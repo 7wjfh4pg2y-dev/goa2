@@ -1,0 +1,50 @@
+{
+	"name": "statsofatlantis",
+	"version": "0.0.1",
+	"scripts": {
+		"dev": "vite dev",
+		"build": "vite build",
+		"preview": "vite preview",
+		"test": "npm run test:integration && npm run test:unit",
+		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+		"lint": "prettier --plugin-search-dir . --check . && eslint .",
+		"format": "prettier --plugin-search-dir . --write .",
+		"test:integration": "playwright test",
+		"test:unit": "vitest",
+		"gh-pages": "npm run build && npx gh-pages -d build --nojekyll --add"
+	},
+	"devDependencies": {
+		"@playwright/test": "^1.28.1",
+		"@rollup/plugin-dynamic-import-vars": "^2.1.0",
+		"@sveltejs/adapter-auto": "^7.0.1",
+		"@sveltejs/adapter-static": "^3.0.10",
+		"@sveltejs/kit": "^2.59.1",
+		"@types/cookie": "^0.5.1",
+		"@typescript-eslint/eslint-plugin": "^7.18.0",
+		"@typescript-eslint/parser": "^7.18.0",
+		"autoprefixer": "^10.4.14",
+		"eslint": "^8.28.0",
+		"eslint-config-prettier": "^8.5.0",
+		"eslint-plugin-svelte": "^2.30.0",
+		"flowbite": "^1.8.1",
+		"flowbite-svelte": "^0.46.23",
+		"gh-pages": "^6.1.0",
+		"postcss": "^8.4.24",
+		"postcss-load-config": "^4.0.1",
+		"prettier": "^3.8.3",
+		"prettier-plugin-svelte": "^3.5.1",
+		"svelte": "^5.55.5",
+		"svelte-check": "^3.4.3",
+		"tailwindcss": "^3.3.2",
+		"tslib": "^2.4.1",
+		"typescript": "^5.0.0",
+		"vite": "^8.0.10",
+		"vitest": "^4.1.5"
+	},
+	"type": "module",
+	"dependencies": {
+		"flowbite-svelte-icons": "^3.1.0",
+		"typescript-map": "^0.1.0"
+	}
+}
