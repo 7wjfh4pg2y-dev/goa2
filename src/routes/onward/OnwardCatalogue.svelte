@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte"
+  import { base } from "$app/paths"
   import {
     Button,
   } from "flowbite-svelte"
@@ -178,7 +179,7 @@
 <div class="pt-18 md:pt-22">
   <div class="flex items-center flex-col w-full">
     <div class="flex justify-center pb-5">
-      <a href="/onward/builder">
+      <a href="{base}/onward/builder">
         <Button class="w-40 text-xl">Card Builder</Button>
       </a>
     </div>

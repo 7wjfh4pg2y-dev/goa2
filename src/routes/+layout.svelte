@@ -4,6 +4,7 @@
 	import { Navbar, NavBrand, NavHamburger, NavLi, NavUl } from 'flowbite-svelte';
 	import { ChevronDownOutline } from 'flowbite-svelte-icons';
 	import { page } from '$app/stores';
+	import { base } from '$app/paths';
 	import { browser } from '$app/environment';
 	import { afterNavigate } from '$app/navigation';
 	import { onMount } from 'svelte';
@@ -13,7 +14,7 @@
 	export let data;
 
 	$: activeUrl = $page.url.pathname;
-	$: otherGamesActive = activeUrl.startsWith('/onward') || activeUrl.startsWith('/rivals');
+	$: otherGamesActive = activeUrl.startsWith(`${base}/onward`) || activeUrl.startsWith(`${base}/rivals`);
 
 	let otherGamesOpen = false;
 	let otherGamesEl: HTMLElement | undefined;
@@ -74,7 +75,7 @@
 </script>
 
 <Navbar class="fixed z-50 top-0 border-b bg-dark-800 border-b-dark-600">
-	<NavBrand href="/">
+	<NavBrand href="{base}/">
 		<img src={smallLogoImage} class="mr-3 h-6 sm:h-9" alt="SoA Logo" />
 		<span class="whitespace-nowrap text-2xl font-semibold text-white">Stats of Atlantis</span>
 	</NavBrand>
@@ -85,11 +86,11 @@
 		activeClass="hover:text-white hover:bg-dark-700 font-semibold"
 		nonActiveClass="hover:text-white hover:bg-dark-700 font-semibold"
 	>
-		<NavLi class="text-dark-400" href="/">Catalogue</NavLi>
-		<NavLi class="text-dark-400" href="/encyclopedia">Encyclopedia</NavLi>
-		<NavLi class="text-dark-400" href="/builder">Card Builder</NavLi>
-		<NavLi class="text-dark-400" href="/draft">Draft</NavLi>
-		<NavLi class="text-dark-400" href="/timer">Timer</NavLi>
+		<NavLi class="text-dark-400" href="{base}/">Catalogue</NavLi>
+		<NavLi class="text-dark-400" href="{base}/encyclopedia">Encyclopedia</NavLi>
+		<NavLi class="text-dark-400" href="{base}/builder">Card Builder</NavLi>
+		<NavLi class="text-dark-400" href="{base}/draft">Draft</NavLi>
+		<NavLi class="text-dark-400" href="{base}/timer">Timer</NavLi>
 		<li
 			bind:this={otherGamesEl}
 			class="relative list-none"
@@ -120,10 +121,10 @@
 					>
 						<li role="none">
 							<a
-								href="/onward"
+								href="{base}/onward"
 								role="menuitem"
 								class="block px-4 py-2 text-sm font-semibold text-dark-400 hover:bg-dark-700 hover:text-white {activeUrl.startsWith(
-									'/onward',
+									`${base}/onward`,
 								)
 									? 'text-white bg-dark-700/60'
 									: ''}"
@@ -134,10 +135,10 @@
 						</li>
 						<li role="none">
 							<a
-								href="/rivals"
+								href="{base}/rivals"
 								role="menuitem"
 								class="block px-4 py-2 text-sm font-semibold text-dark-400 hover:bg-dark-700 hover:text-white {activeUrl.startsWith(
-									'/rivals',
+									`${base}/rivals`,
 								)
 									? 'text-white bg-dark-700/60'
 									: ''}"
@@ -150,7 +151,7 @@
 				</div>
 			{/if}
 		</li>
-		<NavLi class="text-dark-400" href="/about">About</NavLi>
+		<NavLi class="text-dark-400" href="{base}/about">About</NavLi>
 	</NavUl>
 </Navbar>
 
