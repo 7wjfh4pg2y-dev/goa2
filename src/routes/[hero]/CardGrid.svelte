@@ -603,7 +603,7 @@
 
   const labelColor = (disabled: boolean): string => disabled ? "gray" : "white"
 
-  $: disableShowNumbers = true
+  $: disableShowNumbers = false
 
   $: activeStats = useNewPrinting ? stats.slice(0, 4) : stats
   let hero: Hero | OldHero | undefined
@@ -1485,7 +1485,6 @@
           Show Numbers
         </div>
       </Checkbox>
-      <Tooltip triggeredBy="#showNumbers" placement="bottom" class="z-50">Disabled by the developer's request</Tooltip>
     </div>
     <div class="col-span-6 flex-col content-center mt-8 xs:mt-10 sm:mt-14 flex items-center">
       <Checkbox bind:checked={showHandicap}>
