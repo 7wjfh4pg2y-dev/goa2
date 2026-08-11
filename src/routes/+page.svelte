@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from "$app/stores"
+	import { base } from "$app/paths"
 	import { flip } from "svelte/animate"
 	import { Card, Img, SpeedDial, SpeedDialButton, Tooltip } from "flowbite-svelte"
 	import { SortOutline } from "flowbite-svelte-icons"
@@ -331,7 +332,7 @@
 	<ul class="max-w-full m-auto">
 		{#each filteredHeroList as [name, desc] (name)}
 			<li class="px-3 py-1.5" animate:flip={{duration: 300}}>
-				<a href={useNewPrinting ? `/${name}` : `/${name}?printing=old`}>
+				<a href={useNewPrinting ? `${base}/${name}` : `${base}/${name}?printing=old`}>
 					<div class="border border-dark-600 rounded-lg sm:rounded-2xl relative w-[300px] xs:w-[360px] sm:w-[560px] md:w-[720px] h-[151px] xs:h-[181px] sm:h-[281px] md:h-[361px]">
 						<Img src={getHeroImage(name)} class="absolute z-0 rounded-lg sm:rounded-2xl transition-all duration-300 cursor-pointer filter md:saturate-50 hover:saturate-150" alt="" />
 						<ul class="absolute top-1 sm:top-2 left-1 sm:left-2 space-y-0.5 sm:space-y-1">

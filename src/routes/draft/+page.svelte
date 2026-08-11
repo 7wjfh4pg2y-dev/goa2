@@ -2,6 +2,7 @@
 	import { browser } from "$app/environment"
 	import { goto } from "$app/navigation"
 	import { page } from "$app/stores"
+	import { base } from "$app/paths"
 	import { onMount } from "svelte"
 	import { Pack, heroes } from "../../states"
 
@@ -644,7 +645,7 @@
 	}
 
 	function heroLink(heroId: string): string {
-		return `/${heroId}`
+		return `${base}/${heroId}`
 	}
 </script>
 
