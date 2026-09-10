@@ -71,10 +71,10 @@
 		const a = (deg * Math.PI) / 180, dx = x - BOARD / 2, dy = y - BOARD / 2
 		return [BOARD / 2 + dx * Math.cos(a) - dy * Math.sin(a), BOARD / 2 + dx * Math.sin(a) + dy * Math.cos(a)]
 	}
-	function centerOf(c: number, r: number, sz: number, ox: number, oy: number): [number, number] {
+	function centerOf(c: number, r: number, sz: number, ox: number, oy: number, rotation: number): [number, number] {
 		const x = ox + sz * SQRT3 * (c + 0.5 * (r & 1))
 		const y = oy + sz * 1.5 * r
-		return rotate(x, y, rot) as [number, number]
+		return rotate(x, y, rotation) as [number, number]
 	}
 	function poly(cx: number, cy: number, sz: number, rotation: number) {
 		const p = []
@@ -89,7 +89,7 @@
 		const arr: { id: string; cx: number; cy: number }[] = []
 		for (let r = 0; r < rows; r++)
 			for (let c = 0; c < cols; c++) {
-				const [cx, cy] = centerOf(c, r, size, originX, originY)
+				const [cx, cy] = centerOf(c, r, size, originX, originY, rot)
 				arr.push({ id: `${c}_${r}`, cx, cy })
 			}
 		return arr
