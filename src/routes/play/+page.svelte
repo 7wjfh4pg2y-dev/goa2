@@ -23,11 +23,13 @@
 	// base + minion-spawn hexes show the emblem art)
 	const tileSprites = import.meta.glob('../../lib/images/tiles/*.png', { eager: true, import: 'default' }) as Record<string, string>
 	const minionSprites = import.meta.glob('../../lib/images/minions/*.png', { eager: true, import: 'default' }) as Record<string, string>
-	function spriteFor(t: HexType): string | undefined {
-		if (t === 'spawnOrange') return minionSprites['../../lib/images/minions/orange_melee.png']
-		if (t === 'spawnBlue') return minionSprites['../../lib/images/minions/blue_melee.png']
+	type Minion = 'ranged' | 'melee' | 'heavy'
+	function spriteFor(id: string, t: HexType): string | undefined {
+		if (t === 'spawnOrange') return minionSprites[`../../lib/images/minions/orange_${meta[id]?.m ?? 'melee'}.png`]
+		if (t === 'spawnBlue') return minionSprites[`../../lib/images/minions/blue_${meta[id]?.m ?? 'melee'}.png`]
 		return tileSprites[`../../lib/images/tiles/${t}.png`]
 	}
+	const isSpawn = (t?: HexType) => t === 'spawnOrange' || t === 'spawnBlue'
 
 	// grid geometry (regular pointy-top lattice; adjustable so it roughly covers
 	// the image while tracing — precision doesn't matter, we paint whole cells)
@@ -39,8 +41,11 @@
 	let rows = 22
 
 	let cells: Record<string, HexType> = {} // painted cells only: "c_r" -> type
+	let meta: Record<string, { m: Minion; dir: number }> = {} // per-spawn minion type + facing (0-5)
 	let name = 'forgotten_island'
 	let selected: HexType | 'erase' = 'beach'
+	let minionKind: Minion = 'melee' // which minion to place when painting a spawn
+	let tool: 'paint' | 'rotate' = 'paint'
 
 	let showImage = true
 	let showEmpty = true // show faint outlines of unpainted hexes (edit mode)
@@ -110,17 +115,36 @@
 	$: paintedCount = Object.keys(cells).length
 
 	function paint(id: string) {
-		if (selected === 'erase') { if (cells[id]) { delete cells[id]; cells = cells } }
-		else if (cells[id] !== selected) { cells[id] = selected; cells = cells }
+		if (selected === 'erase') {
+			if (cells[id]) { delete cells[id]; delete meta[id]; cells = cells; meta = meta }
+		} else {
+			cells[id] = selected
+			if (isSpawn(selected)) meta[id] = { m: minionKind, dir: meta[id]?.dir ?? 0 }
+			else if (meta[id]) delete meta[id]
+			cells = cells; meta = meta
+		}
 	}
+	function rotateHex(id: string, back = false) {
+		if (!isSpawn(cells[id])) return
+		const cur = meta[id] ?? { m: 'melee' as Minion, dir: 0 }
+		meta[id] = { m: cur.m, dir: (cur.dir + (back ? 5 : 1)) % 6 }
+		meta = meta
+	}
+	function hexDown(e: PointerEvent, id: string) {
+		e.preventDefault()
+		if (tool === 'rotate') rotateHex(id, e.shiftKey)
+		else { painting = true; paint(id) }
+	}
+	const hexEnter = (id: string) => { if (tool === 'paint' && painting) paint(id) }
 
 	// ---- saved maps ----
 	const WORK = 'goa2-map-work-v1'
 	const MAPS = 'goa2-maps-v1'
 	let saved: Record<string, any> = {}
-	function snapshot() { return { name, grid: { size, originX, originY, rot, cols, rows }, cells } }
+	function snapshot() { return { name, grid: { size, originX, originY, rot, cols, rows }, cells, meta } }
 	function applyMap(m: any) {
 		cells = m.cells ?? {}
+		meta = m.meta ?? {}
 		const g = m.grid ?? {}
 		size = g.size ?? size; originX = g.originX ?? originX; originY = g.originY ?? originY
 		rot = g.rot ?? rot; cols = g.cols ?? cols; rows = g.rows ?? rows
@@ -159,21 +183,18 @@
 			{#each grid as h (h.id)}
 				{#if cells[h.id]}
 					{#if tileMode}
-						<image href={spriteFor(cells[h.id])} x={h.cx - SQRT3 * size * 0.53} y={h.cy - size * 1.06}
-							width={SQRT3 * size * 1.06} height={size * 2 * 1.06} style="pointer-events:none" preserveAspectRatio="none" />
-						<polygon points={poly(h.cx, h.cy, size, erot)} class="cell hit"
-							on:pointerdown={(e) => { e.preventDefault(); painting = true; paint(h.id) }}
-							on:pointerenter={() => painting && paint(h.id)} />
+						<image href={spriteFor(h.id, cells[h.id])} x={h.cx - SQRT3 * size * 0.53} y={h.cy - size * 1.06}
+							width={SQRT3 * size * 1.06} height={size * 2 * 1.06} preserveAspectRatio="none" style="pointer-events:none"
+							transform={isSpawn(cells[h.id]) && meta[h.id]?.dir ? `rotate(${meta[h.id].dir * 60} ${h.cx} ${h.cy})` : undefined} />
+						<polygon points={poly(h.cx, h.cy, size, erot)} class="cell hit" class:rotatable={tool === 'rotate' && isSpawn(cells[h.id])}
+							on:pointerdown={(e) => hexDown(e, h.id)} on:pointerenter={() => hexEnter(h.id)} />
 					{:else}
-						<polygon points={poly(h.cx, h.cy, size, erot)} style="fill:{colorOf(cells[h.id])}"
-							class="cell painted"
-							on:pointerdown={(e) => { e.preventDefault(); painting = true; paint(h.id) }}
-							on:pointerenter={() => painting && paint(h.id)} />
+						<polygon points={poly(h.cx, h.cy, size, erot)} style="fill:{colorOf(cells[h.id])}" class="cell painted"
+							on:pointerdown={(e) => hexDown(e, h.id)} on:pointerenter={() => hexEnter(h.id)} />
 					{/if}
 				{:else if showEmpty}
 					<polygon points={poly(h.cx, h.cy, size, erot)} class="cell empty"
-						on:pointerdown={(e) => { e.preventDefault(); painting = true; paint(h.id) }}
-						on:pointerenter={() => painting && paint(h.id)} />
+						on:pointerdown={(e) => hexDown(e, h.id)} on:pointerenter={() => hexEnter(h.id)} />
 				{/if}
 			{/each}
 		</svg>
@@ -198,6 +219,21 @@
 			{/each}
 			<button class="sw erase" class:on={selected === 'erase'} on:click={() => (selected = 'erase')}>⌫ Erase</button>
 		</div>
+
+		{#if isSpawn(selected)}
+			<div class="submenu">
+				<span class="lbl">Minion:</span>
+				{#each ['ranged', 'melee', 'heavy'] as mk}
+					<button class="mk" class:on={minionKind === mk} on:click={() => (minionKind = mk as Minion)}>{mk}</button>
+				{/each}
+			</div>
+		{/if}
+
+		<div class="row tools">
+			<button class="tg" class:on={tool === 'paint'} on:click={() => (tool = 'paint')}>🖌 Paint</button>
+			<button class="tg" class:on={tool === 'rotate'} on:click={() => (tool = 'rotate')}>🔄 Rotate facing</button>
+		</div>
+		{#if tool === 'rotate'}<p class="tip">Click a minion-spawn hex to turn it 60° (Shift-click reverses). Needs 3D tiles on.</p>{/if}
 
 		<div class="row">
 			<label class="ck"><input type="checkbox" bind:checked={tileMode} /> 3D tiles</label>
@@ -257,6 +293,13 @@
 	.cell.empty:hover { fill: rgba(56,189,248,.35); }
 	.cell.hit { fill: transparent; stroke: transparent; }
 	.cell.hit:hover { fill: rgba(56,189,248,.28); }
+	.cell.hit.rotatable:hover { fill: rgba(250,204,21,.32); cursor: alias; }
+	.submenu { display: flex; align-items: center; gap: 6px; margin: 2px 0 10px; }
+	.submenu .lbl { font-size: 12px; color: #9ca3af; }
+	.mk { flex: 1; font-size: 12px; padding: 6px; border-radius: 7px; background: #1f2937; color: #e5e7eb; border: 2px solid transparent; cursor: pointer; text-transform: capitalize; }
+	.mk.on { border-color: #fff; }
+	.tools .tg { background: #1f2937; border: 2px solid transparent; }
+	.tools .tg.on { border-color: #38bdf8; background: #0b3a52; }
 	.panel { flex: 1 1 320px; max-width: 400px; background: #111827; border: 1px solid #374151; border-radius: 12px; padding: 16px; height: fit-content; }
 	.panel h3 { margin: 0 0 4px; } .sub { font-size: 12px; color: #9ca3af; margin: 0 0 12px; }
 	.palette { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 12px; }
