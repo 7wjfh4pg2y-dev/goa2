@@ -11,20 +11,47 @@
 	let peerCount = 1
 	let loaded = false
 
-	// A single SHARED puck whose position lives in the database (persistent),
-	// synced live while dragging via broadcast. This is the real game pattern:
-	// broadcast for smooth live movement, DB for the durable source of truth.
-	let puck = { x: 0.5, y: 0.5 }
+	// Shared puck. `target` is the latest known logical position (0..1),
+	// `render` is what's drawn — eased toward target each animation frame so
+	// motion stays smooth between network samples and across browsers.
+	let target = { x: 0.5, y: 0.5 }
+	let render = { x: 0.5, y: 0.5 }
 
 	let arena: HTMLDivElement
+	let puckEl: HTMLDivElement
+	let arenaW = 1
+	let arenaH = 1
+	let ro: ResizeObserver | undefined
+	let raf = 0
+
 	let channel: RealtimeChannel | undefined
 	let dragging = false
 	let lastSent = 0
 
+	function measure() {
+		if (!arena) return
+		const r = arena.getBoundingClientRect()
+		arenaW = r.width
+		arenaH = r.height
+	}
+
+	function frame() {
+		// Follow the cursor 1:1 while *you* drag; ease when receiving remote moves.
+		const f = dragging ? 1 : 0.3
+		render.x += (target.x - render.x) * f
+		render.y += (target.y - render.y) * f
+		if (puckEl) {
+			const px = render.x * arenaW
+			const py = render.y * arenaH
+			puckEl.style.transform = `translate3d(${px}px, ${py}px, 0) translate(-50%, -50%)`
+		}
+		raf = requestAnimationFrame(frame)
+	}
+
 	async function persist() {
 		await supabase.from('rooms').upsert({
 			id: room,
-			state: { puck },
+			state: { puck: target },
 			updated_at: new Date().toISOString(),
 		})
 	}
@@ -33,12 +60,12 @@
 		const now = performance.now()
 		if (now - lastSent < 33) return
 		lastSent = now
-		channel?.send({ type: 'broadcast', event: 'puck', payload: { id: clientId, ...puck } })
+		channel?.send({ type: 'broadcast', event: 'puck', payload: { id: clientId, ...target } })
 	}
 
 	function pointerToNorm(e: PointerEvent) {
 		const r = arena.getBoundingClientRect()
-		puck = {
+		target = {
 			x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)),
 			y: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)),
 		}
@@ -57,7 +84,7 @@
 		if (!dragging) return
 		dragging = false
 		try { arena.releasePointerCapture(e.pointerId) } catch {}
-		persist() // save final position to the DB
+		persist()
 	}
 
 	onMount(async () => {
@@ -65,14 +92,22 @@
 		room = params.get('room') || 'lobby'
 		shareUrl = window.location.origin + window.location.pathname + '?room=' + room
 
-		// 1) Load persisted state (create the row if this room is new).
+		measure()
+		ro = new ResizeObserver(measure)
+		ro.observe(arena)
+		raf = requestAnimationFrame(frame)
+
+		// Load persisted state (create the row if this room is new).
 		const { data, error } = await supabase.from('rooms').select('state').eq('id', room).maybeSingle()
 		if (error) status = 'error'
-		if (data?.state?.puck) puck = data.state.puck
-		else await persist()
+		if (data?.state?.puck) {
+			target = data.state.puck
+			render = { ...target } // snap on first load — no animation from center
+		} else {
+			await persist()
+		}
 		loaded = true
 
-		// 2) One channel: live broadcast + presence + DB change stream.
 		channel = supabase.channel('goa2-play:' + room, {
 			config: { broadcast: { self: false }, presence: { key: clientId } },
 		})
@@ -81,7 +116,7 @@
 			.on('broadcast', { event: 'puck' }, ({ payload }) => {
 				const p = payload as { id: string; x: number; y: number }
 				if (p.id === clientId || dragging) return
-				puck = { x: p.x, y: p.y }
+				target = { x: p.x, y: p.y }
 			})
 			.on(
 				'postgres_changes',
@@ -89,7 +124,7 @@
 				(payload) => {
 					if (dragging) return
 					const s = (payload.new as { state?: { puck?: { x: number; y: number } } }).state
-					if (s?.puck) puck = s.puck
+					if (s?.puck) target = s.puck
 				},
 			)
 			.on('presence', { event: 'sync' }, () => {
@@ -106,6 +141,8 @@
 	})
 
 	onDestroy(() => {
+		if (raf) cancelAnimationFrame(raf)
+		if (ro) ro.disconnect()
 		if (channel) supabase.removeChannel(channel)
 	})
 
@@ -150,10 +187,10 @@
 		on:pointerup={onUp}
 		on:pointercancel={onUp}
 	>
-		<div class="puck" style="left:{puck.x * 100}%; top:{puck.y * 100}%">★</div>
+		<div class="puck" bind:this={puckEl}>★</div>
 	</div>
 
-	<p class="foot">Phase 1a · persistent shared state · Supabase DB + Realtime (broadcast · presence · postgres_changes)</p>
+	<p class="foot">Phase 1a · persistent shared state · GPU transform + rAF interpolation</p>
 </div>
 
 <style>
@@ -176,13 +213,13 @@
 	}
 	.arena:active { cursor: grabbing; }
 	.puck {
-		position: absolute; width: 44px; height: 44px; border-radius: 50%;
-		transform: translate(-50%, -50%);
+		position: absolute; top: 0; left: 0;
+		width: 44px; height: 44px; border-radius: 50%;
 		display: flex; align-items: center; justify-content: center;
 		font-size: 22px; color: #1a1200;
 		background: radial-gradient(circle at 35% 30%, #fde68a, #f59e0b);
 		box-shadow: 0 4px 14px rgba(0,0,0,0.55); outline: 3px solid rgba(255,255,255,0.85);
-		transition: left 0.05s linear, top 0.05s linear;
+		will-change: transform;
 	}
 	.foot { font-size: 12px; color: #6b7280; margin-top: 12px; }
 </style>
