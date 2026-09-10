@@ -287,7 +287,7 @@
 </script>
 
 <svelte:head>
-	<title>Stats of Atlantis</title>
+	<title>GoA2</title>
 	<meta name="description" content="Guards of Atlantis II card builder and catalogue." />
 </svelte:head>
 /

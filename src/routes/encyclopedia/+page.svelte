@@ -81,7 +81,7 @@ function resetFilters() {
 </script>
 
 <svelte:head>
-	<title>Encyclopedia — Stats of Atlantis</title>
+	<title>Encyclopedia — GoA2</title>
 	<meta name="description" content="Browse all Guards of Atlantis II hero cards and spell cards." />
 </svelte:head>
 

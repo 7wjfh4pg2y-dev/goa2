@@ -122,7 +122,7 @@
 	function clearAll() { if (confirm('Delete all hexes?')) { hexes = []; selectedId = null } }
 </script>
 
-<svelte:head><title>Board Editor — Guards of Atlantis</title></svelte:head>
+<svelte:head><title>Board Editor — GoA2</title></svelte:head>
 
 <div class="page">
 	<div class="board-wrap">
