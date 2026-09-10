@@ -16,6 +16,27 @@
 		if (t === 'spawnBlue') return minionSprites[`../../lib/images/minions/blue_${meta[id]?.m ?? 'melee'}.png`]
 		return tileSprites[`../../lib/images/tiles/${t}.png`]
 	}
+	const isSpawn = (t: string) => t === 'spawnOrange' || t === 'spawnBlue'
+
+	// Minion-spawn hexes borrow the colour of the terrain zone around them; the
+	// team emblem is drawn as a centred badge over that zone tile.
+	const ZONE_TYPES = ['forest', 'beach', 'middle', 'terrain', 'baseOrange', 'baseBlue']
+	const ODDR = [
+		[[1, 0], [0, -1], [-1, -1], [-1, 0], [-1, 1], [0, 1]],
+		[[1, 0], [1, -1], [0, -1], [-1, 0], [0, 1], [1, 1]]
+	]
+	function zoneOf(id: string): string {
+		const [c, r] = id.split('_').map(Number)
+		const counts: Record<string, number> = {}
+		for (const [dc, dr] of ODDR[r & 1]) {
+			const n = cells[`${c + dc}_${r + dr}`]
+			if (n && ZONE_TYPES.includes(n)) counts[n] = (counts[n] ?? 0) + 1
+		}
+		let best = 'middle', bc = 0
+		for (const k in counts) if (counts[k] > bc) { bc = counts[k]; best = k }
+		return best
+	}
+	const zoneTile = (z: string) => tileSprites[`../../lib/images/tiles/${z}.png`]
 	function poly(cx: number, cy: number, sz: number) {
 		const p = []
 		for (let i = 0; i < 6; i++) { const a = (Math.PI / 180) * (60 * i - 90); p.push(`${(cx + sz * Math.cos(a)).toFixed(1)},${(cy + sz * Math.sin(a)).toFixed(1)}`) }
@@ -67,9 +88,16 @@
 		<div class="viewport" style="transform: translate({panX}px,{panY}px) scale({scale});">
 			<svg viewBox={vb} preserveAspectRatio="xMidYMid meet">
 				{#each hexes as h (h.id)}
-					<image href={spriteFor(h.id, h.t)} x={h.x - SQRT3 * size * 0.53} y={h.y - size * 1.06}
-						width={SQRT3 * size * 1.06} height={size * 2 * 1.06} preserveAspectRatio="none"
-						transform={(h.t === 'spawnOrange' || h.t === 'spawnBlue') && meta[h.id]?.dir ? `rotate(${meta[h.id].dir * 60} ${h.x} ${h.y})` : undefined} />
+					{#if isSpawn(h.t)}
+						<image href={zoneTile(zoneOf(h.id))} x={h.x - SQRT3 * size * 0.53} y={h.y - size * 1.06}
+							width={SQRT3 * size * 1.06} height={size * 2 * 1.06} preserveAspectRatio="none" />
+						<image href={spriteFor(h.id, h.t)} x={h.x - SQRT3 * size * 1.06 * 0.36} y={h.y - SQRT3 * size * 1.06 * 0.36}
+							width={SQRT3 * size * 1.06 * 0.72} height={SQRT3 * size * 1.06 * 0.72} preserveAspectRatio="xMidYMid meet"
+							transform={meta[h.id]?.dir ? `rotate(${meta[h.id].dir * 60} ${h.x} ${h.y})` : undefined} />
+					{:else}
+						<image href={spriteFor(h.id, h.t)} x={h.x - SQRT3 * size * 0.53} y={h.y - size * 1.06}
+							width={SQRT3 * size * 1.06} height={size * 2 * 1.06} preserveAspectRatio="none" />
+					{/if}
 					<polygon points={poly(h.x, h.y, size)} fill="none" stroke="rgba(6,10,18,.7)" stroke-width="4" stroke-linejoin="round" />
 				{/each}
 			</svg>

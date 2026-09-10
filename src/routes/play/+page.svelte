@@ -33,6 +33,26 @@
 	}
 	const isSpawn = (t?: HexType) => t === 'spawnOrange' || t === 'spawnBlue'
 
+	// A minion-spawn hex takes on the colour of the terrain zone it sits in
+	// (inferred from its neighbours); the team emblem is drawn as a badge on top.
+	const ZONE_TYPES: HexType[] = ['forest', 'beach', 'middle', 'terrain', 'baseOrange', 'baseBlue']
+	const ODDR = [
+		[[1, 0], [0, -1], [-1, -1], [-1, 0], [-1, 1], [0, 1]],
+		[[1, 0], [1, -1], [0, -1], [-1, 0], [0, 1], [1, 1]]
+	]
+	function zoneOf(id: string, src: Record<string, HexType>): HexType {
+		const [c, r] = id.split('_').map(Number)
+		const counts: Record<string, number> = {}
+		for (const [dc, dr] of ODDR[r & 1]) {
+			const n = src[`${c + dc}_${r + dr}`]
+			if (n && ZONE_TYPES.includes(n)) counts[n] = (counts[n] ?? 0) + 1
+		}
+		let best: HexType = 'middle', bc = 0
+		for (const k in counts) if (counts[k] > bc) { bc = counts[k]; best = k as HexType }
+		return best
+	}
+	const zoneTile = (z: HexType) => tileSprites[`../../lib/images/tiles/${z}.png`]
+
 	// grid geometry (regular pointy-top lattice; adjustable so it roughly covers
 	// the image while tracing — precision doesn't matter, we paint whole cells)
 	let size = 62
@@ -115,6 +135,12 @@
 		return arr
 	})()
 	$: paintedCount = Object.keys(cells).length
+	// zone tile behind each minion-spawn hex (recomputed when the paint changes)
+	$: zones = (() => {
+		const z: Record<string, HexType> = {}
+		for (const id in cells) if (isSpawn(cells[id])) z[id] = zoneOf(id, cells)
+		return z
+	})()
 
 	function paint(id: string) {
 		if (selected === 'erase') {
@@ -185,9 +211,16 @@
 			{#each grid as h (h.id)}
 				{#if cells[h.id]}
 					{#if tileMode}
-						<image href={spriteFor(h.id, cells[h.id])} x={h.cx - SQRT3 * size * 0.53} y={h.cy - size * 1.06}
-							width={SQRT3 * size * 1.06} height={size * 2 * 1.06} preserveAspectRatio="none" style="pointer-events:none"
-							transform={isSpawn(cells[h.id]) && meta[h.id]?.dir ? `rotate(${meta[h.id].dir * 60} ${h.cx} ${h.cy})` : undefined} />
+						{#if isSpawn(cells[h.id])}
+							<image href={zoneTile(zones[h.id] ?? 'middle')} x={h.cx - SQRT3 * size * 0.53} y={h.cy - size * 1.06}
+								width={SQRT3 * size * 1.06} height={size * 2 * 1.06} preserveAspectRatio="none" style="pointer-events:none" />
+							<image href={spriteFor(h.id, cells[h.id])} x={h.cx - SQRT3 * size * 1.06 * 0.36} y={h.cy - SQRT3 * size * 1.06 * 0.36}
+								width={SQRT3 * size * 1.06 * 0.72} height={SQRT3 * size * 1.06 * 0.72} preserveAspectRatio="xMidYMid meet" style="pointer-events:none"
+								transform={meta[h.id]?.dir ? `rotate(${meta[h.id].dir * 60} ${h.cx} ${h.cy})` : undefined} />
+						{:else}
+							<image href={spriteFor(h.id, cells[h.id])} x={h.cx - SQRT3 * size * 0.53} y={h.cy - size * 1.06}
+								width={SQRT3 * size * 1.06} height={size * 2 * 1.06} preserveAspectRatio="none" style="pointer-events:none" />
+						{/if}
 						<polygon points={poly(h.cx, h.cy, size, erot)} class="cell hit" class:rotatable={tool === 'rotate' && isSpawn(cells[h.id])}
 							on:pointerdown={(e) => hexDown(e, h.id)} on:pointerenter={() => hexEnter(h.id)} />
 					{:else}
