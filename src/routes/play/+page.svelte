@@ -9,6 +9,8 @@
 	const PALETTE = [
 		{ t: 'baseOrange', label: 'Orange base', c: '#ea580c' },
 		{ t: 'baseBlue', label: 'Blue base', c: '#2563eb' },
+		{ t: 'baseOrangeSpawn', label: 'Orange throne', c: '#c2410c' },
+		{ t: 'baseBlueSpawn', label: 'Blue throne', c: '#1e40af' },
 		{ t: 'forest', label: 'Forest', c: '#16a34a' },
 		{ t: 'beach', label: 'Beach', c: '#eab308' },
 		{ t: 'middle', label: 'Middle', c: '#9ca3af' },
@@ -287,11 +289,11 @@
 	.zoomctl button { width: 34px; flex: none; padding: 6px 0; background: rgba(17,24,39,.9); border: 1px solid #374151; border-radius: 6px; color: #e5e7eb; font-size: 15px; cursor: pointer; }
 	.zoomctl button.on { background: #2563eb; }
 	.cell { stroke-width: 2; cursor: pointer; }
-	.cell.painted { fill-opacity: .72; stroke: rgba(0,0,0,.45); }
+	.cell.painted { fill-opacity: .72; stroke: rgba(6,10,18,.75); stroke-width: 4; }
 	.cell.painted:hover { fill-opacity: .9; }
 	.cell.empty { fill: rgba(255,255,255,.04); stroke: rgba(148,163,184,.35); }
 	.cell.empty:hover { fill: rgba(56,189,248,.35); }
-	.cell.hit { fill: transparent; stroke: transparent; }
+	.cell.hit { fill: transparent; stroke: rgba(6,10,18,.7); stroke-width: 4; stroke-linejoin: round; }
 	.cell.hit:hover { fill: rgba(56,189,248,.28); }
 	.cell.hit.rotatable:hover { fill: rgba(250,204,21,.32); cursor: alias; }
 	.submenu { display: flex; align-items: center; gap: 6px; margin: 2px 0 10px; }

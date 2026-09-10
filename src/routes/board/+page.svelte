@@ -16,6 +16,11 @@
 		if (t === 'spawnBlue') return minionSprites[`../../lib/images/minions/blue_${meta[id]?.m ?? 'melee'}.png`]
 		return tileSprites[`../../lib/images/tiles/${t}.png`]
 	}
+	function poly(cx: number, cy: number, sz: number) {
+		const p = []
+		for (let i = 0; i < 6; i++) { const a = (Math.PI / 180) * (60 * i - 90); p.push(`${(cx + sz * Math.cos(a)).toFixed(1)},${(cy + sz * Math.sin(a)).toFixed(1)}`) }
+		return p.join(' ')
+	}
 
 	// upright hex centers, keyed by "col_row"
 	$: hexes = Object.keys(cells).map((id) => {
@@ -65,6 +70,7 @@
 					<image href={spriteFor(h.id, h.t)} x={h.x - SQRT3 * size * 0.53} y={h.y - size * 1.06}
 						width={SQRT3 * size * 1.06} height={size * 2 * 1.06} preserveAspectRatio="none"
 						transform={(h.t === 'spawnOrange' || h.t === 'spawnBlue') && meta[h.id]?.dir ? `rotate(${meta[h.id].dir * 60} ${h.x} ${h.y})` : undefined} />
+					<polygon points={poly(h.x, h.y, size)} fill="none" stroke="rgba(6,10,18,.7)" stroke-width="4" stroke-linejoin="round" />
 				{/each}
 			</svg>
 		</div>
