@@ -176,7 +176,7 @@
 </div>
 
 <style>
-	.page { max-width: 1200px; margin: 0 auto; padding: 84px 16px 32px; display: flex; gap: 20px; flex-wrap: wrap; color: #e5e7eb; }
+	.page { max-width: 1200px; margin: 0 auto; padding: 84px 16px 32px; display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; color: #e5e7eb; }
 	.board-wrap { position: relative; flex: 1 1 520px; max-width: 760px; aspect-ratio: 1/1; border-radius: 12px; overflow: hidden; box-shadow: 0 8px 30px rgba(0,0,0,.5); background: #0b1220; }
 	.board-wrap.noimg { background: #0b1220; }
 	.board-wrap img { width: 100%; height: 100%; display: block; user-select: none; opacity: .85; }
