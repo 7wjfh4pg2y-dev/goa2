@@ -37,6 +37,36 @@
 	let painting = false
 	let loaded = false
 
+	// --- map-only zoom/pan (does not magnify the page) ---
+	let wrapEl: HTMLDivElement
+	let scale = 1, panX = 0, panY = 0, panMode = false, panning = false, pstart = { x: 0, y: 0 }
+	function clampPan() {
+		if (!wrapEl) return
+		const W = wrapEl.clientWidth, mn = W * (1 - scale)
+		if (scale <= 1) { panX = 0; panY = 0 }
+		else { panX = Math.min(0, Math.max(mn, panX)); panY = Math.min(0, Math.max(mn, panY)) }
+	}
+	function zoomAt(ns: number, mx: number, my: number) {
+		ns = Math.min(6, Math.max(1, ns))
+		panX = mx - (mx - panX) * (ns / scale)
+		panY = my - (my - panY) * (ns / scale)
+		scale = ns; clampPan()
+	}
+	function onWheel(e: WheelEvent) {
+		e.preventDefault()
+		const r = wrapEl.getBoundingClientRect()
+		if (e.ctrlKey) zoomAt(scale * (e.deltaY < 0 ? 1.15 : 1 / 1.15), e.clientX - r.left, e.clientY - r.top) // pinch/ctrl = zoom
+		else { panX -= e.deltaX; panY -= e.deltaY; clampPan() } // two-finger scroll = pan
+	}
+	function zoomBtn(f: number) { const W = wrapEl?.clientWidth ?? 0; zoomAt(scale * f, W / 2, W / 2) }
+	function resetView() { scale = 1; panX = 0; panY = 0 }
+	function panDown(e: PointerEvent) {
+		if (!(panMode || e.button === 1)) return
+		panning = true; pstart = { x: e.clientX - panX, y: e.clientY - panY }; wrapEl.setPointerCapture(e.pointerId)
+	}
+	function panMove(e: PointerEvent) { if (!panning) return; panX = e.clientX - pstart.x; panY = e.clientY - pstart.y; clampPan() }
+	function panUp(e: PointerEvent) { panning = false; try { wrapEl.releasePointerCapture(e.pointerId) } catch {} }
+
 	function rotate(x: number, y: number, deg: number) {
 		const a = (deg * Math.PI) / 180, dx = x - BOARD / 2, dy = y - BOARD / 2
 		return [BOARD / 2 + dx * Math.cos(a) - dy * Math.sin(a), BOARD / 2 + dx * Math.sin(a) + dy * Math.cos(a)]
@@ -95,8 +125,9 @@
 		try { const m = localStorage.getItem(MAPS); if (m) saved = JSON.parse(m) } catch {}
 		loaded = true
 		window.addEventListener('pointerup', () => (painting = false))
+		wrapEl?.addEventListener('wheel', onWheel, { passive: false })
 	})
-	onDestroy(() => {})
+	onDestroy(() => wrapEl?.removeEventListener('wheel', onWheel))
 
 	let copied = false
 	async function exportMap() {
@@ -107,9 +138,11 @@
 <svelte:head><title>Map Editor — GoA2</title></svelte:head>
 
 <div class="page">
-	<div class="board-wrap" class:noimg={!showImage}>
+	<div class="board-wrap" bind:this={wrapEl} class:noimg={!showImage} class:panmode={panMode}
+		on:pointerdown={panDown} on:pointermove={panMove} on:pointerup={panUp} on:pointercancel={panUp}>
+		<div class="viewport" style="transform: translate({panX}px,{panY}px) scale({scale});">
 		{#if showImage}<img src={boardUrl} alt="tracing guide" draggable="false" />{/if}
-		<svg class="overlay" viewBox="0 0 {BOARD} {BOARD}" preserveAspectRatio="xMidYMid meet">
+		<svg class="overlay" class:nopick={panMode} viewBox="0 0 {BOARD} {BOARD}" preserveAspectRatio="xMidYMid meet">
 			{#each grid as h (h.id)}
 				{#if cells[h.id]}
 					<polygon points={poly(h.cx, h.cy, size, rot)} style="fill:{colorOf(cells[h.id])}"
@@ -123,6 +156,13 @@
 				{/if}
 			{/each}
 		</svg>
+		</div>
+		<div class="zoomctl">
+			<button on:click={() => zoomBtn(1 / 1.2)} title="Zoom out">−</button>
+			<button on:click={() => zoomBtn(1.2)} title="Zoom in">+</button>
+			<button class:on={panMode} on:click={() => (panMode = !panMode)} title="Pan mode (drag to move)">✋</button>
+			<button on:click={resetView} title="Reset view">⟲</button>
+		</div>
 	</div>
 
 	<div class="panel">
@@ -179,8 +219,15 @@
 	.page { max-width: 1200px; margin: 0 auto; padding: 84px 16px 32px; display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; color: #e5e7eb; }
 	.board-wrap { position: relative; flex: 1 1 520px; max-width: 760px; aspect-ratio: 1/1; border-radius: 12px; overflow: hidden; box-shadow: 0 8px 30px rgba(0,0,0,.5); background: #0b1220; }
 	.board-wrap.noimg { background: #0b1220; }
+	.board-wrap.panmode { cursor: grab; }
+	.board-wrap.panmode:active { cursor: grabbing; }
+	.viewport { position: absolute; inset: 0; transform-origin: 0 0; }
 	.board-wrap img { width: 100%; height: 100%; display: block; user-select: none; opacity: .85; }
 	.overlay { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
+	.overlay.nopick { pointer-events: none; }
+	.zoomctl { position: absolute; right: 8px; bottom: 8px; display: flex; gap: 4px; z-index: 5; }
+	.zoomctl button { width: 34px; flex: none; padding: 6px 0; background: rgba(17,24,39,.9); border: 1px solid #374151; border-radius: 6px; color: #e5e7eb; font-size: 15px; cursor: pointer; }
+	.zoomctl button.on { background: #2563eb; }
 	.cell { stroke-width: 2; cursor: pointer; }
 	.cell.painted { fill-opacity: .72; stroke: rgba(0,0,0,.45); }
 	.cell.painted:hover { fill-opacity: .9; }
