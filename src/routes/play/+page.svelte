@@ -13,6 +13,7 @@
 	type Hex = { id: string; x: number; y: number }
 	let hexes: Hex[] = [] // every hex here is a playable cell
 	let selectedId: string | null = null
+	let loaded = false // guard: don't autosave until we've loaded from storage
 
 	const KEY = 'goa2-board-map-v2'
 	const uid = () => 'h' + Math.random().toString(36).slice(2, 9)
@@ -100,12 +101,15 @@
 		else if (e.key === 'd') { e.preventDefault(); duplicate() }
 	}
 
-	$: try { localStorage.setItem(KEY, JSON.stringify({ orientation, size, rot, hexes })) } catch {}
+	// Only autosave AFTER the initial load, so the empty default can't clobber
+	// a previously saved map during component init.
+	$: if (loaded) { try { localStorage.setItem(KEY, JSON.stringify({ orientation, size, rot, hexes })) } catch {} }
 	onMount(() => {
 		try {
 			const s = localStorage.getItem(KEY)
 			if (s) { const d = JSON.parse(s); hexes = d.hexes ?? []; orientation = d.orientation ?? orientation; size = d.size ?? size; rot = d.rot ?? rot }
 		} catch {}
+		loaded = true
 		window.addEventListener('keydown', onKey)
 	})
 	onDestroy(() => window.removeEventListener('keydown', onKey))
