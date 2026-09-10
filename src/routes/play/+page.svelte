@@ -21,11 +21,13 @@
 		const a = (deg * Math.PI) / 180
 		return [x * Math.cos(a) - y * Math.sin(a), x * Math.sin(a) + y * Math.cos(a)]
 	}
-	function polyPoints(cx: number, cy: number) {
+	// size/orient/rotation are passed in (not read from closure) so Svelte tracks
+	// them as dependencies of the markup and re-renders live when they change.
+	function polyPoints(cx: number, cy: number, sz: number, orient: 'pointy' | 'flat', rotation: number) {
 		const p = []
 		for (let i = 0; i < 6; i++) {
-			const ang = (Math.PI / 180) * (60 * i + (orientation === 'pointy' ? -90 : 0) + rot)
-			p.push(`${(cx + size * Math.cos(ang)).toFixed(1)},${(cy + size * Math.sin(ang)).toFixed(1)}`)
+			const ang = (Math.PI / 180) * (60 * i + (orient === 'pointy' ? -90 : 0) + rotation)
+			p.push(`${(cx + sz * Math.cos(ang)).toFixed(1)},${(cy + sz * Math.sin(ang)).toFixed(1)}`)
 		}
 		return p.join(' ')
 	}
@@ -124,7 +126,7 @@
 		<svg bind:this={svgEl} class="overlay" viewBox="0 0 {BOARD} {BOARD}" preserveAspectRatio="xMidYMid meet"
 			on:pointerdown={addAt} on:pointermove={moveHandler} on:pointerup={upHandler} on:pointercancel={upHandler}>
 			{#each hexes as h (h.id)}
-				<polygon points={polyPoints(h.x, h.y)} class="hex" class:sel={selectedId === h.id}
+				<polygon points={polyPoints(h.x, h.y, size, orientation, rot)} class="hex" class:sel={selectedId === h.id}
 					on:pointerdown={(e) => hexDown(e, h)} />
 			{/each}
 		</svg>
