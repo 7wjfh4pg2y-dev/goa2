@@ -14,6 +14,7 @@
 		oy: number
 		cols: number
 		rows: number
+		rot: number // whole-grid rotation in degrees (board is slightly tilted)
 		opacity: number
 		show: boolean
 	}
@@ -25,6 +26,7 @@
 		oy: 190,
 		cols: 17,
 		rows: 19,
+		rot: 0,
 		opacity: 0.6,
 		show: true,
 	}
@@ -97,16 +99,18 @@
 		<img src={boardUrl} alt="Forgotten Island board" draggable="false" />
 		{#if cal.show}
 			<svg class="overlay" viewBox="0 0 {BOARD} {BOARD}" preserveAspectRatio="xMidYMid meet">
-				{#each hexes as h (h.id)}
-					<polygon
-						points={h.pts}
-						class="hex"
-						class:hovered={hovered === h.id}
-						style="stroke: rgba(255,60,60,{cal.opacity})"
-						on:pointerenter={() => (hovered = h.id)}
-						on:pointerleave={() => (hovered === h.id && (hovered = -1))}
-					/>
-				{/each}
+				<g transform="rotate({cal.rot} {BOARD / 2} {BOARD / 2})">
+					{#each hexes as h (h.id)}
+						<polygon
+							points={h.pts}
+							class="hex"
+							class:hovered={hovered === h.id}
+							style="stroke: rgba(255,60,60,{cal.opacity})"
+							on:pointerenter={() => (hovered = h.id)}
+							on:pointerleave={() => (hovered === h.id && (hovered = -1))}
+						/>
+					{/each}
+				</g>
 			</svg>
 		{/if}
 	</div>
@@ -122,7 +126,7 @@
 			</select>
 		</label>
 
-		{#each [ ['size','Hex size',20,120,0.5], ['ox','Origin X',-200,600,1], ['oy','Origin Y',-200,600,1], ['cols','Columns',1,40,1], ['rows','Rows',1,40,1], ['opacity','Line opacity',0,1,0.05] ] as [key,label,min,max,step]}
+		{#each [ ['rot','Rotation°',-15,15,0.1], ['size','Hex size',20,120,0.5], ['ox','Origin X',-200,600,1], ['oy','Origin Y',-200,600,1], ['cols','Columns',1,40,1], ['rows','Rows',1,40,1], ['opacity','Line opacity',0,1,0.05] ] as [key,label,min,max,step]}
 			<label class="slider">
 				<span>{label}<b>{cal[key]}</b></span>
 				<input type="range" min={min} max={max} step={step} bind:value={cal[key]} />
