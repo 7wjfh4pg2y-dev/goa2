@@ -5,179 +5,209 @@
 	const BOARD = 2000
 	const SQRT3 = Math.sqrt(3)
 
-	// Global hex shape (tune on your first reference hex; all hexes share it).
-	let orientation: 'pointy' | 'flat' = 'pointy'
-	let size = 69
+	// Hex type palette (colors are the editor's; meanings map to game concepts).
+	const PALETTE = [
+		{ t: 'baseOrange', label: 'Orange base', c: '#ea580c' },
+		{ t: 'baseBlue', label: 'Blue base', c: '#2563eb' },
+		{ t: 'forest', label: 'Forest', c: '#16a34a' },
+		{ t: 'beach', label: 'Beach', c: '#eab308' },
+		{ t: 'middle', label: 'Middle', c: '#9ca3af' },
+		{ t: 'terrain', label: 'Terrain', c: '#111827' },
+		{ t: 'spawnOrange', label: 'Orange spawn', c: '#ef4444' },
+		{ t: 'spawnBlue', label: 'Blue spawn', c: '#a855f7' },
+	] as const
+	type HexType = (typeof PALETTE)[number]['t']
+	const colorOf = (t: HexType) => PALETTE.find((p) => p.t === t)?.c ?? '#fff'
+
+	// grid geometry (regular pointy-top lattice; adjustable so it roughly covers
+	// the image while tracing — precision doesn't matter, we paint whole cells)
+	let size = 62
+	let originX = 150
+	let originY = 150
 	let rot = 0
+	let cols = 22
+	let rows = 22
 
-	type Hex = { id: string; x: number; y: number }
-	let hexes: Hex[] = [] // every hex here is a playable cell
-	let selectedId: string | null = null
-	let loaded = false // guard: don't autosave until we've loaded from storage
+	let cells: Record<string, HexType> = {} // painted cells only: "c_r" -> type
+	let name = 'forgotten_island'
+	let selected: HexType | 'erase' = 'beach'
 
-	const KEY = 'goa2-board-map-v2'
-	const uid = () => 'h' + Math.random().toString(36).slice(2, 9)
+	let showImage = true
+	let showEmpty = true // show faint outlines of unpainted hexes (edit mode)
+	let painting = false
+	let loaded = false
 
-	function rotVec(x: number, y: number, deg: number) {
-		const a = (deg * Math.PI) / 180
-		return [x * Math.cos(a) - y * Math.sin(a), x * Math.sin(a) + y * Math.cos(a)]
+	function rotate(x: number, y: number, deg: number) {
+		const a = (deg * Math.PI) / 180, dx = x - BOARD / 2, dy = y - BOARD / 2
+		return [BOARD / 2 + dx * Math.cos(a) - dy * Math.sin(a), BOARD / 2 + dx * Math.sin(a) + dy * Math.cos(a)]
 	}
-	// size/orient/rotation are passed in (not read from closure) so Svelte tracks
-	// them as dependencies of the markup and re-renders live when they change.
-	function polyPoints(cx: number, cy: number, sz: number, orient: 'pointy' | 'flat', rotation: number) {
+	function centerOf(c: number, r: number, sz: number, ox: number, oy: number): [number, number] {
+		const x = ox + sz * SQRT3 * (c + 0.5 * (r & 1))
+		const y = oy + sz * 1.5 * r
+		return rotate(x, y, rot) as [number, number]
+	}
+	function poly(cx: number, cy: number, sz: number, rotation: number) {
 		const p = []
 		for (let i = 0; i < 6; i++) {
-			const ang = (Math.PI / 180) * (60 * i + (orient === 'pointy' ? -90 : 0) + rotation)
+			const ang = (Math.PI / 180) * (60 * i - 90 + rotation)
 			p.push(`${(cx + sz * Math.cos(ang)).toFixed(1)},${(cy + sz * Math.sin(ang)).toFixed(1)}`)
 		}
 		return p.join(' ')
 	}
 
-	// ---- pointer interaction ----
-	let svgEl: SVGSVGElement
-	let activeId: string | null = null
-	let moved = false
-	let start = { x: 0, y: 0 }
+	$: grid = (() => {
+		const arr: { id: string; cx: number; cy: number }[] = []
+		for (let r = 0; r < rows; r++)
+			for (let c = 0; c < cols; c++) {
+				const [cx, cy] = centerOf(c, r, size, originX, originY)
+				arr.push({ id: `${c}_${r}`, cx, cy })
+			}
+		return arr
+	})()
+	$: paintedCount = Object.keys(cells).length
 
-	function toBoard(e: PointerEvent): [number, number] {
-		const r = svgEl.getBoundingClientRect()
-		return [((e.clientX - r.left) / r.width) * BOARD, ((e.clientY - r.top) / r.height) * BOARD]
-	}
-	function addAt(e: PointerEvent) {
-		// click on empty board => drop a new hex there and select it
-		const [x, y] = toBoard(e)
-		const h = { id: uid(), x, y }
-		hexes = [...hexes, h]
-		selectedId = h.id
-	}
-	function hexDown(e: PointerEvent, h: Hex) {
-		e.stopPropagation()
-		activeId = h.id
-		selectedId = h.id
-		moved = false
-		start = { x: e.clientX, y: e.clientY }
-		svgEl.setPointerCapture(e.pointerId)
-	}
-	function moveHandler(e: PointerEvent) {
-		if (!activeId) return
-		if (Math.abs(e.clientX - start.x) + Math.abs(e.clientY - start.y) > 3) moved = true
-		if (moved) {
-			const [bx, by] = toBoard(e)
-			const h = hexes.find((z) => z.id === activeId)
-			if (h) { h.x = bx; h.y = by; hexes = hexes }
-		}
-	}
-	function upHandler(e: PointerEvent) {
-		activeId = null
-		try { svgEl.releasePointerCapture(e.pointerId) } catch {}
+	function paint(id: string) {
+		if (selected === 'erase') { if (cells[id]) { delete cells[id]; cells = cells } }
+		else if (cells[id] !== selected) { cells[id] = selected; cells = cells }
 	}
 
-	function duplicate() {
-		const h = hexes.find((z) => z.id === selectedId)
-		if (!h) return
-		const stepX = orientation === 'pointy' ? SQRT3 * size : 1.5 * size
-		const [dx, dy] = rotVec(stepX, 0, rot) // east neighbour, rotated
-		const n = { id: uid(), x: h.x + dx, y: h.y + dy }
-		hexes = [...hexes, n]
-		selectedId = n.id
+	// ---- saved maps ----
+	const WORK = 'goa2-map-work-v1'
+	const MAPS = 'goa2-maps-v1'
+	let saved: Record<string, any> = {}
+	function snapshot() { return { name, grid: { size, originX, originY, rot, cols, rows }, cells } }
+	function applyMap(m: any) {
+		cells = m.cells ?? {}
+		const g = m.grid ?? {}
+		size = g.size ?? size; originX = g.originX ?? originX; originY = g.originY ?? originY
+		rot = g.rot ?? rot; cols = g.cols ?? cols; rows = g.rows ?? rows
+		name = m.name ?? name
 	}
-	function del() {
-		if (!selectedId) return
-		hexes = hexes.filter((z) => z.id !== selectedId)
-		selectedId = null
-	}
-	function nudge(dx: number, dy: number) {
-		const h = hexes.find((z) => z.id === selectedId)
-		if (h) { h.x += dx; h.y += dy; hexes = hexes }
-	}
-	function onKey(e: KeyboardEvent) {
-		if (!selectedId) return
-		const s = e.shiftKey ? 10 : 1
-		if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); del() }
-		else if (e.key === 'ArrowLeft') { e.preventDefault(); nudge(-s, 0) }
-		else if (e.key === 'ArrowRight') { e.preventDefault(); nudge(s, 0) }
-		else if (e.key === 'ArrowUp') { e.preventDefault(); nudge(0, -s) }
-		else if (e.key === 'ArrowDown') { e.preventDefault(); nudge(0, s) }
-		else if (e.key === 'd') { e.preventDefault(); duplicate() }
-	}
+	function saveMap() { saved = { ...saved, [name]: snapshot() }; try { localStorage.setItem(MAPS, JSON.stringify(saved)) } catch {} }
+	function loadMap(n: string) { if (saved[n]) applyMap(saved[n]) }
+	function deleteMap(n: string) { const s = { ...saved }; delete s[n]; saved = s; try { localStorage.setItem(MAPS, JSON.stringify(saved)) } catch {} }
+	function newMap() { if (confirm('Start a new blank map? (current unsaved paint is kept in autosave until you paint over it)')) { cells = {}; name = 'untitled' } }
+	function clearPaint() { if (confirm('Clear all painted hexes on this map?')) cells = {} }
 
-	// Only autosave AFTER the initial load, so the empty default can't clobber
-	// a previously saved map during component init.
-	$: if (loaded) { try { localStorage.setItem(KEY, JSON.stringify({ orientation, size, rot, hexes })) } catch {} }
+	$: if (loaded) { try { localStorage.setItem(WORK, JSON.stringify(snapshot())) } catch {} }
 	onMount(() => {
-		try {
-			const s = localStorage.getItem(KEY)
-			if (s) { const d = JSON.parse(s); hexes = d.hexes ?? []; orientation = d.orientation ?? orientation; size = d.size ?? size; rot = d.rot ?? rot }
-		} catch {}
+		try { const s = localStorage.getItem(WORK); if (s) applyMap(JSON.parse(s)) } catch {}
+		try { const m = localStorage.getItem(MAPS); if (m) saved = JSON.parse(m) } catch {}
 		loaded = true
-		window.addEventListener('keydown', onKey)
+		window.addEventListener('pointerup', () => (painting = false))
 	})
-	onDestroy(() => window.removeEventListener('keydown', onKey))
+	onDestroy(() => {})
 
 	let copied = false
 	async function exportMap() {
-		const map = { board: 'forgotten_island', size, orientation, rot, hexes: hexes.map(({ id, x, y }) => ({ id, x: Math.round(x), y: Math.round(y) })) }
-		try { await navigator.clipboard.writeText(JSON.stringify(map)); copied = true; setTimeout(() => (copied = false), 1500) } catch {}
+		try { await navigator.clipboard.writeText(JSON.stringify(snapshot())); copied = true; setTimeout(() => (copied = false), 1500) } catch {}
 	}
-	function clearAll() { if (confirm('Delete all hexes?')) { hexes = []; selectedId = null } }
 </script>
 
-<svelte:head><title>Board Editor — GoA2</title></svelte:head>
+<svelte:head><title>Map Editor — GoA2</title></svelte:head>
 
 <div class="page">
-	<div class="board-wrap">
-		<img src={boardUrl} alt="Forgotten Island board" draggable="false" />
-		<svg bind:this={svgEl} class="overlay" viewBox="0 0 {BOARD} {BOARD}" preserveAspectRatio="xMidYMid meet"
-			on:pointerdown={addAt} on:pointermove={moveHandler} on:pointerup={upHandler} on:pointercancel={upHandler}>
-			{#each hexes as h (h.id)}
-				<polygon points={polyPoints(h.x, h.y, size, orientation, rot)} class="hex" class:sel={selectedId === h.id}
-					on:pointerdown={(e) => hexDown(e, h)} />
+	<div class="board-wrap" class:noimg={!showImage}>
+		{#if showImage}<img src={boardUrl} alt="tracing guide" draggable="false" />{/if}
+		<svg class="overlay" viewBox="0 0 {BOARD} {BOARD}" preserveAspectRatio="xMidYMid meet">
+			{#each grid as h (h.id)}
+				{#if cells[h.id]}
+					<polygon points={poly(h.cx, h.cy, size, rot)} style="fill:{colorOf(cells[h.id])}"
+						class="cell painted"
+						on:pointerdown={(e) => { e.preventDefault(); painting = true; paint(h.id) }}
+						on:pointerenter={() => painting && paint(h.id)} />
+				{:else if showEmpty}
+					<polygon points={poly(h.cx, h.cy, size, rot)} class="cell empty"
+						on:pointerdown={(e) => { e.preventDefault(); painting = true; paint(h.id) }}
+						on:pointerenter={() => painting && paint(h.id)} />
+				{/if}
 			{/each}
 		</svg>
 	</div>
 
 	<div class="panel">
-		<h3>Board editor</h3>
-		<p class="sub">Click the board to drop a hex. Drag to move it. Select one, then <b>Duplicate</b> to clone it to the next cell.</p>
+		<h3>Map editor</h3>
+		<p class="sub">Pick a color, then click or drag across hexes to paint. Unpainted hexes aren't part of the map.</p>
 
-		<label>Orientation
-			<select bind:value={orientation}><option value="pointy">pointy-top</option><option value="flat">flat-top</option></select>
-		</label>
-		<label class="sl"><span>Hex size<b>{size}</b></span><input type="range" min="30" max="110" step="0.5" bind:value={size} /></label>
-		<label class="sl"><span>Rotation°<b>{rot}</b></span><input type="range" min="-30" max="30" step="0.1" bind:value={rot} /></label>
-
-		<div class="hint">Tip: perfect ONE hex (size + rotation) on a painted cell first, then Duplicate outward. Arrow keys nudge the selected hex (Shift = ×10); <b>D</b> duplicates; Delete removes.</div>
+		<div class="palette">
+			{#each PALETTE as p}
+				<button class="sw" class:on={selected === p.t} style="--c:{p.c}" on:click={() => (selected = p.t)}>
+					<span class="dot" style="background:{p.c}"></span>{p.label}
+				</button>
+			{/each}
+			<button class="sw erase" class:on={selected === 'erase'} on:click={() => (selected = 'erase')}>⌫ Erase</button>
+		</div>
 
 		<div class="row">
-			<button on:click={duplicate} disabled={!selectedId}>⧉ Duplicate</button>
-			<button class="danger" on:click={del} disabled={!selectedId}>Delete</button>
+			<label class="ck"><input type="checkbox" bind:checked={showImage} /> tracing image</label>
+			<label class="ck"><input type="checkbox" bind:checked={showEmpty} /> empty hexes</label>
 		</div>
-		<div class="row">
-			<button on:click={exportMap} disabled={!hexes.length}>{copied ? 'Copied!' : 'Export map JSON'}</button>
-			<button class="g" on:click={clearAll} disabled={!hexes.length}>Clear</button>
+		<p class="tip">Uncheck both for a clean <b>play preview</b> — just the colored board.</p>
+
+		<details>
+			<summary>Grid geometry</summary>
+			{#each [ ['size','Hex size',30,110,0.5],['originX','Origin X',0,500,1],['originY','Origin Y',0,500,1],['rot','Rotation°',-15,15,0.1],['cols','Columns',6,34,1],['rows','Rows',6,34,1] ] as [k,l,mn,mx,st]}
+				<label class="sl"><span>{l}<b>{ {size,originX,originY,rot,cols,rows}[k] }</b></span>
+					<input type="range" min={mn} max={mx} step={st} value={ {size,originX,originY,rot,cols,rows}[k] }
+						on:input={(e)=>{const v=+e.currentTarget.value; if(k==='size')size=v;else if(k==='originX')originX=v;else if(k==='originY')originY=v;else if(k==='rot')rot=v;else if(k==='cols')cols=v;else rows=v;}} />
+				</label>
+			{/each}
+		</details>
+
+		<div class="maps">
+			<label>Map name <input class="txt" bind:value={name} /></label>
+			<div class="row">
+				<button on:click={saveMap}>💾 Save</button>
+				<button class="g" on:click={newMap}>New</button>
+				<button class="danger" on:click={clearPaint}>Clear paint</button>
+			</div>
+			{#if Object.keys(saved).length}
+				<div class="saved">
+					{#each Object.keys(saved) as n}
+						<div class="savedrow"><button class="link" on:click={() => loadMap(n)}>{n}</button><button class="x" on:click={() => deleteMap(n)}>✕</button></div>
+					{/each}
+				</div>
+			{/if}
 		</div>
-		<p class="count"><b>{hexes.length}</b> hexes{#if selectedId} · 1 selected{/if}</p>
+
+		<div class="row"><button on:click={exportMap} disabled={!paintedCount}>{copied ? 'Copied!' : 'Export map JSON'}</button></div>
+		<p class="count"><b>{paintedCount}</b> hexes painted</p>
 	</div>
 </div>
 
 <style>
 	.page { max-width: 1200px; margin: 0 auto; padding: 84px 16px 32px; display: flex; gap: 20px; flex-wrap: wrap; color: #e5e7eb; }
-	.board-wrap { position: relative; flex: 1 1 520px; max-width: 760px; aspect-ratio: 1/1; border-radius: 12px; overflow: hidden; box-shadow: 0 8px 30px rgba(0,0,0,.5); }
-	.board-wrap img { width: 100%; height: 100%; display: block; user-select: none; }
-	.overlay { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: crosshair; }
-	.hex { fill: rgba(56,189,248,.18); stroke: rgba(56,189,248,.8); stroke-width: 2; cursor: pointer; }
-	.hex:hover { fill: rgba(56,189,248,.4); }
-	.hex.sel { fill: rgba(250,204,21,.4); stroke: #facc15; stroke-width: 3; }
-	.panel { flex: 1 1 300px; max-width: 380px; background: #111827; border: 1px solid #374151; border-radius: 12px; padding: 16px; height: fit-content; }
+	.board-wrap { position: relative; flex: 1 1 520px; max-width: 760px; aspect-ratio: 1/1; border-radius: 12px; overflow: hidden; box-shadow: 0 8px 30px rgba(0,0,0,.5); background: #0b1220; }
+	.board-wrap.noimg { background: #0b1220; }
+	.board-wrap img { width: 100%; height: 100%; display: block; user-select: none; opacity: .85; }
+	.overlay { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
+	.cell { stroke-width: 2; cursor: pointer; }
+	.cell.painted { fill-opacity: .72; stroke: rgba(0,0,0,.45); }
+	.cell.painted:hover { fill-opacity: .9; }
+	.cell.empty { fill: rgba(255,255,255,.04); stroke: rgba(148,163,184,.35); }
+	.cell.empty:hover { fill: rgba(56,189,248,.35); }
+	.panel { flex: 1 1 320px; max-width: 400px; background: #111827; border: 1px solid #374151; border-radius: 12px; padding: 16px; height: fit-content; }
 	.panel h3 { margin: 0 0 4px; } .sub { font-size: 12px; color: #9ca3af; margin: 0 0 12px; }
-	label { display: block; font-size: 13px; margin-bottom: 10px; }
+	.palette { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 12px; }
+	.sw { display: flex; align-items: center; gap: 7px; font-size: 12.5px; padding: 7px 9px; border-radius: 8px; background: #1f2937; color: #e5e7eb; border: 2px solid transparent; cursor: pointer; text-align: left; }
+	.sw.on { border-color: #fff; }
+	.sw .dot { width: 14px; height: 14px; border-radius: 3px; flex: none; box-shadow: inset 0 0 0 1px rgba(0,0,0,.3); }
+	.sw.erase { grid-column: span 2; justify-content: center; }
+	.row { display: flex; gap: 8px; margin: 8px 0; align-items: center; }
+	.ck { display: flex; align-items: center; gap: 6px; font-size: 12.5px; }
+	.tip { font-size: 11.5px; color: #93c5fd; margin: 2px 0 10px; }
+	details { margin: 6px 0 12px; } summary { cursor: pointer; font-size: 13px; color: #cbd5e1; }
+	label { display: block; font-size: 13px; margin-bottom: 8px; }
 	label.sl span { display: flex; justify-content: space-between; margin-bottom: 3px; color: #cbd5e1; } label.sl b { color: #fff; }
 	input[type=range] { width: 100%; }
-	select { width: 100%; margin-top: 4px; background: #1f2937; color: #e5e7eb; border: 1px solid #374151; border-radius: 6px; padding: 4px; }
-	.hint { font-size: 11.5px; color: #93c5fd; background: #0b1220; border: 1px solid #1e3a5f; border-radius: 6px; padding: 8px; margin: 10px 0; line-height: 1.5; }
-	.row { display: flex; gap: 8px; margin: 8px 0; }
+	.txt { width: 100%; margin-top: 4px; background: #1f2937; color: #fff; border: 1px solid #374151; border-radius: 6px; padding: 6px; }
+	.maps { border-top: 1px solid #374151; margin-top: 10px; padding-top: 10px; }
+	.saved { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
+	.savedrow { display: flex; justify-content: space-between; align-items: center; background: #0b1220; border: 1px solid #1e293b; border-radius: 6px; padding: 2px 4px 2px 8px; }
+	.link { background: none; border: none; color: #93c5fd; cursor: pointer; font-size: 13px; padding: 4px 0; }
+	.x { background: none; border: none; color: #ef4444; cursor: pointer; }
 	button { font-size: 13px; padding: 7px 12px; border-radius: 8px; background: #2563eb; color: #fff; border: none; cursor: pointer; flex: 1; }
 	button:disabled { opacity: .4; cursor: default; }
-	button.danger { background: #7f1d1d; } button.g { background: #374151; }
+	button.g { background: #374151; } button.danger { background: #7f1d1d; }
 	.count { font-size: 12px; color: #9ca3af; }
 </style>
