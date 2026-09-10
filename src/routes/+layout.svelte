@@ -29,6 +29,8 @@
 		<NavLi class="text-dark-400" href="{base}/builder">Card Builder</NavLi>
 		<NavLi class="text-dark-400" href="{base}/draft">Draft</NavLi>
 		<NavLi class="text-dark-400" href="{base}/timer">Timer</NavLi>
+		<NavLi class="text-dark-400" href="{base}/board">Board</NavLi>
+		<NavLi class="text-dark-400" href="{base}/play">Map Editor</NavLi>
 	</NavUl>
 </Navbar>
 
