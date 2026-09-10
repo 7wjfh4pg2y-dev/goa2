@@ -19,6 +19,16 @@
 	type HexType = (typeof PALETTE)[number]['t']
 	const colorOf = (t: HexType) => PALETTE.find((p) => p.t === t)?.c ?? '#fff'
 
+	// 3D tile/emblem sprites rendered from the STLs (zone tiles keep their color;
+	// base + minion-spawn hexes show the emblem art)
+	const tileSprites = import.meta.glob('../../lib/images/tiles/*.png', { eager: true, import: 'default' }) as Record<string, string>
+	const minionSprites = import.meta.glob('../../lib/images/minions/*.png', { eager: true, import: 'default' }) as Record<string, string>
+	function spriteFor(t: HexType): string | undefined {
+		if (t === 'spawnOrange') return minionSprites['../../lib/images/minions/orange_melee.png']
+		if (t === 'spawnBlue') return minionSprites['../../lib/images/minions/blue_melee.png']
+		return tileSprites[`../../lib/images/tiles/${t}.png`]
+	}
+
 	// grid geometry (regular pointy-top lattice; adjustable so it roughly covers
 	// the image while tracing — precision doesn't matter, we paint whole cells)
 	let size = 62
@@ -34,6 +44,7 @@
 
 	let showImage = true
 	let showEmpty = true // show faint outlines of unpainted hexes (edit mode)
+	let tileMode = true // render painted hexes as 3D tile/emblem sprites (upright)
 	let painting = false
 	let loaded = false
 
@@ -85,11 +96,13 @@
 		return p.join(' ')
 	}
 
+	// In tile mode we render an upright board (ignore the tracing tilt).
+	$: erot = tileMode ? 0 : rot
 	$: grid = (() => {
 		const arr: { id: string; cx: number; cy: number }[] = []
 		for (let r = 0; r < rows; r++)
 			for (let c = 0; c < cols; c++) {
-				const [cx, cy] = centerOf(c, r, size, originX, originY, rot)
+				const [cx, cy] = centerOf(c, r, size, originX, originY, erot)
 				arr.push({ id: `${c}_${r}`, cx, cy })
 			}
 		return arr
@@ -141,16 +154,24 @@
 	<div class="board-wrap" bind:this={wrapEl} class:noimg={!showImage} class:panmode={panMode}
 		on:pointerdown={panDown} on:pointermove={panMove} on:pointerup={panUp} on:pointercancel={panUp}>
 		<div class="viewport" style="transform: translate({panX}px,{panY}px) scale({scale});">
-		{#if showImage}<img src={boardUrl} alt="tracing guide" draggable="false" />{/if}
+		{#if showImage && !tileMode}<img src={boardUrl} alt="tracing guide" draggable="false" />{/if}
 		<svg class="overlay" class:nopick={panMode} viewBox="0 0 {BOARD} {BOARD}" preserveAspectRatio="xMidYMid meet">
 			{#each grid as h (h.id)}
 				{#if cells[h.id]}
-					<polygon points={poly(h.cx, h.cy, size, rot)} style="fill:{colorOf(cells[h.id])}"
-						class="cell painted"
-						on:pointerdown={(e) => { e.preventDefault(); painting = true; paint(h.id) }}
-						on:pointerenter={() => painting && paint(h.id)} />
+					{#if tileMode}
+						<image href={spriteFor(cells[h.id])} x={h.cx - SQRT3 * size * 0.53} y={h.cy - size * 1.06}
+							width={SQRT3 * size * 1.06} height={size * 2 * 1.06} style="pointer-events:none" preserveAspectRatio="none" />
+						<polygon points={poly(h.cx, h.cy, size, erot)} class="cell hit"
+							on:pointerdown={(e) => { e.preventDefault(); painting = true; paint(h.id) }}
+							on:pointerenter={() => painting && paint(h.id)} />
+					{:else}
+						<polygon points={poly(h.cx, h.cy, size, erot)} style="fill:{colorOf(cells[h.id])}"
+							class="cell painted"
+							on:pointerdown={(e) => { e.preventDefault(); painting = true; paint(h.id) }}
+							on:pointerenter={() => painting && paint(h.id)} />
+					{/if}
 				{:else if showEmpty}
-					<polygon points={poly(h.cx, h.cy, size, rot)} class="cell empty"
+					<polygon points={poly(h.cx, h.cy, size, erot)} class="cell empty"
 						on:pointerdown={(e) => { e.preventDefault(); painting = true; paint(h.id) }}
 						on:pointerenter={() => painting && paint(h.id)} />
 				{/if}
@@ -179,10 +200,11 @@
 		</div>
 
 		<div class="row">
-			<label class="ck"><input type="checkbox" bind:checked={showImage} /> tracing image</label>
+			<label class="ck"><input type="checkbox" bind:checked={tileMode} /> 3D tiles</label>
+			<label class="ck"><input type="checkbox" bind:checked={showImage} disabled={tileMode} /> tracing image</label>
 			<label class="ck"><input type="checkbox" bind:checked={showEmpty} /> empty hexes</label>
 		</div>
-		<p class="tip">Uncheck both for a clean <b>play preview</b> — just the colored board.</p>
+		<p class="tip"><b>3D tiles</b> shows the STL-rendered board (upright). Turn it off + tracing image on to trace/paint over the map; uncheck empty hexes for a clean preview.</p>
 
 		<details>
 			<summary>Grid geometry</summary>
@@ -233,6 +255,8 @@
 	.cell.painted:hover { fill-opacity: .9; }
 	.cell.empty { fill: rgba(255,255,255,.04); stroke: rgba(148,163,184,.35); }
 	.cell.empty:hover { fill: rgba(56,189,248,.35); }
+	.cell.hit { fill: transparent; stroke: transparent; }
+	.cell.hit:hover { fill: rgba(56,189,248,.28); }
 	.panel { flex: 1 1 320px; max-width: 400px; background: #111827; border: 1px solid #374151; border-radius: 12px; padding: 16px; height: fit-content; }
 	.panel h3 { margin: 0 0 4px; } .sub { font-size: 12px; color: #9ca3af; margin: 0 0 12px; }
 	.palette { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 12px; }
