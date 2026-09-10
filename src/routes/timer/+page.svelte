@@ -589,7 +589,7 @@
 </script>
 
 <svelte:head>
-	<title>Timer — Stats of Atlantis</title>
+	<title>Timer — GoA2</title>
 	<meta
 		name="description"
 		content="Run Guards of Atlantis II planning, resolving, and upgrading timers."

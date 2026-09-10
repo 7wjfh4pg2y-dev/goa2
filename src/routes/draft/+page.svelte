@@ -650,7 +650,7 @@
 </script>
 
 <svelte:head>
-	<title>Draft — Stats of Atlantis</title>
+	<title>Draft — GoA2</title>
 	<meta name="description" content="Draft heroes for your Guards of Atlantis II games." />
 </svelte:head>
 

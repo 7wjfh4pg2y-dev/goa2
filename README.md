@@ -1,6 +1,4 @@
-![logo](src/lib/images/logo.png)
-
-# Stats of Atlantis
+# GoA2
 
 ## Developing
 

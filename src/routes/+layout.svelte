@@ -14,8 +14,8 @@
 
 <Navbar class="fixed z-50 top-0 border-b bg-dark-800 border-b-dark-600">
 	<NavBrand href="{base}/">
-		<img src={smallLogoImage} class="mr-3 h-6 sm:h-9" alt="SoA Logo" />
-		<span class="whitespace-nowrap text-2xl font-semibold text-white">Stats of Atlantis</span>
+		<img src={smallLogoImage} class="mr-3 h-6 sm:h-9" alt="logo" />
+		<span class="whitespace-nowrap text-2xl font-semibold text-white">GoA2</span>
 	</NavBrand>
 	<NavHamburger class="text-dark-400 hover:bg-dark-600" />
 	<NavUl
