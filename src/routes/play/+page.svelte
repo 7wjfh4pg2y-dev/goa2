@@ -1,225 +1,164 @@
 <script lang="ts">
-	import { onMount, onDestroy } from 'svelte'
-	import { supabase } from '$lib/supabase'
-	import type { RealtimeChannel } from '@supabase/supabase-js'
+	import { onMount } from 'svelte'
+	import boardUrl from '$lib/images/board/forgotten_island.webp'
 
-	const clientId = Math.random().toString(36).slice(2, 10)
+	// The board image is 2000x2000. We express the hex grid in the board's own
+	// pixel coordinates via an SVG viewBox of 0..2000, so calibration values are
+	// resolution-independent and portable regardless of on-screen size.
+	const BOARD = 2000
 
-	let room = 'lobby'
-	let shareUrl = ''
-	let status: 'connecting' | 'connected' | 'error' = 'connecting'
-	let peerCount = 1
-	let loaded = false
-
-	// Shared puck. `target` is the latest known logical position (0..1),
-	// `render` is what's drawn — eased toward target each animation frame so
-	// motion stays smooth between network samples and across browsers.
-	let target = { x: 0.5, y: 0.5 }
-	let render = { x: 0.5, y: 0.5 }
-
-	let arena: HTMLDivElement
-	let puckEl: HTMLDivElement
-	let arenaW = 1
-	let arenaH = 1
-	let ro: ResizeObserver | undefined
-	let raf = 0
-
-	let channel: RealtimeChannel | undefined
-	let dragging = false
-	let lastSent = 0
-
-	function measure() {
-		if (!arena) return
-		const r = arena.getBoundingClientRect()
-		arenaW = r.width
-		arenaH = r.height
+	type Cal = {
+		orientation: 'pointy' | 'flat'
+		size: number // center-to-corner radius, in board px
+		ox: number // x of grid origin (col 0,row 0 center)
+		oy: number
+		cols: number
+		rows: number
+		opacity: number
+		show: boolean
 	}
 
-	function frame() {
-		// Follow the cursor 1:1 while *you* drag; ease when receiving remote moves.
-		const f = dragging ? 1 : 0.3
-		render.x += (target.x - render.x) * f
-		render.y += (target.y - render.y) * f
-		if (puckEl) {
-			const px = render.x * arenaW
-			const py = render.y * arenaH
-			puckEl.style.transform = `translate3d(${px}px, ${py}px, 0) translate(-50%, -50%)`
-		}
-		raf = requestAnimationFrame(frame)
+	const DEFAULT: Cal = {
+		orientation: 'pointy',
+		size: 60,
+		ox: 210,
+		oy: 190,
+		cols: 17,
+		rows: 19,
+		opacity: 0.6,
+		show: true,
 	}
 
-	async function persist() {
-		await supabase.from('rooms').upsert({
-			id: room,
-			state: { puck: target },
-			updated_at: new Date().toISOString(),
-		})
-	}
+	let cal: Cal = { ...DEFAULT }
+	let hovered = -1
 
-	function broadcastLive() {
-		const now = performance.now()
-		if (now - lastSent < 33) return
-		lastSent = now
-		channel?.send({ type: 'broadcast', event: 'puck', payload: { id: clientId, ...target } })
-	}
+	const KEY = 'goa2-hex-cal-v1'
+	onMount(() => {
+		try {
+			const s = localStorage.getItem(KEY)
+			if (s) cal = { ...DEFAULT, ...JSON.parse(s) }
+		} catch {}
+	})
+	$: try { localStorage.setItem(KEY, JSON.stringify(cal)) } catch {}
 
-	function pointerToNorm(e: PointerEvent) {
-		const r = arena.getBoundingClientRect()
-		target = {
-			x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)),
-			y: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)),
-		}
-		broadcastLive()
-	}
+	const SQRT3 = Math.sqrt(3)
 
-	function onDown(e: PointerEvent) {
-		dragging = true
-		arena.setPointerCapture(e.pointerId)
-		pointerToNorm(e)
-	}
-	function onMove(e: PointerEvent) {
-		if (dragging) pointerToNorm(e)
-	}
-	function onUp(e: PointerEvent) {
-		if (!dragging) return
-		dragging = false
-		try { arena.releasePointerCapture(e.pointerId) } catch {}
-		persist()
-	}
-
-	onMount(async () => {
-		const params = new URLSearchParams(window.location.search)
-		room = params.get('room') || 'lobby'
-		shareUrl = window.location.origin + window.location.pathname + '?room=' + room
-
-		measure()
-		ro = new ResizeObserver(measure)
-		ro.observe(arena)
-		raf = requestAnimationFrame(frame)
-
-		// Load persisted state (create the row if this room is new).
-		const { data, error } = await supabase.from('rooms').select('state').eq('id', room).maybeSingle()
-		if (error) status = 'error'
-		if (data?.state?.puck) {
-			target = data.state.puck
-			render = { ...target } // snap on first load — no animation from center
+	// Hex center for offset coords (odd-r for pointy, odd-q for flat).
+	function center(c: number, r: number, k: Cal) {
+		if (k.orientation === 'pointy') {
+			const x = k.ox + k.size * SQRT3 * (c + 0.5 * (r & 1))
+			const y = k.oy + k.size * 1.5 * r
+			return [x, y]
 		} else {
-			await persist()
+			const x = k.ox + k.size * 1.5 * c
+			const y = k.oy + k.size * SQRT3 * (r + 0.5 * (c & 1))
+			return [x, y]
 		}
-		loaded = true
+	}
 
-		channel = supabase.channel('goa2-play:' + room, {
-			config: { broadcast: { self: false }, presence: { key: clientId } },
-		})
+	function polyPoints(cx: number, cy: number, s: number, orient: 'pointy' | 'flat') {
+		const pts = []
+		for (let i = 0; i < 6; i++) {
+			const ang = (Math.PI / 180) * (60 * i + (orient === 'pointy' ? -90 : 0))
+			pts.push([cx + s * Math.cos(ang), cy + s * Math.sin(ang)])
+		}
+		return pts.map((p) => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ')
+	}
 
-		channel
-			.on('broadcast', { event: 'puck' }, ({ payload }) => {
-				const p = payload as { id: string; x: number; y: number }
-				if (p.id === clientId || dragging) return
-				target = { x: p.x, y: p.y }
-			})
-			.on(
-				'postgres_changes',
-				{ event: '*', schema: 'public', table: 'rooms', filter: 'id=eq.' + room },
-				(payload) => {
-					if (dragging) return
-					const s = (payload.new as { state?: { puck?: { x: number; y: number } } }).state
-					if (s?.puck) target = s.puck
-				},
-			)
-			.on('presence', { event: 'sync' }, () => {
-				peerCount = Object.keys(channel!.presenceState()).length
-			})
-			.subscribe(async (s) => {
-				if (s === 'SUBSCRIBED') {
-					status = 'connected'
-					await channel!.track({ at: Date.now() })
-				} else if (s === 'CHANNEL_ERROR' || s === 'TIMED_OUT') {
-					status = 'error'
+	type Hex = { id: number; c: number; r: number; pts: string }
+	$: hexes = (() => {
+		const out: Hex[] = []
+		let id = 0
+		const margin = cal.size
+		for (let r = 0; r < cal.rows; r++) {
+			for (let c = 0; c < cal.cols; c++) {
+				const [cx, cy] = center(c, r, cal)
+				if (cx < -margin || cx > BOARD + margin || cy < -margin || cy > BOARD + margin) {
+					id++
+					continue
 				}
-			})
-	})
-
-	onDestroy(() => {
-		if (raf) cancelAnimationFrame(raf)
-		if (ro) ro.disconnect()
-		if (channel) supabase.removeChannel(channel)
-	})
+				out.push({ id: id++, c, r, pts: polyPoints(cx, cy, cal.size, cal.orientation) })
+			}
+		}
+		return out
+	})()
 
 	let copied = false
-	async function copyLink() {
-		try {
-			await navigator.clipboard.writeText(shareUrl)
-			copied = true
-			setTimeout(() => (copied = false), 1500)
-		} catch {}
+	async function copyCal() {
+		try { await navigator.clipboard.writeText(JSON.stringify(cal, null, 2)); copied = true; setTimeout(() => (copied = false), 1500) } catch {}
 	}
+	function reset() { cal = { ...DEFAULT } }
 </script>
 
-<svelte:head>
-	<title>Realtime Test — Guards of Atlantis</title>
-</svelte:head>
+<svelte:head><title>Board Calibration — Guards of Atlantis</title></svelte:head>
 
-<div class="wrap">
-	<div class="bar">
-		<span class="dot-status" class:ok={status === 'connected'} class:err={status === 'error'}></span>
-		<strong>
-			{#if status === 'connecting'}Connecting…{:else if status === 'connected'}Connected{:else}Connection error{/if}
-		</strong>
-		<span class="pill">Room: {room}</span>
-		<span class="pill">{peerCount} here</span>
-		<span class="pill">{loaded ? 'state loaded' : 'loading…'}</span>
-		<span class="spacer"></span>
-		<button on:click={copyLink}>{copied ? 'Copied!' : 'Copy invite link'}</button>
+<div class="page">
+	<div class="board-wrap">
+		<img src={boardUrl} alt="Forgotten Island board" draggable="false" />
+		{#if cal.show}
+			<svg class="overlay" viewBox="0 0 {BOARD} {BOARD}" preserveAspectRatio="xMidYMid meet">
+				{#each hexes as h (h.id)}
+					<polygon
+						points={h.pts}
+						class="hex"
+						class:hovered={hovered === h.id}
+						style="stroke: rgba(255,60,60,{cal.opacity})"
+						on:pointerenter={() => (hovered = h.id)}
+						on:pointerleave={() => (hovered === h.id && (hovered = -1))}
+					/>
+				{/each}
+			</svg>
+		{/if}
 	</div>
 
-	<p class="hint">
-		Drag the <span class="chip">★ shared puck</span> around. It moves live on every screen — and its
-		position is <strong>saved to the database</strong>: refresh the page (or rejoin later) and it's
-		right where you left it.
-	</p>
+	<div class="panel">
+		<h3>Hex grid calibration</h3>
+		<p class="sub">Nudge until the red grid sits on the board's printed hexes. Values are in board pixels (0–2000).</p>
 
-	<div
-		class="arena"
-		bind:this={arena}
-		on:pointerdown={onDown}
-		on:pointermove={onMove}
-		on:pointerup={onUp}
-		on:pointercancel={onUp}
-	>
-		<div class="puck" bind:this={puckEl}>★</div>
+		<label>Orientation
+			<select bind:value={cal.orientation}>
+				<option value="pointy">pointy-top</option>
+				<option value="flat">flat-top</option>
+			</select>
+		</label>
+
+		{#each [ ['size','Hex size',20,120,0.5], ['ox','Origin X',-200,600,1], ['oy','Origin Y',-200,600,1], ['cols','Columns',1,40,1], ['rows','Rows',1,40,1], ['opacity','Line opacity',0,1,0.05] ] as [key,label,min,max,step]}
+			<label class="slider">
+				<span>{label}<b>{cal[key]}</b></span>
+				<input type="range" min={min} max={max} step={step} bind:value={cal[key]} />
+			</label>
+		{/each}
+
+		<label class="check"><input type="checkbox" bind:checked={cal.show} /> Show grid</label>
+
+		<div class="row">
+			<button on:click={copyCal}>{copied ? 'Copied!' : 'Copy calibration JSON'}</button>
+			<button class="ghost" on:click={reset}>Reset</button>
+		</div>
+		<p class="count">{hexes.length} hexes drawn · hover one to test hittability</p>
+		<pre class="json">{JSON.stringify(cal)}</pre>
 	</div>
-
-	<p class="foot">Phase 1a · persistent shared state · GPU transform + rAF interpolation</p>
 </div>
 
 <style>
-	.wrap { max-width: 900px; margin: 0 auto; padding: 90px 16px 32px; color: #e5e7eb; }
-	.bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
-	.spacer { flex: 1 1 auto; }
-	.dot-status { width: 10px; height: 10px; border-radius: 50%; background: #eab308; display: inline-block; }
-	.dot-status.ok { background: #22c55e; }
-	.dot-status.err { background: #ef4444; }
-	.pill { font-size: 13px; padding: 2px 10px; border-radius: 999px; background: #1f2937; border: 1px solid #374151; }
-	.chip { color: #eab308; font-weight: 600; }
-	button { font-size: 13px; padding: 6px 12px; border-radius: 8px; background: #374151; color: #e5e7eb; border: 1px solid #4b5563; cursor: pointer; }
-	button:hover { background: #4b5563; }
-	.hint { font-size: 14px; color: #9ca3af; margin: 6px 0 14px; }
-	.arena {
-		position: relative; width: 100%; height: 60vh; min-height: 340px;
-		border: 2px solid #374151; border-radius: 14px;
-		background: radial-gradient(circle at 25px 25px, #1f2937 2px, transparent 0) 0 0 / 50px 50px, #0b1220;
-		touch-action: none; overflow: hidden; cursor: grab;
-	}
-	.arena:active { cursor: grabbing; }
-	.puck {
-		position: absolute; top: 0; left: 0;
-		width: 44px; height: 44px; border-radius: 50%;
-		display: flex; align-items: center; justify-content: center;
-		font-size: 22px; color: #1a1200;
-		background: radial-gradient(circle at 35% 30%, #fde68a, #f59e0b);
-		box-shadow: 0 4px 14px rgba(0,0,0,0.55); outline: 3px solid rgba(255,255,255,0.85);
-		will-change: transform;
-	}
-	.foot { font-size: 12px; color: #6b7280; margin-top: 12px; }
+	.page { max-width: 1200px; margin: 0 auto; padding: 84px 16px 32px; display: flex; gap: 20px; flex-wrap: wrap; color: #e5e7eb; }
+	.board-wrap { position: relative; flex: 1 1 520px; max-width: 760px; aspect-ratio: 1 / 1; border-radius: 12px; overflow: hidden; box-shadow: 0 8px 30px rgba(0,0,0,0.5); }
+	.board-wrap img { width: 100%; height: 100%; display: block; user-select: none; }
+	.overlay { position: absolute; inset: 0; width: 100%; height: 100%; }
+	.hex { fill: transparent; stroke-width: 2; pointer-events: all; transition: fill 0.08s; }
+	.hex:hover, .hex.hovered { fill: rgba(80,180,255,0.35); stroke: #38bdf8 !important; }
+	.panel { flex: 1 1 300px; max-width: 380px; background: #111827; border: 1px solid #374151; border-radius: 12px; padding: 16px; height: fit-content; }
+	.panel h3 { margin: 0 0 4px; }
+	.sub { font-size: 12px; color: #9ca3af; margin: 0 0 14px; }
+	label { display: block; font-size: 13px; margin-bottom: 12px; }
+	label.slider span { display: flex; justify-content: space-between; margin-bottom: 4px; color: #cbd5e1; }
+	label.slider b { color: #fff; }
+	input[type=range] { width: 100%; }
+	select { width: 100%; margin-top: 4px; background: #1f2937; color: #e5e7eb; border: 1px solid #374151; border-radius: 6px; padding: 4px; }
+	.check { display: flex; align-items: center; gap: 8px; }
+	.row { display: flex; gap: 8px; margin: 8px 0; }
+	button { font-size: 13px; padding: 7px 12px; border-radius: 8px; background: #2563eb; color: #fff; border: none; cursor: pointer; }
+	button.ghost { background: #374151; }
+	.count { font-size: 12px; color: #9ca3af; }
+	.json { font-size: 11px; background: #0b1220; border: 1px solid #374151; border-radius: 6px; padding: 8px; overflow-x: auto; color: #93c5fd; }
 </style>
