@@ -32,6 +32,8 @@
 		return tileSprites[`../../lib/images/tiles/${t}.png`]
 	}
 	const isSpawn = (t?: HexType) => t === 'spawnOrange' || t === 'spawnBlue'
+	const isThrone = (t?: HexType) => t === 'baseOrangeSpawn' || t === 'baseBlueSpawn'
+	const baseTileFor = (t: HexType) => (t === 'baseOrangeSpawn' ? 'baseOrange' : 'baseBlue')
 
 	// A minion-spawn hex takes on the colour of the terrain zone it sits in
 	// (inferred from its neighbours); the team emblem is drawn as a badge on top.
@@ -211,12 +213,12 @@
 			{#each grid as h (h.id)}
 				{#if cells[h.id]}
 					{#if tileMode}
-						{#if isSpawn(cells[h.id])}
-							<image href={zoneTile(zones[h.id] ?? 'middle')} x={h.cx - SQRT3 * size * 0.53} y={h.cy - size * 1.06}
+						{#if isSpawn(cells[h.id]) || isThrone(cells[h.id])}
+							<image href={zoneTile(isSpawn(cells[h.id]) ? (zones[h.id] ?? 'middle') : baseTileFor(cells[h.id]))} x={h.cx - SQRT3 * size * 0.53} y={h.cy - size * 1.06}
 								width={SQRT3 * size * 1.06} height={size * 2 * 1.06} preserveAspectRatio="none" style="pointer-events:none" />
 							<image href={spriteFor(h.id, cells[h.id])} x={h.cx - SQRT3 * size * 1.06 * 0.36} y={h.cy - SQRT3 * size * 1.06 * 0.36}
 								width={SQRT3 * size * 1.06 * 0.72} height={SQRT3 * size * 1.06 * 0.72} preserveAspectRatio="xMidYMid meet" style="pointer-events:none"
-								transform={meta[h.id]?.dir ? `rotate(${meta[h.id].dir * 60} ${h.cx} ${h.cy})` : undefined} />
+								transform={isSpawn(cells[h.id]) && meta[h.id]?.dir ? `rotate(${meta[h.id].dir * 60} ${h.cx} ${h.cy})` : undefined} />
 						{:else}
 							<image href={spriteFor(h.id, cells[h.id])} x={h.cx - SQRT3 * size * 0.53} y={h.cy - size * 1.06}
 								width={SQRT3 * size * 1.06} height={size * 2 * 1.06} preserveAspectRatio="none" style="pointer-events:none" />
