@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte'
 	import { writable, type Readable } from 'svelte/store'
+	import BoardCanvas from '$lib/BoardCanvas.svelte'
+	import { availableMaps, type MapChoice } from '$lib/maps'
 	import {
 		joinMatch,
 		nextTurn,
@@ -35,6 +37,10 @@
 	let customWaves = 3
 	let customLife = 6
 
+	let maps: MapChoice[] = []
+	let mapId = ''
+	let boardCanvas: BoardCanvas
+
 	let session: MatchSession | null = null
 	let state: Readable<MatchState> = writable(initialMatchState())
 	let players: Readable<Player[]> = writable([])
@@ -50,6 +56,8 @@
 
 	onMount(() => {
 		ticker = setInterval(() => (now = Date.now()), 250)
+		maps = availableMaps()
+		mapId = maps[0]?.id ?? ''
 		try {
 			colGame = localStorage.getItem('goa2-hud-game') === '1'
 			colLife = localStorage.getItem('goa2-hud-life') === '1'
@@ -82,7 +90,13 @@
 			localStorage.setItem('goa2-hud-name', name)
 		} catch {}
 		room = room.trim().toUpperCase() || 'TABLE'
-		const seed = initialMatchState({ waves: previewWaves, life: previewLife })
+		const chosen = maps.find((m) => m.id === mapId) ?? maps[0]
+		const seed = initialMatchState({
+			waves: previewWaves,
+			life: previewLife,
+			mapId: chosen?.id ?? '',
+			map: chosen?.data ?? null
+		})
 		session = joinMatch(room, { name, team }, seed)
 		state = session.state
 		players = session.players
@@ -222,12 +236,42 @@
 				</p>
 			</div>
 
+			<div class="space-y-2">
+				<span class="font-semibold">Map</span>
+				{#if maps.length}
+					<div class="flex flex-wrap gap-2">
+						{#each maps as m (m.id)}
+							<button
+								on:click={() => (mapId = m.id)}
+								class={`chip ${mapId === m.id ? 'bg-amber-600 border-amber-500' : 'bg-dark-700 border-dark-600'}`}
+								>{m.label}</button
+							>
+						{/each}
+					</div>
+					<p class="text-dark-400 text-xs">
+						The chosen board is shared with everyone in the room — even a custom one from the editor.
+					</p>
+				{:else}
+					<p class="text-dark-400 text-xs">Loading maps…</p>
+				{/if}
+			</div>
+
 			<button on:click={join} class="primary-button w-full">Join table</button>
 		</div>
 	</div>
 {:else}
 	{@const s = $state}
 	<div class="table-surface">
+		<!-- the chosen board, rendered as the play surface -->
+		{#if s.map}
+			<BoardCanvas map={s.map} bind:this={boardCanvas} />
+			<div class="boardctl">
+				<button on:click={() => boardCanvas.zoomBtn(1 / 1.2)}>−</button>
+				<button on:click={() => boardCanvas.zoomBtn(1.2)}>+</button>
+				<button on:click={() => boardCanvas.reset()}>⟲</button>
+			</div>
+		{/if}
+
 		<!-- UPPER-LEFT: shared game state -->
 		<section class="hud top-left" class:collapsed={colGame}>
 			<header>
@@ -415,6 +459,7 @@
 	}
 	.hud {
 		position: absolute;
+		z-index: 5;
 		background: rgba(15, 21, 34, 0.92);
 		border: 1px solid rgb(55 65 81);
 		border-radius: 0.6rem;
@@ -422,6 +467,25 @@
 		backdrop-filter: blur(4px);
 		width: 15rem;
 		max-width: calc(50vw - 1rem);
+	}
+	.boardctl {
+		position: absolute;
+		z-index: 5;
+		top: 0.75rem;
+		left: 50%;
+		transform: translateX(-50%);
+		display: flex;
+		gap: 0.25rem;
+	}
+	.boardctl button {
+		width: 2rem;
+		padding: 0.3rem 0;
+		background: rgba(17, 24, 39, 0.9);
+		border: 1px solid #374151;
+		border-radius: 0.35rem;
+		color: #e5e7eb;
+		font-size: 0.95rem;
+		cursor: pointer;
 	}
 	.top-left { top: 0.75rem; left: 0.75rem; }
 	.top-right { top: 0.75rem; right: 0.75rem; }
@@ -498,6 +562,7 @@
 
 	.victory {
 		position: absolute;
+		z-index: 6;
 		top: 6.5rem; left: 50%; transform: translateX(-50%);
 		text-align: center;
 		background: rgba(15, 21, 34, 0.95);
