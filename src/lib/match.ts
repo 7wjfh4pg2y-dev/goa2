@@ -16,6 +16,7 @@
 import { writable, type Readable } from 'svelte/store'
 import { supabase } from './supabase'
 import type { RealtimeChannel } from '@supabase/supabase-js'
+import type { GameMap } from './maps'
 
 export type Team = 'orange' | 'blue'
 export type Phase = 'planning' | 'action' | 'upgrade'
@@ -54,6 +55,8 @@ export interface MatchState {
 	life: Record<Team, number> // per-team Life counters remaining; 0 = that team loses
 	timer: TimerState
 	log: LogEntry[] // capped activity log (most recent last)
+	mapId: string // id of the chosen board (from the maps registry)
+	map: GameMap | null // full board data, shared so everyone renders the same map
 	rev: number // monotonic version for last-write-wins
 	updatedBy: string
 	updatedAt: number
@@ -75,7 +78,14 @@ export interface Player {
 }
 
 export function initialMatchState(
-	opts: { length?: 'quick' | 'long'; players?: number; waves?: number; life?: number } = {}
+	opts: {
+		length?: 'quick' | 'long'
+		players?: number
+		waves?: number
+		life?: number
+		mapId?: string
+		map?: GameMap | null
+	} = {}
 ): MatchState {
 	const length = opts.length ?? 'long'
 	const players = opts.players ?? 6
@@ -91,6 +101,8 @@ export function initialMatchState(
 		life: { orange: life, blue: life },
 		timer: { running: false, baseMs: 0, startedAt: null },
 		log: [],
+		mapId: opts.mapId ?? '',
+		map: opts.map ?? null,
 		rev: 0,
 		updatedBy: '',
 		updatedAt: 0
