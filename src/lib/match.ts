@@ -1,8 +1,9 @@
 // Shared, room-synced match state for the assisted table (Phase 2).
 //
 // This is the single source of truth every player at a table reads from and
-// writes to: which round/turn we're on, whose coin side is up, how many wave
-// counters each team has left, and the running score. It syncs over Supabase
+// writes to: which round/turn we're on, whose coin side is up, the shared wave
+// pool, each team's Life counters, the shared timer, and an attributed activity
+// log of who changed what. It syncs over Supabase
 // Realtime broadcast + presence — no database row required — so it works the
 // same way the shared board pieces (Phase 1) do. Persistence and proper
 // room-scoped authorization come with the Supabase hardening pass (Phase 3).
@@ -28,6 +29,21 @@ export const PHASE_LABELS: Record<Phase, string> = {
 	upgrade: 'Upgrade'
 }
 
+export interface LogEntry {
+	id: string
+	by: string // player name
+	text: string // human-readable action, e.g. "Blue Push · waves 5→4"
+	at: number // epoch ms
+}
+
+/** Shared stopwatch. Display time is derived so there's no clock drift:
+ *  running ? baseMs + (now - startedAt) : baseMs. */
+export interface TimerState {
+	running: boolean
+	baseMs: number // accumulated while paused
+	startedAt: number | null // epoch ms of the current run, else null
+}
+
 export interface MatchState {
 	round: number
 	turn: number // 1..TURNS_PER_ROUND
@@ -36,10 +52,14 @@ export interface MatchState {
 	waves: number // SHARED wave counters remaining; game ends when it hits 0
 	lastPush: Team | null // team that won the most recent Push the Lane
 	life: Record<Team, number> // per-team Life counters remaining; 0 = that team loses
+	timer: TimerState
+	log: LogEntry[] // capped activity log (most recent last)
 	rev: number // monotonic version for last-write-wins
 	updatedBy: string
 	updatedAt: number
 }
+
+export const LOG_CAP = 60
 
 /** Life counters per team, from the rulebook setup table (base, single lane). */
 export function lifeFor(length: 'quick' | 'long', players: number): number {
@@ -55,23 +75,45 @@ export interface Player {
 }
 
 export function initialMatchState(
-	opts: { length?: 'quick' | 'long'; players?: number } = {}
+	opts: { length?: 'quick' | 'long'; players?: number; waves?: number; life?: number } = {}
 ): MatchState {
 	const length = opts.length ?? 'long'
 	const players = opts.players ?? 6
-	const life = lifeFor(length, players)
+	const life = opts.life ?? lifeFor(length, players)
+	const waves = opts.waves ?? wavesFor(length)
 	return {
 		round: 1,
 		turn: 1,
 		phase: 'planning',
 		tieBreaker: 'orange',
-		waves: wavesFor(length),
+		waves,
 		lastPush: null,
 		life: { orange: life, blue: life },
+		timer: { running: false, baseMs: 0, startedAt: null },
+		log: [],
 		rev: 0,
 		updatedBy: '',
 		updatedAt: 0
 	}
+}
+
+/** Derived stopwatch reading in ms (no stored drift). */
+export function timerDisplayMs(t: TimerState, now = Date.now()): number {
+	return t.running && t.startedAt != null ? t.baseMs + (now - t.startedAt) : t.baseMs
+}
+
+export function startTimer(): Partial<MatchState> {
+	return { timer: { running: true, baseMs: 0, startedAt: Date.now() } }
+}
+export function toggleTimer(t: TimerState): Partial<MatchState> {
+	const now = Date.now()
+	if (t.running && t.startedAt != null) {
+		return { timer: { running: false, baseMs: t.baseMs + (now - t.startedAt), startedAt: null } }
+	}
+	return { timer: { running: true, baseMs: t.baseMs, startedAt: now } }
+}
+export function resetTimer(): Partial<MatchState> {
+	return { timer: { running: false, baseMs: 0, startedAt: null } }
 }
 
 const otherTeam = (t: Team): Team => (t === 'orange' ? 'blue' : 'orange')
@@ -82,6 +124,8 @@ export interface MatchSession {
 	players: Readable<Player[]>
 	/** Merge a patch into the shared state and broadcast it to everyone. */
 	update: (patch: Partial<MatchState>) => void
+	/** Apply a patch AND append an attributed log entry describing it. */
+	act: (text: string, patch: Partial<MatchState>) => void
 	/** Announce which team this client is playing (or spectating). */
 	setSelf: (info: { name?: string; team?: Team | 'spectator' }) => void
 	leave: () => void
@@ -167,6 +211,16 @@ export function joinMatch(
 		broadcastState()
 	}
 
+	const act = (text: string, patch: Partial<MatchState>) => {
+		const entry: LogEntry = {
+			id: globalThis.crypto?.randomUUID?.() ?? `l_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+			by: me.name,
+			text,
+			at: Date.now()
+		}
+		update({ ...patch, log: [...local.log, entry].slice(-LOG_CAP) })
+	}
+
 	const setSelf = (info: { name?: string; team?: Team | 'spectator' }) => {
 		me = { ...me, ...info }
 		channel.track(me)
@@ -181,7 +235,7 @@ export function joinMatch(
 		}
 	}
 
-	return { state, players, update, setSelf, leave, clientId }
+	return { state, players, update, act, setSelf, leave, clientId }
 }
 
 // ---- Round/turn helpers (encode the rulebook's structure) -------------------
