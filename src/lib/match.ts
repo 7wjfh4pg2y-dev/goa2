@@ -33,12 +33,20 @@ export interface MatchState {
 	turn: number // 1..TURNS_PER_ROUND
 	phase: Phase
 	tieBreaker: Team // team whose symbol is currently showing on the coin
-	waves: Record<Team, number> // wave counters remaining (victory track)
-	score: Record<Team, number> // battle points / kills toward victory
+	waves: number // SHARED wave counters remaining; game ends when it hits 0
+	lastPush: Team | null // team that won the most recent Push the Lane
+	life: Record<Team, number> // per-team Life counters remaining; 0 = that team loses
 	rev: number // monotonic version for last-write-wins
 	updatedBy: string
 	updatedAt: number
 }
+
+/** Life counters per team, from the rulebook setup table (base, single lane). */
+export function lifeFor(length: 'quick' | 'long', players: number): number {
+	if (length === 'quick') return players <= 4 ? 4 : 5
+	return players <= 4 ? 6 : 8
+}
+export const wavesFor = (length: 'quick' | 'long') => (length === 'quick' ? 3 : 5)
 
 export interface Player {
 	id: string
@@ -46,14 +54,20 @@ export interface Player {
 	team: Team | 'spectator'
 }
 
-export function initialMatchState(waves = 5): MatchState {
+export function initialMatchState(
+	opts: { length?: 'quick' | 'long'; players?: number } = {}
+): MatchState {
+	const length = opts.length ?? 'long'
+	const players = opts.players ?? 6
+	const life = lifeFor(length, players)
 	return {
 		round: 1,
 		turn: 1,
 		phase: 'planning',
 		tieBreaker: 'orange',
-		waves: { orange: waves, blue: waves },
-		score: { orange: 0, blue: 0 },
+		waves: wavesFor(length),
+		lastPush: null,
+		life: { orange: life, blue: life },
 		rev: 0,
 		updatedBy: '',
 		updatedAt: 0
@@ -190,12 +204,27 @@ export function flipCoin(s: MatchState): Partial<MatchState> {
 	return { tieBreaker: otherTeam(s.tieBreaker) }
 }
 
-export function adjustWaves(s: MatchState, team: Team, delta: number): Partial<MatchState> {
-	return { waves: { ...s.waves, [team]: Math.max(0, s.waves[team] + delta) } }
+/** Adjust the shared wave pool directly (manual correction). */
+export function adjustWaves(s: MatchState, delta: number): Partial<MatchState> {
+	return { waves: Math.max(0, s.waves + delta) }
 }
 
-export function adjustScore(s: MatchState, team: Team, delta: number): Partial<MatchState> {
-	return { score: { ...s.score, [team]: Math.max(0, s.score[team] + delta) } }
+/** A team wins a Push the Lane: flip one shared wave counter and record it. */
+export function pushLane(s: MatchState, winner: Team): Partial<MatchState> {
+	return { waves: Math.max(0, s.waves - 1), lastPush: winner }
+}
+
+/** Adjust a team's Life counters (they lose these when their heroes are defeated). */
+export function adjustLife(s: MatchState, team: Team, delta: number): Partial<MatchState> {
+	return { life: { ...s.life, [team]: Math.max(0, s.life[team] + delta) } }
+}
+
+/** Whichever end condition has triggered, or null while play continues. */
+export function winner(s: MatchState): { team: Team; reason: string } | null {
+	if (s.life.orange <= 0) return { team: 'blue', reason: 'Orange ran out of Life counters' }
+	if (s.life.blue <= 0) return { team: 'orange', reason: 'Blue ran out of Life counters' }
+	if (s.waves <= 0 && s.lastPush) return { team: s.lastPush, reason: 'Won the final Push' }
+	return null
 }
 
 export { otherTeam, clampTurn }

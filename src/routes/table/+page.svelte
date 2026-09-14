@@ -6,7 +6,11 @@
 		prevTurn,
 		flipCoin,
 		adjustWaves,
-		adjustScore,
+		pushLane,
+		adjustLife,
+		winner,
+		wavesFor,
+		lifeFor,
 		initialMatchState,
 		TEAMS,
 		PHASES,
@@ -26,6 +30,7 @@
 	let room = ''
 	let team: Team | 'spectator' = 'spectator'
 	let gameLength: 'quick' | 'long' = 'long'
+	let playerCount = 6
 
 	let session: MatchSession | null = null
 	let state: Readable<MatchState> = writable(initialMatchState())
@@ -39,7 +44,7 @@
 	function join() {
 		if (!name.trim()) name = 'Player'
 		room = room.trim().toUpperCase() || 'TABLE'
-		const seed = initialMatchState(gameLength === 'quick' ? 3 : 5)
+		const seed = initialMatchState({ length: gameLength, players: playerCount })
 		session = joinMatch(room, { name, team }, seed)
 		state = session.state
 		players = session.players
@@ -79,7 +84,7 @@
 				<h1 class="font-modesto text-3xl sm:text-4xl">Match Board</h1>
 				<p class="text-dark-300 text-sm mt-1">
 					A shared, live tracker for a table. Everyone who joins the same room code sees the same
-					round, coin, waves and score in real time.
+					round, coin, waves and Life counters in real time.
 				</p>
 			</div>
 
@@ -123,14 +128,33 @@
 					<button
 						on:click={() => (gameLength = 'quick')}
 						class={`chip ${gameLength === 'quick' ? 'bg-amber-600 border-amber-500' : 'bg-dark-700 border-dark-600'}`}
-						>Quick · 3 waves</button
+						>Quick · {wavesFor('quick')} waves</button
 					>
 					<button
 						on:click={() => (gameLength = 'long')}
 						class={`chip ${gameLength === 'long' ? 'bg-amber-600 border-amber-500' : 'bg-dark-700 border-dark-600'}`}
-						>Long · 5 waves</button
+						>Long · {wavesFor('long')} waves</button
 					>
 				</div>
+			</div>
+
+			<div class="space-y-2">
+				<span class="font-semibold">Players</span>
+				<div class="flex flex-wrap gap-2">
+					{#each [4, 6] as n (n)}
+						<button
+							on:click={() => (playerCount = n)}
+							class={`chip ${playerCount === n ? 'bg-amber-600 border-amber-500' : 'bg-dark-700 border-dark-600'}`}
+							>{n} players</button
+						>
+					{/each}
+				</div>
+				<p class="text-dark-400 text-xs">
+					Sets starting Life counters per team: <span class="text-dark-200"
+						>{lifeFor(gameLength, playerCount)}</span
+					>
+					· Waves (shared): <span class="text-dark-200">{wavesFor(gameLength)}</span>
+				</p>
 			</div>
 
 			<button on:click={join} class="primary-button">Join table</button>
@@ -208,27 +232,55 @@
 				<button on:click={() => set(flipCoin(s))} class="ghost-button">Flip coin ⟳</button>
 			</div>
 
-			<!-- waves + score per team -->
+			<!-- shared wave counters + Push the Lane -->
+			{#if winner(s)}
+				{@const w = winner(s)}
+				<div class={`rounded-lg border p-4 text-center ${teamBorder(w.team)}`}>
+					<p class={`font-modesto text-3xl ${teamText(w.team)}`}>{teamLabel(w.team)} wins!</p>
+					<p class="text-dark-300 text-sm">{w.reason}</p>
+				</div>
+			{/if}
+
+			<div class="rounded-lg border border-dark-600 bg-dark-900/90 p-4">
+				<div class="flex items-center justify-between flex-wrap gap-3">
+					<div>
+						<p class="text-dark-300 text-xs uppercase tracking-wide">Wave counters (shared)</p>
+						<div class="flex items-center gap-2 mt-1">
+							<button on:click={() => set(adjustWaves(s, -1))} class="step">−</button>
+							<span class="font-mono text-4xl w-12 text-center">{s.waves}</span>
+							<button on:click={() => set(adjustWaves(s, 1))} class="step">+</button>
+						</div>
+					</div>
+					<div class="text-right">
+						<p class="text-dark-300 text-xs uppercase tracking-wide mb-1">Push the Lane — won by</p>
+						<div class="flex gap-2">
+							{#each TEAMS as t (t)}
+								<button
+									on:click={() => set(pushLane(s, t))}
+									disabled={s.waves <= 0}
+									class={`chip ${teamBtn(t)} disabled:opacity-50`}>{teamLabel(t)}</button
+								>
+							{/each}
+						</div>
+					</div>
+				</div>
+				<p class="text-dark-500 text-xs mt-2">
+					{#if s.lastPush}Last push won by <span class={teamText(s.lastPush)}>{teamLabel(s.lastPush)}</span>.
+					{/if}A Push flips one shared counter; at 0 the last pusher wins.
+				</p>
+			</div>
+
+			<!-- per-team Life counters -->
 			<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
 				{#each TEAMS as t (t)}
 					<div class={`rounded-lg border bg-dark-900/90 p-4 ${teamBorder(t)}`}>
 						<h2 class={`font-semibold text-lg mb-3 ${teamText(t)}`}>{teamLabel(t)}</h2>
-
-						<div class="flex items-center justify-between mb-3">
-							<span class="text-dark-300 text-sm">Waves left</span>
-							<div class="flex items-center gap-2">
-								<button on:click={() => set(adjustWaves(s, t, -1))} class="step">−</button>
-								<span class="font-mono text-3xl w-10 text-center">{s.waves[t]}</span>
-								<button on:click={() => set(adjustWaves(s, t, 1))} class="step">+</button>
-							</div>
-						</div>
-
 						<div class="flex items-center justify-between">
-							<span class="text-dark-300 text-sm">Score</span>
+							<span class="text-dark-300 text-sm">Life counters</span>
 							<div class="flex items-center gap-2">
-								<button on:click={() => set(adjustScore(s, t, -1))} class="step">−</button>
-								<span class="font-mono text-3xl w-10 text-center">{s.score[t]}</span>
-								<button on:click={() => set(adjustScore(s, t, 1))} class="step">+</button>
+								<button on:click={() => set(adjustLife(s, t, -1))} class="step">−</button>
+								<span class="font-mono text-3xl w-10 text-center">{s.life[t]}</span>
+								<button on:click={() => set(adjustLife(s, t, 1))} class="step">+</button>
 							</div>
 						</div>
 					</div>
