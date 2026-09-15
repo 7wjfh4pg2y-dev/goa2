@@ -7,7 +7,7 @@
 	import { browser } from '$app/environment';
 	import { goto } from '$app/navigation';
 
-	import smallLogoImage from '$lib/images/small_logo.png';
+	import logoImage from '$lib/images/goa-logo.png';
 	import RoleGate from '$lib/RoleGate.svelte';
 	import { role, signOut } from '$lib/role';
 
@@ -29,8 +29,7 @@
 
 <Navbar class="fixed z-50 top-0 border-b bg-dark-800 border-b-dark-600">
 	<NavBrand href={playerOnly ? `${base}/table` : `${base}/`}>
-		<img src={smallLogoImage} class="mr-3 h-6 sm:h-9" alt="logo" />
-		<span class="whitespace-nowrap text-2xl font-semibold text-white">GoA2</span>
+		<img src={logoImage} class="h-9 sm:h-12 w-auto" alt="Guards of Atlantis II" />
 	</NavBrand>
 	<NavHamburger class="text-dark-400 hover:bg-dark-600" />
 	<NavUl

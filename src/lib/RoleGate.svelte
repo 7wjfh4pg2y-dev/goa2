@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { tryAdmin, enterAsPlayer } from '$lib/role'
-	import smallLogoImage from '$lib/images/small_logo.png'
+	import logoImage from '$lib/images/goa-logo.png'
 
 	let step: 'choose' | 'admin' = 'choose'
 	let pw = ''
@@ -26,8 +26,7 @@
 <div class="gate">
 	<div class="card">
 		<div class="brand">
-			<img src={smallLogoImage} alt="" class="logo" />
-			<span class="name">GoA2</span>
+			<img src={logoImage} alt="Guards of Atlantis II" class="logo" />
 		</div>
 
 		{#if step === 'choose'}
@@ -84,9 +83,8 @@
 		box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
 		text-align: center;
 	}
-	.brand { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 14px; }
-	.logo { height: 34px; }
-	.name { font-size: 1.5rem; font-weight: 700; }
+	.brand { display: flex; align-items: center; justify-content: center; margin-bottom: 12px; }
+	.logo { height: 120px; width: auto; }
 	h1 { margin: 0 0 4px; font-size: 1.4rem; }
 	.sub { margin: 0 0 18px; color: #9ca3af; font-size: 0.9rem; }
 	.opts { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
