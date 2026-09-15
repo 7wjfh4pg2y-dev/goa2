@@ -195,7 +195,14 @@
 		cells,
 		meta
 	})
-	$: if (loaded && workJson) { try { localStorage.setItem(WORK, workJson) } catch {} }
+	let savedAt = 0
+	let saveError = false
+	$: if (loaded && workJson) {
+		try { localStorage.setItem(WORK, workJson); savedAt = Date.now(); saveError = false } catch { saveError = true }
+	}
+	$: savedClock = savedAt
+		? new Date(savedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+		: ''
 	onMount(() => {
 		try { const s = localStorage.getItem(WORK); if (s) applyMap(JSON.parse(s)) } catch {}
 		try { const m = localStorage.getItem(MAPS); if (m) saved = JSON.parse(m) } catch {}
@@ -315,7 +322,14 @@
 		</div>
 
 		<div class="row"><button on:click={exportMap} disabled={!paintedCount}>{copied ? 'Copied!' : 'Export map JSON'}</button></div>
-		<p class="count"><b>{paintedCount}</b> hexes painted</p>
+		<p class="count">
+			<b>{paintedCount}</b> hexes painted
+			{#if saveError}
+				<span class="savestat err">⚠ not saved</span>
+			{:else if savedClock}
+				<span class="savestat ok">Saved ✓ {savedClock}</span>
+			{/if}
+		</p>
 	</div>
 </div>
 
@@ -369,5 +383,8 @@
 	button { font-size: 13px; padding: 7px 12px; border-radius: 8px; background: #2563eb; color: #fff; border: none; cursor: pointer; flex: 1; }
 	button:disabled { opacity: .4; cursor: default; }
 	button.g { background: #374151; } button.danger { background: #7f1d1d; }
-	.count { font-size: 12px; color: #9ca3af; }
+	.count { font-size: 12px; color: #9ca3af; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+	.savestat { font-size: 11px; padding: 1px 7px; border-radius: 9999px; white-space: nowrap; }
+	.savestat.ok { color: #6ee7b7; background: rgba(16, 185, 129, 0.14); border: 1px solid rgba(16, 185, 129, 0.35); }
+	.savestat.err { color: #fca5a5; background: rgba(239, 68, 68, 0.14); border: 1px solid rgba(239, 68, 68, 0.4); }
 </style>
