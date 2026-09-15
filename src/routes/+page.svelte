@@ -61,8 +61,6 @@
 	{:else}
 		<img class="logo" src={logoImage} alt="Guards of Atlantis II" />
 		<div class="card solo">
-			<p class="t">Admin access</p>
-			<p class="s">Enter the GM password.</p>
 			<input class="field" type="password" placeholder="Password" bind:value={pw} on:keydown={onKey} autocomplete="off" />
 			{#if error}<p class="err">Incorrect password.</p>{/if}
 			<div class="row">
