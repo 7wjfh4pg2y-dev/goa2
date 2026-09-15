@@ -260,7 +260,7 @@
 							{/if}
 							<div class="fld">
 								<span>Players (seats)</span>
-								<div class="chips">{#each [4, 6] as n (n)}<button class="chip" class:on={playerCount === n} on:click={() => (playerCount = n)}>{n}</button>{/each}</div>
+								<div class="chips">{#each [4, 6, 8, 10] as n (n)}<button class="chip" class:on={playerCount === n} on:click={() => (playerCount = n)}>{n}</button>{/each}</div>
 							</div>
 						</div>
 						<div class="col">
