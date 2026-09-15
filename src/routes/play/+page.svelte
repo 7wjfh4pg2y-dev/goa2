@@ -186,7 +186,16 @@
 	function newMap() { if (confirm('Start a new blank map? (current unsaved paint is kept in autosave until you paint over it)')) { cells = {}; name = 'untitled' } }
 	function clearPaint() { if (confirm('Clear all painted hexes on this map?')) cells = {} }
 
-	$: if (loaded) { try { localStorage.setItem(WORK, JSON.stringify(snapshot())) } catch {} }
+	// Reference every field directly so Svelte tracks them — a reactive block
+	// that only calls snapshot() would depend on `loaded` alone and never
+	// re-save edits to cells/meta (they're read inside the function, unseen).
+	$: workJson = JSON.stringify({
+		name,
+		grid: { size, originX, originY, rot, cols, rows },
+		cells,
+		meta
+	})
+	$: if (loaded && workJson) { try { localStorage.setItem(WORK, workJson) } catch {} }
 	onMount(() => {
 		try { const s = localStorage.getItem(WORK); if (s) applyMap(JSON.parse(s)) } catch {}
 		try { const m = localStorage.getItem(MAPS); if (m) saved = JSON.parse(m) } catch {}
