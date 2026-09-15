@@ -12,9 +12,10 @@
 	} = {}
 	export let interactive = true
 
-	// pieces on the board + a callback when one is dropped on a hex
-	export let pieces: Array<{ id: string; hex: string; team: string; label?: string }> = []
+	// pieces on the board + callbacks when one is moved or dragged off the board
+	export let pieces: Array<{ id: string; hex: string; team: string; role?: string; label?: string }> = []
 	export let onMovePiece: ((id: string, hex: string) => void) | null = null
+	export let onRemovePiece: ((id: string) => void) | null = null
 
 	const SQRT3 = Math.sqrt(3)
 	const tileSprites = import.meta.glob('./images/tiles/*.png', { eager: true, import: 'default' }) as Record<string, string>
@@ -127,8 +128,15 @@
 		const hex = nearestHex(pt.x, pt.y)
 		const id = drag.id
 		drag = null
-		if (hex && onMovePiece) onMovePiece(id, hex)
+		if (!hex) return
+		// dropped well away from every hex -> remove the piece
+		const c = centerOf(hex)
+		const off = Math.hypot(c.x - pt.x, c.y - pt.y) > size * 1.3
+		if (off && onRemovePiece) onRemovePiece(id)
+		else if (onMovePiece) onMovePiece(id, hex)
 	}
+	const minionHref = (team: string, role?: string) =>
+		minionSprites[`./images/minions/${team === 'blue' ? 'blue' : 'orange'}_${role ?? 'melee'}.png`]
 </script>
 
 <div
@@ -166,12 +174,18 @@
 					class:dragging={drag?.id === p.id}
 					role="button"
 					tabindex="-1"
-					aria-label={p.label ? `${p.team} ${p.label}` : `${p.team} token`}
+					aria-label={p.role ? `${p.team} ${p.role} minion` : `${p.team} ${p.label ?? 'piece'}`}
 					on:pointerdown={(e) => startDrag(e, p)}
 				>
-					<circle cx={c.x} cy={c.y} r={size * 0.6} fill={pieceColor(p.team)} stroke="#0b1220" stroke-width={size * 0.09} />
-					{#if p.label}
-						<text x={c.x} y={c.y} text-anchor="middle" dominant-baseline="central" font-size={size * 0.7} font-weight="700" fill="#0b1220">{p.label}</text>
+					{#if p.role}
+						<!-- minion piece: light disc + team ring + emblem badge -->
+						<circle cx={c.x} cy={c.y} r={size * 0.66} fill="#e2e8f0" stroke={pieceColor(p.team)} stroke-width={size * 0.14} />
+						<image href={minionHref(p.team, p.role)} x={c.x - size * 0.62} y={c.y - size * 0.62} width={size * 1.24} height={size * 1.24} preserveAspectRatio="xMidYMid meet" />
+					{:else}
+						<circle cx={c.x} cy={c.y} r={size * 0.6} fill={pieceColor(p.team)} stroke="#0b1220" stroke-width={size * 0.09} />
+						{#if p.label}
+							<text x={c.x} y={c.y} text-anchor="middle" dominant-baseline="central" font-size={size * 0.7} font-weight="700" fill="#0b1220">{p.label}</text>
+						{/if}
 					{/if}
 				</g>
 			{/each}
