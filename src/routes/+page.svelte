@@ -107,6 +107,25 @@
 	// host keeps the directory entry in sync with the room
 	$: if (roomHandle) roomHandle.update({ count: seatedCount, started: $state.started });
 
+	// host handoff: if the current host has left the room, the remaining player
+	// with the smallest id claims host (deterministic, so everyone agrees).
+	$: if (
+		session &&
+		$state.rev >= 0 &&
+		(mode === 'lobby' || mode === 'game') &&
+		$state.host &&
+		$players.length &&
+		!$players.some((p) => p.id === $state.host)
+	) {
+		const cand = [...$players].map((p) => p.id).sort()[0];
+		if (cand === session.clientId && $state.host !== cand) session.update({ host: cand });
+	}
+
+	// whoever is host keeps the room in the public directory (covers handoff)
+	$: if (browser && session && iAmHost && !roomHandle && (mode === 'lobby' || mode === 'game')) {
+		roomHandle = announceRoom({ room, host: name, seats: $state.seats, count: seatedCount, started: $state.started });
+	}
+
 	// browse open rooms only while on the Join screen
 	function manageBrowse(m: Mode) {
 		if (m === 'join') {
@@ -318,24 +337,33 @@
 			<div class="step" transition:reveal bind:clientHeight={h['join']}>
 				<div class="card form narrow">
 					<label class="fld"><span>Your name</span><input class="field" bind:value={name} placeholder="e.g. Zaheen" /></label>
-					<label class="fld"><span>Room code</span><input class="field up" bind:value={room} maxlength="8" placeholder="code from the host" /></label>
+
 					<div class="fld">
 						<span>Open games</span>
 						{#if openRooms.length}
-							<div class="roomlist">
+							<div class="glist">
 								{#each openRooms as r (r.room)}
-									<button class="roomrow" on:click={() => joinFromList(r)}>
-										<span class="mono rc">{r.room}</span>
-										<span class="rh">{r.host}'s game</span>
-										<span class="rmeta">{r.started ? 'in progress' : `${r.count}/${r.seats} seated`}</span>
-										<span class="rjoin">{r.started || r.count >= r.seats ? 'Spectate' : 'Join'}</span>
+									{@const spectate = r.started || r.count >= r.seats}
+									<button class="gcard" on:click={() => joinFromList(r)}>
+										<span class="gdot" class:live={r.started}></span>
+										<span class="gmain">
+											<span class="gtop"><b>{r.host}</b><span class="grc mono">{r.room}</span></span>
+											<span class="gsub">
+												<span class="gseats">{#each Array(r.seats) as _, i (i)}<span class="seatdot" class:on={i < r.count}></span>{/each}</span>
+												<span class="gstatus">{r.started ? 'in progress' : `${r.count}/${r.seats}`}</span>
+											</span>
+										</span>
+										<span class="garrow">{spectate ? 'Spectate' : 'Join'} →</span>
 									</button>
 								{/each}
 							</div>
 						{:else}
-							<p class="hint">No open games right now — enter a code above or create one.</p>
+							<p class="hint">No open games right now.</p>
 						{/if}
 					</div>
+
+					<label class="fld"><span>Have a code?</span><input class="field up" bind:value={room} maxlength="8" placeholder="enter room code" /></label>
+
 					<div class="row">
 						<button class="ghost" on:click={() => (mode = 'menu')}>← Back</button>
 						<button class="primary" on:click={joinGame} disabled={!room.trim()}>Join game</button>
@@ -451,13 +479,22 @@
 	.sw.sel { outline: 2px solid #f59e0b; outline-offset: 2px; border-color: #fff; }
 	.sw:disabled { opacity: 0.28; cursor: not-allowed; }
 	.hint { font-size: 0.72rem; color: #94a3b8; margin: 2px 0 0; }
-	.roomlist { display: flex; flex-direction: column; gap: 6px; max-height: 176px; overflow-y: auto; }
-	.roomrow { display: flex; align-items: center; gap: 10px; text-align: left; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 8px 10px; color: #e5e7eb; cursor: pointer; transition: background 0.12s; }
-	.roomrow:hover { background: rgba(255, 255, 255, 0.09); }
-	.rc { font-size: 0.95rem; font-weight: 700; letter-spacing: 0.06em; }
-	.rh { flex: 1; font-size: 0.82rem; color: #cbd5e1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-	.rmeta { font-size: 0.72rem; color: #94a3b8; }
-	.rjoin { font-size: 0.78rem; font-weight: 600; color: #fdba74; }
+	.glist { display: flex; flex-direction: column; gap: 8px; max-height: 210px; overflow-y: auto; }
+	.gcard { display: flex; align-items: center; gap: 12px; text-align: left; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 10px 13px; color: #e5e7eb; cursor: pointer; transition: background 0.14s, border-color 0.14s, transform 0.12s; }
+	.gcard:hover { background: rgba(255, 255, 255, 0.09); border-color: rgba(245, 158, 11, 0.45); transform: translateY(-1px); }
+	.gcard:hover .garrow { opacity: 1; transform: translateX(2px); }
+	.gdot { width: 0.6rem; height: 0.6rem; border-radius: 50%; background: #22c55e; box-shadow: 0 0 8px rgba(34, 197, 94, 0.6); flex: 0 0 auto; }
+	.gdot.live { background: #f59e0b; box-shadow: 0 0 8px rgba(245, 158, 11, 0.6); }
+	.gmain { flex: 1; display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+	.gtop { display: flex; align-items: baseline; gap: 8px; }
+	.gtop b { font-size: 0.92rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.grc { font-size: 0.72rem; color: #64748b; letter-spacing: 0.08em; }
+	.gsub { display: flex; align-items: center; gap: 9px; }
+	.gseats { display: flex; gap: 3px; }
+	.seatdot { width: 0.42rem; height: 0.42rem; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.35); }
+	.seatdot.on { background: #e5e7eb; border-color: #e5e7eb; }
+	.gstatus { font-size: 0.68rem; color: #94a3b8; }
+	.garrow { font-size: 0.75rem; font-weight: 600; color: #fdba74; opacity: 0.75; white-space: nowrap; transition: opacity 0.14s, transform 0.14s; }
 	.err { color: #fca5a5; font-size: 0.82rem; margin: 0; }
 	.row { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
 	.row.wraprow { flex-wrap: wrap; }
