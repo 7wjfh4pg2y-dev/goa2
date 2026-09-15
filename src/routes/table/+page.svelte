@@ -23,6 +23,8 @@
 		movePiece,
 		clearPieces,
 		newPieceId,
+		PLAYER_COLORS,
+		colorHex,
 		TEAMS,
 		TURNS_PER_ROUND,
 		type Team,
@@ -31,11 +33,12 @@
 		type MatchSession
 	} from '$lib/match'
 
-	// --- join form ---
+	// --- start screen ---
 	let joined = false
+	let mode: 'menu' | 'create' | 'join' = 'menu'
 	let name = ''
 	let room = ''
-	let team: Team | 'spectator' = 'spectator'
+	let color = 'red'
 	let ruleset: 'quick' | 'long' | 'custom' = 'long'
 	let playerCount = 6
 	let customWaves = 3
@@ -90,23 +93,32 @@
 	$: previewWaves = ruleset === 'custom' ? customWaves : wavesFor(ruleset)
 	$: previewLife = ruleset === 'custom' ? customLife : lifeFor(ruleset, playerCount)
 
-	function join() {
+	function beginSession(seed?: MatchState) {
 		if (!name.trim()) name = 'Player'
 		try {
 			localStorage.setItem('goa2-hud-name', name)
 		} catch {}
 		room = room.trim().toUpperCase() || 'TABLE'
-		const chosen = maps.find((m) => m.id === mapId) ?? maps[0]
-		const seed = initialMatchState({
-			waves: previewWaves,
-			life: previewLife,
-			mapId: chosen?.id ?? '',
-			map: chosen?.data ?? null
-		})
-		session = joinMatch(room, { name, team }, seed)
+		session = joinMatch(room, { name, color }, seed ? { seed } : {})
 		state = session.state
 		players = session.players
 		joined = true
+	}
+	// creator: ruleset + map are authoritative for the room
+	function createGame() {
+		const chosen = maps.find((m) => m.id === mapId) ?? maps[0]
+		beginSession(
+			initialMatchState({
+				waves: previewWaves,
+				life: previewLife,
+				mapId: chosen?.id ?? '',
+				map: chosen?.data ?? null
+			})
+		)
+	}
+	// joiner: inherits the room's ruleset + map, brings only name + colour
+	function joinGame() {
+		beginSession(undefined)
 	}
 
 	// current shared state (for handlers passed as props)
@@ -117,9 +129,9 @@
 	function act(text: string, patch: Partial<MatchState>) {
 		session?.act(text, patch)
 	}
-	function pickTeam(t: Team | 'spectator') {
-		team = t
-		session?.setSelf({ team: t })
+	function pickColor(c: string) {
+		color = c
+		session?.setSelf({ color: c })
 	}
 	function leave() {
 		session?.leave()
@@ -217,81 +229,94 @@
 				</p>
 			</div>
 
-			<label class="block space-y-1">
-				<span class="font-semibold">Your name</span>
-				<input class="field" bind:value={name} placeholder="e.g. Zaheen" />
-			</label>
-
-			<div class="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3 items-end">
-				<label class="block space-y-1">
-					<span class="font-semibold">Room code</span>
-					<input class="field uppercase" bind:value={room} maxlength="8" />
-				</label>
-				<button on:click={randomRoom} class="ghost-button">Random</button>
-			</div>
-
-			<div class="space-y-2">
-				<span class="font-semibold">Join as</span>
-				<div class="flex flex-wrap gap-2">
-					<button on:click={() => (team = 'orange')} class={`chip ${team === 'orange' ? teamBtn('orange') : 'bg-dark-700 border-dark-600'}`}>Orange</button>
-					<button on:click={() => (team = 'blue')} class={`chip ${team === 'blue' ? teamBtn('blue') : 'bg-dark-700 border-dark-600'}`}>Blue</button>
-					<button on:click={() => (team = 'spectator')} class={`chip ${team === 'spectator' ? 'bg-amber-600 border-amber-500' : 'bg-dark-700 border-dark-600'}`}>Spectator</button>
+			{#if mode === 'menu'}
+				<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+					<button on:click={() => (mode = 'create')} class="primary-button">Create game</button>
+					<button on:click={() => (mode = 'join')} class="ghost-button">Join game</button>
 				</div>
-			</div>
-
-			<div class="space-y-2">
-				<span class="font-semibold">Ruleset</span>
-				<div class="flex flex-wrap gap-2">
-					<button on:click={() => (ruleset = 'quick')} class={`chip ${ruleset === 'quick' ? 'bg-amber-600 border-amber-500' : 'bg-dark-700 border-dark-600'}`}>Quick · {wavesFor('quick')} waves</button>
-					<button on:click={() => (ruleset = 'long')} class={`chip ${ruleset === 'long' ? 'bg-amber-600 border-amber-500' : 'bg-dark-700 border-dark-600'}`}>Long · {wavesFor('long')} waves</button>
-					<button on:click={() => (ruleset = 'custom')} class={`chip ${ruleset === 'custom' ? 'bg-amber-600 border-amber-500' : 'bg-dark-700 border-dark-600'}`}>Custom</button>
-				</div>
-
-				{#if ruleset === 'custom'}
-					<div class="grid grid-cols-2 gap-3 pt-1">
-						<label class="space-y-1">
-							<span class="text-sm text-dark-300">Wave counters (shared)</span>
-							<input class="field" type="number" min="1" max="20" bind:value={customWaves} />
-						</label>
-						<label class="space-y-1">
-							<span class="text-sm text-dark-300">Life counters (per team)</span>
-							<input class="field" type="number" min="1" max="30" bind:value={customLife} />
-						</label>
-					</div>
-				{:else}
-					<div class="flex flex-wrap gap-2 pt-1">
-						{#each [4, 6] as n (n)}
-							<button on:click={() => (playerCount = n)} class={`chip ${playerCount === n ? 'bg-amber-600 border-amber-500' : 'bg-dark-700 border-dark-600'}`}>{n} players</button>
-						{/each}
-					</div>
-				{/if}
 				<p class="text-dark-400 text-xs">
-					Starts with <span class="text-dark-200">{previewWaves}</span> shared waves ·
-					<span class="text-dark-200">{previewLife}</span> Life per team.
+					<b>Create</b> sets the ruleset and map for the room. <b>Join</b> just needs the room code —
+					you inherit the host's settings.
 				</p>
-			</div>
+			{:else}
+				<label class="block space-y-1">
+					<span class="font-semibold">Your name</span>
+					<input class="field" bind:value={name} placeholder="e.g. Zaheen" />
+				</label>
 
-			<div class="space-y-2">
-				<span class="font-semibold">Map</span>
-				{#if maps.length}
-					<div class="flex flex-wrap gap-2">
-						{#each maps as m (m.id)}
-							<button
-								on:click={() => (mapId = m.id)}
-								class={`chip ${mapId === m.id ? 'bg-amber-600 border-amber-500' : 'bg-dark-700 border-dark-600'}`}
-								>{m.label}</button
-							>
+				<div class="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3 items-end">
+					<label class="block space-y-1">
+						<span class="font-semibold">Room code</span>
+						<input class="field uppercase" bind:value={room} maxlength="8" placeholder={mode === 'join' ? 'code from the host' : ''} />
+					</label>
+					{#if mode === 'create'}<button on:click={randomRoom} class="ghost-button">Random</button>{/if}
+				</div>
+
+				<div class="space-y-2">
+					<span class="font-semibold">Your colour</span>
+					<div class="flex flex-wrap items-center gap-2">
+						{#each PLAYER_COLORS as c (c.id)}
+							<button title={c.label} aria-label={c.label} on:click={() => (color = c.id)} class="swatch" class:sel={color === c.id} style="--sc:{c.hex}"></button>
 						{/each}
+						<button on:click={() => (color = 'spectator')} class={`chip ${color === 'spectator' ? 'bg-amber-600 border-amber-500' : 'bg-dark-700 border-dark-600'}`}>Spectator</button>
 					</div>
-					<p class="text-dark-400 text-xs">
-						The chosen board is shared with everyone in the room — even a custom one from the editor.
-					</p>
-				{:else}
-					<p class="text-dark-400 text-xs">Loading maps…</p>
-				{/if}
-			</div>
+				</div>
 
-			<button on:click={join} class="primary-button w-full">Join table</button>
+				{#if mode === 'create'}
+					<div class="space-y-2">
+						<span class="font-semibold">Ruleset</span>
+						<div class="flex flex-wrap gap-2">
+							<button on:click={() => (ruleset = 'quick')} class={`chip ${ruleset === 'quick' ? 'bg-amber-600 border-amber-500' : 'bg-dark-700 border-dark-600'}`}>Quick · {wavesFor('quick')} waves</button>
+							<button on:click={() => (ruleset = 'long')} class={`chip ${ruleset === 'long' ? 'bg-amber-600 border-amber-500' : 'bg-dark-700 border-dark-600'}`}>Long · {wavesFor('long')} waves</button>
+							<button on:click={() => (ruleset = 'custom')} class={`chip ${ruleset === 'custom' ? 'bg-amber-600 border-amber-500' : 'bg-dark-700 border-dark-600'}`}>Custom</button>
+						</div>
+
+						{#if ruleset === 'custom'}
+							<div class="grid grid-cols-2 gap-3 pt-1">
+								<label class="space-y-1">
+									<span class="text-sm text-dark-300">Wave counters (shared)</span>
+									<input class="field" type="number" min="1" max="20" bind:value={customWaves} />
+								</label>
+								<label class="space-y-1">
+									<span class="text-sm text-dark-300">Life counters (per team)</span>
+									<input class="field" type="number" min="1" max="30" bind:value={customLife} />
+								</label>
+							</div>
+						{:else}
+							<div class="flex flex-wrap gap-2 pt-1">
+								{#each [4, 6] as n (n)}
+									<button on:click={() => (playerCount = n)} class={`chip ${playerCount === n ? 'bg-amber-600 border-amber-500' : 'bg-dark-700 border-dark-600'}`}>{n} players</button>
+								{/each}
+							</div>
+						{/if}
+						<p class="text-dark-400 text-xs">
+							Starts with <span class="text-dark-200">{previewWaves}</span> shared waves ·
+							<span class="text-dark-200">{previewLife}</span> Life per team.
+						</p>
+					</div>
+
+					<div class="space-y-2">
+						<span class="font-semibold">Map</span>
+						{#if maps.length}
+							<div class="flex flex-wrap gap-2">
+								{#each maps as m (m.id)}
+									<button on:click={() => (mapId = m.id)} class={`chip ${mapId === m.id ? 'bg-amber-600 border-amber-500' : 'bg-dark-700 border-dark-600'}`}>{m.label}</button>
+								{/each}
+							</div>
+							<p class="text-dark-400 text-xs">The chosen board is shared with everyone in the room — even a custom one from the editor.</p>
+						{:else}
+							<p class="text-dark-400 text-xs">Loading maps…</p>
+						{/if}
+					</div>
+
+					<button on:click={createGame} class="primary-button w-full">Create game</button>
+				{:else}
+					<button on:click={joinGame} class="primary-button w-full" disabled={!room.trim()}>Join game</button>
+					<p class="text-dark-400 text-xs">You'll inherit the room's ruleset and map from the host.</p>
+				{/if}
+
+				<button on:click={() => (mode = 'menu')} class="backlink">← Back</button>
+			{/if}
 		</div>
 	</div>
 {:else}
@@ -424,13 +449,17 @@
 			<div class="body compact">
 				<div class="row"><span class="lbl">Room</span><span class="mono">{room}</span></div>
 				<div class="seat">
-					<button class={`chip sm ${team === 'orange' ? teamBtn('orange') : 'bg-dark-700 border-dark-600'}`} on:click={() => pickTeam('orange')}>O</button>
-					<button class={`chip sm ${team === 'blue' ? teamBtn('blue') : 'bg-dark-700 border-dark-600'}`} on:click={() => pickTeam('blue')}>B</button>
-					<button class={`chip sm ${team === 'spectator' ? 'bg-amber-600 border-amber-500' : 'bg-dark-700 border-dark-600'}`} on:click={() => pickTeam('spectator')}>Spec</button>
+					{#each PLAYER_COLORS as c (c.id)}
+						<button title={c.label} aria-label={c.label} on:click={() => pickColor(c.id)} class="swatch sm" class:sel={color === c.id} style="--sc:{c.hex}"></button>
+					{/each}
+					<button class={`chip sm ${color === 'spectator' ? 'bg-amber-600 border-amber-500' : 'bg-dark-700 border-dark-600'}`} on:click={() => pickColor('spectator')}>Spec</button>
 				</div>
 				<div class="players">
 					{#each $players as p (p.id)}
-						<span class={`ptag ${p.team === 'orange' ? teamText('orange') : p.team === 'blue' ? teamText('blue') : 'text-dark-300'}`}>{p.name}{p.id === session?.clientId ? '•' : ''}</span>
+						<span class="ptag">
+							<span class="pdot" style="background:{p.color === 'spectator' ? 'transparent' : colorHex(p.color)}; border-color:{p.color === 'spectator' ? '#64748b' : colorHex(p.color)}"></span>
+							{p.name}{p.id === session?.clientId ? ' •' : ''}
+						</span>
 					{/each}
 				</div>
 				<button class="mini" on:click={leave}>Leave</button>
@@ -501,6 +530,36 @@
 	.chip.sm {
 		padding: 0.2rem 0.55rem;
 		font-size: 0.78rem;
+	}
+	.swatch {
+		width: 1.6rem;
+		height: 1.6rem;
+		border-radius: 9999px;
+		background: var(--sc);
+		border: 2px solid rgba(255, 255, 255, 0.25);
+		cursor: pointer;
+		padding: 0;
+		box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+	}
+	.swatch.sm { width: 1.15rem; height: 1.15rem; border-width: 1px; }
+	.swatch.sel { outline: 2px solid #f59e0b; outline-offset: 2px; border-color: #fff; }
+	.backlink {
+		background: none;
+		border: none;
+		color: #9ca3af;
+		cursor: pointer;
+		font-size: 0.85rem;
+		padding: 0;
+	}
+	.backlink:hover { color: #e5e7eb; }
+	.pdot {
+		display: inline-block;
+		width: 0.6rem;
+		height: 0.6rem;
+		border-radius: 9999px;
+		border: 1px solid;
+		vertical-align: middle;
+		margin-right: 0.15rem;
 	}
 
 	/* ---- table surface + HUD ---- */
@@ -608,7 +667,7 @@
 	.pip-o { background: #f97316; }
 	.pip-b { background: #3b82f6; }
 
-	.seat { display: flex; gap: 0.3rem; }
+	.seat { display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: center; }
 	.players { display: flex; flex-wrap: wrap; gap: 0.3rem; font-size: 0.75rem; }
 	.ptag { white-space: nowrap; }
 
