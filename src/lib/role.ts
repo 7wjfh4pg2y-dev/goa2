@@ -11,10 +11,9 @@ import { browser } from '$app/environment'
 
 export type Role = 'admin' | 'player' | null
 
-// SHA-256 of the admin password. Default password is "goa2-gm" — change it by
-// replacing this hash (see computeHash below or run:
-//   node -e "console.log(require('crypto').createHash('sha256').update('YOURPW').digest('hex'))")
-export const ADMIN_HASH = 'c87639b1f103c637b4423a856b675971fc901543b0695b25be917bc53419a731'
+// SHA-256 of the admin password. Change it by replacing this hash, e.g.:
+//   node -e "console.log(require('crypto').createHash('sha256').update('YOURPW').digest('hex'))"
+export const ADMIN_HASH = 'daaad6e5604e8e17bd9f108d91e26afe6281dac8fda0091040a7a6d7bd9b43b5'
 
 const KEY = 'goa2-role'
 
