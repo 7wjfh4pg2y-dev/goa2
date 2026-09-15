@@ -1,17 +1,17 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
+	import { base } from '$app/paths';
+	import { browser } from '$app/environment';
 	import logoImage from '$lib/images/goa-logo.png';
 	import { role, tryAdmin, enterAsPlayer, signOut } from '$lib/role';
-	import { cubicOut } from 'svelte/easing';
+	import { reveal } from '$lib/transitions';
 
-	// sleek cross-fade: fade + subtle lift, scale and de-blur
-	function reveal(_node: Element, { duration = 300 } = {}) {
-		return {
-			duration,
-			easing: cubicOut,
-			css: (t: number, u: number) =>
-				`opacity:${t}; transform: translateY(${u * 14}px) scale(${0.97 + 0.03 * t}); filter: blur(${u * 7}px);`
-		};
+	function goPlayer() {
+		enterAsPlayer();
+		goto(`${base}/match`);
 	}
+	// a returning player goes straight to the match flow
+	$: if (browser && $role === 'player') goto(`${base}/match`, { replaceState: true });
 
 	let step: 'choose' | 'admin' = 'choose';
 	let pw = '';
@@ -44,18 +44,18 @@
 	<img class="logo" src={logoImage} alt="Guards of Atlantis II" />
 
 	<div class="panel">
-		{#if $role}
+		{#if $role === 'admin'}
 			<div class="step" transition:reveal>
 				<div class="card solo">
-					<p class="hub">You're in as <b class:isadmin={$role === 'admin'}>{$role === 'admin' ? 'Admin' : 'Player'}</b>.</p>
-					<p class="s">More coming soon.</p>
+					<p class="hub">You're in as <b class="isadmin">Admin</b>.</p>
+					<p class="s">GM tools coming soon.</p>
 					<button class="ghost" on:click={signOut}>Sign out</button>
 				</div>
 			</div>
 		{:else if step === 'choose'}
 			<div class="step" transition:reveal>
 				<div class="cards">
-					<button class="card p" on:click={enterAsPlayer}>
+					<button class="card p" on:click={goPlayer}>
 						<span class="ic">
 							<svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="#7dd3fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 4-6 8-6s8 2 8 6" /></svg>
 						</span>
