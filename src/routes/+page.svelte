@@ -50,9 +50,8 @@
 			</button>
 			<button class="card a" on:click={() => (step = 'admin')}>
 				<span class="ic">
-					<svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="#fdba74" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-						<g transform="rotate(45 12 12)"><path d="M12 21 V10" /><path d="M9.2 6.2 a3 3 0 1 0 5.6 0 l-1.9 1.9 h-1.8 l-1.9 -1.9 z" /></g>
-						<g transform="rotate(-45 12 12)"><path d="M12 21 V9" /><rect x="8" y="4.5" width="8" height="4.2" rx="1" /></g>
+					<svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="#fdba74" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+						<g transform="rotate(45 12 12)"><path d="M12 20.5 V10.5" /><path d="M8.7 5.4 a3.4 3.4 0 1 0 6.6 0 l-2.1 2.1 h-2.4 l-2.1 -2.1 z" /></g>
 					</svg>
 				</span>
 				<span class="t">Admin</span>
