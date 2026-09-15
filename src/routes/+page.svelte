@@ -1,6 +1,17 @@
 <script lang="ts">
 	import logoImage from '$lib/images/goa-logo.png';
 	import { role, tryAdmin, enterAsPlayer, signOut } from '$lib/role';
+	import { cubicOut } from 'svelte/easing';
+
+	// sleek cross-fade: fade + subtle lift, scale and de-blur
+	function reveal(_node: Element, { duration = 300 } = {}) {
+		return {
+			duration,
+			easing: cubicOut,
+			css: (t: number, u: number) =>
+				`opacity:${t}; transform: translateY(${u * 14}px) scale(${0.97 + 0.03 * t}); filter: blur(${u * 7}px);`
+		};
+	}
 
 	let step: 'choose' | 'admin' = 'choose';
 	let pw = '';
@@ -30,50 +41,60 @@
 <svelte:head><title>Guards of Atlantis II</title></svelte:head>
 
 <main class="wrap">
-	{#if $role}
-		<!-- placeholder hub until features are rebuilt -->
-		<img class="logo" src={logoImage} alt="Guards of Atlantis II" />
-		<div class="card solo">
-			<p class="hub">You're in as <b class:isadmin={$role === 'admin'}>{$role === 'admin' ? 'Admin' : 'Player'}</b>.</p>
-			<p class="s">More coming soon.</p>
-			<button class="ghost" on:click={signOut}>Sign out</button>
-		</div>
-	{:else if step === 'choose'}
-		<img class="logo" src={logoImage} alt="Guards of Atlantis II" />
-		<div class="cards">
-			<button class="card p" on:click={enterAsPlayer}>
-				<span class="ic">
-					<svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="#7dd3fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 4-6 8-6s8 2 8 6" /></svg>
-				</span>
-				<span class="t">Player</span>
-				<span class="s">Join or create a match</span>
-			</button>
-			<button class="card a" on:click={() => (step = 'admin')}>
-				<span class="ic">
-					<svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="#fdba74" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-						<g transform="rotate(45 12 12)"><path d="M12 20.5 V10.5" /><path d="M8.7 5.4 a3.4 3.4 0 1 0 6.6 0 l-2.1 2.1 h-2.4 l-2.1 -2.1 z" /></g>
-					</svg>
-				</span>
-				<span class="t">Admin</span>
-				<span class="s">GM tools</span>
-			</button>
-		</div>
-	{:else}
-		<img class="logo" src={logoImage} alt="Guards of Atlantis II" />
-		<div class="card solo">
-			<input class="field" type="password" placeholder="Password" bind:value={pw} on:keydown={onKey} autocomplete="off" />
-			{#if error}<p class="err">Incorrect password.</p>{/if}
-			<div class="row">
-				<button class="ghost" on:click={backToChoose}>← Back</button>
-				<button class="primary" on:click={submitAdmin} disabled={busy || !pw}>{busy ? 'Checking…' : 'Unlock'}</button>
+	<img class="logo" src={logoImage} alt="Guards of Atlantis II" />
+
+	<div class="panel">
+		{#if $role}
+			<div class="step" transition:reveal>
+				<div class="card solo">
+					<p class="hub">You're in as <b class:isadmin={$role === 'admin'}>{$role === 'admin' ? 'Admin' : 'Player'}</b>.</p>
+					<p class="s">More coming soon.</p>
+					<button class="ghost" on:click={signOut}>Sign out</button>
+				</div>
 			</div>
-		</div>
-	{/if}
+		{:else if step === 'choose'}
+			<div class="step" transition:reveal>
+				<div class="cards">
+					<button class="card p" on:click={enterAsPlayer}>
+						<span class="ic">
+							<svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="#7dd3fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 4-6 8-6s8 2 8 6" /></svg>
+						</span>
+						<span class="t">Player</span>
+						<span class="s">Join or create a match</span>
+					</button>
+					<button class="card a" on:click={() => (step = 'admin')}>
+						<span class="ic">
+							<svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="#fdba74" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+								<g transform="rotate(45 12 12)"><path d="M12 20.5 V10.5" /><path d="M8.7 5.4 a3.4 3.4 0 1 0 6.6 0 l-2.1 2.1 h-2.4 l-2.1 -2.1 z" /></g>
+							</svg>
+						</span>
+						<span class="t">Admin</span>
+						<span class="s">GM tools</span>
+					</button>
+				</div>
+			</div>
+		{:else}
+			<div class="step" transition:reveal>
+				<div class="card solo">
+					<input class="field" type="password" placeholder="Password" bind:value={pw} on:keydown={onKey} autocomplete="off" />
+					{#if error}<p class="err">Incorrect password.</p>{/if}
+					<div class="row">
+						<button class="ghost" on:click={backToChoose}>← Back</button>
+						<button class="primary" on:click={submitAdmin} disabled={busy || !pw}>{busy ? 'Checking…' : 'Unlock'}</button>
+					</div>
+				</div>
+			</div>
+		{/if}
+	</div>
 </main>
 
 <style>
 	.wrap { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 34px; padding: 24px; color: #f1f5f9; }
 	.logo { width: min(300px, 62vw); filter: drop-shadow(0 12px 34px rgba(0, 0, 0, 0.55)); }
+
+	/* fixed-height stage so swapping steps never moves the logo */
+	.panel { position: relative; width: 100%; max-width: 480px; min-height: 240px; }
+	.step { position: absolute; inset: 0; display: flex; align-items: flex-start; justify-content: center; will-change: opacity, transform, filter; }
 
 	.cards { display: flex; gap: 22px; flex-wrap: wrap; justify-content: center; }
 	.card {
