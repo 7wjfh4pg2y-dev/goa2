@@ -443,7 +443,7 @@
 </main>
 
 <style>
-	.wrap { min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 5vh 20px 32px; gap: 22px; color: #f1f5f9; }
+	.wrap { --hl: linear-gradient(120deg, #ef7d22, #2f7fe6); min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 5vh 20px 32px; gap: 22px; color: #f1f5f9; }
 	.home-link { background: none; border: none; padding: 0; cursor: pointer; }
 	.logo { width: min(224px, 54vw); filter: drop-shadow(0 12px 32px rgba(0, 0, 0, 0.55)); }
 
@@ -474,7 +474,7 @@
 	.field.up { text-transform: uppercase; }
 	.chips, .swatches { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 	.chip { border: 1px solid rgba(255, 255, 255, 0.16); background: rgba(255, 255, 255, 0.05); color: #e5e7eb; border-radius: 999px; padding: 0.35rem 0.8rem; font-size: 0.85rem; cursor: pointer; }
-	.chip.on { background: #d97706; border-color: #f59e0b; color: white; }
+	.chip.on { background: var(--hl); border-color: rgba(255, 255, 255, 0.3); color: white; }
 	.sw { width: 1.5rem; height: 1.5rem; border-radius: 50%; background: var(--sc); border: 2px solid rgba(255, 255, 255, 0.25); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35); cursor: pointer; padding: 0; }
 	.sw.sel { outline: 2px solid #f59e0b; outline-offset: 2px; border-color: #fff; }
 	.sw:disabled { opacity: 0.28; cursor: not-allowed; }
@@ -505,7 +505,7 @@
 	.row { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
 	.row.wraprow { flex-wrap: wrap; }
 	.rightbtns { display: flex; gap: 8px; flex-wrap: wrap; }
-	.primary { border: 1px solid #f59e0b; background: #d97706; color: white; border-radius: 10px; padding: 0.55rem 1.2rem; cursor: pointer; font-weight: 600; }
+	.primary { border: 1px solid rgba(255, 255, 255, 0.3); background: var(--hl); color: white; border-radius: 10px; padding: 0.55rem 1.2rem; cursor: pointer; font-weight: 600; }
 	.primary:disabled { opacity: 0.5; cursor: not-allowed; }
 	.primary.isready { background: #16a34a; border-color: #22c55e; }
 	.ghost { border: 1px solid rgba(255, 255, 255, 0.2); background: rgba(255, 255, 255, 0.06); color: #e5e7eb; border-radius: 10px; padding: 0.55rem 1.1rem; cursor: pointer; }
