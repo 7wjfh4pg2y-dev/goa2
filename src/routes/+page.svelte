@@ -1,5 +1,7 @@
 <script lang="ts">
-	import { onDestroy } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
+	import { browser } from '$app/environment';
+	import { base } from '$app/paths';
 	import { writable, type Readable } from 'svelte/store';
 	import logoImage from '$lib/images/goa-logo.png';
 	import { reveal } from '$lib/transitions';
@@ -17,58 +19,91 @@
 		type MatchSession
 	} from '$lib/match';
 
-	type Mode = 'choose' | 'admin' | 'adminhub' | 'menu' | 'create' | 'join' | 'in';
+	type Mode = 'choose' | 'admin' | 'adminhub' | 'menu' | 'create' | 'join' | 'lobby' | 'game';
 	let mode: Mode = 'choose';
+	let notice = '';
 
 	// admin
 	let pw = '';
 	let pwError = false;
 	let busy = false;
 
-	// player / match
+	// create/join settings
 	let name = '';
 	let room = '';
-	let color = 'red';
-	let ruleset: 'quick' | 'long' | 'custom' = 'long';
-	let playerCount = 6;
+	let ruleset: 'quick' | 'long' | 'custom' = 'quick';
+	let playerCount = 4;
 	let customWaves = 3;
 	let customLife = 6;
 	let maps: MapChoice[] = [];
 	let mapId = '';
 
+	// lobby / session
+	let color = 'spectator';
+	let ready = false;
 	let session: MatchSession | null = null;
 	let players: Readable<Player[]> = writable([]);
 	let state: Readable<MatchState> = writable(initialMatchState());
+	let copied = false;
 
-	// per-step measured heights → animate the stage so steps overlap (no stacking)
-	let hChoose = 0, hAdmin = 0, hAdminhub = 0, hMenu = 0, hCreate = 0, hJoin = 0, hIn = 0;
-	$: stageH = { choose: hChoose, admin: hAdmin, adminhub: hAdminhub, menu: hMenu, create: hCreate, join: hJoin, in: hIn }[mode] ?? 0;
+	// measured heights → animated stage
+	let h: Record<string, number> = {};
+	$: stageH = h[mode] ?? 0;
 
 	function randomRoom() { room = Math.random().toString(36).slice(2, 6).toUpperCase(); }
 	function ensureLoaded() {
 		if (!maps.length) { maps = availableMaps(); mapId = maps[0]?.id ?? ''; }
-		try {
-			name ||= localStorage.getItem('goa2-name') ?? '';
-			color = localStorage.getItem('goa2-color') ?? color;
-		} catch {}
+		try { name ||= localStorage.getItem('goa2-name') ?? ''; } catch {}
 	}
+
+	onMount(() => {
+		// shareable link ?room=CODE → jump straight to Join, prefilled
+		const q = new URLSearchParams(location.search).get('room');
+		if (q) {
+			enterAsPlayer();
+			ensureLoaded();
+			room = q.toUpperCase();
+			mode = 'join';
+		}
+	});
 	onDestroy(() => session?.leave());
 
 	$: previewWaves = ruleset === 'custom' ? customWaves : wavesFor(ruleset);
 	$: previewLife = ruleset === 'custom' ? customLife : lifeFor(ruleset, playerCount);
+	$: shareLink = browser && room ? `${location.origin}${base}/?room=${room}` : '';
+
+	// --- lobby derived ---
+	$: me = session ? $players.find((p) => p.id === session!.clientId) : undefined;
+	$: iAmHost = session ? $state.host === session.clientId : false;
+	$: seated = $players.filter((p) => p.color !== 'spectator');
+	$: seatedCount = seated.length;
+	$: allReady = seatedCount >= 1 && seated.every((p) => p.ready);
+	$: takenColors = new Set($players.filter((p) => p.id !== session?.clientId && p.color !== 'spectator').map((p) => p.color));
+
+	// react to shared game transitions
+	$: if (mode === 'lobby' && $state.started) mode = 'game';
+	$: if ((mode === 'lobby' || mode === 'game') && $state.closed) bail('The host closed the game.');
+
+	function bail(msg: string) {
+		session?.leave();
+		session = null;
+		notice = msg;
+		mode = 'menu';
+	}
 
 	// --- navigation ---
 	function goHome() {
 		session?.leave();
 		session = null;
 		signOut();
-		pw = ''; pwError = false;
+		pw = ''; pwError = false; notice = '';
 		mode = 'choose';
 	}
 	function goPlayer() {
 		enterAsPlayer();
 		ensureLoaded();
 		randomRoom();
+		notice = '';
 		mode = 'menu';
 	}
 	async function submitAdmin() {
@@ -81,12 +116,20 @@
 	function onKey(e: KeyboardEvent) { if (e.key === 'Enter') submitAdmin(); }
 
 	// --- match ---
-	function persistMe() {
+	function persistName() {
 		if (!name.trim()) name = 'Player';
-		try { localStorage.setItem('goa2-name', name); localStorage.setItem('goa2-color', color); } catch {}
+		try { localStorage.setItem('goa2-name', name); } catch {}
+	}
+	function bindSession() {
+		players = session!.players;
+		state = session!.state;
+		color = 'spectator';
+		ready = false;
+		session!.kicked.subscribe((v) => { if (v) bail('You were removed from the game.'); });
+		mode = 'lobby';
 	}
 	function createGame() {
-		persistMe();
+		persistName();
 		room = room.trim().toUpperCase() || 'TABLE';
 		const chosen = maps.find((m) => m.id === mapId) ?? maps[0];
 		const seed = initialMatchState({
@@ -97,23 +140,42 @@
 			mapId: chosen?.id ?? '',
 			map: chosen?.data ?? null
 		});
-		session = joinMatch(room, { name, color }, { seed });
-		players = session.players; state = session.state;
-		mode = 'in';
+		session = joinMatch(room, { name, color: 'spectator' }, { seed });
+		bindSession();
 	}
 	function joinGame() {
-		persistMe();
+		persistName();
 		room = room.trim().toUpperCase();
 		if (!room) return;
-		session = joinMatch(room, { name, color }, {});
-		players = session.players; state = session.state;
-		mode = 'in';
+		session = joinMatch(room, { name, color: 'spectator' }, {});
+		bindSession();
 	}
 	function leaveRoom() {
 		session?.leave();
 		session = null;
 		mode = 'menu';
 		randomRoom();
+	}
+
+	// --- lobby actions ---
+	function pickColor(c: string) {
+		if (c === 'spectator') { color = 'spectator'; ready = false; session?.setSelf({ color: 'spectator', ready: false }); return; }
+		if (takenColors.has(c)) return;
+		if (color === 'spectator' && seatedCount >= $state.seats) return; // seats full
+		color = c;
+		session?.setSelf({ color: c });
+	}
+	function toggleReady() {
+		if (color === 'spectator') return;
+		ready = !ready;
+		session?.setSelf({ ready });
+	}
+	function beginGame() { if (iAmHost && allReady) session?.update({ started: true }); }
+	function closeGame() { session?.update({ closed: true }); }
+	function kick(id: string) { session?.kick(id); }
+
+	async function copyLink() {
+		try { await navigator.clipboard.writeText(shareLink); copied = true; setTimeout(() => (copied = false), 1400); } catch {}
 	}
 </script>
 
@@ -126,7 +188,8 @@
 
 	<div class="stage" style:height={stageH ? stageH + 'px' : ''}>
 		{#if mode === 'choose'}
-			<div class="step" transition:reveal bind:clientHeight={hChoose}>
+			<div class="step" transition:reveal bind:clientHeight={h['choose']}>
+				{#if notice}<p class="notice">{notice}</p>{/if}
 				<div class="cards">
 					<button class="card p" on:click={goPlayer}>
 						<span class="ic"><svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="#7dd3fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 4-6 8-6s8 2 8 6" /></svg></span>
@@ -139,7 +202,7 @@
 				</div>
 			</div>
 		{:else if mode === 'admin'}
-			<div class="step" transition:reveal bind:clientHeight={hAdmin}>
+			<div class="step" transition:reveal bind:clientHeight={h['admin']}>
 				<div class="card form narrow">
 					<input class="field" type="password" placeholder="Password" bind:value={pw} on:keydown={onKey} autocomplete="off" />
 					{#if pwError}<p class="err">Incorrect password.</p>{/if}
@@ -150,7 +213,7 @@
 				</div>
 			</div>
 		{:else if mode === 'adminhub'}
-			<div class="step" transition:reveal bind:clientHeight={hAdminhub}>
+			<div class="step" transition:reveal bind:clientHeight={h['adminhub']}>
 				<div class="card form narrow">
 					<p class="roomline">You're in as <b class="admincol">Admin</b>.</p>
 					<p class="hint">GM tools coming soon.</p>
@@ -158,7 +221,8 @@
 				</div>
 			</div>
 		{:else if mode === 'menu'}
-			<div class="step" transition:reveal bind:clientHeight={hMenu}>
+			<div class="step" transition:reveal bind:clientHeight={h['menu']}>
+				{#if notice}<p class="notice">{notice}</p>{/if}
 				<div class="cards">
 					<button class="card p" on:click={() => (mode = 'create')}>
 						<span class="ic"><svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="#7dd3fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14" /></svg></span>
@@ -171,25 +235,16 @@
 				</div>
 			</div>
 		{:else if mode === 'create'}
-			<div class="step" transition:reveal bind:clientHeight={hCreate}>
+			<div class="step" transition:reveal bind:clientHeight={h['create']}>
 				<div class="card form wide">
+					<label class="fld"><span>Your name</span><input class="field" bind:value={name} placeholder="e.g. Zaheen" /></label>
 					<div class="grid2">
 						<div class="col">
-							<label class="fld"><span>Your name</span><input class="field" bind:value={name} placeholder="e.g. Zaheen" /></label>
 							<div class="fld">
-								<span>Your colour</span>
-								<div class="swatches">
-									{#each PLAYER_COLORS as c (c.id)}<button title={c.label} aria-label={c.label} class="sw" class:sel={color === c.id} style="--sc:{c.hex}" on:click={() => (color = c.id)}></button>{/each}
-									<button class="chip" class:on={color === 'spectator'} on:click={() => (color = 'spectator')}>Spectator</button>
-								</div>
-							</div>
-						</div>
-						<div class="col">
-							<div class="fld">
-								<span>Ruleset</span>
+								<span>Game length</span>
 								<div class="chips">
-									<button class="chip" class:on={ruleset === 'quick'} on:click={() => (ruleset = 'quick')}>Quick · {wavesFor('quick')}</button>
-									<button class="chip" class:on={ruleset === 'long'} on:click={() => (ruleset = 'long')}>Long · {wavesFor('long')}</button>
+									<button class="chip" class:on={ruleset === 'quick'} on:click={() => (ruleset = 'quick')}>Quick</button>
+									<button class="chip" class:on={ruleset === 'long'} on:click={() => (ruleset = 'long')}>Long</button>
 									<button class="chip" class:on={ruleset === 'custom'} on:click={() => (ruleset = 'custom')}>Custom</button>
 								</div>
 								{#if ruleset === 'custom'}
@@ -197,15 +252,19 @@
 										<label class="mini"><span>Waves</span><input class="field" type="number" min="1" max="20" bind:value={customWaves} /></label>
 										<label class="mini"><span>Life / team</span><input class="field" type="number" min="1" max="30" bind:value={customLife} /></label>
 									</div>
-								{:else}
-									<div class="chips">{#each [4, 6] as n (n)}<button class="chip" class:on={playerCount === n} on:click={() => (playerCount = n)}>{n} players</button>{/each}</div>
 								{/if}
-								<p class="hint">{previewWaves} waves · {previewLife} Life / team</p>
 							</div>
+							<div class="fld">
+								<span>Players (seats)</span>
+								<div class="chips">{#each [4, 6] as n (n)}<button class="chip" class:on={playerCount === n} on:click={() => (playerCount = n)}>{n}</button>{/each}</div>
+							</div>
+						</div>
+						<div class="col">
 							<div class="fld">
 								<span>Map</span>
 								<div class="chips">{#each maps as m (m.id)}<button class="chip" class:on={mapId === m.id} on:click={() => (mapId = m.id)}>{m.label}</button>{/each}</div>
 							</div>
+							<p class="hint">{previewWaves} waves · {previewLife} Life per team · {playerCount} seats</p>
 						</div>
 					</div>
 					<div class="row">
@@ -215,36 +274,79 @@
 				</div>
 			</div>
 		{:else if mode === 'join'}
-			<div class="step" transition:reveal bind:clientHeight={hJoin}>
+			<div class="step" transition:reveal bind:clientHeight={h['join']}>
 				<div class="card form narrow">
 					<label class="fld"><span>Your name</span><input class="field" bind:value={name} placeholder="e.g. Zaheen" /></label>
 					<label class="fld"><span>Room code</span><input class="field up" bind:value={room} maxlength="8" placeholder="code from the host" /></label>
-					<div class="fld">
-						<span>Your colour</span>
-						<div class="swatches">
-							{#each PLAYER_COLORS as c (c.id)}<button title={c.label} aria-label={c.label} class="sw" class:sel={color === c.id} style="--sc:{c.hex}" on:click={() => (color = c.id)}></button>{/each}
-							<button class="chip" class:on={color === 'spectator'} on:click={() => (color = 'spectator')}>Spectator</button>
-						</div>
-					</div>
 					<div class="row">
 						<button class="ghost" on:click={() => (mode = 'menu')}>← Back</button>
 						<button class="primary" on:click={joinGame} disabled={!room.trim()}>Join game</button>
 					</div>
 				</div>
 			</div>
-		{:else}
-			<div class="step" transition:reveal bind:clientHeight={hIn}>
-				<div class="card form narrow">
-					<p class="roomline">Room <b class="mono">{room}</b></p>
+		{:else if mode === 'lobby'}
+			<div class="step" transition:reveal bind:clientHeight={h['lobby']}>
+				<div class="card form wide">
+					<div class="lobbyhead">
+						<div>
+							<span class="lbl">Room code</span>
+							<div class="mono roomcode">{room}</div>
+						</div>
+						<button class="ghost" on:click={copyLink}>{copied ? 'Copied!' : 'Copy invite link'}</button>
+					</div>
+
 					<div class="fld">
-						<span>At the table ({$players.length})</span>
-						<div class="players">
+						<span>Your colour {seatedCount >= $state.seats && color === 'spectator' ? '· seats full' : ''}</span>
+						<div class="swatches">
+							{#each PLAYER_COLORS as c (c.id)}
+								<button title={c.label} aria-label={c.label} class="sw" class:sel={color === c.id} disabled={takenColors.has(c.id) || (color === 'spectator' && seatedCount >= $state.seats)} style="--sc:{c.hex}" on:click={() => pickColor(c.id)}></button>
+							{/each}
+							<button class="chip" class:on={color === 'spectator'} on:click={() => pickColor('spectator')}>Spectator</button>
+						</div>
+					</div>
+
+					<div class="fld">
+						<span>At the table — {seatedCount}/{$state.seats} seated</span>
+						<div class="seatlist">
 							{#each $players as p (p.id)}
-								<span class="ptag"><span class="pdot" style="background:{p.color === 'spectator' ? 'transparent' : colorHex(p.color)};border-color:{p.color === 'spectator' ? '#64748b' : colorHex(p.color)}"></span>{p.name}{p.id === session?.clientId ? ' (you)' : ''}</span>
+								<div class="seat">
+									<span class="pdot" style="background:{p.color === 'spectator' ? 'transparent' : colorHex(p.color)};border-color:{p.color === 'spectator' ? '#64748b' : colorHex(p.color)}"></span>
+									<span class="pname">{p.name}{p.id === session?.clientId ? ' (you)' : ''}{p.id === $state.host ? ' · host' : ''}</span>
+									{#if p.color === 'spectator'}
+										<span class="tagm">spectator</span>
+									{:else if p.ready}
+										<span class="tagm ok">ready</span>
+									{:else}
+										<span class="tagm">not ready</span>
+									{/if}
+									{#if iAmHost && p.id !== session?.clientId}
+										<button class="kick" title="Kick" on:click={() => kick(p.id)}>✕</button>
+									{/if}
+								</div>
 							{/each}
 						</div>
 					</div>
-					<p class="hint">You're in. Board & HUD land next — share the room code with your table.</p>
+
+					<div class="row wraprow">
+						<button class="ghost" on:click={leaveRoom}>Leave</button>
+						<div class="rightbtns">
+							{#if color !== 'spectator'}
+								<button class="primary" class:isready={ready} on:click={toggleReady}>{ready ? '✓ Ready' : 'Ready up'}</button>
+							{/if}
+							{#if iAmHost}
+								<button class="ghost danger" on:click={closeGame}>Close</button>
+								<button class="primary" disabled={!allReady} on:click={beginGame}>Begin</button>
+							{/if}
+						</div>
+					</div>
+					{#if iAmHost && !allReady}<p class="hint">Everyone seated must ready up before you can begin.</p>{/if}
+				</div>
+			</div>
+		{:else}
+			<div class="step" transition:reveal bind:clientHeight={h['game']}>
+				<div class="card form narrow">
+					<p class="roomline">Game started — room <b class="mono">{room}</b></p>
+					<p class="hint">The board & HUD land next.</p>
 					<div class="row"><button class="ghost" on:click={leaveRoom}>Leave</button></div>
 				</div>
 			</div>
@@ -257,9 +359,10 @@
 	.home-link { background: none; border: none; padding: 0; cursor: pointer; }
 	.logo { width: min(260px, 60vw); filter: drop-shadow(0 12px 32px rgba(0, 0, 0, 0.55)); }
 
-	/* overlapping steps + animated height so switching never stacks or shifts the logo */
 	.stage { position: relative; width: 100%; max-width: 640px; transition: height 0.32s cubic-bezier(0.2, 0.8, 0.2, 1); }
-	.step { position: absolute; top: 0; left: 0; right: 0; display: flex; justify-content: center; }
+	.step { position: absolute; top: 0; left: 0; right: 0; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+
+	.notice { margin: 0; font-size: 0.85rem; color: #fca5a5; background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.35); border-radius: 8px; padding: 6px 12px; }
 
 	.cards { display: flex; gap: 20px; justify-content: center; flex-wrap: wrap; }
 	.card { background: rgba(12, 18, 32, 0.44); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 18px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35); color: inherit; }
@@ -271,13 +374,14 @@
 	.t { font-size: 1.35rem; font-weight: 700; }
 	.s { font-size: 0.78rem; color: #cbd5e1; }
 
-	.card.form { padding: 24px; display: flex; flex-direction: column; gap: 16px; }
+	.card.form { padding: 24px; display: flex; flex-direction: column; gap: 16px; width: 100%; }
 	.form.narrow { width: min(380px, 92vw); }
-	.form.wide { width: min(620px, 94vw); }
+	.form.wide { width: min(560px, 94vw); }
 	.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
 	.col { display: flex; flex-direction: column; gap: 16px; }
 	.fld { display: flex; flex-direction: column; gap: 7px; }
 	.fld > span { font-size: 0.85rem; font-weight: 600; color: #e2e8f0; }
+	.lbl { font-size: 0.78rem; color: #94a3b8; }
 	.field { width: 100%; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.18); background: rgba(8, 12, 22, 0.6); padding: 0.55rem 0.7rem; color: white; }
 	.field.up { text-transform: uppercase; }
 	.two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -285,20 +389,32 @@
 	.chips, .swatches { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 	.chip { border: 1px solid rgba(255, 255, 255, 0.16); background: rgba(255, 255, 255, 0.05); color: #e5e7eb; border-radius: 999px; padding: 0.35rem 0.8rem; font-size: 0.85rem; cursor: pointer; }
 	.chip.on { background: #d97706; border-color: #f59e0b; color: white; }
-	.sw { width: 1.6rem; height: 1.6rem; border-radius: 50%; background: var(--sc); border: 2px solid rgba(255, 255, 255, 0.25); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35); cursor: pointer; padding: 0; }
+	.sw { width: 1.7rem; height: 1.7rem; border-radius: 50%; background: var(--sc); border: 2px solid rgba(255, 255, 255, 0.25); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35); cursor: pointer; padding: 0; }
 	.sw.sel { outline: 2px solid #f59e0b; outline-offset: 2px; border-color: #fff; }
+	.sw:disabled { opacity: 0.28; cursor: not-allowed; }
 	.hint { font-size: 0.72rem; color: #94a3b8; margin: 2px 0 0; }
 	.err { color: #fca5a5; font-size: 0.82rem; margin: 0; }
-	.row { display: flex; justify-content: space-between; gap: 10px; }
+	.row { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
+	.row.wraprow { flex-wrap: wrap; }
+	.rightbtns { display: flex; gap: 8px; flex-wrap: wrap; }
 	.primary { border: 1px solid #f59e0b; background: #d97706; color: white; border-radius: 10px; padding: 0.55rem 1.2rem; cursor: pointer; font-weight: 600; }
 	.primary:disabled { opacity: 0.5; cursor: not-allowed; }
+	.primary.isready { background: #16a34a; border-color: #22c55e; }
 	.ghost { border: 1px solid rgba(255, 255, 255, 0.2); background: rgba(255, 255, 255, 0.06); color: #e5e7eb; border-radius: 10px; padding: 0.55rem 1.1rem; cursor: pointer; }
+	.ghost.danger { border-color: rgba(239, 68, 68, 0.5); color: #fca5a5; }
 	.roomline { margin: 0; font-size: 1.1rem; }
 	.admincol { color: #fdba74; }
 	.mono { font-family: ui-monospace, monospace; letter-spacing: 0.08em; }
-	.players { display: flex; flex-wrap: wrap; gap: 8px; }
-	.ptag { display: inline-flex; align-items: center; gap: 5px; font-size: 0.85rem; }
-	.pdot { width: 0.65rem; height: 0.65rem; border-radius: 50%; border: 1px solid; display: inline-block; }
+
+	.lobbyhead { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+	.roomcode { font-size: 1.7rem; font-weight: 700; }
+	.seatlist { display: flex; flex-direction: column; gap: 6px; }
+	.seat { display: flex; align-items: center; gap: 8px; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 6px 10px; }
+	.pdot { width: 0.8rem; height: 0.8rem; border-radius: 50%; border: 1px solid; flex: 0 0 auto; }
+	.pname { flex: 1; font-size: 0.9rem; }
+	.tagm { font-size: 0.7rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.04em; }
+	.tagm.ok { color: #6ee7b7; }
+	.kick { border: none; background: rgba(239, 68, 68, 0.15); color: #fca5a5; width: 22px; height: 22px; border-radius: 6px; cursor: pointer; line-height: 1; }
 
 	@media (max-width: 560px) {
 		.grid2 { grid-template-columns: 1fr; gap: 16px; }
