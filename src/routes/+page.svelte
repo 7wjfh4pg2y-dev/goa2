@@ -7,6 +7,7 @@
 	import { reveal } from '$lib/transitions';
 	import { role, tryAdmin, enterAsPlayer, signOut } from '$lib/role';
 	import { availableMaps, type MapChoice } from '$lib/maps';
+	import { announceRoom, browseRooms, type RoomInfo } from '$lib/lobby';
 	import {
 		joinMatch,
 		initialMatchState,
@@ -46,6 +47,11 @@
 	let state: Readable<MatchState> = writable(initialMatchState());
 	let copied = false;
 
+	// public room directory
+	let roomHandle: ReturnType<typeof announceRoom> | null = null;
+	let browseHandle: ReturnType<typeof browseRooms> | null = null;
+	let openRooms: RoomInfo[] = [];
+
 	// measured heights → animated stage
 	let h: Record<string, number> = {};
 	$: stageH = h[mode] ?? 0;
@@ -66,7 +72,11 @@
 			mode = 'join';
 		}
 	});
-	onDestroy(() => session?.leave());
+	onDestroy(() => {
+		session?.leave();
+		roomHandle?.leave();
+		browseHandle?.leave();
+	});
 
 	$: previewWaves = ruleset === 'custom' ? customWaves : wavesFor(ruleset);
 	$: previewLife = ruleset === 'custom' ? customLife : lifeFor(ruleset, playerCount);
@@ -88,14 +98,33 @@
 	function bail(msg: string) {
 		session?.leave();
 		session = null;
+		roomHandle?.leave();
+		roomHandle = null;
 		notice = msg;
 		mode = 'menu';
 	}
+
+	// host keeps the directory entry in sync with the room
+	$: if (roomHandle) roomHandle.update({ count: seatedCount, started: $state.started });
+
+	// browse open rooms only while on the Join screen
+	function manageBrowse(m: Mode) {
+		if (m === 'join') {
+			if (!browseHandle) browseHandle = browseRooms((rs) => (openRooms = rs));
+		} else if (browseHandle) {
+			browseHandle.leave();
+			browseHandle = null;
+			openRooms = [];
+		}
+	}
+	$: if (browser) manageBrowse(mode);
 
 	// --- navigation ---
 	function goHome() {
 		session?.leave();
 		session = null;
+		roomHandle?.leave();
+		roomHandle = null;
 		signOut();
 		pw = ''; pwError = false; notice = '';
 		mode = 'choose';
@@ -142,6 +171,7 @@
 			map: chosen?.data ?? null
 		});
 		session = joinMatch(room, { name, color: 'spectator' }, { seed });
+		roomHandle = announceRoom({ room, host: name, seats: playerCount, count: 0, started: false });
 		bindSession();
 	}
 	function joinGame() {
@@ -154,8 +184,14 @@
 	function leaveRoom() {
 		session?.leave();
 		session = null;
+		roomHandle?.leave();
+		roomHandle = null;
 		mode = 'menu';
 		randomRoom();
+	}
+	function joinFromList(r: RoomInfo) {
+		room = r.room;
+		joinGame();
 	}
 
 	// --- lobby actions ---
@@ -283,6 +319,23 @@
 				<div class="card form narrow">
 					<label class="fld"><span>Your name</span><input class="field" bind:value={name} placeholder="e.g. Zaheen" /></label>
 					<label class="fld"><span>Room code</span><input class="field up" bind:value={room} maxlength="8" placeholder="code from the host" /></label>
+					<div class="fld">
+						<span>Open games</span>
+						{#if openRooms.length}
+							<div class="roomlist">
+								{#each openRooms as r (r.room)}
+									<button class="roomrow" on:click={() => joinFromList(r)}>
+										<span class="mono rc">{r.room}</span>
+										<span class="rh">{r.host}'s game</span>
+										<span class="rmeta">{r.started ? 'in progress' : `${r.count}/${r.seats} seated`}</span>
+										<span class="rjoin">{r.started || r.count >= r.seats ? 'Spectate' : 'Join'}</span>
+									</button>
+								{/each}
+							</div>
+						{:else}
+							<p class="hint">No open games right now — enter a code above or create one.</p>
+						{/if}
+					</div>
 					<div class="row">
 						<button class="ghost" on:click={() => (mode = 'menu')}>← Back</button>
 						<button class="primary" on:click={joinGame} disabled={!room.trim()}>Join game</button>
@@ -398,6 +451,13 @@
 	.sw.sel { outline: 2px solid #f59e0b; outline-offset: 2px; border-color: #fff; }
 	.sw:disabled { opacity: 0.28; cursor: not-allowed; }
 	.hint { font-size: 0.72rem; color: #94a3b8; margin: 2px 0 0; }
+	.roomlist { display: flex; flex-direction: column; gap: 6px; max-height: 176px; overflow-y: auto; }
+	.roomrow { display: flex; align-items: center; gap: 10px; text-align: left; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 8px 10px; color: #e5e7eb; cursor: pointer; transition: background 0.12s; }
+	.roomrow:hover { background: rgba(255, 255, 255, 0.09); }
+	.rc { font-size: 0.95rem; font-weight: 700; letter-spacing: 0.06em; }
+	.rh { flex: 1; font-size: 0.82rem; color: #cbd5e1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.rmeta { font-size: 0.72rem; color: #94a3b8; }
+	.rjoin { font-size: 0.78rem; font-weight: 600; color: #fdba74; }
 	.err { color: #fca5a5; font-size: 0.82rem; margin: 0; }
 	.row { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
 	.row.wraprow { flex-wrap: wrap; }
