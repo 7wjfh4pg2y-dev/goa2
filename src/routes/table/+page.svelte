@@ -2,7 +2,7 @@
 	import { onMount, onDestroy } from 'svelte'
 	import { writable, type Readable } from 'svelte/store'
 	import BoardCanvas from '$lib/BoardCanvas.svelte'
-	import { availableMaps, type MapChoice } from '$lib/maps'
+	import { availableMaps, editorMap, type MapChoice } from '$lib/maps'
 	import {
 		joinMatch,
 		nextTurn,
@@ -44,6 +44,7 @@
 	let maps: MapChoice[] = []
 	let mapId = ''
 	let boardCanvas: BoardCanvas
+	let hasEditorMap = false
 
 	let session: MatchSession | null = null
 	let state: Readable<MatchState> = writable(initialMatchState())
@@ -62,6 +63,7 @@
 		ticker = setInterval(() => (now = Date.now()), 250)
 		maps = availableMaps()
 		mapId = maps[0]?.id ?? ''
+		hasEditorMap = !!editorMap()
 		try {
 			colGame = localStorage.getItem('goa2-hud-game') === '1'
 			colLife = localStorage.getItem('goa2-hud-life') === '1'
@@ -171,6 +173,13 @@
 	}
 	function clearTokens() {
 		if (Object.keys(cur.pieces ?? {}).length) act('cleared tokens', clearPieces())
+	}
+
+	// re-push this browser's current editor map into the live room
+	function reloadMap() {
+		const m = editorMap()
+		if (!m) return
+		act(`reloaded map from editor${m.name ? ` — ${m.name}` : ''}`, { map: m, mapId: 'editor' })
 	}
 
 	// --- display helpers ---
@@ -359,6 +368,15 @@
 						<button class="mini" on:click={clearTokens}>Clear</button>
 					</div>
 					<p class="hint">Drag a token to move it — synced to everyone.</p>
+
+					<!-- board / map -->
+					<div class="row">
+						<span class="lbl">Board</span>
+						<span class="dim ellip">{s.map?.name ?? 'map'}</span>
+					</div>
+					<div class="btnrow">
+						<button class="mini grow" on:click={reloadMap} disabled={!hasEditorMap} title={hasEditorMap ? 'Push your current Map Editor map into this room' : 'No editor map saved in this browser'}>↻ Reload map from editor</button>
+					</div>
 				</div>
 			{/if}
 		</section>
@@ -598,6 +616,7 @@
 	.logline { font-size: 0.78rem; line-height: 1.25; margin: 0; }
 	.log .empty { font-size: 0.78rem; color: #64748b; margin: 0; }
 	.hint { font-size: 0.7rem; color: #64748b; margin: 0.1rem 0 0; }
+	.ellip { max-width: 9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
 
 	.victory {
 		position: absolute;
