@@ -60,3 +60,16 @@ export function firstMap(): MapChoice | null {
 	const maps = availableMaps()
 	return maps[0] ?? null
 }
+
+/** The player's current Map Editor working map (this browser), or null. */
+export function editorMap(): GameMap | null {
+	try {
+		const raw = localStorage.getItem(EDITOR_KEY)
+		if (!raw) return null
+		const data = JSON.parse(raw) as GameMap
+		if (data?.cells && Object.keys(data.cells).length) return data
+	} catch {
+		/* ignore */
+	}
+	return null
+}
