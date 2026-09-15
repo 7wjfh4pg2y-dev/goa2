@@ -15,17 +15,21 @@
 		align-items: center;
 		justify-content: center;
 		padding: 24px;
-		/* Battlefield: orange (top-left) and blue (bottom-right) armies, the map's
-		   green wilds on the other two corners (top-right / bottom-left), all
-		   clashing into a purple seam through the centre. */
+		/* Battlefield: orange (top-left) and blue (bottom-right) armies dominate and
+		   blend through a purple centre; the map's green wilds only lightly tint the
+		   other two corners. No dark seam — the colours flow into each other. */
 		background:
-			radial-gradient(78% 78% at 0% 0%, rgba(198, 92, 22, 0.95) 0%, rgba(150, 66, 20, 0.5) 30%, transparent 60%),
-			radial-gradient(78% 78% at 100% 100%, rgba(38, 108, 158, 0.95) 0%, rgba(26, 78, 118, 0.5) 30%, transparent 60%),
-			radial-gradient(78% 78% at 100% 0%, rgba(40, 128, 66, 0.9) 0%, rgba(26, 88, 50, 0.45) 30%, transparent 60%),
-			radial-gradient(78% 78% at 0% 100%, rgba(40, 128, 66, 0.9) 0%, rgba(26, 88, 50, 0.45) 30%, transparent 60%),
-			radial-gradient(62% 62% at 50% 50%, rgba(128, 58, 160, 0.6) 0%, rgba(92, 42, 122, 0.28) 42%, transparent 72%),
-			#0b1220;
-		background-color: #0b1220;
+			radial-gradient(70% 70% at 100% 0%, rgba(46, 132, 78, 0.3) 0%, transparent 55%),
+			radial-gradient(70% 70% at 0% 100%, rgba(46, 132, 78, 0.3) 0%, transparent 55%),
+			linear-gradient(
+				135deg,
+				rgba(216, 100, 26, 0.98) 0%,
+				rgba(200, 88, 34, 0.92) 24%,
+				rgba(122, 66, 146, 0.88) 50%,
+				rgba(40, 112, 168, 0.92) 76%,
+				rgba(34, 104, 162, 0.98) 100%
+			);
+		background-color: #17243a;
 	}
 	.logo {
 		width: min(360px, 74vw);
