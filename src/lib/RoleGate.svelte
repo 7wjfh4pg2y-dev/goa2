@@ -32,15 +32,12 @@
 
 		{#if step === 'choose'}
 			<h1>Who's playing?</h1>
-			<p class="sub">Pick how you want to enter.</p>
 			<div class="opts">
 				<button class="opt player" on:click={enterAsPlayer}>
 					<span class="big">Player</span>
-					<span class="desc">Join or create a match</span>
 				</button>
 				<button class="opt admin" on:click={() => (step = 'admin')}>
 					<span class="big">Admin</span>
-					<span class="desc">GM tools · password</span>
 				</button>
 			</div>
 		{:else}
@@ -95,9 +92,9 @@
 	.opts { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 	.opt {
 		display: flex;
-		flex-direction: column;
-		gap: 4px;
-		padding: 18px 12px;
+		align-items: center;
+		justify-content: center;
+		padding: 26px 12px;
 		border-radius: 10px;
 		border: 1px solid #374151;
 		background: #1f2937;
@@ -108,8 +105,7 @@
 	.opt:hover { background: #263244; }
 	.opt.player:hover { border-color: #22c55e; }
 	.opt.admin:hover { border-color: #f59e0b; }
-	.big { font-size: 1.15rem; font-weight: 700; }
-	.desc { font-size: 0.75rem; color: #9ca3af; }
+	.big { font-size: 1.2rem; font-weight: 700; }
 	.field {
 		width: 100%;
 		border-radius: 8px;
