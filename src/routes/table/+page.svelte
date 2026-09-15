@@ -19,6 +19,10 @@
 		startTimer,
 		toggleTimer,
 		resetTimer,
+		addPiece,
+		movePiece,
+		clearPieces,
+		newPieceId,
 		TEAMS,
 		TURNS_PER_ROUND,
 		type Team,
@@ -103,6 +107,10 @@
 		joined = true
 	}
 
+	// current shared state (for handlers passed as props)
+	let cur: MatchState = initialMatchState()
+	$: cur = $state
+
 	// every mutation is attributed + logged
 	function act(text: string, patch: Partial<MatchState>) {
 		session?.act(text, patch)
@@ -145,6 +153,24 @@
 		if (kind === 'reset') return act('Timer reset', resetTimer())
 		if (kind === 'start') return act('Timer started', startTimer())
 		act(s.timer.running ? 'Timer paused' : 'Timer resumed', toggleTimer(s.timer))
+	}
+
+	// --- pieces (slice 1: plain tokens) ---
+	$: pieceList = Object.values(cur.pieces ?? {})
+	function startHex(): string {
+		const cells = cur.map?.cells ?? {}
+		return Object.keys(cells)[0] ?? '0_0'
+	}
+	function addToken(t: Team) {
+		const id = newPieceId()
+		act(`added ${teamLabel(t)} token`, addPiece(cur, { id, hex: startHex(), team: t }))
+	}
+	function moveToken(id: string, hex: string) {
+		if (cur.pieces[id]?.hex === hex) return
+		act(`${teamLabel((cur.pieces[id]?.team as Team) ?? 'orange')} token → ${hex}`, movePiece(cur, id, hex))
+	}
+	function clearTokens() {
+		if (Object.keys(cur.pieces ?? {}).length) act('cleared tokens', clearPieces())
 	}
 
 	// --- display helpers ---
@@ -264,7 +290,7 @@
 	<div class="table-surface">
 		<!-- the chosen board, rendered as the play surface -->
 		{#if s.map}
-			<BoardCanvas map={s.map} bind:this={boardCanvas} />
+			<BoardCanvas map={s.map} pieces={pieceList} onMovePiece={moveToken} bind:this={boardCanvas} />
 			<div class="boardctl">
 				<button on:click={() => boardCanvas.zoomBtn(1 / 1.2)}>−</button>
 				<button on:click={() => boardCanvas.zoomBtn(1.2)}>+</button>
@@ -321,6 +347,18 @@
 							<button class={`mini grow ${teamBtn(t)}`} disabled={s.waves <= 0} on:click={() => doPush(s, t)}>{teamLabel(t)} push</button>
 						{/each}
 					</div>
+
+					<!-- tokens (slice 1) -->
+					<div class="row">
+						<span class="lbl">Tokens</span>
+						<span class="dim">{pieceList.length} on board</span>
+					</div>
+					<div class="btnrow">
+						<button class={`mini grow ${teamBtn('orange')}`} on:click={() => addToken('orange')}>+ Orange</button>
+						<button class={`mini grow ${teamBtn('blue')}`} on:click={() => addToken('blue')}>+ Blue</button>
+						<button class="mini" on:click={clearTokens}>Clear</button>
+					</div>
+					<p class="hint">Drag a token to move it — synced to everyone.</p>
 				</div>
 			{/if}
 		</section>
@@ -559,6 +597,7 @@
 	.log .logbody { max-height: 40vh; overflow-y: auto; gap: 0.15rem; }
 	.logline { font-size: 0.78rem; line-height: 1.25; margin: 0; }
 	.log .empty { font-size: 0.78rem; color: #64748b; margin: 0; }
+	.hint { font-size: 0.7rem; color: #64748b; margin: 0.1rem 0 0; }
 
 	.victory {
 		position: absolute;
