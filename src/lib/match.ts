@@ -57,12 +57,21 @@ export interface MatchState {
 	log: LogEntry[] // capped activity log (most recent last)
 	mapId: string // id of the chosen board (from the maps registry)
 	map: GameMap | null // full board data, shared so everyone renders the same map
+	pieces: Record<string, Piece> // tokens on the board, keyed by id
 	rev: number // monotonic version for last-write-wins
 	updatedBy: string
 	updatedAt: number
 }
 
 export const LOG_CAP = 60
+
+/** A piece on the board (slice 1: a plain token). */
+export interface Piece {
+	id: string
+	hex: string // "col_row"
+	team: Team | 'neutral'
+	label?: string
+}
 
 /** Life counters per team, from the rulebook setup table (base, single lane). */
 export function lifeFor(length: 'quick' | 'long', players: number): number {
@@ -103,6 +112,7 @@ export function initialMatchState(
 		log: [],
 		mapId: opts.mapId ?? '',
 		map: opts.map ?? null,
+		pieces: {},
 		rev: 0,
 		updatedBy: '',
 		updatedAt: 0
@@ -291,6 +301,28 @@ export function winner(s: MatchState): { team: Team; reason: string } | null {
 	if (s.life.blue <= 0) return { team: 'orange', reason: 'Blue ran out of Life counters' }
 	if (s.waves <= 0 && s.lastPush) return { team: s.lastPush, reason: 'Won the final Push' }
 	return null
+}
+
+// ---- Pieces on the board ----------------------------------------------------
+
+export function addPiece(s: MatchState, piece: Piece): Partial<MatchState> {
+	return { pieces: { ...s.pieces, [piece.id]: piece } }
+}
+export function movePiece(s: MatchState, id: string, hex: string): Partial<MatchState> {
+	const p = s.pieces[id]
+	if (!p) return {}
+	return { pieces: { ...s.pieces, [id]: { ...p, hex } } }
+}
+export function removePiece(s: MatchState, id: string): Partial<MatchState> {
+	const next = { ...s.pieces }
+	delete next[id]
+	return { pieces: next }
+}
+export function clearPieces(): Partial<MatchState> {
+	return { pieces: {} }
+}
+export function newPieceId(): string {
+	return globalThis.crypto?.randomUUID?.() ?? `p_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
 }
 
 export { otherTeam, clampTurn }
