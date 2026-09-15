@@ -80,10 +80,27 @@ export function lifeFor(length: 'quick' | 'long', players: number): number {
 }
 export const wavesFor = (length: 'quick' | 'long') => (length === 'quick' ? 3 : 5)
 
+// Personal player colours (identity at the table) — distinct, and deliberately
+// NOT orange/blue, since those are the two team sides.
+export interface PlayerColorDef { id: string; label: string; hex: string }
+export const PLAYER_COLORS: PlayerColorDef[] = [
+	{ id: 'red', label: 'Red', hex: '#ef4444' },
+	{ id: 'green', label: 'Green', hex: '#22c55e' },
+	{ id: 'purple', label: 'Purple', hex: '#a855f7' },
+	{ id: 'pink', label: 'Pink', hex: '#ec4899' },
+	{ id: 'yellow', label: 'Yellow', hex: '#eab308' },
+	{ id: 'teal', label: 'Teal', hex: '#2dd4bf' },
+	{ id: 'white', label: 'White', hex: '#f8fafc' },
+	{ id: 'black', label: 'Black', hex: '#0b0f17' },
+	{ id: 'brown', label: 'Brown', hex: '#b45309' },
+	{ id: 'slate', label: 'Slate', hex: '#94a3b8' }
+]
+export const colorHex = (id: string) => PLAYER_COLORS.find((c) => c.id === id)?.hex ?? '#94a3b8'
+
 export interface Player {
 	id: string
 	name: string
-	team: Team | 'spectator'
+	color: string // a PLAYER_COLORS id, or 'spectator'
 }
 
 export function initialMatchState(
@@ -148,30 +165,39 @@ export interface MatchSession {
 	update: (patch: Partial<MatchState>) => void
 	/** Apply a patch AND append an attributed log entry describing it. */
 	act: (text: string, patch: Partial<MatchState>) => void
-	/** Announce which team this client is playing (or spectating). */
-	setSelf: (info: { name?: string; team?: Team | 'spectator' }) => void
+	/** Update this client's name and/or colour. */
+	setSelf: (info: { name?: string; color?: string }) => void
 	leave: () => void
 	clientId: string
 }
 
 /**
- * Join (or create) a match room and keep a live, shared MatchState in sync.
- * The returned stores update as other players make changes.
+ * Join or create a match room and keep a live, shared MatchState in sync.
+ *
+ * Pass `opts.seed` to CREATE a room — that seed (ruleset + map) is authoritative.
+ * Omit it to JOIN: the client starts with a placeholder (rev -1) that any real
+ * state overrides, so a joiner always inherits the room's settings rather than
+ * imposing its own. If no host answers within a short grace period, the joiner
+ * promotes itself to host with a default game so it isn't stuck.
  */
 export function joinMatch(
 	room: string,
-	self: { name: string; team: Team | 'spectator' },
-	seed?: MatchState
+	self: { name: string; color: string },
+	opts: { seed?: MatchState } = {}
 ): MatchSession {
 	const clientId =
 		globalThis.crypto?.randomUUID?.() ?? `c_${Math.random().toString(36).slice(2)}`
 
-	const state = writable<MatchState>(seed ?? initialMatchState())
+	const creating = !!opts.seed
+	// A joiner's placeholder uses rev -1 so ANY incoming state (even rev 0) wins.
+	const start: MatchState = opts.seed ?? { ...initialMatchState(), rev: -1 }
+	const state = writable<MatchState>(start)
 	const players = writable<Player[]>([])
-	let local: MatchState = seed ?? initialMatchState()
+	let local: MatchState = start
 	state.subscribe((v) => (local = v))
 
-	let me: Player = { id: clientId, name: self.name, team: self.team }
+	let me: Player = { id: clientId, name: self.name, color: self.color }
+	let graceTimer: ReturnType<typeof setTimeout> | null = null
 
 	const channel: RealtimeChannel = supabase.channel(`match:${room}`, {
 		config: {
@@ -197,8 +223,9 @@ export function joinMatch(
 	channel
 		.on('broadcast', { event: 'state' }, ({ payload }) => applyRemote(payload as MatchState))
 		.on('broadcast', { event: 'hello' }, () => {
-			// a newcomer asked for the current state — whoever has edits shares them
-			if (local.rev > 0) broadcastState()
+			// a newcomer asked for the current state — anyone holding real state
+			// (not a placeholder) shares it, so joiners inherit the room settings
+			if (local.rev >= 0) broadcastState()
 		})
 		.on('presence', { event: 'sync' }, () => {
 			const raw = channel.presenceState() as Record<string, Array<Partial<Player>>>
@@ -208,7 +235,7 @@ export function joinMatch(
 				list.push({
 					id: key,
 					name: (meta.name as string) ?? 'Player',
-					team: (meta.team as Player['team']) ?? 'spectator'
+					color: (meta.color as string) ?? 'spectator'
 				})
 			}
 			players.set(list)
@@ -219,6 +246,16 @@ export function joinMatch(
 		channel.track(me)
 		// ask whoever is already here for the authoritative state
 		channel.send({ type: 'broadcast', event: 'hello', payload: { id: clientId } })
+		// if joining and nobody answers, promote to host with a default game
+		if (!creating) {
+			graceTimer = setTimeout(() => {
+				if (local.rev < 0) {
+					local = initialMatchState()
+					state.set(local)
+					broadcastState()
+				}
+			}, 1500)
+		}
 	})
 
 	const update = (patch: Partial<MatchState>) => {
@@ -243,12 +280,13 @@ export function joinMatch(
 		update({ ...patch, log: [...local.log, entry].slice(-LOG_CAP) })
 	}
 
-	const setSelf = (info: { name?: string; team?: Team | 'spectator' }) => {
+	const setSelf = (info: { name?: string; color?: string }) => {
 		me = { ...me, ...info }
 		channel.track(me)
 	}
 
 	const leave = () => {
+		if (graceTimer) clearTimeout(graceTimer)
 		try {
 			channel.untrack()
 			supabase.removeChannel(channel)
