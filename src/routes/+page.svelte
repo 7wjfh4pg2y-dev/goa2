@@ -335,34 +335,34 @@
 			</div>
 		{:else if mode === 'join'}
 			<div class="step" transition:reveal bind:clientHeight={h['join']}>
-				<div class="card form narrow">
-					<label class="fld"><span>Your name</span><input class="field" bind:value={name} placeholder="e.g. Zaheen" /></label>
-
-					<div class="fld">
-						<span>Open games</span>
+				<div class="card form" class:wide={openRooms.length} class:narrow={!openRooms.length}>
+					<div class="joincols" class:two={openRooms.length}>
+						<div class="jcol">
+							<label class="fld"><span>Your name</span><input class="field" bind:value={name} placeholder="e.g. Zaheen" /></label>
+							<label class="fld"><span>{openRooms.length ? 'Or enter a code' : 'Room code'}</span><input class="field up" bind:value={room} maxlength="8" placeholder="code from the host" /></label>
+						</div>
 						{#if openRooms.length}
-							<div class="glist">
-								{#each openRooms as r (r.room)}
-									{@const spectate = r.started || r.count >= r.seats}
-									<button class="gcard" on:click={() => joinFromList(r)}>
-										<span class="gdot" class:live={r.started}></span>
-										<span class="gmain">
-											<span class="gtop"><b>{r.host}</b><span class="grc mono">{r.room}</span></span>
-											<span class="gsub">
-												<span class="gseats">{#each Array(r.seats) as _, i (i)}<span class="seatdot" class:on={i < r.count}></span>{/each}</span>
-												<span class="gstatus">{r.started ? 'in progress' : `${r.count}/${r.seats}`}</span>
+							<div class="jcol right">
+								<span class="collbl">Open games</span>
+								<div class="glist">
+									{#each openRooms as r (r.room)}
+										{@const spectate = r.started || r.count >= r.seats}
+										<button class="gcard" on:click={() => joinFromList(r)}>
+											<span class="gdot" class:live={r.started}></span>
+											<span class="gmain">
+												<span class="gtop"><b>{r.host}</b><span class="grc mono">{r.room}</span></span>
+												<span class="gsub">
+													<span class="gseats">{#each Array(r.seats) as _, i (i)}<span class="seatdot" class:on={i < r.count}></span>{/each}</span>
+													<span class="gstatus">{r.started ? 'in progress' : `${r.count}/${r.seats}`}</span>
+												</span>
 											</span>
-										</span>
-										<span class="garrow">{spectate ? 'Spectate' : 'Join'} →</span>
-									</button>
-								{/each}
+											<span class="garrow">{spectate ? 'Spectate' : 'Join'} →</span>
+										</button>
+									{/each}
+								</div>
 							</div>
-						{:else}
-							<p class="hint">No open games right now.</p>
 						{/if}
 					</div>
-
-					<label class="fld"><span>Have a code?</span><input class="field up" bind:value={room} maxlength="8" placeholder="enter room code" /></label>
 
 					<div class="row">
 						<button class="ghost" on:click={() => (mode = 'menu')}>← Back</button>
@@ -479,7 +479,13 @@
 	.sw.sel { outline: 2px solid #f59e0b; outline-offset: 2px; border-color: #fff; }
 	.sw:disabled { opacity: 0.28; cursor: not-allowed; }
 	.hint { font-size: 0.72rem; color: #94a3b8; margin: 2px 0 0; }
-	.glist { display: flex; flex-direction: column; gap: 8px; max-height: 210px; overflow-y: auto; }
+	.joincols { display: flex; flex-direction: column; gap: 14px; }
+	.joincols.two { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; align-items: start; }
+	.jcol { display: flex; flex-direction: column; gap: 13px; min-width: 0; }
+	.jcol.right { gap: 8px; }
+	.joincols.two .jcol.right { border-left: 1px solid rgba(255, 255, 255, 0.09); padding-left: 22px; }
+	.collbl { font-size: 0.85rem; font-weight: 600; color: #e2e8f0; }
+	.glist { display: flex; flex-direction: column; gap: 8px; max-height: 232px; overflow-y: auto; }
 	.gcard { display: flex; align-items: center; gap: 12px; text-align: left; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 10px 13px; color: #e5e7eb; cursor: pointer; transition: background 0.14s, border-color 0.14s, transform 0.12s; }
 	.gcard:hover { background: rgba(255, 255, 255, 0.09); border-color: rgba(245, 158, 11, 0.45); transform: translateY(-1px); }
 	.gcard:hover .garrow { opacity: 1; transform: translateX(2px); }
@@ -493,7 +499,7 @@
 	.gseats { display: flex; gap: 3px; }
 	.seatdot { width: 0.42rem; height: 0.42rem; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.35); }
 	.seatdot.on { background: #e5e7eb; border-color: #e5e7eb; }
-	.gstatus { font-size: 0.68rem; color: #94a3b8; }
+	.gstatus { font-size: 0.68rem; color: #94a3b8; white-space: nowrap; }
 	.garrow { font-size: 0.75rem; font-weight: 600; color: #fdba74; opacity: 0.75; white-space: nowrap; transition: opacity 0.14s, transform 0.14s; }
 	.err { color: #fca5a5; font-size: 0.82rem; margin: 0; }
 	.row { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
