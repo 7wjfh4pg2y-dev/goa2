@@ -18,7 +18,8 @@ export interface MapChoice {
 	data: GameMap
 }
 
-const EDITOR_KEY = 'goa2-map-work-v1'
+const EDITOR_KEY = 'goa2-map-work-v1' // the live working map
+const SAVED_KEY = 'goa2-maps-v1' // named maps saved in the editor
 
 // eager-import every bundled map JSON
 const bundled = import.meta.glob('./maps/*.json', { eager: true }) as Record<
@@ -33,26 +34,56 @@ function titleCase(k: string) {
 	return k.replace(/[_-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
-/** All maps a player can choose from right now (bundled + their editor map). */
+const nonEmpty = (m?: GameMap) => !!(m?.cells && Object.keys(m.cells).length)
+
+/**
+ * Maps a player can choose from, labelled by the name given in the editor.
+ * Order: the live working map, then named saved maps, then bundled maps —
+ * with names de-duplicated so an editor map hides a bundled one of the same
+ * name (bundled maps are just a fallback for a browser with no editor map).
+ */
 export function availableMaps(): MapChoice[] {
 	const list: MapChoice[] = []
-	for (const path in bundled) {
-		const data = bundled[path].default
-		const id = fileKey(path)
-		list.push({ id, label: data?.name ?? titleCase(id), data })
+	const used = new Set<string>()
+	const add = (id: string, label: string, data: GameMap) => {
+		const key = label.trim().toLowerCase()
+		if (!key || used.has(key)) return
+		used.add(key)
+		list.push({ id, label: label.trim(), data })
 	}
-	// the player's own editor map, if present and non-empty
+
+	// live working map (autosaved in this browser)
 	try {
 		const raw = localStorage.getItem(EDITOR_KEY)
 		if (raw) {
 			const data = JSON.parse(raw) as GameMap
-			if (data?.cells && Object.keys(data.cells).length) {
-				list.unshift({ id: 'editor', label: `My map${data.name ? ` — ${data.name}` : ''} (editor)`, data })
+			if (nonEmpty(data)) add('editor', data.name?.trim() || 'My map', data)
+		}
+	} catch {
+		/* ignore */
+	}
+
+	// named maps saved in the editor
+	try {
+		const raw = localStorage.getItem(SAVED_KEY)
+		if (raw) {
+			const saved = JSON.parse(raw) as Record<string, GameMap>
+			for (const nm in saved) {
+				const data = saved[nm]
+				if (nonEmpty(data)) add(`saved:${nm}`, data.name?.trim() || nm, data)
 			}
 		}
 	} catch {
 		/* ignore */
 	}
+
+	// bundled maps — only those not already covered by an editor map name
+	for (const path in bundled) {
+		const data = bundled[path].default
+		const id = fileKey(path)
+		add(id, data?.name ?? titleCase(id), data)
+	}
+
 	return list
 }
 
