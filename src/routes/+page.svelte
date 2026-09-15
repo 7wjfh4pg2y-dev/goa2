@@ -247,13 +247,17 @@
 									<button class="chip" class:on={ruleset === 'long'} on:click={() => (ruleset = 'long')}>Long</button>
 									<button class="chip" class:on={ruleset === 'custom'} on:click={() => (ruleset = 'custom')}>Custom</button>
 								</div>
-								{#if ruleset === 'custom'}
-									<div class="two">
-										<label class="mini"><span>Waves</span><input class="field" type="number" min="1" max="20" bind:value={customWaves} /></label>
-										<label class="mini"><span>Life / team</span><input class="field" type="number" min="1" max="30" bind:value={customLife} /></label>
-									</div>
-								{/if}
 							</div>
+							{#if ruleset === 'custom'}
+								<div class="fld">
+									<span>Waves</span>
+									<div class="chips">{#each [1, 2, 3, 4, 5, 6, 7] as w (w)}<button class="chip" class:on={customWaves === w} on:click={() => (customWaves = w)}>{w}</button>{/each}</div>
+								</div>
+								<div class="fld">
+									<span>Life / team</span>
+									<div class="chips">{#each [3, 4, 5, 6, 7, 8, 9, 10] as l (l)}<button class="chip" class:on={customLife === l} on:click={() => (customLife = l)}>{l}</button>{/each}</div>
+								</div>
+							{/if}
 							<div class="fld">
 								<span>Players (seats)</span>
 								<div class="chips">{#each [4, 6] as n (n)}<button class="chip" class:on={playerCount === n} on:click={() => (playerCount = n)}>{n}</button>{/each}</div>
