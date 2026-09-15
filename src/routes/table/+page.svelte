@@ -21,6 +21,7 @@
 		resetTimer,
 		addPiece,
 		movePiece,
+		removePiece,
 		clearPieces,
 		newPieceId,
 		PLAYER_COLORS,
@@ -169,22 +170,42 @@
 		act(s.timer.running ? 'Timer paused' : 'Timer resumed', toggleTimer(s.timer))
 	}
 
-	// --- pieces (slice 1: plain tokens) ---
+	// --- pieces ---
 	$: pieceList = Object.values(cur.pieces ?? {})
 	function startHex(): string {
 		const cells = cur.map?.cells ?? {}
 		return Object.keys(cells)[0] ?? '0_0'
 	}
-	function addToken(t: Team) {
+	// place a new piece near that side's base/spawn if we can find one
+	function spawnHexFor(t: Team): string {
+		const cells = cur.map?.cells ?? {}
+		const want = t === 'orange'
+			? ['spawnOrange', 'baseOrangeSpawn', 'baseOrange']
+			: ['spawnBlue', 'baseBlueSpawn', 'baseBlue']
+		for (const w of want) {
+			const hit = Object.keys(cells).find((id) => cells[id] === w)
+			if (hit) return hit
+		}
+		return startHex()
+	}
+	function addMinion(t: Team, role: 'ranged' | 'melee' | 'heavy') {
 		const id = newPieceId()
-		act(`added ${teamLabel(t)} token`, addPiece(cur, { id, hex: startHex(), team: t }))
+		act(`added ${teamLabel(t)} ${role} minion`, addPiece(cur, { id, hex: spawnHexFor(t), team: t, kind: 'minion', role }))
 	}
 	function moveToken(id: string, hex: string) {
-		if (cur.pieces[id]?.hex === hex) return
-		act(`${teamLabel((cur.pieces[id]?.team as Team) ?? 'orange')} token → ${hex}`, movePiece(cur, id, hex))
+		const p = cur.pieces[id]
+		if (!p || p.hex === hex) return
+		const what = p.role ? `${p.role} minion` : 'piece'
+		act(`${teamLabel((p.team as Team) ?? 'orange')} ${what} → ${hex}`, movePiece(cur, id, hex))
+	}
+	function removeToken(id: string) {
+		const p = cur.pieces[id]
+		if (!p) return
+		const what = p.role ? `${p.role} minion` : 'piece'
+		act(`removed ${teamLabel((p.team as Team) ?? 'orange')} ${what}`, removePiece(cur, id))
 	}
 	function clearTokens() {
-		if (Object.keys(cur.pieces ?? {}).length) act('cleared tokens', clearPieces())
+		if (Object.keys(cur.pieces ?? {}).length) act('cleared pieces', clearPieces())
 	}
 
 	// re-push this browser's current editor map into the live room
@@ -324,7 +345,7 @@
 	<div class="table-surface">
 		<!-- the chosen board, rendered as the play surface -->
 		{#if s.map}
-			<BoardCanvas map={s.map} pieces={pieceList} onMovePiece={moveToken} bind:this={boardCanvas} />
+			<BoardCanvas map={s.map} pieces={pieceList} onMovePiece={moveToken} onRemovePiece={removeToken} bind:this={boardCanvas} />
 			<div class="boardctl">
 				<button on:click={() => boardCanvas.zoomBtn(1 / 1.2)}>−</button>
 				<button on:click={() => boardCanvas.zoomBtn(1.2)}>+</button>
@@ -382,17 +403,23 @@
 						{/each}
 					</div>
 
-					<!-- tokens (slice 1) -->
+					<!-- minion tray -->
 					<div class="row">
-						<span class="lbl">Tokens</span>
+						<span class="lbl">Minions</span>
 						<span class="dim">{pieceList.length} on board</span>
 					</div>
+					{#each TEAMS as t (t)}
+						<div class="btnrow">
+							<span class={`tag ${teamText(t)}`}>{teamLabel(t)}</span>
+							<button class="mini grow" on:click={() => addMinion(t, 'ranged')}>Ranged</button>
+							<button class="mini grow" on:click={() => addMinion(t, 'melee')}>Melee</button>
+							<button class="mini grow" on:click={() => addMinion(t, 'heavy')}>Heavy</button>
+						</div>
+					{/each}
 					<div class="btnrow">
-						<button class={`mini grow ${teamBtn('orange')}`} on:click={() => addToken('orange')}>+ Orange</button>
-						<button class={`mini grow ${teamBtn('blue')}`} on:click={() => addToken('blue')}>+ Blue</button>
-						<button class="mini" on:click={clearTokens}>Clear</button>
+						<button class="mini" on:click={clearTokens}>Clear all</button>
 					</div>
-					<p class="hint">Drag a token to move it — synced to everyone.</p>
+					<p class="hint">New pieces land at that team's base — drag to move. Drag a piece off the board to remove it.</p>
 
 					<!-- board / map -->
 					<div class="row">
@@ -675,6 +702,7 @@
 	.logline { font-size: 0.78rem; line-height: 1.25; margin: 0; }
 	.log .empty { font-size: 0.78rem; color: #64748b; margin: 0; }
 	.hint { font-size: 0.7rem; color: #64748b; margin: 0.1rem 0 0; }
+	.tag { font-size: 0.72rem; font-weight: 600; width: 3.1rem; flex: 0 0 auto; }
 	.ellip { max-width: 9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
 
 	.victory {

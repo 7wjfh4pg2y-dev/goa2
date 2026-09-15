@@ -65,12 +65,14 @@ export interface MatchState {
 
 export const LOG_CAP = 60
 
-/** A piece on the board (slice 1: a plain token). */
+/** A piece on the board. */
 export interface Piece {
 	id: string
 	hex: string // "col_row"
 	team: Team | 'neutral'
-	label?: string
+	kind?: 'token' | 'minion' | 'hero'
+	role?: 'ranged' | 'melee' | 'heavy' // for minions
+	label?: string // for hero/token markers
 }
 
 /** Life counters per team, from the rulebook setup table (base, single lane). */
