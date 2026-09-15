@@ -58,6 +58,10 @@ export interface MatchState {
 	mapId: string // id of the chosen board (from the maps registry)
 	map: GameMap | null // full board data, shared so everyone renders the same map
 	pieces: Record<string, Piece> // tokens on the board, keyed by id
+	seats: number // number of player seats the game is set up for (excl. spectators)
+	host: string // clientId of the host (the creator)
+	started: boolean // lobby → game has begun
+	closed: boolean // host closed the game; everyone returns to the menu
 	rev: number // monotonic version for last-write-wins
 	updatedBy: string
 	updatedAt: number
@@ -103,6 +107,7 @@ export interface Player {
 	id: string
 	name: string
 	color: string // a PLAYER_COLORS id, or 'spectator'
+	ready: boolean // lobby ready toggle
 }
 
 export function initialMatchState(
@@ -132,6 +137,10 @@ export function initialMatchState(
 		mapId: opts.mapId ?? '',
 		map: opts.map ?? null,
 		pieces: {},
+		seats: players,
+		host: '',
+		started: false,
+		closed: false,
 		rev: 0,
 		updatedBy: '',
 		updatedAt: 0
@@ -167,8 +176,12 @@ export interface MatchSession {
 	update: (patch: Partial<MatchState>) => void
 	/** Apply a patch AND append an attributed log entry describing it. */
 	act: (text: string, patch: Partial<MatchState>) => void
-	/** Update this client's name and/or colour. */
-	setSelf: (info: { name?: string; color?: string }) => void
+	/** Update this client's name, colour and/or ready state. */
+	setSelf: (info: { name?: string; color?: string; ready?: boolean }) => void
+	/** Host: ask a player (by clientId) to leave the room. */
+	kick: (id: string) => void
+	/** Becomes true when THIS client has been kicked. */
+	kicked: Readable<boolean>
 	leave: () => void
 	clientId: string
 }
@@ -198,8 +211,10 @@ export function joinMatch(
 	let local: MatchState = start
 	state.subscribe((v) => (local = v))
 
-	let me: Player = { id: clientId, name: self.name, color: self.color }
+	if (creating) start.host = clientId
+	let me: Player = { id: clientId, name: self.name, color: self.color, ready: false }
 	let graceTimer: ReturnType<typeof setTimeout> | null = null
+	const kicked = writable(false)
 
 	const channel: RealtimeChannel = supabase.channel(`match:${room}`, {
 		config: {
@@ -229,6 +244,9 @@ export function joinMatch(
 			// (not a placeholder) shares it, so joiners inherit the room settings
 			if (local.rev >= 0) broadcastState()
 		})
+		.on('broadcast', { event: 'kick' }, ({ payload }) => {
+			if ((payload as { id: string }).id === clientId) kicked.set(true)
+		})
 		.on('presence', { event: 'sync' }, () => {
 			const raw = channel.presenceState() as Record<string, Array<Partial<Player>>>
 			const list: Player[] = []
@@ -237,7 +255,8 @@ export function joinMatch(
 				list.push({
 					id: key,
 					name: (meta.name as string) ?? 'Player',
-					color: (meta.color as string) ?? 'spectator'
+					color: (meta.color as string) ?? 'spectator',
+					ready: (meta.ready as boolean) ?? false
 				})
 			}
 			players.set(list)
@@ -252,7 +271,7 @@ export function joinMatch(
 		if (!creating) {
 			graceTimer = setTimeout(() => {
 				if (local.rev < 0) {
-					local = initialMatchState()
+					local = { ...initialMatchState(), host: clientId }
 					state.set(local)
 					broadcastState()
 				}
@@ -282,9 +301,14 @@ export function joinMatch(
 		update({ ...patch, log: [...local.log, entry].slice(-LOG_CAP) })
 	}
 
-	const setSelf = (info: { name?: string; color?: string }) => {
+	const setSelf = (info: { name?: string; color?: string; ready?: boolean }) => {
 		me = { ...me, ...info }
 		channel.track(me)
+	}
+
+	// host asks a player to leave; the target client observes and leaves itself
+	const kick = (id: string) => {
+		channel.send({ type: 'broadcast', event: 'kick', payload: { id } })
 	}
 
 	const leave = () => {
@@ -297,7 +321,7 @@ export function joinMatch(
 		}
 	}
 
-	return { state, players, update, act, setSelf, leave, clientId }
+	return { state, players, update, act, setSelf, kick, kicked, leave, clientId }
 }
 
 // ---- Round/turn helpers (encode the rulebook's structure) -------------------
