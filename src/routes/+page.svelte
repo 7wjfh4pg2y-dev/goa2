@@ -338,8 +338,8 @@
 				<div class="card form" class:wide={openRooms.length} class:narrow={!openRooms.length}>
 					<div class="joincols" class:two={openRooms.length}>
 						<div class="jcol">
-							<label class="fld"><span>Your name</span><input class="field" bind:value={name} placeholder="e.g. Zaheen" /></label>
-							<label class="fld"><span>{openRooms.length ? 'Or enter a code' : 'Room code'}</span><input class="field up" bind:value={room} maxlength="8" placeholder="code from the host" /></label>
+							<label class="fld"><span>Name</span><input class="field" bind:value={name} placeholder="e.g. Zaheen" /></label>
+							<label class="fld"><span>Room code</span><input class="field up" bind:value={room} maxlength="8" placeholder="code from the host" /></label>
 						</div>
 						{#if openRooms.length}
 							<div class="jcol right">
@@ -418,12 +418,12 @@
 					<div class="row wraprow">
 						<button class="ghost" on:click={leaveRoom}>Leave</button>
 						<div class="rightbtns">
-							{#if color !== 'spectator'}
-								<button class="primary" class:isready={ready} on:click={toggleReady}>{ready ? '✓ Ready' : 'Ready up'}</button>
-							{/if}
 							{#if iAmHost}
 								<button class="ghost danger" on:click={closeGame}>Close</button>
 								<button class="primary" disabled={!allReady} on:click={beginGame}>Begin</button>
+							{/if}
+							{#if color !== 'spectator'}
+								<button class="primary" class:isready={ready} on:click={toggleReady}>{ready ? '✓ Ready' : 'Ready up'}</button>
 							{/if}
 						</div>
 					</div>
