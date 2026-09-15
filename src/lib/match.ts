@@ -310,9 +310,28 @@ export function joinMatch(
 		update({ ...patch, log: [...local.log, entry].slice(-LOG_CAP) })
 	}
 
+	// Presence updates are throttled: Supabase Realtime rate-limits messages per
+	// channel, so rapid color switches (fast clicks) would otherwise flood track()
+	// and wedge the socket. We update `me` instantly and coalesce network pushes to
+	// at most one per TRACK_MIN ms, always sending the latest state (trailing edge).
+	let trackTimer: ReturnType<typeof setTimeout> | null = null
+	let lastTrack = 0
+	const TRACK_MIN = 320
+	const flushTrack = () => {
+		trackTimer = null
+		lastTrack = Date.now()
+		try { channel.track(me) } catch { /* ignore */ }
+	}
+	const scheduleTrack = () => {
+		if (trackTimer) return // a trailing flush is already queued; it sends latest me
+		const wait = TRACK_MIN - (Date.now() - lastTrack)
+		if (wait <= 0) flushTrack()
+		else trackTimer = setTimeout(flushTrack, wait)
+	}
+
 	const setSelf = (info: { name?: string; color?: string; ready?: boolean }) => {
 		me = { ...me, ...info }
-		channel.track(me)
+		scheduleTrack()
 	}
 
 	// host asks a player to leave; the target client observes and leaves itself
@@ -322,6 +341,7 @@ export function joinMatch(
 
 	const leave = () => {
 		if (graceTimer) clearTimeout(graceTimer)
+		if (trackTimer) clearTimeout(trackTimer)
 		try {
 			channel.untrack()
 			supabase.removeChannel(channel)
