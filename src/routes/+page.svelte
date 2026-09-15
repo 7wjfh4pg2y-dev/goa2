@@ -76,6 +76,7 @@
 	$: me = session ? $players.find((p) => p.id === session!.clientId) : undefined;
 	$: iAmHost = session ? $state.host === session.clientId : false;
 	$: seated = $players.filter((p) => p.color !== 'spectator');
+	$: spectators = $players.filter((p) => p.color === 'spectator');
 	$: seatedCount = seated.length;
 	$: allReady = seatedCount >= 1 && seated.every((p) => p.ready);
 	$: takenColors = new Set($players.filter((p) => p.id !== session?.clientId && p.color !== 'spectator').map((p) => p.color));
@@ -290,7 +291,7 @@
 			</div>
 		{:else if mode === 'lobby'}
 			<div class="step" transition:reveal bind:clientHeight={h['lobby']}>
-				<div class="card form wide">
+				<div class="card form lobby" style="width: min(96vw, {$state.seats * 96 + 56}px)">
 					<div class="lobbyhead">
 						<div>
 							<span class="lbl">Room code</span>
@@ -311,24 +312,26 @@
 
 					<div class="fld">
 						<span>At the table — {seatedCount}/{$state.seats} seated</span>
-						<div class="seatlist">
-							{#each $players as p (p.id)}
-								<div class="seat">
-									<span class="pdot" style="background:{p.color === 'spectator' ? 'transparent' : colorHex(p.color)};border-color:{p.color === 'spectator' ? '#64748b' : colorHex(p.color)}"></span>
-									<span class="pname">{p.name}{p.id === session?.clientId ? ' (you)' : ''}{p.id === $state.host ? ' · host' : ''}</span>
-									{#if p.color === 'spectator'}
-										<span class="tagm">spectator</span>
-									{:else if p.ready}
-										<span class="tagm ok">ready</span>
-									{:else}
-										<span class="tagm">not ready</span>
-									{/if}
-									{#if iAmHost && p.id !== session?.clientId}
-										<button class="kick" title="Kick" on:click={() => kick(p.id)}>✕</button>
-									{/if}
-								</div>
+						<div class="hrow">
+							{#each Array($state.seats) as _, i (i)}
+								{@const p = seated[i]}
+								{#if p}
+									<div class="hseat" class:mine={p.id === session?.clientId}>
+										<div class="av" style="background:{colorHex(p.color)}">
+											{#if p.id === $state.host}<span class="crown" title="Host">♛</span>{/if}
+											{#if iAmHost && p.id !== session?.clientId}<button class="kick" title="Kick" on:click={() => kick(p.id)}>✕</button>{/if}
+										</div>
+										<div class="hn">{p.name}{p.id === session?.clientId ? ' (you)' : ''}</div>
+										<div class="hr" class:ok={p.ready}>{p.ready ? 'ready' : '…'}</div>
+									</div>
+								{:else}
+									<div class="hseat empty"><div class="av av-empty"></div><div class="hn muted">open</div><div class="hr">&nbsp;</div></div>
+								{/if}
 							{/each}
 						</div>
+						{#if spectators.length}
+							<p class="specs">Spectating: {#each spectators as sp, i (sp.id)}{sp.name}{sp.id === session?.clientId ? ' (you)' : ''}{#if iAmHost && sp.id !== session?.clientId}<button class="kickx" title="Kick" on:click={() => kick(sp.id)}>✕</button>{/if}{i < spectators.length - 1 ? ', ' : ''}{/each}</p>
+						{/if}
 					</div>
 
 					<div class="row wraprow">
@@ -363,7 +366,7 @@
 	.home-link { background: none; border: none; padding: 0; cursor: pointer; }
 	.logo { width: min(260px, 60vw); filter: drop-shadow(0 12px 32px rgba(0, 0, 0, 0.55)); }
 
-	.stage { position: relative; width: 100%; max-width: 640px; transition: height 0.32s cubic-bezier(0.2, 0.8, 0.2, 1); }
+	.stage { position: relative; width: 100%; max-width: 1040px; transition: height 0.32s cubic-bezier(0.2, 0.8, 0.2, 1); }
 	.step { position: absolute; top: 0; left: 0; right: 0; display: flex; flex-direction: column; align-items: center; gap: 14px; }
 
 	.notice { margin: 0; font-size: 0.85rem; color: #fca5a5; background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.35); border-radius: 8px; padding: 6px 12px; }
@@ -388,8 +391,6 @@
 	.lbl { font-size: 0.78rem; color: #94a3b8; }
 	.field { width: 100%; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.18); background: rgba(8, 12, 22, 0.6); padding: 0.55rem 0.7rem; color: white; }
 	.field.up { text-transform: uppercase; }
-	.two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-	.mini { display: flex; flex-direction: column; gap: 5px; font-size: 0.78rem; color: #cbd5e1; }
 	.chips, .swatches { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 	.chip { border: 1px solid rgba(255, 255, 255, 0.16); background: rgba(255, 255, 255, 0.05); color: #e5e7eb; border-radius: 999px; padding: 0.35rem 0.8rem; font-size: 0.85rem; cursor: pointer; }
 	.chip.on { background: #d97706; border-color: #f59e0b; color: white; }
@@ -412,13 +413,21 @@
 
 	.lobbyhead { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 	.roomcode { font-size: 1.7rem; font-weight: 700; }
-	.seatlist { display: flex; flex-direction: column; gap: 6px; }
-	.seat { display: flex; align-items: center; gap: 8px; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 6px 10px; }
-	.pdot { width: 0.8rem; height: 0.8rem; border-radius: 50%; border: 1px solid; flex: 0 0 auto; }
-	.pname { flex: 1; font-size: 0.9rem; }
-	.tagm { font-size: 0.7rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.04em; }
-	.tagm.ok { color: #6ee7b7; }
-	.kick { border: none; background: rgba(239, 68, 68, 0.15); color: #fca5a5; width: 22px; height: 22px; border-radius: 6px; cursor: pointer; line-height: 1; }
+
+	.hrow { display: flex; gap: 8px; flex-wrap: nowrap; overflow-x: auto; }
+	.hseat { flex: 1 1 84px; min-width: 84px; display: flex; flex-direction: column; align-items: center; gap: 6px; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; padding: 10px 4px; }
+	.hseat.mine { border-color: rgba(245, 158, 11, 0.6); background: rgba(245, 158, 11, 0.08); }
+	.hseat.empty { border-style: dashed; }
+	.av { width: 40px; height: 40px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.3); position: relative; }
+	.av-empty { background: rgba(255, 255, 255, 0.05); border-style: dashed; }
+	.crown { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); font-size: 13px; color: #fcd34d; }
+	.kick { position: absolute; top: -6px; right: -6px; border: none; background: #b91c1c; color: #fff; width: 18px; height: 18px; border-radius: 50%; cursor: pointer; line-height: 1; font-size: 11px; padding: 0; }
+	.hn { font-size: 0.8rem; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.hn.muted { color: #64748b; }
+	.hr { font-size: 0.62rem; text-transform: uppercase; color: #94a3b8; }
+	.hr.ok { color: #6ee7b7; }
+	.specs { font-size: 0.75rem; color: #94a3b8; margin: 8px 0 0; }
+	.kickx { border: none; background: transparent; color: #fca5a5; cursor: pointer; font-size: 0.7rem; padding: 0 2px; }
 
 	@media (max-width: 560px) {
 		.grid2 { grid-template-columns: 1fr; gap: 16px; }
