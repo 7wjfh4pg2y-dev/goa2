@@ -267,15 +267,24 @@ export function joinMatch(
 		channel.track(me)
 		// ask whoever is already here for the authoritative state
 		channel.send({ type: 'broadcast', event: 'hello', payload: { id: clientId } })
-		// if joining and nobody answers, promote to host with a default game
+		// if joining and nobody answers, promote to host with a default game —
+		// but ONLY if we're truly alone. If a host is present but their state
+		// hasn't reached us yet, keep asking rather than resetting ourselves.
 		if (!creating) {
-			graceTimer = setTimeout(() => {
-				if (local.rev < 0) {
+			const tryPromote = () => {
+				if (local.rev >= 0) return // we already have the room's real state
+				const others = Object.keys(channel.presenceState()).filter((k) => k !== clientId).length
+				if (others === 0) {
 					local = { ...initialMatchState(), host: clientId }
 					state.set(local)
 					broadcastState()
+				} else {
+					// someone's here but we haven't received state — ask again
+					channel.send({ type: 'broadcast', event: 'hello', payload: { id: clientId } })
+					graceTimer = setTimeout(tryPromote, 1200)
 				}
-			}, 1500)
+			}
+			graceTimer = setTimeout(tryPromote, 1500)
 		}
 	})
 
