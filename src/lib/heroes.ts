@@ -89,3 +89,22 @@ export const heroAvatar = (id: string): string => avatarUrls[`./images/avatars/$
 /** Full landscape splash art, keyed by hero id. */
 const splashUrls = import.meta.glob('./images/avatars_full/*.webp', { eager: true, import: 'default' }) as Record<string, string>;
 export const heroSplash = (id: string): string => splashUrls[`./images/avatars_full/${id}.webp`] ?? '';
+
+/** Per-hero emblem/logo (the crest shown beside the name). */
+const logoUrls = import.meta.glob('./images/logos/*.png', { eager: true, import: 'default' }) as Record<string, string>;
+export const heroLogo = (id: string): string => logoUrls[`./images/logos/${id}.png`] ?? '';
+
+// Stat/trait/star icons (from the original Stats-of-Atlantis art).
+const iconUrls = import.meta.glob('./images/hero_icons/*.png', { eager: true, import: 'default' }) as Record<string, string>;
+const STAT_ICON_FILES = ['attack_white', 'defense_white', 'initiative_white', 'movement_white'];
+/** White stat icon by stat index (0=Attack … 3=Movement). */
+export const statIcon = (i: number): string => iconUrls[`./images/hero_icons/${STAT_ICON_FILES[i]}.png`] ?? '';
+/** Gold role symbol for a trait, or '' when none exists (e.g. 'tokens'). */
+export const traitIcon = (t: Trait): string => iconUrls[`./images/hero_icons/trait_${t}.png`] ?? '';
+export const starIcon = (): string => iconUrls['./images/hero_icons/star.png'] ?? '';
+
+/** The maximum any stat pip bar shows. */
+export const STAT_PIPS = 8;
+
+/** Heroes sorted alphabetically by name (for the draft grid). */
+export const HEROES_ALPHA: Hero[] = [...HEROES].sort((a, b) => a.name.localeCompare(b.name));
