@@ -22,7 +22,6 @@
 		draftPoolMin,
 		DRAFT_SYSTEMS,
 		DRAFT_LABELS,
-		DRAFT_BLURBS,
 		type MatchState,
 		type Player,
 		type MatchSession,
@@ -548,26 +547,27 @@
 							<p class="hint">{previewWaves} waves · {previewLife} Life per team · {playerCount} seats</p>
 						</div>
 					</div>
-					<div class="fld draftfld">
-						<span>Hero draft</span>
-						<div class="chips">
-							{#each DRAFT_SYSTEMS as sys (sys)}
-								<button class="chip" class:on={draftSystem === sys} on:click={() => (draftSystem = sys)}>{DRAFT_LABELS[sys]}</button>
-							{/each}
+					<div class="grid2 draftfld">
+						<div class="fld">
+							<span>Hero draft</span>
+							<div class="chips">
+								{#each DRAFT_SYSTEMS as sys (sys)}
+									<button class="chip" class:on={draftSystem === sys} on:click={() => (draftSystem = sys)}>{DRAFT_LABELS[sys]}</button>
+								{/each}
+							</div>
 						</div>
-						<p class="hint">{DRAFT_BLURBS[draftSystem]}</p>
-					</div>
-					<div class="fld">
-						<span>Hero complexity</span>
-						<div class="chips">
-							{#each [1, 2, 3, 4] as s (s)}
-								<button class="chip star" class:on={draftStars.includes(s)} on:click={() => toggleStar(s)}>{'★'.repeat(s)}</button>
-							{/each}
+						<div class="fld">
+							<span>Hero complexity</span>
+							<div class="chips">
+								{#each [1, 2, 3, 4] as s (s)}
+									<button class="chip star" class:on={draftStars.includes(s)} on:click={() => toggleStar(s)}>{'★'.repeat(s)}</button>
+								{/each}
+							</div>
 						</div>
-						<p class="hint" class:warn={poolShort}>
-							{eligibleCount} heroes in pool{poolShort ? ` · need ${poolNeed} for ${DRAFT_LABELS[draftSystem]} with ${playerCount} players` : ''}
-						</p>
 					</div>
+					{#if poolShort}
+						<p class="hint warn">Only {eligibleCount} heroes — need {poolNeed} for {DRAFT_LABELS[draftSystem]} with {playerCount} players.</p>
+					{/if}
 					<div class="row">
 						<button class="ghost" on:click={() => (mode = 'menu')}>← Back</button>
 						<button class="primary" on:click={createGame} disabled={poolShort}>Create game</button>
@@ -768,7 +768,7 @@
 	.t { font-size: 1.35rem; font-weight: 700; }
 	.s { font-size: 0.78rem; color: #cbd5e1; }
 
-	.card.form { padding: 20px; display: flex; flex-direction: column; gap: 13px; width: 100%; }
+	.card.form { padding: 18px 20px; display: flex; flex-direction: column; gap: 11px; width: 100%; }
 	.form.narrow { width: min(380px, 92vw); }
 	.form.wide { width: min(560px, 94vw); }
 	.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
@@ -786,7 +786,7 @@
 	.sw:disabled { opacity: 0.28; cursor: not-allowed; }
 	.hint { font-size: 0.72rem; color: #94a3b8; margin: 2px 0 0; }
 	.hint.warn { color: #fca5a5; }
-	.draftfld { border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 13px; }
+	.draftfld { border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 12px; margin-top: 1px; }
 	.chip.star { letter-spacing: 1px; }
 	.joincols { display: flex; flex-direction: column; gap: 14px; }
 	.joincols.two { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; align-items: start; }
