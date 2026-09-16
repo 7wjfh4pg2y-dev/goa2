@@ -204,7 +204,7 @@
 	$: if (
 		session &&
 		$state.rev >= 0 &&
-		(mode === 'lobby' || mode === 'game') &&
+		(mode === 'lobby' || mode === 'draft' || mode === 'game') &&
 		$state.host &&
 		$players.length &&
 		!$players.some((p) => p.id === $state.host)
