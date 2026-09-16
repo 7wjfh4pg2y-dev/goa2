@@ -1,0 +1,87 @@
+// Guards of Atlantis II hero registry — a clean, self-contained port of the
+// hero data (ported from the OLD build's states.ts). Each hero has an id (used
+// for art + draft state), display name/title, complexity (1–4 stars), the pack
+// it ships in, its trait tags, and its stat ranges [level1 … max] for
+// Attack / Defense / Initiative / Movement.
+
+export type Pack = 'BASE' | 'DEFIANT' | 'RENOWNED' | 'DEVOTED' | 'ARCANE' | 'WAYWARD';
+
+export const PACKS: Pack[] = ['BASE', 'DEFIANT', 'RENOWNED', 'DEVOTED', 'ARCANE', 'WAYWARD'];
+export const PACK_LABELS: Record<Pack, string> = {
+	BASE: 'Base',
+	DEFIANT: 'Defiant',
+	RENOWNED: 'Renowned',
+	DEVOTED: 'Devoted',
+	ARCANE: 'Arcane',
+	WAYWARD: 'Wayward'
+};
+
+export type Trait =
+	| 'damager' | 'disabler' | 'durable' | 'farming' | 'healer'
+	| 'melee' | 'pusher' | 'sniper' | 'tactician' | 'tokens';
+
+export const TRAITS: Trait[] = [
+	'damager', 'disabler', 'durable', 'farming', 'healer',
+	'melee', 'pusher', 'sniper', 'tactician', 'tokens'
+];
+export const TRAIT_LABELS: Record<Trait, string> = {
+	damager: 'Damager', disabler: 'Disabler', durable: 'Durable', farming: 'Farming',
+	healer: 'Healer', melee: 'Melee', pusher: 'Pusher', sniper: 'Sniper',
+	tactician: 'Tactician', tokens: 'Tokens'
+};
+
+/** Stat order matches `stats`: [Attack, Defense, Initiative, Movement]. */
+export const STAT_LABELS = ['Attack', 'Defense', 'Initiative', 'Movement'] as const;
+
+export interface Hero {
+	id: string;
+	name: string;
+	title: string;
+	stars: number; // complexity 1–4
+	pack: Pack;
+	traits: Trait[];
+	/** Four [min, max] pairs: Attack, Defense, Initiative, Movement. */
+	stats: [number, number][];
+}
+
+export const HEROES: Hero[] = [
+	{ id: 'arien', name: 'Arien', title: 'the Tidemaster', stars: 1, pack: 'BASE', traits: ['tactician', 'disabler', 'durable', 'pusher'], stats: [[8, 8], [5, 6], [4, 4], [5, 6]] },
+	{ id: 'brogan', name: 'Brogan', title: 'the Destroyer', stars: 1, pack: 'BASE', traits: ['durable', 'disabler', 'pusher', 'farming'], stats: [[7, 7], [8, 8], [1, 1], [2, 4]] },
+	{ id: 'dodger', name: 'Dodger', title: 'the Warlock', stars: 1, pack: 'BASE', traits: ['damager', 'sniper', 'pusher', 'farming', 'disabler'], stats: [[3, 3], [2, 5], [7, 7], [5, 5]] },
+	{ id: 'sabina', name: 'Sabina', title: 'the Commander', stars: 1, pack: 'BASE', traits: ['tactician', 'pusher'], stats: [[1, 7], [3, 3], [5, 5], [5, 6]] },
+	{ id: 'tigerclaw', name: 'Tigerclaw', title: 'the Cutpurse', stars: 1, pack: 'BASE', traits: ['melee', 'disabler', 'farming'], stats: [[4, 8], [1, 4], [8, 8], [7, 8]] },
+	{ id: 'wasp', name: 'Wasp', title: 'the Warmaiden', stars: 1, pack: 'BASE', traits: ['disabler', 'tactician', 'sniper'], stats: [[5, 5], [4, 5], [6, 6], [5, 5]] },
+	{ id: 'xargatha', name: 'Xargatha', title: 'the Changed', stars: 1, pack: 'BASE', traits: ['tactician', 'pusher', 'disabler', 'durable', 'sniper'], stats: [[5, 8], [6, 6], [3, 3], [6, 6]] },
+	{ id: 'bain', name: 'Bain', title: 'the Bounty Hunter', stars: 2, pack: 'DEFIANT', traits: ['tactician', 'sniper', 'healer', 'farming', 'durable'], stats: [[5, 5], [4, 6], [4, 4], [5, 6]] },
+	{ id: 'garrus', name: 'Garrus', title: 'the Gladiator', stars: 2, pack: 'DEFIANT', traits: ['disabler', 'durable', 'tactician'], stats: [[8, 8], [7, 7], [3, 3], [5, 6]] },
+	{ id: 'min', name: 'Min', title: 'the Dragonmonk', stars: 2, pack: 'RENOWNED', traits: ['tokens', 'disabler', 'damager', 'melee'], stats: [[4, 8], [3, 8], [8, 8], [6, 6]] },
+	{ id: 'misa', name: 'Misa', title: 'the Samurai', stars: 2, pack: 'DEVOTED', traits: ['tactician', 'durable', 'damager'], stats: [[6, 6], [5, 5], [7, 7], [1, 8]] },
+	{ id: 'rowenna', name: 'Rowenna', title: 'the Vanguard', stars: 2, pack: 'ARCANE', traits: ['melee', 'durable', 'healer', 'farming', 'pusher', 'tactician'], stats: [[8, 8], [7, 7], [4, 4], [3, 5]] },
+	{ id: 'silverarrow', name: 'Silverarrow', title: 'the Pathfinder', stars: 2, pack: 'DEVOTED', traits: ['sniper', 'damager', 'disabler', 'healer', 'farming'], stats: [[2, 2], [1, 1], [7, 7], [6, 7]] },
+	{ id: 'ursafar', name: 'Ursafar', title: 'the Savage', stars: 2, pack: 'DEVOTED', traits: ['durable', 'pusher', 'farming', 'melee'], stats: [[6, 6], [6, 6], [5, 5], [1, 5]] },
+	{ id: 'whisper', name: 'Whisper', title: 'the Outcast', stars: 2, pack: 'DEVOTED', traits: ['damager', 'durable', 'tactician', 'pusher'], stats: [[7, 7], [4, 4], [7, 7], [3, 5]] },
+	{ id: 'brynn', name: 'Brynn', title: 'the Seeker', stars: 3, pack: 'WAYWARD', traits: ['tactician', 'damager', 'durable'], stats: [[4, 8], [4, 4], [7, 7], [5, 6]] },
+	{ id: 'cutter', name: 'Cutter', title: 'the Sky Pirate', stars: 3, pack: 'DEFIANT', traits: ['tactician', 'damager', 'farming'], stats: [[4, 8], [4, 4], [6, 6], [4, 8]] },
+	{ id: 'hanu', name: 'Hanu', title: 'the Trickster', stars: 3, pack: 'RENOWNED', traits: ['tactician', 'sniper', 'pusher'], stats: [[4, 4], [1, 1], [8, 8], [8, 8]] },
+	{ id: 'mortimer', name: 'Mortimer', title: 'the Awakener', stars: 3, pack: 'WAYWARD', traits: ['melee', 'tokens', 'farming', 'durable', 'pusher'], stats: [[8, 8], [7, 7], [2, 2], [4, 4]] },
+	{ id: 'mrak', name: 'Mrak', title: 'the Rockshaper', stars: 3, pack: 'ARCANE', traits: ['melee', 'tokens', 'durable', 'disabler', 'tactician'], stats: [[8, 8], [8, 8], [1, 1], [2, 4]] },
+	{ id: 'swift', name: 'Swift', title: 'the Sharpshooter', stars: 3, pack: 'RENOWNED', traits: ['sniper', 'farming', 'tactician'], stats: [[5, 5], [2, 2], [4, 4], [3, 7]] },
+	{ id: 'tali', name: 'Tali', title: 'the Spiritcaller', stars: 3, pack: 'DEVOTED', traits: ['damager', 'pusher', 'healer', 'durable', 'tokens'], stats: [[4, 6], [4, 4], [5, 8], [5, 5]] },
+	{ id: 'trinkets', name: 'Trinkets', title: 'the Scavenger', stars: 3, pack: 'DEFIANT', traits: ['sniper', 'damager', 'pusher', 'tokens'], stats: [[3, 5], [2, 4], [6, 6], [7, 8]] },
+	{ id: 'widget', name: 'Widget', title: 'and Pyro', stars: 3, pack: 'WAYWARD', traits: ['tactician', 'pusher', 'damager'], stats: [[5, 5], [4, 4], [4, 4], [5, 6]] },
+	{ id: 'wuk', name: 'Wuk', title: 'the Grove Keeper', stars: 3, pack: 'RENOWNED', traits: ['tokens', 'pusher', 'durable', 'sniper', 'tactician', 'healer'], stats: [[5, 5], [8, 8], [1, 1], [3, 4]] },
+	{ id: 'emmitt', name: 'Emmitt', title: 'the Traveller', stars: 4, pack: 'WAYWARD', traits: ['melee', 'tactician', 'durable', 'disabler', 'tokens'], stats: [[5, 8], [6, 6], [1, 1], [2, 4]] },
+	{ id: 'gydion', name: 'Gydion', title: 'the Archwizard', stars: 4, pack: 'ARCANE', traits: ['sniper', 'tactician', 'farming', 'damager', 'pusher', 'tokens'], stats: [[5, 6], [3, 5], [3, 3], [1, 4]] },
+	{ id: 'ignatia', name: 'Ignatia', title: 'the Mad', stars: 4, pack: 'RENOWNED', traits: ['sniper', 'damager', 'tokens', 'tactician', 'pusher'], stats: [[5, 5], [6, 6], [2, 2], [4, 5]] },
+	{ id: 'nebkher', name: 'NebKher', title: 'the Harbinger', stars: 4, pack: 'DEFIANT', traits: ['disabler', 'tokens', 'sniper'], stats: [[2, 3], [5, 6], [1, 1], [2, 5]] },
+	{ id: 'razzle', name: 'Razzle', title: 'the Ringmaster', stars: 4, pack: 'ARCANE', traits: ['tactician', 'melee'], stats: [[3, 3], [1, 4], [8, 8], [5, 6]] },
+	{ id: 'snorri', name: 'Snorri', title: 'the Runescribe', stars: 4, pack: 'ARCANE', traits: ['sniper', 'farming', 'durable', 'damager', 'pusher', 'healer'], stats: [[5, 6], [5, 6], [2, 2], [4, 5]] },
+	{ id: 'takahide', name: 'Takahide', title: 'the Warlord', stars: 4, pack: 'WAYWARD', traits: ['durable', 'sniper', 'tactician', 'damager', 'farming'], stats: [[5, 7], [4, 7], [3, 5], [1, 4]] }
+];
+
+export const HERO_BY_ID: Record<string, Hero> = Object.fromEntries(HEROES.map((h) => [h.id, h]));
+export const heroById = (id: string): Hero | undefined => HERO_BY_ID[id];
+
+/** Hero portrait URLs, keyed by hero id (bundled via Vite). */
+const avatarUrls = import.meta.glob('./images/avatars/*.webp', { eager: true, import: 'default' }) as Record<string, string>;
+export const heroAvatar = (id: string): string => avatarUrls[`./images/avatars/${id}.webp`] ?? '';
