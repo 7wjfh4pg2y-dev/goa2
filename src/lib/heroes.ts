@@ -85,3 +85,7 @@ export const heroById = (id: string): Hero | undefined => HERO_BY_ID[id];
 /** Hero portrait URLs, keyed by hero id (bundled via Vite). */
 const avatarUrls = import.meta.glob('./images/avatars/*.webp', { eager: true, import: 'default' }) as Record<string, string>;
 export const heroAvatar = (id: string): string => avatarUrls[`./images/avatars/${id}.webp`] ?? '';
+
+/** Full landscape splash art, keyed by hero id. */
+const splashUrls = import.meta.glob('./images/avatars_full/*.webp', { eager: true, import: 'default' }) as Record<string, string>;
+export const heroSplash = (id: string): string => splashUrls[`./images/avatars_full/${id}.webp`] ?? '';
