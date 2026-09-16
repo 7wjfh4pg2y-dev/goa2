@@ -42,7 +42,7 @@
 				<div class="names"><span class="nm">{sel.name}</span><span class="ti">{sel.title}</span></div>
 			</div>
 			<div class="traits">
-				{#each sel.traits as t (t)}
+				{#each [...sel.traits].sort((a, b) => TRAIT_LABELS[a].localeCompare(TRAIT_LABELS[b])) as t (t)}
 					<div class="trait">
 						{#if traitIcon(t)}<img src={traitIcon(t)} alt={TRAIT_LABELS[t]} />{:else}<span class="tdot">◈</span>{/if}
 						<span class="tl">{TRAIT_LABELS[t]}</span>
