@@ -72,6 +72,17 @@ describe('lobby: second player picks a colour', () => {
 		expect(seated.map((p) => p.color)).toContain('purple');
 	});
 
+	it('joining an empty room code reports notFound and does not create a room', async () => {
+		vi.useFakeTimers();
+		const joiner = joinMatch('GHOST', { name: 'Solo', color: 'spectator' }, {});
+		expect(get(joiner.notFound)).toBe(false);
+		await vi.advanceTimersByTimeAsync(3000);
+		expect(get(joiner.notFound)).toBe(true);
+		// stayed a placeholder — no bogus room was created/promoted
+		expect(get(joiner.state).rev).toBe(-1);
+		vi.useRealTimers();
+	});
+
 	it('kick actually targets only the named client', () => {
 		const host = joinMatch('ROOM2', { name: 'Host', color: 'spectator' }, { seed: initialMatchState({ players: 4 }) });
 		const joiner = joinMatch('ROOM2', { name: 'P2', color: 'spectator' }, {});
