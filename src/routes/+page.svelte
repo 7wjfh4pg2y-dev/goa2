@@ -33,8 +33,8 @@
 	import { HEROES } from '$lib/heroes';
 	import HeroDraft from '$lib/HeroDraft.svelte';
 
-	type Mode = 'choose' | 'admin' | 'adminhub' | 'menu' | 'create' | 'join' | 'lobby' | 'draft' | 'game';
-	let mode: Mode = 'choose';
+	type Mode = 'landing' | 'choose' | 'admin' | 'adminhub' | 'menu' | 'create' | 'join' | 'lobby' | 'draft' | 'game';
+	let mode: Mode = 'landing';
 	let notice = '';
 
 	// admin
@@ -231,6 +231,44 @@
 	$: if (browser) manageBrowse(mode);
 
 	// --- navigation ---
+	// a short synthesized "enter" swell (no audio asset needed)
+	function playEnterSfx() {
+		try {
+			const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+			const ac = new Ctx();
+			const t = ac.currentTime;
+			const master = ac.createGain();
+			master.connect(ac.destination);
+			master.gain.setValueAtTime(0.0001, t);
+			master.gain.exponentialRampToValueAtTime(0.42, t + 0.04);
+			master.gain.exponentialRampToValueAtTime(0.0001, t + 1.5);
+			for (const f of [146.83, 220, 293.66]) { // D3 · A3 · D4 — a heroic swell
+				const o = ac.createOscillator();
+				o.type = 'triangle';
+				o.frequency.value = f;
+				const g = ac.createGain();
+				g.gain.value = 0.33;
+				o.connect(g); g.connect(master);
+				o.start(t); o.stop(t + 1.5);
+			}
+			const shimmer = ac.createOscillator(); // a rising sparkle on top
+			shimmer.type = 'sine';
+			shimmer.frequency.setValueAtTime(880, t);
+			shimmer.frequency.exponentialRampToValueAtTime(1760, t + 0.5);
+			const sg = ac.createGain(); sg.gain.value = 0.12;
+			shimmer.connect(sg); sg.connect(master);
+			shimmer.start(t); shimmer.stop(t + 0.6);
+			setTimeout(() => ac.close(), 1800);
+		} catch { /* audio unavailable — no-op */ }
+	}
+	function enterFromLanding() {
+		playEnterSfx();
+		mode = 'choose';
+	}
+	function onLogo() {
+		if (mode === 'landing') enterFromLanding();
+		else goHome();
+	}
 	function goHome() {
 		session?.leave();
 		session = null;
@@ -239,7 +277,7 @@
 		clearActive();
 		signOut();
 		pw = ''; pwError = false; notice = '';
-		mode = 'choose';
+		mode = 'landing';
 	}
 	function goPlayer() {
 		enterAsPlayer();
@@ -450,9 +488,10 @@
 {#if mode === 'draft' && session}
 	<HeroDraft {session} {state} {players} clientId={session.clientId} onLeave={leaveRoom} />
 {:else}
-<main class="wrap">
-	<button class="home-link" on:click={goHome} aria-label="Main menu">
+<main class="wrap" class:landing={mode === 'landing'}>
+	<button class="home-link" class:hero={mode === 'landing'} on:click={onLogo} aria-label={mode === 'landing' ? 'Enter' : 'Main menu'}>
 		<img class="logo" src={logoImage} alt="Guards of Atlantis II" />
+		{#if mode === 'landing'}<span class="entrhint">Click the crest to enter</span>{/if}
 	</button>
 
 	<div class="stage" style:height={stageH ? stageH + 'px' : ''}>
@@ -709,7 +748,7 @@
 					{#if iAmHost && !allReady}<p class="hint">Everyone seated must ready up before you can begin.</p>{/if}
 				</div>
 			</div>
-		{:else}
+		{:else if mode === 'game'}
 			<div class="step" transition:reveal bind:clientHeight={h['game']}>
 				<div class="card form narrow">
 					<p class="roomline">Game started — room <b class="mono">{room}</b></p>
@@ -736,8 +775,14 @@
 
 <style>
 	.wrap { --hl: linear-gradient(120deg, #ef7d22, #2f7fe6); min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 5vh 20px 32px; gap: 22px; color: #f1f5f9; }
-	.home-link { background: none; border: none; padding: 0; cursor: pointer; }
-	.logo { width: min(224px, 54vw); filter: drop-shadow(0 12px 32px rgba(0, 0, 0, 0.55)); }
+	.home-link { background: none; border: none; padding: 0; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 18px; transition: transform 0.6s cubic-bezier(0.2, 0.85, 0.2, 1); transform: translateY(0); }
+	.logo { width: min(224px, 54vw); filter: drop-shadow(0 12px 32px rgba(0, 0, 0, 0.55)); transition: width 0.6s cubic-bezier(0.2, 0.85, 0.2, 1), filter 0.6s ease; }
+	/* landing splash: crest large & centred, morphs up-and-shrink into the menu */
+	.home-link.hero { transform: translateY(18vh); }
+	.home-link.hero .logo { width: min(400px, 80vw); filter: drop-shadow(0 20px 60px rgba(0, 0, 0, 0.6)) drop-shadow(0 0 40px rgba(245, 158, 11, 0.28)); animation: crestBreathe 3.6s ease-in-out infinite; }
+	@keyframes crestBreathe { 0%, 100% { filter: drop-shadow(0 20px 60px rgba(0, 0, 0, 0.6)) drop-shadow(0 0 34px rgba(245, 158, 11, 0.22)); } 50% { filter: drop-shadow(0 20px 60px rgba(0, 0, 0, 0.6)) drop-shadow(0 0 52px rgba(245, 158, 11, 0.4)); } }
+	.entrhint { font-family: 'Modesto Poster', serif; font-size: 1.1rem; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(255, 255, 255, 0.82); text-shadow: 0 2px 10px rgba(0, 0, 0, 0.6); animation: hintPulse 2.2s ease-in-out infinite; }
+	@keyframes hintPulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
 
 	.stage { position: relative; width: 100%; max-width: 1040px; transition: height 0.32s cubic-bezier(0.2, 0.8, 0.2, 1); }
 	.step { position: absolute; top: 0; left: 0; right: 0; display: flex; flex-direction: column; align-items: center; gap: 14px; }
