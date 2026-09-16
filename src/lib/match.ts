@@ -50,9 +50,6 @@ export type Phase = 'planning' | 'action' | 'upgrade'
 export const teamForSeat = (seat: number, seats: number): Team | null =>
 	seat < 0 ? null : seat < Math.floor(seats / 2) ? 'orange' : 'blue'
 
-/** A coin-flip team assignment, broadcast so every client animates in sync. */
-export interface FlipEvent { side: Team; at: number }
-
 export const TEAMS: Team[] = ['orange', 'blue']
 export const TURNS_PER_ROUND = 4
 export const PHASES: Phase[] = ['planning', 'action', 'upgrade']
@@ -214,10 +211,6 @@ export interface MatchSession {
 	act: (text: string, patch: Partial<MatchState>) => void
 	/** Update this client's name, colour, ready state and/or seat. */
 	setSelf: (info: { name?: string; color?: string; ready?: boolean; seat?: number }) => void
-	/** Broadcast a coin-flip team assignment; each client applies its own seat. */
-	flipTeams: (plan: Record<string, number>, side: Team) => void
-	/** Pulses whenever a team flip happens, so the UI can animate the coin. */
-	flip: Readable<FlipEvent | null>
 	/** Host: ask a player (by clientId) to leave the room. */
 	kick: (id: string) => void
 	/** Becomes true when THIS client has been kicked. */
@@ -260,14 +253,13 @@ export function joinMatch(
 	const kicked = writable(false)
 	const notFound = writable(false)
 	const conn = writable<ConnStatus>('connecting')
-	const flip = writable<FlipEvent | null>(null)
 
-	const channel: RealtimeChannel = supabase.channel(`match:${room}`, {
-		config: {
-			broadcast: { self: false },
-			presence: { key: clientId }
-		}
-	})
+	// The channel is rebuilt on a hard reconnect, so it's a `let` that every
+	// closure reads at call time rather than capturing once.
+	let channel: RealtimeChannel
+	let stateTimer: ReturnType<typeof setTimeout> | null = null
+	let watchdog: ReturnType<typeof setTimeout> | null = null
+	let backoff = 1500
 
 	const applyRemote = (incoming: MatchState) => {
 		// last-write-wins: accept strictly newer revisions, break ties on time
@@ -279,69 +271,67 @@ export function joinMatch(
 		}
 	}
 
+	// State broadcasts are coalesced to a trailing edge: each edit bumps `rev` and
+	// updates local state instantly, but we send at most one snapshot per STATE_MIN
+	// ms (always the latest — LWW makes intermediate revs safe to skip). This keeps
+	// rapid clicking well under Supabase Realtime's per-channel rate limit, which
+	// was closing the socket.
+	let lastState = 0
+	const STATE_MIN = 140
+	const flushState = () => {
+		stateTimer = null
+		lastState = Date.now()
+		try { channel.send({ type: 'broadcast', event: 'state', payload: local }) } catch { /* ignore */ }
+	}
 	const broadcastState = () => {
-		channel.send({ type: 'broadcast', event: 'state', payload: local })
+		if (stateTimer) return // a trailing flush is queued; it sends the latest local
+		const wait = STATE_MIN - (Date.now() - lastState)
+		if (wait <= 0) flushState()
+		else stateTimer = setTimeout(flushState, wait)
 	}
 
-	channel
-		.on('broadcast', { event: 'state' }, ({ payload }) => applyRemote(payload as MatchState))
-		.on('broadcast', { event: 'hello' }, () => {
-			// a newcomer asked for the current state — anyone holding real state
-			// (not a placeholder) shares it, so joiners inherit the room settings
-			if (local.rev >= 0) broadcastState()
-		})
-		.on('broadcast', { event: 'kick' }, ({ payload }) => {
-			if ((payload as { id: string }).id === clientId) kicked.set(true)
-		})
-		.on('broadcast', { event: 'teamflip' }, ({ payload }) => {
-			const { plan, side } = payload as { plan: Record<string, number>; side: Team }
-			flip.set({ side, at: Date.now() })
-			if (plan[clientId] !== undefined) setSelf({ seat: plan[clientId] })
-		})
-		.on('presence', { event: 'sync' }, () => {
-			const raw = channel.presenceState() as Record<string, Array<Partial<Player>>>
-			const list: Player[] = []
-			for (const key in raw) {
-				const meta = raw[key][0] ?? {}
-				list.push({
-					id: key,
-					name: (meta.name as string) ?? 'Player',
-					color: (meta.color as string) ?? 'spectator',
-					ready: (meta.ready as boolean) ?? false,
-					seat: typeof meta.seat === 'number' ? meta.seat : -1
-				})
-			}
-			players.set(list)
-		})
+	const registerHandlers = (ch: RealtimeChannel) => {
+		ch.on('broadcast', { event: 'state' }, ({ payload }) => applyRemote(payload as MatchState))
+			.on('broadcast', { event: 'hello' }, () => {
+				// a newcomer asked for the current state — anyone holding real state
+				// (not a placeholder) shares it, so joiners inherit the room settings
+				if (local.rev >= 0) broadcastState()
+			})
+			.on('broadcast', { event: 'kick' }, ({ payload }) => {
+				if ((payload as { id: string }).id === clientId) kicked.set(true)
+			})
+			.on('presence', { event: 'sync' }, () => {
+				const raw = ch.presenceState() as Record<string, Array<Partial<Player>>>
+				const list: Player[] = []
+				for (const key in raw) {
+					const meta = raw[key][0] ?? {}
+					list.push({
+						id: key,
+						name: (meta.name as string) ?? 'Player',
+						color: (meta.color as string) ?? 'spectator',
+						ready: (meta.ready as boolean) ?? false,
+						seat: typeof meta.seat === 'number' ? meta.seat : -1
+					})
+				}
+				players.set(list)
+			})
+	}
 
-	channel.subscribe((s) => {
-		if (s === 'CHANNEL_ERROR' || s === 'TIMED_OUT') { conn.set('reconnecting'); return }
-		if (s === 'CLOSED') { conn.set('closed'); return }
-		if (s !== 'SUBSCRIBED') return
-		conn.set('connected')
-		// (re-)announce our presence — also re-runs after an auto-reconnect
-		channel.track(me)
-		// ask whoever is already here for the authoritative state
-		channel.send({ type: 'broadcast', event: 'hello', payload: { id: clientId } })
-		// only run the "does this room exist?" probe on the FIRST join, while we
-		// still hold a placeholder — after a reconnect we already have real state
+	// JOIN flow only: probe a few times for a host. We must NEVER create a room —
+	// if someone is present we keep asking for their state until it arrives; if the
+	// room is genuinely empty after several tries, report "not found".
+	const startProbe = () => {
 		if (creating || local.rev >= 0) return
 		if (graceTimer) clearTimeout(graceTimer)
-		// JOIN flow: we must NOT create a room. Probe a few times for a host — if
-		// someone is present we keep asking for their state until it arrives; if the
-		// room is genuinely empty after several tries, report "not found" rather than
-		// promoting ourselves (which would silently create a bogus room).
 		let empties = 0
 		const probe = () => {
-			if (local.rev >= 0) return // we received the room's real state — we're in
+			if (local.rev >= 0) return
 			const others = Object.keys(channel.presenceState()).filter((k) => k !== clientId).length
 			if (others > 0) {
-				// a host is here but their state hasn't reached us yet — ask again
 				empties = 0
 				channel.send({ type: 'broadcast', event: 'hello', payload: { id: clientId } })
 				graceTimer = setTimeout(probe, 1000)
 			} else if (++empties >= 3) {
-				// no host, no state after several probes — there is no such game
 				notFound.set(true)
 			} else {
 				channel.send({ type: 'broadcast', event: 'hello', payload: { id: clientId } })
@@ -349,7 +339,42 @@ export function joinMatch(
 			}
 		}
 		graceTimer = setTimeout(probe, 700)
-	})
+	}
+
+	const clearWatchdog = () => { if (watchdog) { clearTimeout(watchdog); watchdog = null } }
+	const armWatchdog = () => { if (!watchdog) watchdog = setTimeout(hardReconnect, backoff) }
+	// If the channel stays down past the backoff, tear it down and rebuild it —
+	// Supabase's own rejoin sometimes wedges after a rate-limit close.
+	const hardReconnect = () => {
+		watchdog = null
+		backoff = Math.min(backoff * 2, 10000)
+		try { supabase.removeChannel(channel) } catch { /* ignore */ }
+		buildChannel()
+	}
+
+	const onStatus = (s: string) => {
+		if (s === 'SUBSCRIBED') {
+			conn.set('connected')
+			backoff = 1500
+			clearWatchdog()
+			channel.track(me) // (re-)announce presence, also after a reconnect
+			channel.send({ type: 'broadcast', event: 'hello', payload: { id: clientId } })
+			startProbe()
+			return
+		}
+		if (s === 'CHANNEL_ERROR' || s === 'TIMED_OUT') { conn.set('reconnecting'); armWatchdog() }
+		else if (s === 'CLOSED') { conn.set('closed'); armWatchdog() }
+	}
+
+	function buildChannel() {
+		channel = supabase.channel(`match:${room}`, {
+			config: { broadcast: { self: false }, presence: { key: clientId } }
+		})
+		registerHandlers(channel)
+		channel.subscribe(onStatus)
+	}
+
+	buildChannel()
 
 	const update = (patch: Partial<MatchState>) => {
 		local = {
@@ -397,15 +422,6 @@ export function joinMatch(
 		scheduleTrack()
 	}
 
-	// Broadcast a team assignment (a map of clientId → seat). Every client, incl.
-	// the initiator, animates the coin and applies ITS OWN new seat — so presence
-	// stays authoritative per-player and no one writes another player's seat.
-	const flipTeams = (plan: Record<string, number>, side: Team) => {
-		flip.set({ side, at: Date.now() })
-		if (plan[clientId] !== undefined) setSelf({ seat: plan[clientId] })
-		channel.send({ type: 'broadcast', event: 'teamflip', payload: { plan, side } })
-	}
-
 	// host asks a player to leave; the target client observes and leaves itself
 	const kick = (id: string) => {
 		channel.send({ type: 'broadcast', event: 'kick', payload: { id } })
@@ -414,6 +430,8 @@ export function joinMatch(
 	const leave = () => {
 		if (graceTimer) clearTimeout(graceTimer)
 		if (trackTimer) clearTimeout(trackTimer)
+		if (stateTimer) clearTimeout(stateTimer)
+		clearWatchdog()
 		try {
 			channel.untrack()
 			supabase.removeChannel(channel)
@@ -422,7 +440,7 @@ export function joinMatch(
 		}
 	}
 
-	return { state, players, update, act, setSelf, flipTeams, flip, kick, kicked, notFound, status: conn, leave, clientId }
+	return { state, players, update, act, setSelf, kick, kicked, notFound, status: conn, leave, clientId }
 }
 
 // ---- Round/turn helpers (encode the rulebook's structure) -------------------
