@@ -59,8 +59,8 @@
 	// coin-flip animation (each player flips their own team on joining)
 	let coinShown = false;
 	let coinRot = 0; // accumulated rotation (deg); lands on orange (mult of 360) or blue (+180)
-	let coinSide: Team = 'orange';
 	let coinDone = false;
+	let coinCaption = '';
 
 	// reconnect/resume: remember the active room so a page refresh rejoins it as
 	// the same player (stable clientId lives in match.ts). resumeSeed lets a lone
@@ -162,8 +162,9 @@
 	$: orangeCount = seated.filter((p) => p.seat < half).length;
 	$: blueCount = seatedCount - orangeCount;
 
-	// react to shared game transitions
-	$: if (mode === 'lobby' && $state.started) mode = 'game';
+	// react to shared game transitions — wait for the tie-breaker coin to finish
+	// so everyone sees the flip land before the board appears
+	$: if (mode === 'lobby' && $state.started && !coinShown) mode = 'game';
 	$: if ((mode === 'lobby' || mode === 'game') && $state.closed) bail('The host closed the game.');
 
 	function bail(msg: string) {
@@ -265,14 +266,25 @@
 	// Spin the coin so it actually animates: mount at the current angle, then bump
 	// the rotation on the next frame so the CSS transition has something to run
 	// from (otherwise it appears already at the final face — the "only blue" bug).
-	function playCoin(side: Team, after?: () => void) {
-		coinSide = side; coinShown = true; coinDone = false;
+	function playCoin(side: Team, opts: { caption?: string; after?: () => void } = {}) {
+		coinShown = true; coinDone = false;
+		coinCaption = opts.caption ?? (side === 'orange' ? 'You’re Orange!' : 'You’re Blue!');
 		const start = coinRot;
 		requestAnimationFrame(() => requestAnimationFrame(() => {
 			coinRot = Math.ceil((start + 1440) / 360) * 360 + (side === 'blue' ? 180 : 0);
 		}));
-		setTimeout(() => { coinDone = true; after?.(); }, 1650);
+		setTimeout(() => { coinDone = true; opts.after?.(); }, 1650);
 		setTimeout(() => (coinShown = false), 2900);
+	}
+	// shared tie-breaker flip on Begin: everyone animates the same result
+	let lastStartFlip = 0;
+	$: if ($state.startFlip && $state.startFlip.at !== lastStartFlip) {
+		lastStartFlip = $state.startFlip.at;
+		const side = $state.startFlip.side;
+		playCoin(side, {
+			caption: side === 'orange' ? 'Orange goes first' : 'Blue goes first',
+			after: () => { if (iAmHost) session?.update({ started: true, startFlip: null }); }
+		});
 	}
 	// join reached a room code with no host → don't create one
 	function failJoin() {
@@ -352,30 +364,33 @@
 		const seat = openSeatsOn(side)[0];
 		if (seat === undefined) return; // table full
 		flipping = true;
-		playCoin(side, () => {
+		playCoin(side, { after: () => {
 			flipping = false;
 			const c = pick || firstFreeColor();
 			color = c;
 			session?.setSelf({ seat, color: c });
 			writeActive({ seat, color: c });
-		});
+		} });
 	}
-	// move to a different open seat (only after you're seated — lets you switch sides)
+	// move to a different open seat (only after you're seated, and not while readied)
 	function sit(i: number) {
-		if (mySeat < 0 || takenSeats.has(i) || i === mySeat) return;
+		if (ready || mySeat < 0 || takenSeats.has(i) || i === mySeat) return;
 		session?.setSelf({ seat: i });
 		writeActive({ seat: i });
 	}
 	// leave the table (back to unseated → must flip again to rejoin)
 	function spectate() {
-		color = 'spectator'; ready = false;
+		if (ready) return; // unready first
+		color = 'spectator';
 		session?.setSelf({ seat: -1, color: 'spectator', ready: false });
 		writeActive({ seat: -1, color: 'spectator' });
 	}
-	// choose a token colour: before flipping it's just a preference; once seated it recolours live
+	// choose a token colour: before flipping it's just a preference; once seated it
+	// recolours live — but not while readied (locked in until you unready)
 	function pickColor(c: string) {
 		if (takenColors.has(c)) return;
 		if (mySeat < 0) { pick = c; return; }
+		if (ready) return;
 		color = c;
 		session?.setSelf({ color: c });
 		writeActive({ color: c });
@@ -387,7 +402,14 @@
 		ready = !ready;
 		session?.setSelf({ ready });
 	}
-	function beginGame() { if (iAmHost && allReady) session?.update({ started: true }); }
+	// host begins: broadcast a shared tie-breaker coin flip. Everyone animates it
+	// (via the $state.startFlip reactive); the host flips `started` on once the
+	// coin lands, so all players see the result before the board appears.
+	function beginGame() {
+		if (!iAmHost || !allReady || $state.startFlip) return;
+		const side: Team = Math.random() < 0.5 ? 'orange' : 'blue';
+		session?.update({ tieBreaker: side, startFlip: { side, at: Date.now() } });
+	}
 	function closeGame() { session?.update({ closed: true }); }
 	function kick(id: string) { session?.kick(id); }
 
@@ -559,6 +581,8 @@
 							<span>Teams {mySeat < 0 ? '· flip to join' : myTeam === 'orange' ? '· you’re Orange' : '· you’re Blue'}</span>
 							{#if mySeat < 0}
 								<button class="flipbtn hero" on:click={flipForTeam} disabled={flipping || seatedCount >= seatCount}>🪙 Flip for your team</button>
+							{:else if ready}
+								<span class="swaphint">🔒 locked in — unready to change</span>
 							{:else}
 								<span class="swaphint">tap an open seat to switch sides</span>
 							{/if}
@@ -579,7 +603,7 @@
 												<div class="hr" class:ok={p.ready}>{p.ready ? 'ready' : '…'}</div>
 											</div>
 										{:else}
-											<button class="tseat open" class:swap={mySeat >= 0} on:click={() => sit(i)} disabled={mySeat < 0}><div class="av av-empty"></div><div class="hn muted">open</div><div class="hr">&nbsp;</div></button>
+											<button class="tseat open" class:swap={mySeat >= 0 && !ready} on:click={() => sit(i)} disabled={mySeat < 0 || ready}><div class="av av-empty"></div><div class="hn muted">open</div><div class="hr">&nbsp;</div></button>
 										{/if}
 									{/each}
 								</div>
@@ -599,7 +623,7 @@
 												<div class="hr" class:ok={p.ready}>{p.ready ? 'ready' : '…'}</div>
 											</div>
 										{:else}
-											<button class="tseat open" class:swap={mySeat >= 0} on:click={() => sit(i)} disabled={mySeat < 0}><div class="av av-empty"></div><div class="hn muted">open</div><div class="hr">&nbsp;</div></button>
+											<button class="tseat open" class:swap={mySeat >= 0 && !ready} on:click={() => sit(i)} disabled={mySeat < 0 || ready}><div class="av av-empty"></div><div class="hn muted">open</div><div class="hr">&nbsp;</div></button>
 										{/if}
 									{/each}
 								</div>
@@ -608,12 +632,12 @@
 					</div>
 
 					<div class="fld">
-						<span>Your token {mySeat < 0 ? '· pick a colour, then flip in' : ''}</span>
+						<span>Your token {mySeat < 0 ? '· pick a colour, then flip in' : ready ? '· 🔒 locked in' : ''}</span>
 						<div class="swatches">
 							{#each PLAYER_COLORS as c (c.id)}
-								<button title={c.label} aria-label={c.label} class="sw" class:sel={(mySeat < 0 ? pick : color) === c.id} disabled={takenColors.has(c.id)} style="--sc:{c.hex}" on:click={() => pickColor(c.id)}></button>
+								<button title={c.label} aria-label={c.label} class="sw" class:sel={(mySeat < 0 ? pick : color) === c.id} disabled={takenColors.has(c.id) || (mySeat >= 0 && ready)} style="--sc:{c.hex}" on:click={() => pickColor(c.id)}></button>
 							{/each}
-							{#if mySeat >= 0}<button class="chip" on:click={spectate}>Spectate</button>{/if}
+							{#if mySeat >= 0 && !ready}<button class="chip" on:click={spectate}>Spectate</button>{/if}
 						</div>
 						{#if spectators.length}
 							<p class="specs">Spectating: {#each spectators as sp, i (sp.id)}{sp.name}{sp.id === session?.clientId ? ' (you)' : ''}{#if iAmHost && sp.id !== session?.clientId}<button class="kickx" title="Kick" on:click={() => kick(sp.id)}>✕</button>{/if}{i < spectators.length - 1 ? ', ' : ''}{/each}</p>
@@ -654,7 +678,7 @@
 				<img class="face front" src={coinOrange} alt="Orange" />
 				<img class="face back" src={coinBlue} alt="Blue" />
 			</div>
-			<p class="coincap" class:done={coinDone}>{coinDone ? (coinSide === 'orange' ? 'You’re Orange!' : 'You’re Blue!') : 'Flipping…'}</p>
+			<p class="coincap" class:done={coinDone}>{coinDone ? coinCaption : 'Flipping…'}</p>
 		</div>
 	</div>
 {/if}

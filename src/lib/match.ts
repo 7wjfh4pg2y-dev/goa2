@@ -91,6 +91,9 @@ export interface MatchState {
 	host: string // clientId of the host (the creator)
 	started: boolean // lobby → game has begun
 	closed: boolean // host closed the game; everyone returns to the menu
+	// set by the host on Begin: a shared coin flip everyone animates to reveal
+	// which team's tie-breaker side is up at the start of the game
+	startFlip: { side: Team; at: number } | null
 	rev: number // monotonic version for last-write-wins
 	updatedBy: string
 	updatedAt: number
@@ -174,6 +177,7 @@ export function initialMatchState(
 		host: '',
 		started: false,
 		closed: false,
+		startFlip: null,
 		rev: 0,
 		updatedBy: '',
 		updatedAt: 0
