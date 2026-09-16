@@ -50,6 +50,39 @@ export type Phase = 'planning' | 'action' | 'upgrade'
 export const teamForSeat = (seat: number, seats: number): Team | null =>
 	seat < 0 ? null : seat < Math.floor(seats / 2) ? 'orange' : 'blue'
 
+// ---- Hero draft types ------------------------------------------------------
+
+export type DraftSystem = 'all-pick' | 'all-random' | 'single-draft' | 'pick-ban'
+export const DRAFT_SYSTEMS: DraftSystem[] = ['all-pick', 'all-random', 'single-draft', 'pick-ban']
+export const DRAFT_LABELS: Record<DraftSystem, string> = {
+	'all-pick': 'All Pick',
+	'all-random': 'All Random',
+	'single-draft': 'Single Draft',
+	'pick-ban': 'Pick & Ban'
+}
+export const DRAFT_BLURBS: Record<DraftSystem, string> = {
+	'all-pick': 'Everyone picks at once from the full pool.',
+	'all-random': 'Everyone is dealt a random hero.',
+	'single-draft': 'Each turn you’re offered three heroes — pick one.',
+	'pick-ban': 'Teams alternate bans and picks in turn.'
+}
+
+export interface DraftTurn {
+	team: Team
+	type: 'pick' | 'ban'
+	actor: string // clientId who owns this turn
+}
+export interface DraftState {
+	system: DraftSystem
+	pool: string[] // eligible hero ids
+	order: DraftTurn[] // resolved turn sequence ([] for all-pick / all-random)
+	step: number // index into order (turn-based modes)
+	picks: Record<string, string> // clientId -> heroId (committed)
+	bans: string[]
+	offer: string[] // single-draft: heroes offered to the current actor
+	offered: string[] // single-draft: every hero offered so far (never re-offered)
+}
+
 export const TEAMS: Team[] = ['orange', 'blue']
 export const TURNS_PER_ROUND = 4
 export const PHASES: Phase[] = ['planning', 'action', 'upgrade']
@@ -89,6 +122,9 @@ export interface MatchState {
 	pieces: Record<string, Piece> // tokens on the board, keyed by id
 	seats: number // number of player seats the game is set up for (excl. spectators)
 	host: string // clientId of the host (the creator)
+	draftSystem: DraftSystem // how heroes are selected
+	draftStars: number[] // allowed hero complexity levels (1–4)
+	draft: DraftState | null // live hero-draft state once Begin starts it
 	started: boolean // lobby → game has begun
 	closed: boolean // host closed the game; everyone returns to the menu
 	// set by the host on Begin: a shared coin flip everyone animates to reveal
@@ -146,6 +182,143 @@ export interface Player {
 	seat: number // seat index (0-based); < 0 means unseated / spectating
 }
 
+// ---- Hero draft engine -----------------------------------------------------
+
+/** Minimum eligible heroes needed to run a system for N total players. */
+export function draftPoolMin(system: DraftSystem, totalPlayers: number): number {
+	if (system === 'single-draft') return totalPlayers * 3
+	if (system === 'pick-ban') return totalPlayers * 2
+	return totalPlayers
+}
+
+function shuffle<T>(xs: T[]): T[] {
+	const a = [...xs]
+	for (let i = a.length - 1; i > 0; i--) {
+		const j = Math.floor(Math.random() * (i + 1))
+		;[a[i], a[j]] = [a[j], a[i]]
+	}
+	return a
+}
+function rollOffer(pool: string[], exclude: Set<string>, n: number): string[] {
+	return shuffle(pool.filter((h) => !exclude.has(h))).slice(0, n)
+}
+
+// Master pick/ban sequence (rulebook draft); sliced to totalPlayers*2 and
+// remapped so the tie-breaker-winning team acts first.
+const PICK_BAN_SEQ: Array<{ team: Team; type: 'pick' | 'ban' }> = [
+	{ team: 'orange', type: 'ban' }, { team: 'blue', type: 'ban' },
+	{ team: 'orange', type: 'pick' }, { team: 'blue', type: 'pick' },
+	{ team: 'blue', type: 'ban' }, { team: 'orange', type: 'ban' },
+	{ team: 'blue', type: 'pick' }, { team: 'orange', type: 'pick' },
+	{ team: 'orange', type: 'ban' }, { team: 'blue', type: 'ban' },
+	{ team: 'blue', type: 'pick' }, { team: 'orange', type: 'pick' },
+	{ team: 'blue', type: 'ban' }, { team: 'orange', type: 'ban' },
+	{ team: 'orange', type: 'pick' }, { team: 'blue', type: 'pick' },
+	{ team: 'blue', type: 'ban' }, { team: 'orange', type: 'ban' },
+	{ team: 'blue', type: 'pick' }, { team: 'orange', type: 'pick' }
+]
+
+const otherTeamOf = (t: Team): Team => (t === 'orange' ? 'blue' : 'orange')
+
+/** Ordered clientIds per team, by seat. */
+export function teamRosters(players: Player[], seats: number): Record<Team, string[]> {
+	const half = Math.floor(seats / 2)
+	const seated = players.filter((p) => p.seat >= 0 && p.seat < seats).sort((a, b) => a.seat - b.seat)
+	return {
+		orange: seated.filter((p) => p.seat < half).map((p) => p.id),
+		blue: seated.filter((p) => p.seat >= half).map((p) => p.id)
+	}
+}
+
+/**
+ * Build the draft at Begin. `startingTeam` comes from the tie-breaker flip.
+ * Turn-based modes get a resolved `order` where each turn is owned by a
+ * specific player (for strict enforcement). All-random assigns immediately.
+ */
+export function buildDraft(
+	system: DraftSystem,
+	pool: string[],
+	players: Player[],
+	seats: number,
+	startingTeam: Team
+): DraftState {
+	const rosters = teamRosters(players, seats)
+	const total = rosters.orange.length + rosters.blue.length
+	const order: DraftTurn[] = []
+
+	if (system === 'pick-ban') {
+		const pickPtr: Record<Team, number> = { orange: 0, blue: 0 }
+		const banPtr: Record<Team, number> = { orange: 0, blue: 0 }
+		for (const t of PICK_BAN_SEQ.slice(0, total * 2)) {
+			const team = startingTeam === 'orange' ? t.team : otherTeamOf(t.team)
+			const roster = rosters[team]
+			let actor = ''
+			if (t.type === 'pick') { actor = roster[pickPtr[team]] ?? ''; pickPtr[team]++ }
+			else { actor = roster[banPtr[team] % Math.max(1, roster.length)] ?? ''; banPtr[team]++ }
+			order.push({ team, type: t.type, actor })
+		}
+	} else if (system === 'single-draft') {
+		const pickPtr: Record<Team, number> = { orange: 0, blue: 0 }
+		for (let i = 0; i < total; i++) {
+			const team = i % 2 === 0 ? startingTeam : otherTeamOf(startingTeam)
+			order.push({ team, type: 'pick', actor: rosters[team][pickPtr[team]] ?? '' })
+			pickPtr[team]++
+		}
+	}
+
+	const picks: Record<string, string> = {}
+	if (system === 'all-random') {
+		const rolled = shuffle(pool)
+		let i = 0
+		for (const id of [...rosters.orange, ...rosters.blue]) picks[id] = rolled[i++] ?? ''
+	}
+
+	const offer = system === 'single-draft' ? rollOffer(pool, new Set(), 3) : []
+	return { system, pool, order, step: 0, picks, bans: [], offer, offered: [...offer] }
+}
+
+export const draftTurn = (d: DraftState): DraftTurn | null => d.order[d.step] ?? null
+export const draftActor = (d: DraftState): string | null => draftTurn(d)?.actor ?? null
+
+/** Heroes no longer selectable (already picked or banned). */
+export function draftBlocked(d: DraftState): Set<string> {
+	return new Set([...Object.values(d.picks), ...d.bans])
+}
+
+/** Is the draft finished? */
+export function draftComplete(d: DraftState, seatedIds: string[]): boolean {
+	if (d.order.length) return d.step >= d.order.length
+	return seatedIds.length > 0 && seatedIds.every((id) => d.picks[id]) // all-pick / all-random
+}
+
+/**
+ * Apply the current turn's action (a pick or ban of `heroId` by the active
+ * actor) and advance one step. Rolls the next offer for single-draft. Only
+ * call on the actor's turn (the UI enforces this).
+ */
+export function draftAdvance(d: DraftState, heroId: string): DraftState {
+	const turn = draftTurn(d)
+	if (!turn) return d
+	const picks = { ...d.picks }
+	const bans = [...d.bans]
+	if (turn.type === 'ban') bans.push(heroId)
+	else picks[turn.actor] = heroId
+	const step = d.step + 1
+	let offer = d.offer
+	let offered = d.offered
+	if (d.system === 'single-draft' && step < d.order.length) {
+		const exclude = new Set([...Object.values(picks), ...bans, ...d.offered])
+		offer = rollOffer(d.pool, exclude, 3)
+		offered = [...d.offered, ...offer]
+	}
+	return { ...d, picks, bans, step, offer, offered }
+}
+
+/** All-pick: set (or change) a single player's own pick. */
+export function draftSetPick(d: DraftState, clientId: string, heroId: string): DraftState {
+	return { ...d, picks: { ...d.picks, [clientId]: heroId } }
+}
+
 export function initialMatchState(
 	opts: {
 		length?: 'quick' | 'long'
@@ -154,6 +327,8 @@ export function initialMatchState(
 		life?: number
 		mapId?: string
 		map?: GameMap | null
+		draftSystem?: DraftSystem
+		draftStars?: number[]
 	} = {}
 ): MatchState {
 	const length = opts.length ?? 'long'
@@ -175,6 +350,9 @@ export function initialMatchState(
 		pieces: {},
 		seats: players,
 		host: '',
+		draftSystem: opts.draftSystem ?? 'all-pick',
+		draftStars: opts.draftStars ?? [1, 2, 3, 4],
+		draft: null,
 		started: false,
 		closed: false,
 		startFlip: null,
