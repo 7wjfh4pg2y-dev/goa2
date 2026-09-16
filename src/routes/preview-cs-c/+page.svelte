@@ -11,6 +11,11 @@
 	let sel: Hero = heroById('arien')!;
 	// pip state for a cell: 2 = full, 1 = partial (within the min–max range), 0 = empty
 	const pip = (stat: [number, number], i: number) => (i < stat[0] ? 2 : i < stat[1] ? 1 : 0);
+	// your team decides the Lock In colour (fully orange or fully blue)
+	const team: 'orange' | 'blue' = 'orange';
+	const teamBg = team === 'orange'
+		? 'linear-gradient(120deg, #f59e0b, #dd6a12)'
+		: 'linear-gradient(120deg, #3b82f6, #2563eb)';
 </script>
 
 <main class="wrap">
@@ -44,17 +49,19 @@
 					</div>
 				{/each}
 			</div>
-			<button class="lockin">Lock In {sel.name}</button>
 		</div>
 
-		<!-- browse grid, right, alphabetical, rows of 4 -->
-		<aside class="browse">
-			{#each HEROES_ALPHA as h (h.id)}
-				<button class="hero" class:on={sel.id === h.id} class:gone={taken.has(h.id)} on:mouseenter={() => (sel = h)} on:click={() => (sel = h)}>
-					<img src={heroAvatar(h.id)} alt={h.name} />
-				</button>
-			{/each}
-		</aside>
+		<!-- browse grid + lock-in, right, alphabetical, rows of 4 -->
+		<div class="rightcol">
+			<div class="browse">
+				{#each HEROES_ALPHA as h (h.id)}
+					<button class="hero" class:on={sel.id === h.id} class:gone={taken.has(h.id)} on:mouseenter={() => (sel = h)} on:click={() => (sel = h)}>
+						<img src={heroAvatar(h.id)} alt={h.name} />
+					</button>
+				{/each}
+			</div>
+			<button class="lockin" style="background:{teamBg}">Lock In {sel.name}</button>
+		</div>
 	</div>
 
 	<footer class="rails">
@@ -101,9 +108,10 @@
 	.trait img { width: 40px; height: 40px; object-fit: contain; filter: drop-shadow(0 2px 5px rgba(0,0,0,0.7)); }
 	.tdot { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; color: #fbbf24; border: 2px solid #fbbf24; border-radius: 50%; }
 	.tl { font-family: 'Modesto Poster', serif; font-size: 0.92rem; letter-spacing: 0.03em; text-transform: uppercase; text-shadow: 0 2px 4px rgba(0,0,0,0.8); }
-	.lockin { border: 1px solid rgba(255,255,255,0.3); background: var(--hl); color: #fff; border-radius: 12px; padding: 0.8rem 2rem; font-weight: 700; font-size: 1.05rem; cursor: pointer; box-shadow: 0 8px 24px rgba(0,0,0,0.45); }
+	.lockin { width: 100%; border: 1px solid rgba(255,255,255,0.32); color: #fff; border-radius: 12px; padding: 0.85rem 1rem; font-weight: 700; font-size: 1.05rem; cursor: pointer; box-shadow: 0 8px 24px rgba(0,0,0,0.45); }
 
-	.browse { position: absolute; top: 16px; right: 16px; bottom: 16px; width: 300px; display: grid; grid-template-columns: repeat(4, 1fr); grid-auto-rows: min-content; gap: 8px; align-content: start; overflow-y: auto; padding: 12px; background: rgba(9,13,22,0.5); border: 1px solid rgba(255,255,255,0.12); border-radius: 14px; backdrop-filter: blur(6px); }
+	.rightcol { position: absolute; top: 16px; right: 16px; width: 300px; display: flex; flex-direction: column; gap: 10px; }
+	.browse { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 12px; background: rgba(9,13,22,0.5); border: 1px solid rgba(255,255,255,0.12); border-radius: 14px; backdrop-filter: blur(6px); }
 	.hero { border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.04); border-radius: 9px; padding: 0; cursor: pointer; overflow: hidden; transition: transform 0.1s; }
 	.hero img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
 	.hero:hover { transform: scale(1.06); }
