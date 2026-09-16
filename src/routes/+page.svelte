@@ -42,6 +42,8 @@
 	// lobby / session
 	let color = 'spectator';
 	let ready = false;
+	let joinError = '';
+	let joining = false;
 	let session: MatchSession | null = null;
 	let players: Readable<Player[]> = writable([]);
 	let state: Readable<MatchState> = writable(initialMatchState());
@@ -169,13 +171,26 @@
 		if (!name.trim()) name = 'Player';
 		try { localStorage.setItem('goa2-name', name); } catch {}
 	}
-	function bindSession() {
-		players = session!.players;
-		state = session!.state;
+	function bindSession(enterLobby: boolean) {
+		const s = session!;
+		players = s.players;
+		state = s.state;
 		color = 'spectator';
 		ready = false;
-		session!.kicked.subscribe((v) => { if (v) bail('You were removed from the game.'); });
-		mode = 'lobby';
+		s.kicked.subscribe((v) => { if (v && session === s) bail('You were removed from the game.'); });
+		s.notFound.subscribe((v) => { if (v && session === s) failJoin(); });
+		if (enterLobby) mode = 'lobby';
+	}
+	// a join stays on the Join screen ("Joining…") until the room's real state
+	// arrives (→ lobby) or it's confirmed there's no such game (→ error)
+	$: if (joining && $state.rev >= 0) { joining = false; mode = 'lobby'; }
+	// join reached a room code with no host → don't create one, send them back
+	function failJoin() {
+		session?.leave();
+		session = null;
+		joining = false;
+		joinError = `No open game with code “${room}”.`;
+		mode = 'join';
 	}
 	function createGame() {
 		persistName();
@@ -191,14 +206,16 @@
 		});
 		session = joinMatch(room, { name, color: 'spectator' }, { seed });
 		roomHandle = announceRoom({ room, host: name, seats: playerCount, count: 0, started: false });
-		bindSession();
+		bindSession(true);
 	}
 	function joinGame() {
 		persistName();
 		room = room.trim().toUpperCase();
-		if (!room) return;
+		if (!room || joining) return;
+		joinError = '';
+		joining = true;
 		session = joinMatch(room, { name, color: 'spectator' }, {});
-		bindSession();
+		bindSession(false);
 	}
 	function leaveRoom() {
 		session?.leave();
@@ -339,7 +356,8 @@
 					<div class="joincols" class:two={openRooms.length}>
 						<div class="jcol">
 							<label class="fld"><span>Name</span><input class="field" bind:value={name} placeholder="e.g. Zaheen" /></label>
-							<label class="fld"><span>Room code</span><input class="field up" bind:value={room} maxlength="8" placeholder="code from the host" /></label>
+							<label class="fld"><span>Room code</span><input class="field up" bind:value={room} on:input={() => (joinError = '')} maxlength="8" placeholder="code from the host" /></label>
+							{#if joinError}<p class="err">{joinError}</p>{/if}
 						</div>
 						{#if openRooms.length}
 							<div class="jcol right">
@@ -366,7 +384,7 @@
 
 					<div class="row">
 						<button class="ghost" on:click={() => (mode = 'menu')}>← Back</button>
-						<button class="primary" on:click={joinGame} disabled={!room.trim()}>Join game</button>
+						<button class="primary" on:click={joinGame} disabled={!room.trim() || joining}>{joining ? 'Joining…' : 'Join game'}</button>
 					</div>
 				</div>
 			</div>
@@ -378,7 +396,10 @@
 							<span class="lbl">Room code</span>
 							<div class="mono roomcode">{room}</div>
 						</div>
-						<button class="ghost" on:click={copyLink}>{copied ? 'Copied!' : 'Copy invite link'}</button>
+						<button class="copybtn" class:done={copied} on:click={copyLink} aria-label="Copy invite link">
+							<span class="ci" aria-hidden="true">{copied ? '✓' : '🔗'}</span>
+							<span>{copied ? 'Link copied' : 'Invite link'}</span>
+						</button>
 					</div>
 
 					<div class="fld">
@@ -510,6 +531,12 @@
 	.primary.isready { background: #16a34a; border-color: #22c55e; }
 	.ghost { border: 1px solid rgba(255, 255, 255, 0.2); background: rgba(255, 255, 255, 0.06); color: #e5e7eb; border-radius: 10px; padding: 0.55rem 1.1rem; cursor: pointer; }
 	.ghost.danger { border-color: rgba(239, 68, 68, 0.5); color: #fca5a5; }
+	.copybtn { display: inline-flex; align-items: center; gap: 8px; border: 1px solid rgba(255, 255, 255, 0.18); background: rgba(255, 255, 255, 0.06); color: #e5e7eb; border-radius: 10px; padding: 0.5rem 0.95rem; cursor: pointer; font-weight: 600; font-size: 0.9rem; transition: background 0.18s, border-color 0.18s, color 0.18s, transform 0.12s; }
+	.copybtn:hover { background: rgba(255, 255, 255, 0.12); border-color: rgba(255, 255, 255, 0.32); transform: translateY(-1px); }
+	.copybtn .ci { display: inline-block; font-size: 0.95rem; line-height: 1; }
+	.copybtn.done { background: rgba(22, 163, 74, 0.22); border-color: #22c55e; color: #bbf7d0; }
+	.copybtn.done .ci { animation: pop 0.34s ease; }
+	@keyframes pop { 0% { transform: scale(0.3); opacity: 0; } 55% { transform: scale(1.3); } 100% { transform: scale(1); opacity: 1; } }
 	.roomline { margin: 0; font-size: 1.1rem; }
 	.admincol { color: #fdba74; }
 	.mono { font-family: ui-monospace, monospace; letter-spacing: 0.08em; }

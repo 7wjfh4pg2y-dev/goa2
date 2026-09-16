@@ -89,17 +89,20 @@ export const wavesFor = (length: 'quick' | 'long') => (length === 'quick' ? 3 : 
 // Personal player colours (identity at the table) — distinct, and deliberately
 // NOT orange/blue, since those are the two team sides.
 export interface PlayerColorDef { id: string; label: string; hex: string }
+// Ordered as a rainbow (ROYGBIV, skipping orange & blue which are the team
+// colours) with neutrals last. Teal and brown were dropped — too close to the
+// blue and orange team colours to tell apart on the board.
 export const PLAYER_COLORS: PlayerColorDef[] = [
 	{ id: 'red', label: 'Red', hex: '#ef4444' },
+	{ id: 'yellow', label: 'Yellow', hex: '#eab308' },
+	{ id: 'lime', label: 'Lime', hex: '#84cc16' },
 	{ id: 'green', label: 'Green', hex: '#22c55e' },
 	{ id: 'purple', label: 'Purple', hex: '#a855f7' },
+	{ id: 'magenta', label: 'Magenta', hex: '#d946ef' },
 	{ id: 'pink', label: 'Pink', hex: '#ec4899' },
-	{ id: 'yellow', label: 'Yellow', hex: '#eab308' },
-	{ id: 'teal', label: 'Teal', hex: '#2dd4bf' },
 	{ id: 'white', label: 'White', hex: '#f8fafc' },
-	{ id: 'black', label: 'Black', hex: '#0b0f17' },
-	{ id: 'brown', label: 'Brown', hex: '#b45309' },
-	{ id: 'slate', label: 'Slate', hex: '#94a3b8' }
+	{ id: 'slate', label: 'Slate', hex: '#94a3b8' },
+	{ id: 'black', label: 'Black', hex: '#0b0f17' }
 ]
 export const colorHex = (id: string) => PLAYER_COLORS.find((c) => c.id === id)?.hex ?? '#94a3b8'
 
@@ -182,6 +185,8 @@ export interface MatchSession {
 	kick: (id: string) => void
 	/** Becomes true when THIS client has been kicked. */
 	kicked: Readable<boolean>
+	/** Becomes true when JOINING a room code that has no host (no such game). */
+	notFound: Readable<boolean>
 	leave: () => void
 	clientId: string
 }
@@ -215,6 +220,7 @@ export function joinMatch(
 	let me: Player = { id: clientId, name: self.name, color: self.color, ready: false }
 	let graceTimer: ReturnType<typeof setTimeout> | null = null
 	const kicked = writable(false)
+	const notFound = writable(false)
 
 	const channel: RealtimeChannel = supabase.channel(`match:${room}`, {
 		config: {
@@ -267,24 +273,29 @@ export function joinMatch(
 		channel.track(me)
 		// ask whoever is already here for the authoritative state
 		channel.send({ type: 'broadcast', event: 'hello', payload: { id: clientId } })
-		// if joining and nobody answers, promote to host with a default game —
-		// but ONLY if we're truly alone. If a host is present but their state
-		// hasn't reached us yet, keep asking rather than resetting ourselves.
+		// JOIN flow: we must NOT create a room. Probe a few times for a host — if
+		// someone is present we keep asking for their state until it arrives; if the
+		// room is genuinely empty after several tries, report "not found" rather than
+		// promoting ourselves (which would silently create a bogus room).
 		if (!creating) {
-			const tryPromote = () => {
-				if (local.rev >= 0) return // we already have the room's real state
+			let empties = 0
+			const probe = () => {
+				if (local.rev >= 0) return // we received the room's real state — we're in
 				const others = Object.keys(channel.presenceState()).filter((k) => k !== clientId).length
-				if (others === 0) {
-					local = { ...initialMatchState(), host: clientId }
-					state.set(local)
-					broadcastState()
-				} else {
-					// someone's here but we haven't received state — ask again
+				if (others > 0) {
+					// a host is here but their state hasn't reached us yet — ask again
+					empties = 0
 					channel.send({ type: 'broadcast', event: 'hello', payload: { id: clientId } })
-					graceTimer = setTimeout(tryPromote, 1200)
+					graceTimer = setTimeout(probe, 1000)
+				} else if (++empties >= 3) {
+					// no host, no state after several probes — there is no such game
+					notFound.set(true)
+				} else {
+					channel.send({ type: 'broadcast', event: 'hello', payload: { id: clientId } })
+					graceTimer = setTimeout(probe, 700)
 				}
 			}
-			graceTimer = setTimeout(tryPromote, 1500)
+			graceTimer = setTimeout(probe, 700)
 		}
 	})
 
@@ -350,7 +361,7 @@ export function joinMatch(
 		}
 	}
 
-	return { state, players, update, act, setSelf, kick, kicked, leave, clientId }
+	return { state, players, update, act, setSelf, kick, kicked, notFound, leave, clientId }
 }
 
 // ---- Round/turn helpers (encode the rulebook's structure) -------------------
