@@ -18,12 +18,18 @@
 		colorHex,
 		PLAYER_COLORS,
 		teamForSeat,
+		draftPoolMin,
+		DRAFT_SYSTEMS,
+		DRAFT_LABELS,
+		DRAFT_BLURBS,
 		type MatchState,
 		type Player,
 		type MatchSession,
 		type ConnStatus,
-		type Team
+		type Team,
+		type DraftSystem
 	} from '$lib/match';
+	import { HEROES } from '$lib/heroes';
 
 	type Mode = 'choose' | 'admin' | 'adminhub' | 'menu' | 'create' | 'join' | 'lobby' | 'game';
 	let mode: Mode = 'choose';
@@ -41,6 +47,8 @@
 	let playerCount = 4;
 	let customWaves = 3;
 	let customLife = 6;
+	let draftSystem: DraftSystem = 'all-pick';
+	let draftStars = [1, 2, 3, 4];
 	let maps: MapChoice[] = [];
 	let mapId = '';
 
@@ -133,6 +141,13 @@
 
 	$: previewWaves = ruleset === 'custom' ? customWaves : wavesFor(ruleset);
 	$: previewLife = ruleset === 'custom' ? customLife : lifeFor(ruleset, playerCount);
+	// draft pool sizing: eligible heroes must cover the chosen system for the seats
+	function toggleStar(s: number) {
+		draftStars = draftStars.includes(s) ? draftStars.filter((x) => x !== s) : [...draftStars, s].sort();
+	}
+	$: eligibleCount = HEROES.filter((h) => draftStars.includes(h.stars)).length;
+	$: poolNeed = draftPoolMin(draftSystem, playerCount);
+	$: poolShort = eligibleCount < poolNeed;
 	$: shareLink = browser && room ? `${location.origin}${base}/?room=${room}` : '';
 
 	// --- lobby derived ---
@@ -317,7 +332,9 @@
 			waves: ruleset === 'custom' ? customWaves : undefined,
 			life: ruleset === 'custom' ? customLife : undefined,
 			mapId: chosen?.id ?? '',
-			map: chosen?.data ?? null
+			map: chosen?.data ?? null,
+			draftSystem,
+			draftStars
 		});
 		session = joinMatch(room, { name, color: 'spectator' }, { seed });
 		roomHandle = announceRoom({ room, host: name, seats: playerCount, count: 0, started: false });
@@ -510,9 +527,29 @@
 							<p class="hint">{previewWaves} waves · {previewLife} Life per team · {playerCount} seats</p>
 						</div>
 					</div>
+					<div class="fld draftfld">
+						<span>Hero draft</span>
+						<div class="chips">
+							{#each DRAFT_SYSTEMS as sys (sys)}
+								<button class="chip" class:on={draftSystem === sys} on:click={() => (draftSystem = sys)}>{DRAFT_LABELS[sys]}</button>
+							{/each}
+						</div>
+						<p class="hint">{DRAFT_BLURBS[draftSystem]}</p>
+					</div>
+					<div class="fld">
+						<span>Hero complexity</span>
+						<div class="chips">
+							{#each [1, 2, 3, 4] as s (s)}
+								<button class="chip star" class:on={draftStars.includes(s)} on:click={() => toggleStar(s)}>{'★'.repeat(s)}</button>
+							{/each}
+						</div>
+						<p class="hint" class:warn={poolShort}>
+							{eligibleCount} heroes in pool{poolShort ? ` · need ${poolNeed} for ${DRAFT_LABELS[draftSystem]} with ${playerCount} players` : ''}
+						</p>
+					</div>
 					<div class="row">
 						<button class="ghost" on:click={() => (mode = 'menu')}>← Back</button>
-						<button class="primary" on:click={createGame}>Create game</button>
+						<button class="primary" on:click={createGame} disabled={poolShort}>Create game</button>
 					</div>
 				</div>
 			</div>
@@ -720,6 +757,9 @@
 	.sw.sel { outline: 2px solid #f59e0b; outline-offset: 2px; border-color: #fff; }
 	.sw:disabled { opacity: 0.28; cursor: not-allowed; }
 	.hint { font-size: 0.72rem; color: #94a3b8; margin: 2px 0 0; }
+	.hint.warn { color: #fca5a5; }
+	.draftfld { border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 13px; }
+	.chip.star { letter-spacing: 1px; }
 	.joincols { display: flex; flex-direction: column; gap: 14px; }
 	.joincols.two { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; align-items: start; }
 	.jcol { display: flex; flex-direction: column; gap: 13px; min-width: 0; }
