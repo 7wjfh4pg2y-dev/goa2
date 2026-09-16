@@ -18,6 +18,7 @@
 		colorHex,
 		PLAYER_COLORS,
 		teamForSeat,
+		buildDraft,
 		draftPoolMin,
 		DRAFT_SYSTEMS,
 		DRAFT_LABELS,
@@ -30,8 +31,9 @@
 		type DraftSystem
 	} from '$lib/match';
 	import { HEROES } from '$lib/heroes';
+	import HeroDraft from '$lib/HeroDraft.svelte';
 
-	type Mode = 'choose' | 'admin' | 'adminhub' | 'menu' | 'create' | 'join' | 'lobby' | 'game';
+	type Mode = 'choose' | 'admin' | 'adminhub' | 'menu' | 'create' | 'join' | 'lobby' | 'draft' | 'game';
 	let mode: Mode = 'choose';
 	let notice = '';
 
@@ -177,10 +179,12 @@
 	$: orangeCount = seated.filter((p) => p.seat < half).length;
 	$: blueCount = seatedCount - orangeCount;
 
-	// react to shared game transitions — wait for the tie-breaker coin to finish
-	// so everyone sees the flip land before the board appears
-	$: if (mode === 'lobby' && $state.started && !coinShown) mode = 'game';
-	$: if ((mode === 'lobby' || mode === 'game') && $state.closed) bail('The host closed the game.');
+	// react to shared game transitions. The tie-breaker coin plays first (on Begin);
+	// once it lands the host builds the draft, so everyone enters the draft screen,
+	// then the board when the draft is done.
+	$: if (mode === 'lobby' && $state.draft && !$state.started && !coinShown) mode = 'draft';
+	$: if ((mode === 'lobby' || mode === 'draft') && $state.started && !coinShown) mode = 'game';
+	$: if ((mode === 'lobby' || mode === 'draft' || mode === 'game') && $state.closed) bail('The host closed the game.');
 
 	function bail(msg: string) {
 		session?.leave();
@@ -298,8 +302,14 @@
 		const side = $state.startFlip.side;
 		playCoin(side, {
 			caption: side === 'orange' ? 'Orange goes first' : 'Blue goes first',
-			after: () => { if (iAmHost) session?.update({ started: true, startFlip: null }); }
+			after: () => { if (iAmHost) startDraft(side); }
 		});
+	}
+	// host builds the shared draft from the seed config; the tie-breaker winner drafts first
+	function startDraft(startingTeam: Team) {
+		const pool = HEROES.filter((hr) => $state.draftStars.includes(hr.stars)).map((hr) => hr.id);
+		const d = buildDraft($state.draftSystem, pool, $players, $state.seats, startingTeam);
+		session?.update({ draft: d, startFlip: null });
 	}
 	// join reached a room code with no host → don't create one
 	function failJoin() {
@@ -437,6 +447,9 @@
 
 <svelte:head><title>Guards of Atlantis II</title></svelte:head>
 
+{#if mode === 'draft' && session}
+	<HeroDraft {session} {state} {players} clientId={session.clientId} onLeave={leaveRoom} />
+{:else}
 <main class="wrap">
 	<button class="home-link" on:click={goHome} aria-label="Main menu">
 		<img class="logo" src={logoImage} alt="Guards of Atlantis II" />
@@ -707,6 +720,7 @@
 		{/if}
 	</div>
 </main>
+{/if}
 
 {#if coinShown}
 	<div class="coinoverlay">
