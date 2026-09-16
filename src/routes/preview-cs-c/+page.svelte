@@ -55,7 +55,7 @@
 		<div class="rightcol">
 			<div class="browse">
 				{#each HEROES_ALPHA as h (h.id)}
-					<button class="hero" class:on={sel.id === h.id} class:gone={taken.has(h.id)} on:mouseenter={() => (sel = h)} on:click={() => (sel = h)}>
+					<button class="hero" class:on={sel.id === h.id} class:gone={taken.has(h.id)} on:click={() => (sel = h)}>
 						<img src={heroAvatar(h.id)} alt={h.name} />
 					</button>
 				{/each}
