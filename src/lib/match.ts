@@ -46,6 +46,13 @@ function stableClientId(): string {
 export type Team = 'orange' | 'blue'
 export type Phase = 'planning' | 'action' | 'upgrade'
 
+/** Which team a seat belongs to: the first half is Orange, the second Blue. */
+export const teamForSeat = (seat: number, seats: number): Team | null =>
+	seat < 0 ? null : seat < Math.floor(seats / 2) ? 'orange' : 'blue'
+
+/** A coin-flip team assignment, broadcast so every client animates in sync. */
+export interface FlipEvent { side: Team; at: number }
+
 export const TEAMS: Team[] = ['orange', 'blue']
 export const TURNS_PER_ROUND = 4
 export const PHASES: Phase[] = ['planning', 'action', 'upgrade']
@@ -136,6 +143,7 @@ export interface Player {
 	name: string
 	color: string // a PLAYER_COLORS id, or 'spectator'
 	ready: boolean // lobby ready toggle
+	seat: number // seat index (0-based); < 0 means unseated / spectating
 }
 
 export function initialMatchState(
@@ -204,8 +212,12 @@ export interface MatchSession {
 	update: (patch: Partial<MatchState>) => void
 	/** Apply a patch AND append an attributed log entry describing it. */
 	act: (text: string, patch: Partial<MatchState>) => void
-	/** Update this client's name, colour and/or ready state. */
-	setSelf: (info: { name?: string; color?: string; ready?: boolean }) => void
+	/** Update this client's name, colour, ready state and/or seat. */
+	setSelf: (info: { name?: string; color?: string; ready?: boolean; seat?: number }) => void
+	/** Broadcast a coin-flip team assignment; each client applies its own seat. */
+	flipTeams: (plan: Record<string, number>, side: Team) => void
+	/** Pulses whenever a team flip happens, so the UI can animate the coin. */
+	flip: Readable<FlipEvent | null>
 	/** Host: ask a player (by clientId) to leave the room. */
 	kick: (id: string) => void
 	/** Becomes true when THIS client has been kicked. */
@@ -243,11 +255,12 @@ export function joinMatch(
 	state.subscribe((v) => (local = v))
 
 	if (creating) start.host = clientId
-	let me: Player = { id: clientId, name: self.name, color: self.color, ready: false }
+	let me: Player = { id: clientId, name: self.name, color: self.color, ready: false, seat: -1 }
 	let graceTimer: ReturnType<typeof setTimeout> | null = null
 	const kicked = writable(false)
 	const notFound = writable(false)
 	const conn = writable<ConnStatus>('connecting')
+	const flip = writable<FlipEvent | null>(null)
 
 	const channel: RealtimeChannel = supabase.channel(`match:${room}`, {
 		config: {
@@ -280,6 +293,11 @@ export function joinMatch(
 		.on('broadcast', { event: 'kick' }, ({ payload }) => {
 			if ((payload as { id: string }).id === clientId) kicked.set(true)
 		})
+		.on('broadcast', { event: 'teamflip' }, ({ payload }) => {
+			const { plan, side } = payload as { plan: Record<string, number>; side: Team }
+			flip.set({ side, at: Date.now() })
+			if (plan[clientId] !== undefined) setSelf({ seat: plan[clientId] })
+		})
 		.on('presence', { event: 'sync' }, () => {
 			const raw = channel.presenceState() as Record<string, Array<Partial<Player>>>
 			const list: Player[] = []
@@ -289,7 +307,8 @@ export function joinMatch(
 					id: key,
 					name: (meta.name as string) ?? 'Player',
 					color: (meta.color as string) ?? 'spectator',
-					ready: (meta.ready as boolean) ?? false
+					ready: (meta.ready as boolean) ?? false,
+					seat: typeof meta.seat === 'number' ? meta.seat : -1
 				})
 			}
 			players.set(list)
@@ -373,9 +392,18 @@ export function joinMatch(
 		else trackTimer = setTimeout(flushTrack, wait)
 	}
 
-	const setSelf = (info: { name?: string; color?: string; ready?: boolean }) => {
+	const setSelf = (info: { name?: string; color?: string; ready?: boolean; seat?: number }) => {
 		me = { ...me, ...info }
 		scheduleTrack()
+	}
+
+	// Broadcast a team assignment (a map of clientId → seat). Every client, incl.
+	// the initiator, animates the coin and applies ITS OWN new seat — so presence
+	// stays authoritative per-player and no one writes another player's seat.
+	const flipTeams = (plan: Record<string, number>, side: Team) => {
+		flip.set({ side, at: Date.now() })
+		if (plan[clientId] !== undefined) setSelf({ seat: plan[clientId] })
+		channel.send({ type: 'broadcast', event: 'teamflip', payload: { plan, side } })
 	}
 
 	// host asks a player to leave; the target client observes and leaves itself
@@ -394,7 +422,7 @@ export function joinMatch(
 		}
 	}
 
-	return { state, players, update, act, setSelf, kick, kicked, notFound, status: conn, leave, clientId }
+	return { state, players, update, act, setSelf, flipTeams, flip, kick, kicked, notFound, status: conn, leave, clientId }
 }
 
 // ---- Round/turn helpers (encode the rulebook's structure) -------------------

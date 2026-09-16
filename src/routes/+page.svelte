@@ -4,6 +4,8 @@
 	import { base } from '$app/paths';
 	import { writable, get, type Readable } from 'svelte/store';
 	import logoImage from '$lib/images/goa-logo.png';
+	import coinOrange from '$lib/images/tiebreaker_orange.png';
+	import coinBlue from '$lib/images/tiebreaker_blue.png';
 	import { reveal } from '$lib/transitions';
 	import { role, tryAdmin, enterAsPlayer, signOut } from '$lib/role';
 	import { availableMaps, type MapChoice } from '$lib/maps';
@@ -15,10 +17,13 @@
 		lifeFor,
 		colorHex,
 		PLAYER_COLORS,
+		teamForSeat,
 		type MatchState,
 		type Player,
 		type MatchSession,
-		type ConnStatus
+		type ConnStatus,
+		type FlipEvent,
+		type Team
 	} from '$lib/match';
 
 	type Mode = 'choose' | 'admin' | 'adminhub' | 'menu' | 'create' | 'join' | 'lobby' | 'game';
@@ -49,18 +54,26 @@
 	let players: Readable<Player[]> = writable([]);
 	let state: Readable<MatchState> = writable(initialMatchState());
 	let connStatus: Readable<ConnStatus> = writable('connecting');
+	let flipStore: Readable<FlipEvent | null> = writable(null);
 	let copied = false;
+
+	// coin-flip animation
+	let coinShown = false;
+	let coinRot = 0; // accumulated rotation (deg); lands on orange (mult of 360) or blue (+180)
+	let coinDone = false;
+	let lastFlipAt = 0;
 
 	// reconnect/resume: remember the active room so a page refresh rejoins it as
 	// the same player (stable clientId lives in match.ts). resumeSeed lets a lone
 	// creator whose room emptied out while away recreate it instead of erroring.
 	const ACTIVE = 'goa2-active';
 	let pendingColor = '';
+	let pendingSeat = -1;
 	let resumeSeed: MatchState | null = null;
-	interface ActiveInfo { room: string; name: string; color: string; creator: boolean; seed: MatchState | null }
+	interface ActiveInfo { room: string; name: string; color: string; seat: number; creator: boolean; seed: MatchState | null }
 	function writeActive(patch: Partial<ActiveInfo>) {
 		try {
-			const cur: ActiveInfo = JSON.parse(sessionStorage.getItem(ACTIVE) || 'null') ?? { room, name, color, creator: false, seed: null };
+			const cur: ActiveInfo = JSON.parse(sessionStorage.getItem(ACTIVE) || 'null') ?? { room, name, color, seat: mySeat, creator: false, seed: null };
 			sessionStorage.setItem(ACTIVE, JSON.stringify({ ...cur, ...patch }));
 		} catch {}
 	}
@@ -106,6 +119,7 @@
 		name = active.name || name;
 		room = active.room;
 		pendingColor = active.color && active.color !== 'spectator' ? active.color : '';
+		pendingSeat = typeof active.seat === 'number' ? active.seat : -1;
 		resumeSeed = active.creator ? active.seed : null; // fallback if room emptied out
 		joinError = '';
 		joining = true;
@@ -125,11 +139,29 @@
 	// --- lobby derived ---
 	$: me = session ? $players.find((p) => p.id === session!.clientId) : undefined;
 	$: iAmHost = session ? $state.host === session.clientId : false;
-	$: seated = $players.filter((p) => p.color !== 'spectator');
-	$: spectators = $players.filter((p) => p.color === 'spectator');
+	$: seatCount = $state.seats;
+	$: half = Math.floor(seatCount / 2);
+	// a player is "playing" once they hold a real seat (seat >= 0)
+	$: seated = $players.filter((p) => p.seat >= 0 && p.seat < seatCount);
+	$: spectators = $players.filter((p) => p.seat < 0);
 	$: seatedCount = seated.length;
 	$: allReady = seatedCount >= 1 && seated.every((p) => p.ready);
+	$: mySeat = me?.seat ?? -1;
+	$: myTeam = teamForSeat(mySeat, seatCount);
+	// seat index → occupying player (last write wins on the rare collision)
+	$: bySeat = (() => { const m: Record<number, Player> = {}; for (const p of $players) if (p.seat >= 0 && p.seat < seatCount && !m[p.seat]) m[p.seat] = p; return m; })();
+	$: takenSeats = new Set($players.filter((p) => p.id !== session?.clientId && p.seat >= 0).map((p) => p.seat));
 	$: takenColors = new Set($players.filter((p) => p.id !== session?.clientId && p.color !== 'spectator').map((p) => p.color));
+	// first colour not taken by someone else (called on demand, not reactive, to
+	// avoid a freeColor↔color reactive cycle)
+	function firstFreeColor(): string {
+		return PLAYER_COLORS.find((c) => !takenColors.has(c.id) && c.id !== color)?.id
+			?? PLAYER_COLORS.find((c) => !takenColors.has(c.id))?.id ?? 'red';
+	}
+	$: orangeSeats = Array.from({ length: half }, (_, i) => i);
+	$: blueSeats = Array.from({ length: seatCount - half }, (_, i) => half + i);
+	$: orangeCount = seated.filter((p) => p.seat < half).length;
+	$: blueCount = seatedCount - orangeCount;
 
 	// react to shared game transitions
 	$: if (mode === 'lobby' && $state.started) mode = 'game';
@@ -216,6 +248,7 @@
 		players = s.players;
 		state = s.state;
 		connStatus = s.status;
+		flipStore = s.flip;
 		color = 'spectator';
 		ready = false;
 		s.kicked.subscribe((v) => { if (v && session === s) bail('You were removed from the game.'); });
@@ -225,10 +258,19 @@
 	// a join stays on the Join screen ("Joining…") until the room's real state
 	// arrives (→ lobby) or it's confirmed there's no such game (→ error)
 	$: if (joining && $state.rev >= 0) { joining = false; resumeSeed = null; mode = 'lobby'; }
-	// re-apply a remembered colour once we're seated after a reconnect
-	$: if (mode === 'lobby' && pendingColor && $state.rev >= 0) {
-		const c = pendingColor; pendingColor = '';
-		if (!takenColors.has(c)) pickColor(c);
+	// re-apply a remembered seat + colour once the room's state has arrived (reconnect)
+	$: if (mode === 'lobby' && pendingSeat >= 0 && $state.rev >= 0) {
+		const st = pendingSeat; pendingSeat = -1;
+		const c = pendingColor || firstFreeColor(); pendingColor = '';
+		if (!takenSeats.has(st)) { color = c; session?.setSelf({ seat: st, color: c }); writeActive({ seat: st, color: c }); }
+	}
+	// animate the coin whenever a team flip is broadcast (initiator + receivers)
+	$: if ($flipStore && $flipStore.at !== lastFlipAt) { lastFlipAt = $flipStore.at; playCoin($flipStore.side); }
+	function playCoin(side: Team) {
+		coinShown = true; coinDone = false;
+		coinRot = Math.ceil((coinRot + 1440) / 360) * 360 + (side === 'blue' ? 180 : 0);
+		setTimeout(() => (coinDone = true), 1600);
+		setTimeout(() => (coinShown = false), 2900);
 	}
 	// join reached a room code with no host → don't create one
 	function failJoin() {
@@ -265,7 +307,7 @@
 		});
 		session = joinMatch(room, { name, color: 'spectator' }, { seed });
 		roomHandle = announceRoom({ room, host: name, seats: playerCount, count: 0, started: false });
-		writeActive({ room, name, color: 'spectator', creator: true, seed });
+		writeActive({ room, name, color: 'spectator', seat: -1, creator: true, seed });
 		bindSession(true);
 	}
 	function joinGame() {
@@ -275,7 +317,7 @@
 		joinError = '';
 		joining = true;
 		session = joinMatch(room, { name, color: 'spectator' }, {});
-		writeActive({ room, name, color: 'spectator', creator: false, seed: null });
+		writeActive({ room, name, color: 'spectator', seat: -1, creator: false, seed: null });
 		bindSession(false);
 	}
 	function leaveRoom() {
@@ -293,18 +335,50 @@
 	}
 
 	// --- lobby actions ---
+	// take (or move to) a seat. Team is decided by which side the seat is on.
+	function sit(i: number) {
+		if (takenSeats.has(i)) return;
+		const c = firstFreeColor();
+		color = c;
+		session?.setSelf({ seat: i, color: c });
+		writeActive({ seat: i, color: c });
+	}
+	// leave the table
+	function spectate() {
+		color = 'spectator'; ready = false;
+		session?.setSelf({ seat: -1, color: 'spectator', ready: false });
+		writeActive({ seat: -1, color: 'spectator' });
+	}
+	// change your token colour (only while seated)
 	function pickColor(c: string) {
-		if (c === 'spectator') { color = 'spectator'; ready = false; session?.setSelf({ color: 'spectator', ready: false }); writeActive({ color: 'spectator' }); return; }
+		if (mySeat < 0) { // not seated yet → picking a colour seats you in the first open seat
+			const open = [...orangeSeats, ...blueSeats].find((i) => !takenSeats.has(i));
+			if (open === undefined || takenColors.has(c)) return;
+			color = c; session?.setSelf({ seat: open, color: c }); writeActive({ seat: open, color: c });
+			return;
+		}
 		if (takenColors.has(c)) return;
-		if (color === 'spectator' && seatedCount >= $state.seats) return; // seats full
 		color = c;
 		session?.setSelf({ color: c });
 		writeActive({ color: c });
 	}
+	// host: coin-flip a balanced random team assignment for everyone seated
+	function flipForTeams() {
+		if (!iAmHost) return;
+		const ids = seated.map((p) => p.id);
+		for (let i = ids.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [ids[i], ids[j]] = [ids[j], ids[i]]; }
+		// fill seats alternating sides so teams stay balanced: 0, half, 1, half+1, …
+		const order: number[] = [];
+		for (let i = 0; i < half; i++) { order.push(i); order.push(half + i); }
+		const plan: Record<string, number> = {};
+		ids.forEach((id, k) => { if (order[k] !== undefined) plan[id] = order[k]; });
+		const side: Team = Math.random() < 0.5 ? 'orange' : 'blue';
+		session?.flipTeams(plan, side);
+	}
 	const connLabel = (s: ConnStatus) =>
 		s === 'connected' ? 'Connected' : s === 'reconnecting' ? 'Reconnecting…' : s === 'closed' ? 'Disconnected' : 'Connecting…';
 	function toggleReady() {
-		if (color === 'spectator') return;
+		if (mySeat < 0) return;
 		ready = !ready;
 		session?.setSelf({ ready });
 	}
@@ -476,33 +550,63 @@
 					{/if}
 
 					<div class="fld">
-						<span>Your colour {seatedCount >= $state.seats && color === 'spectator' ? '· seats full' : ''}</span>
-						<div class="swatches">
-							{#each PLAYER_COLORS as c (c.id)}
-								<button title={c.label} aria-label={c.label} class="sw" class:sel={color === c.id} disabled={takenColors.has(c.id) || (color === 'spectator' && seatedCount >= $state.seats)} style="--sc:{c.hex}" on:click={() => pickColor(c.id)}></button>
-							{/each}
-							<button class="chip" class:on={color === 'spectator'} on:click={() => pickColor('spectator')}>Spectator</button>
+						<div class="teamstop">
+							<span>Pick your side {mySeat < 0 ? '· tap a seat to join' : myTeam === 'orange' ? '· you’re Orange' : '· you’re Blue'}</span>
+							{#if iAmHost}
+								<button class="flipbtn" on:click={flipForTeams} disabled={seatedCount < 2} title="Randomly assign teams">🪙 Flip for teams</button>
+							{/if}
+						</div>
+						<div class="teams">
+							<div class="teampanel orange">
+								<div class="teamhdr"><span class="tflag"></span>Orange <span class="tcount">{orangeCount}/{half}</span></div>
+								<div class="tseats">
+									{#each orangeSeats as i (i)}
+										{@const p = bySeat[i]}
+										{#if p}
+											<div class="tseat" class:mine={p.id === session?.clientId}>
+												<div class="av" style="background:{colorHex(p.color)}">
+													{#if p.id === $state.host}<span class="crown" title="Host">♛</span>{/if}
+													{#if iAmHost && p.id !== session?.clientId}<button class="kick" title="Kick" on:click={() => kick(p.id)}>✕</button>{/if}
+												</div>
+												<div class="hn">{p.name}{p.id === session?.clientId ? ' (you)' : ''}</div>
+												<div class="hr" class:ok={p.ready}>{p.ready ? 'ready' : '…'}</div>
+											</div>
+										{:else}
+											<button class="tseat open" on:click={() => sit(i)}><div class="av av-empty"></div><div class="hn muted">open</div><div class="hr">&nbsp;</div></button>
+										{/if}
+									{/each}
+								</div>
+							</div>
+							<div class="teampanel blue">
+								<div class="teamhdr"><span class="tflag"></span>Blue <span class="tcount">{blueCount}/{seatCount - half}</span></div>
+								<div class="tseats">
+									{#each blueSeats as i (i)}
+										{@const p = bySeat[i]}
+										{#if p}
+											<div class="tseat" class:mine={p.id === session?.clientId}>
+												<div class="av" style="background:{colorHex(p.color)}">
+													{#if p.id === $state.host}<span class="crown" title="Host">♛</span>{/if}
+													{#if iAmHost && p.id !== session?.clientId}<button class="kick" title="Kick" on:click={() => kick(p.id)}>✕</button>{/if}
+												</div>
+												<div class="hn">{p.name}{p.id === session?.clientId ? ' (you)' : ''}</div>
+												<div class="hr" class:ok={p.ready}>{p.ready ? 'ready' : '…'}</div>
+											</div>
+										{:else}
+											<button class="tseat open" on:click={() => sit(i)}><div class="av av-empty"></div><div class="hn muted">open</div><div class="hr">&nbsp;</div></button>
+										{/if}
+									{/each}
+								</div>
+							</div>
 						</div>
 					</div>
 
 					<div class="fld">
-						<span>At the table — {seatedCount}/{$state.seats} seated</span>
-						<div class="hrow">
-							{#each Array($state.seats) as _, i (i)}
-								{@const p = seated[i]}
-								{#if p}
-									<div class="hseat" class:mine={p.id === session?.clientId}>
-										<div class="av" style="background:{colorHex(p.color)}">
-											{#if p.id === $state.host}<span class="crown" title="Host">♛</span>{/if}
-											{#if iAmHost && p.id !== session?.clientId}<button class="kick" title="Kick" on:click={() => kick(p.id)}>✕</button>{/if}
-										</div>
-										<div class="hn">{p.name}{p.id === session?.clientId ? ' (you)' : ''}</div>
-										<div class="hr" class:ok={p.ready}>{p.ready ? 'ready' : '…'}</div>
-									</div>
-								{:else}
-									<div class="hseat empty"><div class="av av-empty"></div><div class="hn muted">open</div><div class="hr">&nbsp;</div></div>
-								{/if}
+						<span>Your token {mySeat < 0 ? '· pick a colour to sit down' : ''}</span>
+						<div class="swatches">
+							{#each PLAYER_COLORS as c (c.id)}
+								<button title={c.label} aria-label={c.label} class="sw" class:sel={color === c.id} disabled={takenColors.has(c.id)} style="--sc:{c.hex}" on:click={() => pickColor(c.id)}></button>
 							{/each}
+							{#if mySeat >= 0}<button class="chip" on:click={spectate}>Spectate</button>{/if}
 						</div>
 						{#if spectators.length}
 							<p class="specs">Spectating: {#each spectators as sp, i (sp.id)}{sp.name}{sp.id === session?.clientId ? ' (you)' : ''}{#if iAmHost && sp.id !== session?.clientId}<button class="kickx" title="Kick" on:click={() => kick(sp.id)}>✕</button>{/if}{i < spectators.length - 1 ? ', ' : ''}{/each}</p>
@@ -516,7 +620,7 @@
 								<button class="ghost danger" on:click={closeGame}>Close</button>
 								<button class="primary" disabled={!allReady} on:click={beginGame}>Begin</button>
 							{/if}
-							{#if color !== 'spectator'}
+							{#if mySeat >= 0}
 								<button class="primary" class:isready={ready} on:click={toggleReady}>{ready ? '✓ Ready' : 'Ready up'}</button>
 							{/if}
 						</div>
@@ -535,6 +639,18 @@
 		{/if}
 	</div>
 </main>
+
+{#if coinShown}
+	<div class="coinoverlay">
+		<div class="coinstage">
+			<div class="coin" style="transform: rotateY({coinRot}deg)">
+				<img class="face front" src={coinOrange} alt="Orange" />
+				<img class="face back" src={coinBlue} alt="Blue" />
+			</div>
+			<p class="coincap" class:done={coinDone}>{coinDone ? 'Teams set!' : 'Flipping for teams…'}</p>
+		</div>
+	</div>
+{/if}
 
 <style>
 	.wrap { --hl: linear-gradient(120deg, #ef7d22, #2f7fe6); min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 5vh 20px 32px; gap: 22px; color: #f1f5f9; }
@@ -628,10 +744,25 @@
 	@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
 	.connbanner { margin: 0; font-size: 0.78rem; color: #fcd34d; background: rgba(251, 191, 36, 0.12); border: 1px solid rgba(251, 191, 36, 0.32); border-radius: 8px; padding: 6px 12px; }
 
-	.hrow { display: flex; gap: 8px; flex-wrap: nowrap; overflow-x: auto; }
-	.hseat { flex: 1 1 84px; min-width: 84px; display: flex; flex-direction: column; align-items: center; gap: 5px; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; padding: 8px 4px; }
-	.hseat.mine { border-color: rgba(245, 158, 11, 0.6); background: rgba(245, 158, 11, 0.08); }
-	.hseat.empty { border-style: dashed; }
+	/* teams */
+	.teamstop { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+	.flipbtn { border: 1px solid rgba(255, 255, 255, 0.2); background: rgba(255, 255, 255, 0.06); color: #f1f5f9; border-radius: 999px; padding: 0.32rem 0.8rem; font-size: 0.78rem; font-weight: 600; cursor: pointer; transition: background 0.15s, transform 0.12s; }
+	.flipbtn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.13); transform: translateY(-1px); }
+	.flipbtn:disabled { opacity: 0.4; cursor: not-allowed; }
+	.teams { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+	.teampanel { border-radius: 14px; padding: 10px; border: 1px solid rgba(255, 255, 255, 0.1); }
+	.teampanel.orange { background: linear-gradient(180deg, rgba(216, 100, 26, 0.16), rgba(216, 100, 26, 0.05)); border-color: rgba(239, 125, 34, 0.4); }
+	.teampanel.blue { background: linear-gradient(180deg, rgba(40, 112, 168, 0.16), rgba(40, 112, 168, 0.05)); border-color: rgba(47, 127, 230, 0.4); }
+	.teamhdr { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 0.9rem; margin-bottom: 9px; }
+	.tflag { width: 0.7rem; height: 0.7rem; border-radius: 3px; }
+	.orange .tflag { background: #ef7d22; }
+	.blue .tflag { background: #2f7fe6; }
+	.tcount { margin-left: auto; font-size: 0.75rem; font-weight: 600; color: #cbd5e1; }
+	.tseats { display: flex; gap: 8px; flex-wrap: wrap; }
+	.tseat { flex: 1 1 78px; min-width: 72px; display: flex; flex-direction: column; align-items: center; gap: 5px; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.09); border-radius: 10px; padding: 8px 4px; }
+	.tseat.mine { border-color: rgba(245, 158, 11, 0.7); box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.4); }
+	.tseat.open { border-style: dashed; cursor: pointer; transition: background 0.14s, border-color 0.14s, transform 0.12s; }
+	.tseat.open:hover { background: rgba(255, 255, 255, 0.1); border-color: rgba(255, 255, 255, 0.4); transform: translateY(-2px); }
 	.av { width: 34px; height: 34px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.3); position: relative; }
 	.av-empty { background: rgba(255, 255, 255, 0.05); border-style: dashed; }
 	.crown { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); font-size: 13px; color: #fcd34d; }
@@ -642,6 +773,16 @@
 	.hr.ok { color: #6ee7b7; }
 	.specs { font-size: 0.75rem; color: #94a3b8; margin: 8px 0 0; }
 	.kickx { border: none; background: transparent; color: #fca5a5; cursor: pointer; font-size: 0.7rem; padding: 0 2px; }
+
+	/* coin flip */
+	.coinoverlay { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; background: rgba(6, 10, 20, 0.72); backdrop-filter: blur(3px); animation: fadein 0.25s ease; }
+	.coinstage { display: flex; flex-direction: column; align-items: center; gap: 18px; perspective: 900px; }
+	.coin { width: 150px; height: 150px; position: relative; transform-style: preserve-3d; transition: transform 1.55s cubic-bezier(0.2, 0.75, 0.2, 1); }
+	.coin .face { position: absolute; inset: 0; width: 100%; height: 100%; backface-visibility: hidden; border-radius: 50%; filter: drop-shadow(0 14px 30px rgba(0, 0, 0, 0.55)); }
+	.coin .back { transform: rotateY(180deg); }
+	.coincap { margin: 0; font-size: 1.05rem; font-weight: 700; letter-spacing: 0.02em; color: #e2e8f0; }
+	.coincap.done { color: #6ee7b7; }
+	@keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
 
 	@media (max-width: 560px) {
 		.grid2 { grid-template-columns: 1fr; gap: 16px; }
