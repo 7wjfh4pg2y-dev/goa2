@@ -2,7 +2,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { browser } from '$app/environment';
 	import { base } from '$app/paths';
-	import { writable, type Readable } from 'svelte/store';
+	import { writable, get, type Readable } from 'svelte/store';
 	import logoImage from '$lib/images/goa-logo.png';
 	import { reveal } from '$lib/transitions';
 	import { role, tryAdmin, enterAsPlayer, signOut } from '$lib/role';
@@ -17,7 +17,8 @@
 		PLAYER_COLORS,
 		type MatchState,
 		type Player,
-		type MatchSession
+		type MatchSession,
+		type ConnStatus
 	} from '$lib/match';
 
 	type Mode = 'choose' | 'admin' | 'adminhub' | 'menu' | 'create' | 'join' | 'lobby' | 'game';
@@ -47,7 +48,26 @@
 	let session: MatchSession | null = null;
 	let players: Readable<Player[]> = writable([]);
 	let state: Readable<MatchState> = writable(initialMatchState());
+	let connStatus: Readable<ConnStatus> = writable('connecting');
 	let copied = false;
+
+	// reconnect/resume: remember the active room so a page refresh rejoins it as
+	// the same player (stable clientId lives in match.ts). resumeSeed lets a lone
+	// creator whose room emptied out while away recreate it instead of erroring.
+	const ACTIVE = 'goa2-active';
+	let pendingColor = '';
+	let resumeSeed: MatchState | null = null;
+	interface ActiveInfo { room: string; name: string; color: string; creator: boolean; seed: MatchState | null }
+	function writeActive(patch: Partial<ActiveInfo>) {
+		try {
+			const cur: ActiveInfo = JSON.parse(sessionStorage.getItem(ACTIVE) || 'null') ?? { room, name, color, creator: false, seed: null };
+			sessionStorage.setItem(ACTIVE, JSON.stringify({ ...cur, ...patch }));
+		} catch {}
+	}
+	function clearActive() { try { sessionStorage.removeItem(ACTIVE); } catch {} }
+	function readActive(): ActiveInfo | null {
+		try { return JSON.parse(sessionStorage.getItem(ACTIVE) || 'null'); } catch { return null; }
+	}
 
 	// public room directory
 	let roomHandle: ReturnType<typeof announceRoom> | null = null;
@@ -72,8 +92,26 @@
 			ensureLoaded();
 			room = q.toUpperCase();
 			mode = 'join';
+			return;
 		}
+		// otherwise, if we were in a room and the page reloaded, rejoin it
+		const active = readActive();
+		if (active?.room) resume(active);
 	});
+
+	// rejoin a room after a refresh, as the same player (stable clientId)
+	function resume(active: ActiveInfo) {
+		enterAsPlayer();
+		ensureLoaded();
+		name = active.name || name;
+		room = active.room;
+		pendingColor = active.color && active.color !== 'spectator' ? active.color : '';
+		resumeSeed = active.creator ? active.seed : null; // fallback if room emptied out
+		joinError = '';
+		joining = true;
+		session = joinMatch(room, { name, color: 'spectator' }, {});
+		bindSession(false);
+	}
 	onDestroy(() => {
 		session?.leave();
 		roomHandle?.leave();
@@ -102,6 +140,7 @@
 		session = null;
 		roomHandle?.leave();
 		roomHandle = null;
+		clearActive();
 		notice = msg;
 		mode = 'menu';
 	}
@@ -146,6 +185,7 @@
 		session = null;
 		roomHandle?.leave();
 		roomHandle = null;
+		clearActive();
 		signOut();
 		pw = ''; pwError = false; notice = '';
 		mode = 'choose';
@@ -175,6 +215,7 @@
 		const s = session!;
 		players = s.players;
 		state = s.state;
+		connStatus = s.status;
 		color = 'spectator';
 		ready = false;
 		s.kicked.subscribe((v) => { if (v && session === s) bail('You were removed from the game.'); });
@@ -183,14 +224,32 @@
 	}
 	// a join stays on the Join screen ("Joining…") until the room's real state
 	// arrives (→ lobby) or it's confirmed there's no such game (→ error)
-	$: if (joining && $state.rev >= 0) { joining = false; mode = 'lobby'; }
-	// join reached a room code with no host → don't create one, send them back
+	$: if (joining && $state.rev >= 0) { joining = false; resumeSeed = null; mode = 'lobby'; }
+	// re-apply a remembered colour once we're seated after a reconnect
+	$: if (mode === 'lobby' && pendingColor && $state.rev >= 0) {
+		const c = pendingColor; pendingColor = '';
+		if (!takenColors.has(c)) pickColor(c);
+	}
+	// join reached a room code with no host → don't create one
 	function failJoin() {
+		// a lone creator whose room emptied out while away just recreates it
+		if (resumeSeed) { const seed = resumeSeed; resumeSeed = null; recreateFrom(seed); return; }
+		const st = session ? get(session.status) : 'reconnecting';
 		session?.leave();
 		session = null;
 		joining = false;
-		joinError = `No open game with code “${room}”.`;
+		joinError = st === 'connected'
+			? `No open game with code “${room}”.`
+			: `Couldn't reach the server — check your connection and try again.`;
+		clearActive();
 		mode = 'join';
+	}
+	// recreate a room from a stored seed (creator resuming an emptied room)
+	function recreateFrom(seed: MatchState) {
+		session = joinMatch(room, { name, color: 'spectator' }, { seed });
+		roomHandle = announceRoom({ room, host: name, seats: seed.seats, count: 0, started: false });
+		writeActive({ creator: true, seed });
+		bindSession(true);
 	}
 	function createGame() {
 		persistName();
@@ -206,6 +265,7 @@
 		});
 		session = joinMatch(room, { name, color: 'spectator' }, { seed });
 		roomHandle = announceRoom({ room, host: name, seats: playerCount, count: 0, started: false });
+		writeActive({ room, name, color: 'spectator', creator: true, seed });
 		bindSession(true);
 	}
 	function joinGame() {
@@ -215,6 +275,7 @@
 		joinError = '';
 		joining = true;
 		session = joinMatch(room, { name, color: 'spectator' }, {});
+		writeActive({ room, name, color: 'spectator', creator: false, seed: null });
 		bindSession(false);
 	}
 	function leaveRoom() {
@@ -222,6 +283,7 @@
 		session = null;
 		roomHandle?.leave();
 		roomHandle = null;
+		clearActive();
 		mode = 'menu';
 		randomRoom();
 	}
@@ -232,12 +294,15 @@
 
 	// --- lobby actions ---
 	function pickColor(c: string) {
-		if (c === 'spectator') { color = 'spectator'; ready = false; session?.setSelf({ color: 'spectator', ready: false }); return; }
+		if (c === 'spectator') { color = 'spectator'; ready = false; session?.setSelf({ color: 'spectator', ready: false }); writeActive({ color: 'spectator' }); return; }
 		if (takenColors.has(c)) return;
 		if (color === 'spectator' && seatedCount >= $state.seats) return; // seats full
 		color = c;
 		session?.setSelf({ color: c });
+		writeActive({ color: c });
 	}
+	const connLabel = (s: ConnStatus) =>
+		s === 'connected' ? 'Connected' : s === 'reconnecting' ? 'Reconnecting…' : s === 'closed' ? 'Disconnected' : 'Connecting…';
 	function toggleReady() {
 		if (color === 'spectator') return;
 		ready = !ready;
@@ -396,11 +461,19 @@
 							<span class="lbl">Room code</span>
 							<div class="mono roomcode">{room}</div>
 						</div>
-						<button class="copybtn" class:done={copied} on:click={copyLink} aria-label="Copy invite link">
-							<span class="ci" aria-hidden="true">{copied ? '✓' : '🔗'}</span>
-							<span>{copied ? 'Link copied' : 'Invite link'}</span>
-						</button>
+						<div class="headright">
+							<span class="conn {$connStatus}" title="Realtime connection">
+								<span class="cdot"></span>{connLabel($connStatus)}
+							</span>
+							<button class="copybtn" class:done={copied} on:click={copyLink} aria-label="Copy invite link">
+								<span class="ci" aria-hidden="true">{copied ? '✓' : '🔗'}</span>
+								<span>{copied ? 'Link copied' : 'Invite link'}</span>
+							</button>
+						</div>
 					</div>
+					{#if $connStatus === 'reconnecting' || $connStatus === 'closed'}
+						<p class="connbanner">Connection lost — trying to reconnect. Your seat is held.</p>
+					{/if}
 
 					<div class="fld">
 						<span>Your colour {seatedCount >= $state.seats && color === 'spectator' ? '· seats full' : ''}</span>
@@ -542,7 +615,18 @@
 	.mono { font-family: ui-monospace, monospace; letter-spacing: 0.08em; }
 
 	.lobbyhead { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+	.headright { display: flex; align-items: center; gap: 12px; }
 	.roomcode { font-size: 1.5rem; font-weight: 700; }
+	.conn { display: inline-flex; align-items: center; gap: 6px; font-size: 0.72rem; font-weight: 600; color: #94a3b8; white-space: nowrap; }
+	.conn .cdot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: #64748b; }
+	.conn.connected { color: #6ee7b7; }
+	.conn.connected .cdot { background: #22c55e; box-shadow: 0 0 7px rgba(34, 197, 94, 0.7); }
+	.conn.connecting .cdot, .conn.reconnecting .cdot { background: #fbbf24; animation: blink 1s ease-in-out infinite; }
+	.conn.reconnecting, .conn.connecting { color: #fcd34d; }
+	.conn.closed { color: #fca5a5; }
+	.conn.closed .cdot { background: #ef4444; }
+	@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+	.connbanner { margin: 0; font-size: 0.78rem; color: #fcd34d; background: rgba(251, 191, 36, 0.12); border: 1px solid rgba(251, 191, 36, 0.32); border-radius: 8px; padding: 6px 12px; }
 
 	.hrow { display: flex; gap: 8px; flex-wrap: nowrap; overflow-x: auto; }
 	.hseat { flex: 1 1 84px; min-width: 84px; display: flex; flex-direction: column; align-items: center; gap: 5px; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; padding: 8px 4px; }

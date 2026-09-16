@@ -18,6 +18,31 @@ import { supabase } from './supabase'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import type { GameMap } from './maps'
 
+/** Realtime connection state, surfaced so the UI can show a status indicator. */
+export type ConnStatus = 'connecting' | 'connected' | 'reconnecting' | 'closed'
+
+const newId = () =>
+	globalThis.crypto?.randomUUID?.() ?? `c_${Math.random().toString(36).slice(2)}`
+
+/**
+ * A per-tab client identity that survives a page reload. Using sessionStorage
+ * (not localStorage) means a refresh keeps your seat, but a second tab is a new
+ * player — so two tabs never fight over one presence key.
+ */
+function stableClientId(): string {
+	try {
+		const k = 'goa2-client-id'
+		let id = sessionStorage.getItem(k)
+		if (!id) {
+			id = newId()
+			sessionStorage.setItem(k, id)
+		}
+		return id
+	} catch {
+		return newId()
+	}
+}
+
 export type Team = 'orange' | 'blue'
 export type Phase = 'planning' | 'action' | 'upgrade'
 
@@ -187,6 +212,8 @@ export interface MatchSession {
 	kicked: Readable<boolean>
 	/** Becomes true when JOINING a room code that has no host (no such game). */
 	notFound: Readable<boolean>
+	/** Live realtime connection state, for a connection indicator. */
+	status: Readable<ConnStatus>
 	leave: () => void
 	clientId: string
 }
@@ -205,8 +232,7 @@ export function joinMatch(
 	self: { name: string; color: string },
 	opts: { seed?: MatchState } = {}
 ): MatchSession {
-	const clientId =
-		globalThis.crypto?.randomUUID?.() ?? `c_${Math.random().toString(36).slice(2)}`
+	const clientId = stableClientId()
 
 	const creating = !!opts.seed
 	// A joiner's placeholder uses rev -1 so ANY incoming state (even rev 0) wins.
@@ -221,6 +247,7 @@ export function joinMatch(
 	let graceTimer: ReturnType<typeof setTimeout> | null = null
 	const kicked = writable(false)
 	const notFound = writable(false)
+	const conn = writable<ConnStatus>('connecting')
 
 	const channel: RealtimeChannel = supabase.channel(`match:${room}`, {
 		config: {
@@ -268,35 +295,41 @@ export function joinMatch(
 			players.set(list)
 		})
 
-	channel.subscribe((status) => {
-		if (status !== 'SUBSCRIBED') return
+	channel.subscribe((s) => {
+		if (s === 'CHANNEL_ERROR' || s === 'TIMED_OUT') { conn.set('reconnecting'); return }
+		if (s === 'CLOSED') { conn.set('closed'); return }
+		if (s !== 'SUBSCRIBED') return
+		conn.set('connected')
+		// (re-)announce our presence — also re-runs after an auto-reconnect
 		channel.track(me)
 		// ask whoever is already here for the authoritative state
 		channel.send({ type: 'broadcast', event: 'hello', payload: { id: clientId } })
+		// only run the "does this room exist?" probe on the FIRST join, while we
+		// still hold a placeholder — after a reconnect we already have real state
+		if (creating || local.rev >= 0) return
+		if (graceTimer) clearTimeout(graceTimer)
 		// JOIN flow: we must NOT create a room. Probe a few times for a host — if
 		// someone is present we keep asking for their state until it arrives; if the
 		// room is genuinely empty after several tries, report "not found" rather than
 		// promoting ourselves (which would silently create a bogus room).
-		if (!creating) {
-			let empties = 0
-			const probe = () => {
-				if (local.rev >= 0) return // we received the room's real state — we're in
-				const others = Object.keys(channel.presenceState()).filter((k) => k !== clientId).length
-				if (others > 0) {
-					// a host is here but their state hasn't reached us yet — ask again
-					empties = 0
-					channel.send({ type: 'broadcast', event: 'hello', payload: { id: clientId } })
-					graceTimer = setTimeout(probe, 1000)
-				} else if (++empties >= 3) {
-					// no host, no state after several probes — there is no such game
-					notFound.set(true)
-				} else {
-					channel.send({ type: 'broadcast', event: 'hello', payload: { id: clientId } })
-					graceTimer = setTimeout(probe, 700)
-				}
+		let empties = 0
+		const probe = () => {
+			if (local.rev >= 0) return // we received the room's real state — we're in
+			const others = Object.keys(channel.presenceState()).filter((k) => k !== clientId).length
+			if (others > 0) {
+				// a host is here but their state hasn't reached us yet — ask again
+				empties = 0
+				channel.send({ type: 'broadcast', event: 'hello', payload: { id: clientId } })
+				graceTimer = setTimeout(probe, 1000)
+			} else if (++empties >= 3) {
+				// no host, no state after several probes — there is no such game
+				notFound.set(true)
+			} else {
+				channel.send({ type: 'broadcast', event: 'hello', payload: { id: clientId } })
+				graceTimer = setTimeout(probe, 700)
 			}
-			graceTimer = setTimeout(probe, 700)
 		}
+		graceTimer = setTimeout(probe, 700)
 	})
 
 	const update = (patch: Partial<MatchState>) => {
@@ -361,7 +394,7 @@ export function joinMatch(
 		}
 	}
 
-	return { state, players, update, act, setSelf, kick, kicked, notFound, leave, clientId }
+	return { state, players, update, act, setSelf, kick, kicked, notFound, status: conn, leave, clientId }
 }
 
 // ---- Round/turn helpers (encode the rulebook's structure) -------------------
