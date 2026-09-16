@@ -231,34 +231,67 @@
 	$: if (browser) manageBrowse(mode);
 
 	// --- navigation ---
-	// a short synthesized "enter" swell (no audio asset needed)
+	// a cinematic, MOBA-style "enter" hit (synthesized — no audio asset):
+	// a rising whoosh that builds into a deep boom with a metallic shwing on top
 	function playEnterSfx() {
 		try {
 			const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
 			const ac = new Ctx();
 			const t = ac.currentTime;
-			const master = ac.createGain();
-			master.connect(ac.destination);
-			master.gain.setValueAtTime(0.0001, t);
-			master.gain.exponentialRampToValueAtTime(0.42, t + 0.04);
-			master.gain.exponentialRampToValueAtTime(0.0001, t + 1.5);
-			for (const f of [146.83, 220, 293.66]) { // D3 · A3 · D4 — a heroic swell
-				const o = ac.createOscillator();
-				o.type = 'triangle';
-				o.frequency.value = f;
-				const g = ac.createGain();
-				g.gain.value = 0.33;
-				o.connect(g); g.connect(master);
-				o.start(t); o.stop(t + 1.5);
+			const comp = ac.createDynamicsCompressor(); // tame peaks so nothing clips
+			comp.threshold.value = -10; comp.ratio.value = 12;
+			comp.connect(ac.destination);
+			const master = ac.createGain(); master.gain.value = 0.9; master.connect(comp);
+
+			// shared white-noise buffer for the riser + impact
+			const noise = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
+			const nd = noise.getChannelData(0);
+			for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+
+			const hit = t + 0.5; // the boom lands here; the riser builds up to it
+
+			// 1) riser — bandpass noise sweeping up into the hit
+			const riser = ac.createBufferSource(); riser.buffer = noise;
+			const rf = ac.createBiquadFilter(); rf.type = 'bandpass'; rf.Q.value = 0.8;
+			rf.frequency.setValueAtTime(280, t); rf.frequency.exponentialRampToValueAtTime(5200, hit);
+			const rg = ac.createGain();
+			rg.gain.setValueAtTime(0.0001, t);
+			rg.gain.exponentialRampToValueAtTime(0.5, hit - 0.02);
+			rg.gain.exponentialRampToValueAtTime(0.0001, hit + 0.12);
+			riser.connect(rf); rf.connect(rg); rg.connect(master);
+			riser.start(t); riser.stop(hit + 0.2);
+
+			// 2) sub-bass drop — the boom
+			const sub = ac.createOscillator(); sub.type = 'sine';
+			sub.frequency.setValueAtTime(165, hit); sub.frequency.exponentialRampToValueAtTime(42, hit + 0.5);
+			const sg = ac.createGain();
+			sg.gain.setValueAtTime(0.0001, hit); sg.gain.exponentialRampToValueAtTime(1, hit + 0.02); sg.gain.exponentialRampToValueAtTime(0.0001, hit + 1.1);
+			sub.connect(sg); sg.connect(master); sub.start(hit); sub.stop(hit + 1.2);
+
+			// body of the impact
+			const body = ac.createOscillator(); body.type = 'triangle';
+			body.frequency.setValueAtTime(110, hit); body.frequency.exponentialRampToValueAtTime(55, hit + 0.4);
+			const bg = ac.createGain();
+			bg.gain.setValueAtTime(0.0001, hit); bg.gain.exponentialRampToValueAtTime(0.5, hit + 0.02); bg.gain.exponentialRampToValueAtTime(0.0001, hit + 0.7);
+			body.connect(bg); bg.connect(master); body.start(hit); body.stop(hit + 0.8);
+
+			// punchy noise transient on the hit
+			const burst = ac.createBufferSource(); burst.buffer = noise;
+			const bf = ac.createBiquadFilter(); bf.type = 'lowpass'; bf.frequency.value = 1900;
+			const bng = ac.createGain();
+			bng.gain.setValueAtTime(0.6, hit); bng.gain.exponentialRampToValueAtTime(0.0001, hit + 0.18);
+			burst.connect(bf); bf.connect(bng); bng.connect(master); burst.start(hit); burst.stop(hit + 0.25);
+
+			// 3) metallic shwing / ring
+			for (const f of [1245, 1875]) {
+				const o = ac.createOscillator(); o.type = 'sawtooth';
+				o.frequency.setValueAtTime(f * 1.4, hit); o.frequency.exponentialRampToValueAtTime(f, hit + 0.12);
+				const hf = ac.createBiquadFilter(); hf.type = 'highpass'; hf.frequency.value = 800;
+				const g = ac.createGain(); g.gain.setValueAtTime(0.13, hit); g.gain.exponentialRampToValueAtTime(0.0001, hit + 0.35);
+				o.connect(hf); hf.connect(g); g.connect(master); o.start(hit); o.stop(hit + 0.4);
 			}
-			const shimmer = ac.createOscillator(); // a rising sparkle on top
-			shimmer.type = 'sine';
-			shimmer.frequency.setValueAtTime(880, t);
-			shimmer.frequency.exponentialRampToValueAtTime(1760, t + 0.5);
-			const sg = ac.createGain(); sg.gain.value = 0.12;
-			shimmer.connect(sg); sg.connect(master);
-			shimmer.start(t); shimmer.stop(t + 0.6);
-			setTimeout(() => ac.close(), 1800);
+
+			setTimeout(() => ac.close(), 2200);
 		} catch { /* audio unavailable — no-op */ }
 	}
 	function enterFromLanding() {
