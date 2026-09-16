@@ -265,7 +265,7 @@
 
 	// --- match ---
 	function persistName() {
-		if (!name.trim()) name = 'Player';
+		name = name.trim();
 		try { localStorage.setItem('goa2-name', name); } catch {}
 	}
 	function bindSession(enterLobby: boolean) {
@@ -340,6 +340,7 @@
 	}
 	function createGame() {
 		persistName();
+		if (!name) return; // name is required
 		room = room.trim().toUpperCase() || 'TABLE';
 		const chosen = maps.find((m) => m.id === mapId) ?? maps[0];
 		const seed = initialMatchState({
@@ -359,6 +360,7 @@
 	}
 	function joinGame() {
 		persistName();
+		if (!name) { joinError = 'Enter your name first.'; return; }
 		room = room.trim().toUpperCase();
 		if (!room || joining) return;
 		joinError = '';
@@ -570,7 +572,7 @@
 					{/if}
 					<div class="row">
 						<button class="ghost" on:click={() => (mode = 'menu')}>← Back</button>
-						<button class="primary" on:click={createGame} disabled={poolShort}>Create game</button>
+						<button class="primary" on:click={createGame} disabled={poolShort || !name.trim()}>Create game</button>
 					</div>
 				</div>
 			</div>
@@ -608,7 +610,7 @@
 
 					<div class="row">
 						<button class="ghost" on:click={() => (mode = 'menu')}>← Back</button>
-						<button class="primary" on:click={joinGame} disabled={!room.trim() || joining}>{joining ? 'Joining…' : 'Join game'}</button>
+						<button class="primary" on:click={joinGame} disabled={!room.trim() || !name.trim() || joining}>{joining ? 'Joining…' : 'Join game'}</button>
 					</div>
 				</div>
 			</div>

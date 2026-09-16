@@ -82,10 +82,20 @@ export interface DraftState {
 	offer: string[] // single-draft: heroes offered to the current actor
 	offered: string[] // single-draft: every hero offered so far (never re-offered)
 	deadline: number // epoch ms the current turn auto-picks at (0 = no timer)
+	lastAction: DraftAction | null // most recent pick/ban, for the announcement toast
 }
 
-/** How long each turn-based draft turn lasts before an auto-pick. */
-export const DRAFT_TURN_MS = 75_000
+export interface DraftAction {
+	team: Team
+	type: 'pick' | 'ban'
+	actor: string // clientId
+	hero: string // heroId
+	at: number // epoch ms (also the toast nonce)
+	auto?: boolean // resolved by the timer/watchdog rather than a player
+}
+
+/** How long each turn-based turn (and the all-pick phase) lasts before auto-resolve. */
+export const DRAFT_TURN_MS = 45_000
 
 export const TEAMS: Team[] = ['orange', 'blue']
 export const TURNS_PER_ROUND = 4
@@ -283,7 +293,7 @@ export function buildDraft(
 	// all-random resolves instantly; every other mode gets a timer (per-turn for
 	// turn-based, whole-phase for all-pick) so the draft can never hang
 	const deadline = system === 'all-random' ? 0 : Date.now() + DRAFT_TURN_MS
-	return { system, pool, order: owned, step: 0, picks, bans: [], offer, offered: [...offer], deadline }
+	return { system, pool, order: owned, step: 0, picks, bans: [], offer, offered: [...offer], deadline, lastAction: null }
 }
 
 export const draftTurn = (d: DraftState): DraftTurn | null => d.order[d.step] ?? null
@@ -305,7 +315,7 @@ export function draftComplete(d: DraftState, seatedIds: string[]): boolean {
  * actor) and advance one step. Rolls the next offer for single-draft. Only
  * call on the actor's turn (the UI enforces this).
  */
-export function draftAdvance(d: DraftState, heroId: string): DraftState {
+export function draftAdvance(d: DraftState, heroId: string, auto = false): DraftState {
 	const turn = draftTurn(d)
 	if (!turn) return d
 	const picks = { ...d.picks }
@@ -321,12 +331,14 @@ export function draftAdvance(d: DraftState, heroId: string): DraftState {
 		offered = [...d.offered, ...offer]
 	}
 	const deadline = step < d.order.length ? Date.now() + DRAFT_TURN_MS : 0
-	return { ...d, picks, bans, step, offer, offered, deadline }
+	const lastAction: DraftAction = { team: turn.team, type: turn.type, actor: turn.actor, hero: heroId, at: Date.now(), auto }
+	return { ...d, picks, bans, step, offer, offered, deadline, lastAction }
 }
 
 /** All-pick: set (or change) a single player's own pick. */
-export function draftSetPick(d: DraftState, clientId: string, heroId: string): DraftState {
-	return { ...d, picks: { ...d.picks, [clientId]: heroId } }
+export function draftSetPick(d: DraftState, clientId: string, heroId: string, team?: Team, auto = false): DraftState {
+	const lastAction = team ? { team, type: 'pick' as const, actor: clientId, hero: heroId, at: Date.now(), auto } : d.lastAction
+	return { ...d, picks: { ...d.picks, [clientId]: heroId }, lastAction }
 }
 
 export function initialMatchState(
