@@ -103,11 +103,11 @@
 	.names { display: flex; flex-direction: column; line-height: 1; }
 	.nm { font-family: 'Modesto Poster', serif; font-size: 3.6rem; letter-spacing: 0.01em; text-shadow: 0 4px 18px rgba(0,0,0,0.7); }
 	.ti { font-family: 'Modesto Poster', serif; font-size: 1.5rem; color: #dbe4ee; text-shadow: 0 2px 10px rgba(0,0,0,0.7); margin-top: 2px; }
-	.traits { display: flex; gap: 18px; margin: 16px 0 18px; }
-	.trait { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 62px; }
-	.trait img { width: 40px; height: 40px; object-fit: contain; filter: drop-shadow(0 2px 5px rgba(0,0,0,0.7)); }
-	.tdot { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; color: #fbbf24; border: 2px solid #fbbf24; border-radius: 50%; }
-	.tl { font-family: 'Modesto Poster', serif; font-size: 0.92rem; letter-spacing: 0.03em; text-transform: uppercase; text-shadow: 0 2px 4px rgba(0,0,0,0.8); }
+	.traits { display: flex; gap: 10px; margin: 14px 0 4px; }
+	.trait { display: flex; flex-direction: column; align-items: center; gap: 5px; width: 76px; }
+	.trait img { width: 36px; height: 36px; object-fit: contain; filter: drop-shadow(0 2px 5px rgba(0,0,0,0.7)); }
+	.tdot { width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; font-size: 1.35rem; color: #fbbf24; border: 2px solid #fbbf24; border-radius: 50%; }
+	.tl { font-family: 'Modesto Poster', serif; font-size: 0.62rem; letter-spacing: 0.02em; text-transform: uppercase; white-space: nowrap; text-align: center; text-shadow: 0 2px 4px rgba(0,0,0,0.8); }
 	.lockin { width: 100%; border: 1px solid rgba(255,255,255,0.32); color: #fff; border-radius: 12px; padding: 0.85rem 1rem; font-weight: 700; font-size: 1.05rem; cursor: pointer; box-shadow: 0 8px 24px rgba(0,0,0,0.45); }
 
 	.rightcol { position: absolute; top: 16px; right: 16px; width: 300px; display: flex; flex-direction: column; gap: 10px; }
