@@ -454,7 +454,7 @@
 		{:else if mode === 'create'}
 			<div class="step" transition:reveal bind:clientHeight={h['create']}>
 				<div class="card form wide">
-					<label class="fld"><span>Your name</span><input class="field" bind:value={name} placeholder="e.g. Zaheen" /></label>
+					<label class="fld"><span>Your name</span><input class="field" bind:value={name} placeholder="Your name" /></label>
 					<div class="grid2">
 						<div class="col">
 							<div class="fld">
@@ -499,7 +499,7 @@
 				<div class="card form" class:wide={openRooms.length} class:narrow={!openRooms.length}>
 					<div class="joincols" class:two={openRooms.length}>
 						<div class="jcol">
-							<label class="fld"><span>Name</span><input class="field" bind:value={name} placeholder="e.g. Zaheen" /></label>
+							<label class="fld"><span>Name</span><input class="field" bind:value={name} placeholder="Your name" /></label>
 							<label class="fld"><span>Room code</span><input class="field up" bind:value={room} on:input={() => (joinError = '')} maxlength="8" placeholder="code from the host" /></label>
 							{#if joinError}<p class="err">{joinError}</p>{/if}
 						</div>
