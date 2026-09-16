@@ -81,7 +81,11 @@ export interface DraftState {
 	bans: string[]
 	offer: string[] // single-draft: heroes offered to the current actor
 	offered: string[] // single-draft: every hero offered so far (never re-offered)
+	deadline: number // epoch ms the current turn auto-picks at (0 = no timer)
 }
+
+/** How long each turn-based draft turn lasts before an auto-pick. */
+export const DRAFT_TURN_MS = 75_000
 
 export const TEAMS: Team[] = ['orange', 'blue']
 export const TURNS_PER_ROUND = 4
@@ -276,7 +280,10 @@ export function buildDraft(
 	// drop any turns with no owner (can happen if teams are uneven at Begin)
 	const owned = order.filter((t) => t.actor)
 	const offer = system === 'single-draft' ? rollOffer(pool, new Set(), 3) : []
-	return { system, pool, order: owned, step: 0, picks, bans: [], offer, offered: [...offer] }
+	// all-random resolves instantly; every other mode gets a timer (per-turn for
+	// turn-based, whole-phase for all-pick) so the draft can never hang
+	const deadline = system === 'all-random' ? 0 : Date.now() + DRAFT_TURN_MS
+	return { system, pool, order: owned, step: 0, picks, bans: [], offer, offered: [...offer], deadline }
 }
 
 export const draftTurn = (d: DraftState): DraftTurn | null => d.order[d.step] ?? null
@@ -313,7 +320,8 @@ export function draftAdvance(d: DraftState, heroId: string): DraftState {
 		offer = rollOffer(d.pool, exclude, 3)
 		offered = [...d.offered, ...offer]
 	}
-	return { ...d, picks, bans, step, offer, offered }
+	const deadline = step < d.order.length ? Date.now() + DRAFT_TURN_MS : 0
+	return { ...d, picks, bans, step, offer, offered, deadline }
 }
 
 /** All-pick: set (or change) a single player's own pick. */

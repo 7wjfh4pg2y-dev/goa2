@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount, onDestroy } from 'svelte';
 	import type { Readable } from 'svelte/store';
 	import {
 		HEROES_ALPHA, heroAvatar, heroSplash, heroLogo, heroById,
@@ -75,6 +76,60 @@
 		if (iAmHost) session.update({ started: true });
 	}
 
+	// ---- resilience: countdown + host watchdog --------------------------------
+	let now = Date.now();
+	$: secsLeft = d && d.deadline && !complete ? Math.max(0, Math.ceil((d.deadline - now) / 1000)) : null;
+	$: countdown = secsLeft == null ? '' : `${Math.floor(secsLeft / 60)}:${String(secsLeft % 60).padStart(2, '0')}`;
+
+	const randomFrom = (dd: typeof d, forId?: string): string => {
+		if (!dd) return '';
+		const src = dd.system === 'single-draft' ? dd.offer : dd.pool;
+		const taken = new Set([...Object.values(dd.picks), ...dd.bans]);
+		const choices = src.filter((h) => !taken.has(h));
+		return choices[Math.floor(Math.random() * choices.length)] ?? '';
+	};
+
+	// turn-based: host auto-advances the current turn with a random valid hero
+	function autoAdvance() {
+		if (!d || complete || !d.order.length) return;
+		const hero = randomFrom(d);
+		if (hero) session.update({ draft: draftAdvance(d, hero) });
+	}
+	// all-pick: host fills any missing picks (for absent players on timeout)
+	function fillMissing() {
+		if (!d || complete) return;
+		let nd = d;
+		let changed = false;
+		for (const id of seatedIds.filter((x) => !nd.picks[x])) {
+			const hero = randomFrom(nd);
+			if (hero) { nd = draftSetPick(nd, id, hero); changed = true; }
+		}
+		if (changed) session.update({ draft: nd });
+	}
+
+	// The host is the single authority that resolves a stall: the clock ran out,
+	// or (turn-based) the active player has been gone from presence a few seconds.
+	let absentActor = '';
+	let absentAt = 0;
+	function watchdog() {
+		now = Date.now();
+		if (!iAmHost || !d || complete) { absentActor = ''; return; }
+		const timedOut = d.deadline > 0 && now >= d.deadline;
+		if (d.order.length) {
+			const actor = activeActor;
+			const present = !!actor && $players.some((p) => p.id === actor);
+			if (present) absentActor = '';
+			else if (actor && absentActor !== actor) { absentActor = actor; absentAt = now; }
+			const dropped = !present && !!actor && now - absentAt > 8000;
+			if (timedOut || dropped) { absentActor = ''; autoAdvance(); }
+		} else if (timedOut) {
+			fillMissing(); // all-pick phase timer elapsed
+		}
+	}
+	let ticker: ReturnType<typeof setInterval>;
+	onMount(() => { ticker = setInterval(watchdog, 1000); });
+	onDestroy(() => clearInterval(ticker));
+
 	// top banner text
 	$: banner = (() => {
 		if (!d) return '';
@@ -109,7 +164,7 @@
 	<div class="stage">
 		<img class="splash" src={heroSplash(sel)} alt={selHero.name} />
 		<div class="scrim"></div>
-		<div class="turn t-{bannerTeam ?? 'orange'}"><span class="dot"></span>{banner}{#if !complete && d.order.length}<span class="mode">· {DRAFT_LABELS[d.system]}</span>{/if}</div>
+		<div class="turn t-{bannerTeam ?? 'orange'}"><span class="dot"></span>{banner}{#if countdown}<span class="clock" class:urgent={secsLeft != null && secsLeft <= 10}>{countdown}</span>{/if}{#if !complete && d.order.length}<span class="mode">· {DRAFT_LABELS[d.system]}</span>{/if}</div>
 
 		<div class="stats">
 			<div class="cx">{#each Array(selHero.stars) as _, i (i)}<img class="star" src={starIcon()} alt="★" />{/each}<span class="pack">{PACK_LABELS[selHero.pack]}</span></div>
@@ -181,6 +236,8 @@
 	.scrim { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(9,13,22,0.94) 0%, rgba(9,13,22,0.6) 40%, rgba(9,13,22,0.12) 66%, rgba(9,13,22,0.35) 100%); }
 	.turn { position: absolute; top: 18px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; font-weight: 700; background: rgba(0,0,0,0.45); border: 1px solid rgba(255,255,255,0.18); border-radius: 999px; padding: 7px 18px; font-size: 1.05rem; }
 	.turn .mode { color: #94a3b8; font-weight: 600; font-size: 0.85rem; }
+	.turn .clock { font-variant-numeric: tabular-nums; background: rgba(0,0,0,0.35); border-radius: 7px; padding: 1px 8px; font-size: 0.95rem; }
+	.turn .clock.urgent { color: #fca5a5; box-shadow: 0 0 0 1px rgba(239,68,68,0.5); }
 	.dot { width: 0.6rem; height: 0.6rem; border-radius: 50%; background: #ef7d22; box-shadow: 0 0 10px #ef7d22; }
 	.t-blue .dot { background: #2f7fe6; box-shadow: 0 0 10px #2f7fe6; }
 
