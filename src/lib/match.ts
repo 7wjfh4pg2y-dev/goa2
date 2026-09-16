@@ -273,8 +273,10 @@ export function buildDraft(
 		for (const id of [...rosters.orange, ...rosters.blue]) picks[id] = rolled[i++] ?? ''
 	}
 
+	// drop any turns with no owner (can happen if teams are uneven at Begin)
+	const owned = order.filter((t) => t.actor)
 	const offer = system === 'single-draft' ? rollOffer(pool, new Set(), 3) : []
-	return { system, pool, order, step: 0, picks, bans: [], offer, offered: [...offer] }
+	return { system, pool, order: owned, step: 0, picks, bans: [], offer, offered: [...offer] }
 }
 
 export const draftTurn = (d: DraftState): DraftTurn | null => d.order[d.step] ?? null
