@@ -34,23 +34,29 @@
 
 	const nameOf = (id: string) => $players.find((p) => p.id === id)?.name ?? 'Player';
 
+	$: inPool = d ? new Set(d.pool) : new Set<string>();
+	// a hero is unavailable if it's outside the complexity pool, picked, or banned
+	$: unavailable = (h: string) => !inPool.has(h) || blocked.has(h);
+
 	let sel = '';
 	let myWant = ''; // all-pick self-heal target
-	// keep a sensible highlighted hero
-	$: if (d && (!sel || blocked.has(sel))) {
-		sel = HEROES_ALPHA.find((h) => !blocked.has(h.id))?.id ?? HEROES_ALPHA[0].id;
-	}
-	// on your single-draft turn, snap to one of your three offered heroes
-	$: if (d?.system === 'single-draft' && myTurn && !d.offer.includes(sel)) {
-		sel = d.offer[0] ?? sel;
+	// initial highlight: first available hero (don't reset after every action —
+	// leave `sel` on what you just picked/banned)
+	$: if (d && !sel) sel = HEROES_ALPHA.find((h) => inPool.has(h.id))?.id ?? HEROES_ALPHA[0].id;
+	// when it BECOMES your turn, snap to a fresh valid option (once per step)
+	let snapStep = -1;
+	$: if (d && d.order.length && myTurn && d.step !== snapStep) {
+		snapStep = d.step;
+		sel = d.system === 'single-draft'
+			? (d.offer[0] ?? sel)
+			: (HEROES_ALPHA.find((h) => inPool.has(h.id) && !blocked.has(h.id))?.id ?? sel);
 	}
 	$: selHero = heroById(sel);
 	const pip = (stat: [number, number], i: number) => (i < stat[0] ? 2 : i < stat[1] ? 1 : 0);
 
 	// can the active player lock `h` right now?
 	function canAct(h: string): boolean {
-		if (!d || complete) return false;
-		if (blocked.has(h)) return false;
+		if (!d || complete || unavailable(h)) return false;
 		if (d.system === 'all-random') return false;
 		if (d.system === 'all-pick') return !myPick;
 		if (!myTurn) return false;
@@ -63,17 +69,33 @@
 		if (!d || !canAct(sel)) return;
 		if (d.system === 'all-pick') {
 			myWant = sel;
-			session.update({ draft: draftSetPick(d, clientId, sel) });
+			session.update({ draft: draftSetPick(d, clientId, sel, myTeam ?? undefined) });
 		} else {
 			session.update({ draft: draftAdvance(d, sel) });
 		}
 	}
 	// self-heal a rare all-pick clobber (two players locking at once)
 	$: if (d && d.system === 'all-pick' && myWant && d.picks[clientId] !== myWant) {
-		session.update({ draft: draftSetPick(d, clientId, myWant) });
+		session.update({ draft: draftSetPick(d, clientId, myWant, myTeam ?? undefined) });
 	}
 	function startGame() {
 		if (iAmHost) session.update({ started: true });
+	}
+
+	// ---- pick/ban announcement toast ------------------------------------------
+	let toast = '';
+	let toastAt = 0;
+	let toastTimer: ReturnType<typeof setTimeout>;
+	$: if (d?.lastAction && d.lastAction.at !== toastAt) {
+		toastAt = d.lastAction.at;
+		const a = d.lastAction;
+		if (a.actor !== clientId) { // the actor doesn't need to be told what they did
+			const h = heroById(a.hero);
+			const verb = a.type === 'ban' ? 'banned' : 'picked';
+			toast = `${a.team === 'orange' ? 'Orange' : 'Blue'} · ${nameOf(a.actor)} ${verb} ${h?.name ?? ''} ${h?.title ?? ''}${a.auto ? ' (auto)' : ''}`;
+			clearTimeout(toastTimer);
+			toastTimer = setTimeout(() => (toast = ''), 3800);
+		}
 	}
 
 	// ---- resilience: countdown + host watchdog --------------------------------
@@ -81,7 +103,7 @@
 	$: secsLeft = d && d.deadline && !complete ? Math.max(0, Math.ceil((d.deadline - now) / 1000)) : null;
 	$: countdown = secsLeft == null ? '' : `${Math.floor(secsLeft / 60)}:${String(secsLeft % 60).padStart(2, '0')}`;
 
-	const randomFrom = (dd: typeof d, forId?: string): string => {
+	const randomFrom = (dd: typeof d): string => {
 		if (!dd) return '';
 		const src = dd.system === 'single-draft' ? dd.offer : dd.pool;
 		const taken = new Set([...Object.values(dd.picks), ...dd.bans]);
@@ -93,7 +115,7 @@
 	function autoAdvance() {
 		if (!d || complete || !d.order.length) return;
 		const hero = randomFrom(d);
-		if (hero) session.update({ draft: draftAdvance(d, hero) });
+		if (hero) session.update({ draft: draftAdvance(d, hero, true) });
 	}
 	// all-pick: host fills any missing picks (for absent players on timeout)
 	function fillMissing() {
@@ -102,7 +124,7 @@
 		let changed = false;
 		for (const id of seatedIds.filter((x) => !nd.picks[x])) {
 			const hero = randomFrom(nd);
-			if (hero) { nd = draftSetPick(nd, id, hero); changed = true; }
+			if (hero) { nd = draftSetPick(nd, id, hero, teamForSeat($players.find((p) => p.id === id)?.seat ?? -1, seats) ?? undefined, true); changed = true; }
 		}
 		if (changed) session.update({ draft: nd });
 	}
@@ -128,7 +150,7 @@
 	}
 	let ticker: ReturnType<typeof setInterval>;
 	onMount(() => { ticker = setInterval(watchdog, 1000); });
-	onDestroy(() => clearInterval(ticker));
+	onDestroy(() => { clearInterval(ticker); clearTimeout(toastTimer); });
 
 	// top banner text
 	$: banner = (() => {
@@ -165,6 +187,7 @@
 		<img class="splash" src={heroSplash(sel)} alt={selHero.name} />
 		<div class="scrim"></div>
 		<div class="turn t-{bannerTeam ?? 'orange'}"><span class="dot"></span>{banner}{#if countdown}<span class="clock" class:urgent={secsLeft != null && secsLeft <= 10}>{countdown}</span>{/if}{#if !complete && d.order.length}<span class="mode">· {DRAFT_LABELS[d.system]}</span>{/if}</div>
+		{#if toast}<div class="toast">{toast}</div>{/if}
 
 		<div class="stats">
 			<div class="cx">{#each Array(selHero.stars) as _, i (i)}<img class="star" src={starIcon()} alt="★" />{/each}<span class="pack">{PACK_LABELS[selHero.pack]}</span></div>
@@ -194,8 +217,9 @@
 		<div class="rightcol">
 			<div class="browse">
 				{#each HEROES_ALPHA as h (h.id)}
-					<button class="hero" class:on={sel === h.id} class:gone={blocked.has(h.id)}
-						class:dim={d.system === 'single-draft' && myTurn && !d.offer.includes(h.id) && !blocked.has(h.id)}
+					<button class="hero" class:on={sel === h.id} class:gone={unavailable(h.id)}
+						class:dim={d.system === 'single-draft' && myTurn && inPool.has(h.id) && !d.offer.includes(h.id) && !blocked.has(h.id)}
+						disabled={!inPool.has(h.id)}
 						on:click={() => (sel = h.id)}>
 						<img src={heroAvatar(h.id)} alt={h.name} />
 					</button>
@@ -238,6 +262,9 @@
 	.turn .mode { color: #94a3b8; font-weight: 600; font-size: 0.85rem; }
 	.turn .clock { font-variant-numeric: tabular-nums; background: rgba(0,0,0,0.35); border-radius: 7px; padding: 1px 8px; font-size: 0.95rem; }
 	.turn .clock.urgent { color: #fca5a5; box-shadow: 0 0 0 1px rgba(239,68,68,0.5); }
+	.toast { position: absolute; top: 66px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.16); border-radius: 999px; padding: 6px 16px; font-size: 0.92rem; font-weight: 600; white-space: nowrap; animation: toastIn 0.25s ease; }
+	@keyframes toastIn { from { opacity: 0; transform: translate(-50%, -6px); } to { opacity: 1; transform: translate(-50%, 0); } }
+	.hero:disabled { cursor: default; }
 	.dot { width: 0.6rem; height: 0.6rem; border-radius: 50%; background: #ef7d22; box-shadow: 0 0 10px #ef7d22; }
 	.t-blue .dot { background: #2f7fe6; box-shadow: 0 0 10px #2f7fe6; }
 
