@@ -8,7 +8,7 @@
 	import {
 		teamRosters, teamForSeat, draftTurn, draftActor, draftBlocked, draftComplete,
 		draftAdvance, draftSetPick, DRAFT_LABELS,
-		type MatchState, type Player, type MatchSession, type Team
+		type MatchState, type Player, type MatchSession, type Team, type DraftAction
 	} from '$lib/match';
 
 	export let session: MatchSession;
@@ -83,20 +83,18 @@
 	}
 
 	// ---- pick/ban announcement toast ------------------------------------------
-	let toast = '';
+	let toastAction: DraftAction | null = null;
 	let toastAt = 0;
 	let toastTimer: ReturnType<typeof setTimeout>;
 	$: if (d?.lastAction && d.lastAction.at !== toastAt) {
 		toastAt = d.lastAction.at;
-		const a = d.lastAction;
-		if (a.actor !== clientId) { // the actor doesn't need to be told what they did
-			const h = heroById(a.hero);
-			const verb = a.type === 'ban' ? 'banned' : 'picked';
-			toast = `${a.team === 'orange' ? 'Orange' : 'Blue'} · ${nameOf(a.actor)} ${verb} ${h?.name ?? ''} ${h?.title ?? ''}${a.auto ? ' (auto)' : ''}`;
+		if (d.lastAction.actor !== clientId) { // the actor doesn't need to be told what they did
+			toastAction = d.lastAction;
 			clearTimeout(toastTimer);
-			toastTimer = setTimeout(() => (toast = ''), 3800);
+			toastTimer = setTimeout(() => (toastAction = null), 4200);
 		}
 	}
+	$: toastHero = toastAction ? heroById(toastAction.hero) : undefined;
 
 	// ---- resilience: countdown + host watchdog --------------------------------
 	let now = Date.now();
@@ -187,7 +185,15 @@
 		<img class="splash" src={heroSplash(sel)} alt={selHero.name} />
 		<div class="scrim"></div>
 		<div class="turn t-{bannerTeam ?? 'orange'}"><span class="dot"></span>{banner}{#if countdown}<span class="clock" class:urgent={secsLeft != null && secsLeft <= 10}>{countdown}</span>{/if}{#if !complete && d.order.length}<span class="mode">· {DRAFT_LABELS[d.system]}</span>{/if}</div>
-		{#if toast}<div class="toast">{toast}</div>{/if}
+		{#if toastAction && toastHero}
+			<div class="toast t-{toastAction.team}" class:ban={toastAction.type === 'ban'}>
+				<div class="tav"><img src={heroAvatar(toastAction.hero)} alt="" />{#if toastAction.type === 'ban'}<span class="tban">✕</span>{/if}</div>
+				<div class="ttext">
+					<span class="twho"><span class="tteam">{toastAction.team === 'orange' ? 'Orange' : 'Blue'}</span> · {nameOf(toastAction.actor)}{toastAction.auto ? ' · auto' : ''}</span>
+					<span class="tact"><span class="tverb">{toastAction.type === 'ban' ? 'Banned' : 'Picked'}</span> {toastHero.name} <span class="ttitle">{toastHero.title}</span></span>
+				</div>
+			</div>
+		{/if}
 
 		<div class="stats">
 			<div class="cx">{#each Array(selHero.stars) as _, i (i)}<img class="star" src={starIcon()} alt="★" />{/each}<span class="pack">{PACK_LABELS[selHero.pack]}</span></div>
@@ -262,8 +268,22 @@
 	.turn .mode { color: #94a3b8; font-weight: 600; font-size: 0.85rem; }
 	.turn .clock { font-variant-numeric: tabular-nums; background: rgba(0,0,0,0.35); border-radius: 7px; padding: 1px 8px; font-size: 0.95rem; }
 	.turn .clock.urgent { color: #fca5a5; box-shadow: 0 0 0 1px rgba(239,68,68,0.5); }
-	.toast { position: absolute; top: 66px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.16); border-radius: 999px; padding: 6px 16px; font-size: 0.92rem; font-weight: 600; white-space: nowrap; animation: toastIn 0.25s ease; }
-	@keyframes toastIn { from { opacity: 0; transform: translate(-50%, -6px); } to { opacity: 1; transform: translate(-50%, 0); } }
+	.toast { position: absolute; top: 62px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; background: linear-gradient(180deg, rgba(16,22,38,0.82), rgba(9,13,22,0.82)); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.12); border-left-width: 4px; border-radius: 12px; padding: 8px 16px 8px 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); white-space: nowrap; animation: toastIn 0.3s cubic-bezier(0.2,0.9,0.2,1); }
+	.toast.t-orange { border-left-color: #ef7d22; }
+	.toast.t-blue { border-left-color: #2f7fe6; }
+	.tav { position: relative; width: 42px; height: 42px; flex: 0 0 auto; }
+	.tav img { width: 42px; height: 42px; border-radius: 9px; object-fit: cover; border: 1px solid rgba(255,255,255,0.18); }
+	.toast.ban .tav img { filter: grayscale(1) brightness(0.6); }
+	.tban { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #fca5a5; font-size: 1.5rem; font-weight: 800; text-shadow: 0 1px 4px #000; }
+	.ttext { display: flex; flex-direction: column; gap: 1px; line-height: 1.15; }
+	.twho { font-size: 0.72rem; letter-spacing: 0.04em; text-transform: uppercase; color: #94a3b8; }
+	.t-orange .tteam { color: #ef9a5a; font-weight: 700; }
+	.t-blue .tteam { color: #6ea8f0; font-weight: 700; }
+	.tact { font-family: 'Modesto Poster', serif; font-size: 1.15rem; letter-spacing: 0.01em; }
+	.tverb { text-transform: uppercase; font-size: 0.9rem; letter-spacing: 0.05em; color: #6ee7b7; margin-right: 3px; }
+	.toast.ban .tverb { color: #fca5a5; }
+	.ttitle { color: #cbd5e1; font-size: 0.95rem; }
+	@keyframes toastIn { from { opacity: 0; transform: translate(-50%, -10px) scale(0.96); } to { opacity: 1; transform: translate(-50%, 0) scale(1); } }
 	.hero:disabled { cursor: default; }
 	.dot { width: 0.6rem; height: 0.6rem; border-radius: 50%; background: #ef7d22; box-shadow: 0 0 10px #ef7d22; }
 	.t-blue .dot { background: #2f7fe6; box-shadow: 0 0 10px #2f7fe6; }
