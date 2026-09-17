@@ -19,6 +19,11 @@
 	const nameOf = (id: string) => $players.find((p) => p.id === id)?.name ?? 'Player';
 	const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
 
+	// real game art for the HUD (life-counter medallions + tie-breaker token)
+	const art = import.meta.glob('./cards/images/{life_counter,tiebreaker}_*.png', { eager: true, import: 'default' }) as Record<string, string>;
+	const lifeArt = (t: Team) => art[`./cards/images/life_counter_${t}_front.png`];
+	const tieArt = (t: Team) => art[`./cards/images/tiebreaker_${t}.png`];
+
 	// orient the board so the local player's base sits at the bottom
 	$: mySeat = $players.find((p) => p.id === clientId)?.seat ?? -1;
 	$: myTeam = teamForSeat(mySeat, $ms.seats);
@@ -58,7 +63,6 @@
 	const connLabel = (s: ConnStatus) =>
 		s === 'connected' ? 'Connected' : s === 'reconnecting' ? 'Reconnecting…' : s === 'closed' ? 'Disconnected' : 'Connecting…';
 
-	let hudOpen = true;
 	let logOpen = true;
 	let confirmLeave = false;
 	$: log = $ms.log ?? [];
@@ -94,45 +98,52 @@
 		</div>
 	{/if}
 
-	<!-- game HUD (right) -->
-	<button class="hudtab" on:click={() => (hudOpen = !hudOpen)} title="Toggle HUD">{hudOpen ? '▶' : '◀'}</button>
-	{#if hudOpen}
-		<div class="hud">
-			<div class="hhead">
-				<span class="mapname">{$ms.map?.name ?? 'Board'}</span>
-				<span class="rc mono">{room}</span>
-				<span class="conn {$status}"><span class="cdot"></span>{connLabel($status)}</span>
+	<!-- room / connection (top-right corner) -->
+	<div class="corner">
+		<span class="rc mono">{room}</span>
+		<span class="conn {$status}"><span class="cdot"></span>{connLabel($status)}</span>
+	</div>
+
+	<!-- game HUD: ornate top strip -->
+	<div class="tophud">
+			<!-- Orange team Life -->
+			<div class="teamlife orange">
+				<button class="lifeadj" on:click={() => adjLife('orange', -1)} title="Orange Life −">−</button>
+				<div class="medallion" style="background-image:url({lifeArt('orange')})">
+					<span class="lifeval">{$ms.life.orange}</span>
+				</div>
+				<button class="lifeadj" on:click={() => adjLife('orange', 1)} title="Orange Life +">+</button>
 			</div>
-			<div class="hpanel">
-				<div class="hrow">
+
+			<!-- center plaque -->
+			<div class="plaque">
+				<div class="mapname">{$ms.map?.name ?? 'Board'}</div>
+				<div class="prow round">
 					<button class="mini" on:click={() => stepTurn(-1)} title="Previous turn">◀</button>
-					<span class="lbl">Round {$ms.round} · Turn {$ms.turn}</span>
+					<span class="rt">Round {$ms.round} · Turn {$ms.turn}</span>
 					<button class="mini" on:click={() => stepTurn(1)} title="Next turn">▶</button>
 				</div>
-				<div class="hrow">
-					<span class="lbl">Waves</span>
-					<button class="mini" on:click={() => adjWaves(-1)}>−</button>
-					<span class="val">{$ms.waves}</span>
-					<button class="mini" on:click={() => adjWaves(1)}>+</button>
+				<div class="prow foot">
+					<div class="waves">
+						<button class="mini" on:click={() => adjWaves(-1)}>−</button>
+						<span class="wv">◆ {$ms.waves} <small>waves</small></span>
+						<button class="mini" on:click={() => adjWaves(1)}>+</button>
+					</div>
+					<button class="tiebtn {$ms.tieBreaker}" on:click={flipTie} title="Flip the tie-breaker — {$ms.tieBreaker === 'orange' ? 'Orange' : 'Blue'} breaks ties">
+						<img src={tieArt($ms.tieBreaker)} alt="" /><span>Tie-breaker</span>
+					</button>
 				</div>
-				<button class="coin" on:click={flipTie} title="Flip the tie-breaker">
-					<span class="cdotc {$ms.tieBreaker}"></span>Tie-breaker: {$ms.tieBreaker === 'orange' ? 'Orange' : 'Blue'}
-				</button>
 			</div>
-			<div class="lives">
-				<div class="life orange">
-					<span class="team">Orange</span>
-					<div class="lrow"><button class="mini" on:click={() => adjLife('orange', -1)}>−</button><span class="big">{$ms.life.orange}</span><button class="mini" on:click={() => adjLife('orange', 1)}>+</button></div>
-					<span class="cap">Life</span>
+
+			<!-- Blue team Life -->
+			<div class="teamlife blue">
+				<button class="lifeadj" on:click={() => adjLife('blue', -1)} title="Blue Life −">−</button>
+				<div class="medallion" style="background-image:url({lifeArt('blue')})">
+					<span class="lifeval">{$ms.life.blue}</span>
 				</div>
-				<div class="life blue">
-					<span class="team">Blue</span>
-					<div class="lrow"><button class="mini" on:click={() => adjLife('blue', -1)}>−</button><span class="big">{$ms.life.blue}</span><button class="mini" on:click={() => adjLife('blue', 1)}>+</button></div>
-					<span class="cap">Life</span>
-				</div>
+				<button class="lifeadj" on:click={() => adjLife('blue', 1)} title="Blue Life +">+</button>
 			</div>
 		</div>
-	{/if}
 
 	<!-- activity log (bottom-right) -->
 	<div class="logpanel" class:closed={!logOpen}>
@@ -186,10 +197,8 @@
 	.mleave { background: #dc2626; color: #fff; }
 	.mleave:hover { background: #ef4444; }
 
-	.hudtab { position: absolute; top: 12px; right: 12px; z-index: 7; width: 1.8rem; height: 1.8rem; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.18); background: rgba(9, 13, 22, 0.75); color: #e5e7eb; cursor: pointer; }
-	.hud { position: absolute; top: 50px; right: 12px; z-index: 6; width: 220px; display: flex; flex-direction: column; gap: 10px; }
-	.hhead { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.8); }
-	.mapname { font-family: 'Modesto Poster', serif; font-size: 1.15rem; }
+	/* room / connection cluster, tucked in the top-right corner */
+	.corner { position: absolute; top: 10px; right: 14px; z-index: 6; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.8); }
 	.rc { color: #94a3b8; font-size: 0.78rem; }
 	.mono { font-family: ui-monospace, monospace; letter-spacing: 0.08em; }
 	.conn { display: inline-flex; align-items: center; gap: 5px; font-size: 0.7rem; font-weight: 600; color: #94a3b8; }
@@ -199,25 +208,36 @@
 	.conn.reconnecting, .conn.connecting { color: #fcd34d; }
 	.conn.closed { color: #fca5a5; } .conn.closed .cdot { background: #ef4444; }
 
-	.hpanel { display: flex; flex-direction: column; gap: 8px; background: rgba(9, 13, 22, 0.72); backdrop-filter: blur(6px); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 12px; padding: 10px; }
-	.hrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-	.hrow .lbl { font-size: 0.85rem; font-weight: 600; }
-	.hrow .val { min-width: 1.2rem; text-align: center; font-variant-numeric: tabular-nums; font-weight: 700; }
-	.coin { display: flex; align-items: center; gap: 7px; justify-content: center; border: 1px solid rgba(255, 255, 255, 0.16); background: rgba(255, 255, 255, 0.05); border-radius: 999px; padding: 0.35rem 0.7rem; color: #e5e7eb; cursor: pointer; font-size: 0.82rem; font-weight: 600; }
-	.cdotc { width: 0.6rem; height: 0.6rem; border-radius: 50%; display: inline-block; }
-	.cdotc.orange { background: #ef7d22; } .cdotc.blue { background: #2f7fe6; }
+	/* ornate top strip: Life medallions flanking a central plaque */
+	.tophud { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 6; display: flex; align-items: center; gap: 18px; }
+
+	.teamlife { display: flex; align-items: center; gap: 4px; }
+	.medallion { width: 88px; height: 84px; background-size: contain; background-repeat: no-repeat; background-position: center;
+		display: grid; place-items: center; filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.6)); }
+	.medallion .lifeval { font-family: 'Modesto Poster', serif; font-size: 2.1rem; line-height: 1; color: #fff;
+		text-shadow: 0 2px 3px rgba(0, 0, 0, 0.95), 0 0 10px rgba(0, 0, 0, 0.8), 0 0 3px rgba(0, 0, 0, 1); margin-top: 4px; }
+	.lifeadj { width: 1.5rem; height: 1.5rem; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.22); background: rgba(9, 13, 22, 0.72);
+		color: #e5e7eb; cursor: pointer; font-weight: 800; line-height: 1; opacity: 0; transition: opacity 0.15s; }
+	.teamlife:hover .lifeadj, .teamlife:focus-within .lifeadj { opacity: 1; }
+	.lifeadj:hover { background: rgba(30, 40, 60, 0.9); }
+
+	.plaque { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 220px;
+		background: rgba(9, 13, 22, 0.72); backdrop-filter: blur(8px); border: 1px solid rgba(199, 154, 78, 0.4); border-radius: 14px;
+		padding: 7px 18px 9px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5), inset 0 0 22px rgba(199, 154, 78, 0.06); }
+	.plaque .mapname { font-family: 'Modesto Poster', serif; font-size: 1.05rem; letter-spacing: 0.04em; color: #f6ead2; }
+	.prow { display: flex; align-items: center; gap: 10px; }
+	.prow.round .rt { font-weight: 700; font-size: 0.95rem; font-variant-numeric: tabular-nums; }
+	.prow.foot { gap: 14px; margin-top: 3px; }
+	.waves { display: flex; align-items: center; gap: 6px; }
+	.waves .wv { font-weight: 700; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+	.waves .wv small { color: #94a3b8; font-weight: 600; font-size: 0.72rem; }
+	.tiebtn { display: flex; align-items: center; gap: 6px; border: 1px solid rgba(255, 255, 255, 0.16); background: rgba(255, 255, 255, 0.05);
+		border-radius: 999px; padding: 2px 12px 2px 3px; color: #e5e7eb; cursor: pointer; font-size: 0.78rem; font-weight: 600; }
+	.tiebtn img { width: 1.5rem; height: 1.5rem; }
+	.tiebtn.orange { box-shadow: inset 0 0 12px rgba(239, 125, 34, 0.3); border-color: rgba(239, 125, 34, 0.4); }
+	.tiebtn.blue { box-shadow: inset 0 0 12px rgba(47, 127, 230, 0.3); border-color: rgba(47, 127, 230, 0.4); }
 	.mini { width: 1.5rem; height: 1.5rem; border-radius: 7px; border: 1px solid rgba(255, 255, 255, 0.2); background: rgba(255, 255, 255, 0.06); color: #e5e7eb; cursor: pointer; font-weight: 700; line-height: 1; }
 	.mini:hover { background: rgba(255, 255, 255, 0.16); }
-
-	.lives { display: flex; gap: 10px; }
-	.life { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px; border-radius: 12px; background: rgba(9, 13, 22, 0.72); backdrop-filter: blur(6px); border: 1px solid rgba(255, 255, 255, 0.12); }
-	.life.orange { border-top: 3px solid #ef7d22; }
-	.life.blue { border-top: 3px solid #2f7fe6; }
-	.life .team { font-family: 'Modesto Poster', serif; font-size: 0.9rem; }
-	.life.orange .team { color: #ef9a5a; } .life.blue .team { color: #6ea8f0; }
-	.life .lrow { display: flex; align-items: center; gap: 7px; }
-	.life .big { font-size: 1.7rem; font-weight: 800; font-variant-numeric: tabular-nums; min-width: 1.6rem; text-align: center; }
-	.life .cap { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.12em; color: #94a3b8; }
 
 	.logpanel { position: absolute; bottom: 14px; right: 14px; z-index: 6; width: 270px; background: rgba(9, 13, 22, 0.76); backdrop-filter: blur(6px); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 12px; overflow: hidden; }
 	.logpanel.closed { width: auto; }
