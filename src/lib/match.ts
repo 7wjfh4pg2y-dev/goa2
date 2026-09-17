@@ -129,6 +129,7 @@ export interface MatchState {
 	waves: number // SHARED wave counters remaining; game ends when it hits 0
 	lastPush: Team | null // team that won the most recent Push the Lane
 	life: Record<Team, number> // per-team Life counters remaining; 0 = that team loses
+	lifeMax: number // starting Life per team (how many tokens to display)
 	timer: TimerState
 	log: LogEntry[] // capped activity log (most recent last)
 	mapId: string // id of the chosen board (from the maps registry)
@@ -395,6 +396,7 @@ export function initialMatchState(
 		waves,
 		lastPush: null,
 		life: { orange: life, blue: life },
+		lifeMax: life,
 		timer: { running: false, baseMs: 0, startedAt: null },
 		log: [],
 		mapId: opts.mapId ?? '',
