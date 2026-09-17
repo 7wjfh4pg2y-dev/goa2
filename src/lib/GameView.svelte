@@ -21,8 +21,21 @@
 
 	// real game art for the HUD (life-counter medallions + tie-breaker token)
 	const art = import.meta.glob('./cards/images/{life_counter,tiebreaker}_*.png', { eager: true, import: 'default' }) as Record<string, string>;
-	const lifeArt = (t: Team) => art[`./cards/images/life_counter_${t}_front.png`];
+	const lifeArt = (t: Team, side: 'front' | 'back') => art[`./cards/images/life_counter_${t}_${side}.png`];
 	const tieArt = (t: Team) => art[`./cards/images/tiebreaker_${t}.png`];
+	$: lifeMax = $ms.lifeMax || Math.max($ms.life.orange, $ms.life.blue, 8);
+
+	// Click a Life token to set the depletion boundary: clicking a full token
+	// depletes it (and any past it); clicking a spent token restores up to it.
+	function tokClick(team: Team, i: number) {
+		const cur = $ms.life[team];
+		setLife(team, i < cur ? i : i + 1);
+	}
+	function setLife(team: Team, value: number) {
+		const next = clamp(value, 0, lifeMax);
+		if (next !== $ms.life[team])
+			session.act(`${team === 'orange' ? 'Orange' : 'Blue'} Life ${$ms.life[team]} → ${next}`, { life: { ...$ms.life, [team]: next } });
+	}
 
 	// orient the board so the local player's base sits at the bottom
 	$: mySeat = $players.find((p) => p.id === clientId)?.seat ?? -1;
@@ -41,11 +54,6 @@
 		const p = $ms.pieces[id];
 		const label = p?.hero ? heroById(p.hero)?.name ?? 'a piece' : 'a piece';
 		session.act(`moved ${label} → ${zoneName($ms.map, hex)}`, movePiece($ms, id, hex));
-	}
-	function adjLife(team: Team, d: number) {
-		const cur = $ms.life[team];
-		const next = clamp(cur + d, 0, 20);
-		if (next !== cur) session.act(`${team === 'orange' ? 'Orange' : 'Blue'} Life ${cur} → ${next}`, { life: { ...$ms.life, [team]: next } });
 	}
 	function adjWaves(d: number) {
 		const next = clamp($ms.waves + d, 0, 12);
@@ -106,13 +114,17 @@
 
 	<!-- game HUD: ornate top strip -->
 	<div class="tophud">
-			<!-- Orange team Life -->
+			<!-- Orange team Life: one medallion per starting Life; click to deplete/restore -->
 			<div class="teamlife orange">
-				<button class="lifeadj" on:click={() => adjLife('orange', -1)} title="Orange Life −">−</button>
-				<div class="medallion" style="background-image:url({lifeArt('orange')})">
-					<span class="lifeval">{$ms.life.orange}</span>
+				<div class="tlabel"><span class="tn">Orange</span><span class="tc">{$ms.life.orange}<small>/{lifeMax}</small></span></div>
+				<div class="tokens">
+					{#each Array(lifeMax) as _, i}
+						<button class="ltok" class:dep={i >= $ms.life.orange}
+							style="background-image:url({lifeArt('orange', i < $ms.life.orange ? 'front' : 'back')})"
+							on:click={() => tokClick('orange', i)}
+							title="Orange Life {$ms.life.orange} / {lifeMax} — click to set"></button>
+					{/each}
 				</div>
-				<button class="lifeadj" on:click={() => adjLife('orange', 1)} title="Orange Life +">+</button>
 			</div>
 
 			<!-- center plaque -->
@@ -137,11 +149,15 @@
 
 			<!-- Blue team Life -->
 			<div class="teamlife blue">
-				<button class="lifeadj" on:click={() => adjLife('blue', -1)} title="Blue Life −">−</button>
-				<div class="medallion" style="background-image:url({lifeArt('blue')})">
-					<span class="lifeval">{$ms.life.blue}</span>
+				<div class="tlabel"><span class="tn">Blue</span><span class="tc">{$ms.life.blue}<small>/{lifeMax}</small></span></div>
+				<div class="tokens">
+					{#each Array(lifeMax) as _, i}
+						<button class="ltok" class:dep={i >= $ms.life.blue}
+							style="background-image:url({lifeArt('blue', i < $ms.life.blue ? 'front' : 'back')})"
+							on:click={() => tokClick('blue', i)}
+							title="Blue Life {$ms.life.blue} / {lifeMax} — click to set"></button>
+					{/each}
 				</div>
-				<button class="lifeadj" on:click={() => adjLife('blue', 1)} title="Blue Life +">+</button>
 			</div>
 		</div>
 
@@ -211,17 +227,22 @@
 	/* ornate top strip: Life medallions flanking a central plaque */
 	.tophud { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 6; display: flex; align-items: center; gap: 18px; }
 
-	.teamlife { display: flex; align-items: center; gap: 4px; }
-	.medallion { width: 88px; height: 84px; background-size: contain; background-repeat: no-repeat; background-position: center;
-		display: grid; place-items: center; filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.6)); }
-	.medallion .lifeval { font-family: 'Modesto Poster', serif; font-size: 2.1rem; line-height: 1; color: #fff;
-		text-shadow: 0 2px 3px rgba(0, 0, 0, 0.95), 0 0 10px rgba(0, 0, 0, 0.8), 0 0 3px rgba(0, 0, 0, 1); margin-top: 4px; }
-	.lifeadj { width: 1.5rem; height: 1.5rem; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.22); background: rgba(9, 13, 22, 0.72);
-		color: #e5e7eb; cursor: pointer; font-weight: 800; line-height: 1; opacity: 0; transition: opacity 0.15s; }
-	.teamlife:hover .lifeadj, .teamlife:focus-within .lifeadj { opacity: 1; }
-	.lifeadj:hover { background: rgba(30, 40, 60, 0.9); }
+	.teamlife { display: flex; flex-direction: column; gap: 3px; }
+	.tlabel { display: flex; align-items: baseline; gap: 6px; text-shadow: 0 2px 5px rgba(0, 0, 0, 0.8); }
+	.teamlife.blue .tlabel { justify-content: flex-end; }
+	.tn { font-family: 'Modesto Poster', serif; font-size: 0.95rem; }
+	.orange .tn { color: #ef9a5a; } .blue .tn { color: #6ea8f0; }
+	.tc { font-weight: 800; font-variant-numeric: tabular-nums; font-size: 0.95rem; color: #f1f5f9; }
+	.tc small { color: #94a3b8; font-weight: 600; font-size: 0.72rem; }
+	.tokens { display: flex; gap: 2px; flex-wrap: nowrap; }
+	.teamlife.blue .tokens { justify-content: flex-end; }
+	.ltok { width: 34px; height: 32px; padding: 0; border: none; background: transparent no-repeat center / contain; cursor: pointer;
+		filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.55)); transition: transform 0.1s, filter 0.15s, opacity 0.15s; }
+	.ltok:hover { transform: translateY(-2px) scale(1.1); }
+	.ltok.dep { opacity: 0.85; filter: grayscale(0.35) brightness(0.72) drop-shadow(0 2px 3px rgba(0, 0, 0, 0.4)); }
+	.ltok.dep:hover { opacity: 1; filter: grayscale(0.15) brightness(0.9); }
 
-	.plaque { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 220px;
+	.plaque { flex: none; display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 220px; white-space: nowrap;
 		background: rgba(9, 13, 22, 0.72); backdrop-filter: blur(8px); border: 1px solid rgba(199, 154, 78, 0.4); border-radius: 14px;
 		padding: 7px 18px 9px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5), inset 0 0 22px rgba(199, 154, 78, 0.06); }
 	.plaque .mapname { font-family: 'Modesto Poster', serif; font-size: 1.05rem; letter-spacing: 0.04em; color: #f6ead2; }
