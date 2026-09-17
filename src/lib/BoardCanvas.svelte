@@ -141,7 +141,12 @@
 	onDestroy(() => wrapEl?.removeEventListener('wheel', onWheel));
 
 	// ---- pieces: drag to snap onto the nearest hex ----------------------------
+	// A small movement threshold means a *click* on a token never nudges it — you
+	// only move a piece by deliberately dragging it, so clicking/panning near a
+	// token no longer grabs it by accident.
+	const DRAG_THRESHOLD = 6; // client px
 	let drag: { id: string; x: number; y: number } | null = null;
+	let pend: { id: string; hex: string; sx: number; sy: number; moved: boolean } | null = null;
 	function centerOf(id: string) {
 		const [c, r] = id.split('_').map(Number);
 		return { x: size * SQRT3 * (c + 0.5 * (r & 1)), y: size * 1.5 * r };
@@ -155,24 +160,28 @@
 	function startDrag(e: PointerEvent, p: { id: string; hex: string }) {
 		if (!onMovePiece || !interactive) return;
 		e.stopPropagation(); e.preventDefault();
-		const c = centerOf(p.hex);
-		drag = { id: p.id, x: c.x, y: c.y };
+		pend = { id: p.id, hex: p.hex, sx: e.clientX, sy: e.clientY, moved: false };
 		window.addEventListener('pointermove', onDragMove);
 		window.addEventListener('pointerup', onDragEnd);
 	}
 	function onDragMove(e: PointerEvent) {
-		if (!drag) return;
+		if (!pend) return;
+		if (!pend.moved) {
+			if (Math.hypot(e.clientX - pend.sx, e.clientY - pend.sy) < DRAG_THRESHOLD) return;
+			pend.moved = true; // crossed the threshold → this is a real drag
+		}
 		const pt = toChild(e.clientX, e.clientY);
-		drag = { ...drag, x: pt.x, y: pt.y };
+		drag = { id: pend.id, x: pt.x, y: pt.y };
 	}
 	function onDragEnd(e: PointerEvent) {
 		window.removeEventListener('pointermove', onDragMove);
 		window.removeEventListener('pointerup', onDragEnd);
-		if (!drag) return;
+		const moved = pend?.moved, id = pend?.id;
+		pend = null;
+		drag = null;
+		if (!moved || !id) return; // it was a click, not a drag — leave the piece put
 		const pt = toChild(e.clientX, e.clientY);
 		const hex = nearestHex(pt.x, pt.y);
-		const id = drag.id;
-		drag = null;
 		if (!hex) return;
 		const c = centerOf(hex);
 		const off = Math.hypot(c.x - pt.x, c.y - pt.y) > size * 1.3;
