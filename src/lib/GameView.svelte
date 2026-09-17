@@ -23,6 +23,14 @@
 	const art = import.meta.glob('./cards/images/{life_counter,tiebreaker}_*.png', { eager: true, import: 'default' }) as Record<string, string>;
 	const lifeArt = (t: Team, side: 'front' | 'back') => art[`./cards/images/life_counter_${t}_${side}.png`];
 	const tieArt = (t: Team) => art[`./cards/images/tiebreaker_${t}.png`];
+	// waves = the shared minion waves; no dedicated counter art in the lib, so we
+	// use the minion sprite as the wave token.
+	const minionArt = import.meta.glob('./images/minions/*.png', { eager: true, import: 'default' }) as Record<string, string>;
+	const waveIcon = minionArt['./images/minions/orange_melee.png'];
+	function setWaves(v: number) {
+		const next = Math.max(0, v);
+		if (next !== $ms.waves) session.act(`Waves ${$ms.waves} → ${next}`, { waves: next });
+	}
 	$: lifeMax = $ms.lifeMax || Math.max($ms.life.orange, $ms.life.blue, 8);
 
 	// Click a Life token to set the depletion boundary: clicking a full token
@@ -137,9 +145,13 @@
 				</div>
 				<div class="prow foot">
 					<div class="waves">
-						<button class="mini" on:click={() => adjWaves(-1)}>−</button>
-						<span class="wv">◆ {$ms.waves} <small>waves</small></span>
-						<button class="mini" on:click={() => adjWaves(1)}>+</button>
+						<div class="wtoks">
+							{#each Array($ms.waves) as _, i}
+								<button class="wtok" style="background-image:url({waveIcon})" on:click={() => setWaves(i)} title="Waves {$ms.waves} — click to spend"></button>
+							{/each}
+						</div>
+						<button class="mini" on:click={() => adjWaves(1)} title="Add a wave">+</button>
+						<span class="wv">{$ms.waves} <small>waves</small></span>
 					</div>
 					<button class="tiebtn {$ms.tieBreaker}" on:click={flipTie} title="Flip the tie-breaker — {$ms.tieBreaker === 'orange' ? 'Orange' : 'Blue'} breaks ties">
 						<img src={tieArt($ms.tieBreaker)} alt="" /><span>Tie-breaker</span>
@@ -252,6 +264,11 @@
 	.waves { display: flex; align-items: center; gap: 6px; }
 	.waves .wv { font-weight: 700; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
 	.waves .wv small { color: #94a3b8; font-weight: 600; font-size: 0.72rem; }
+	.wtoks { display: flex; gap: 2px; }
+	.wtok { width: 24px; height: 24px; padding: 0; border: none; border-radius: 50%; cursor: pointer;
+		background: rgba(0, 0, 0, 0.35) no-repeat center / 88%; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15);
+		filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5)); transition: transform 0.1s; }
+	.wtok:hover { transform: translateY(-2px) scale(1.12); }
 	.tiebtn { display: flex; align-items: center; gap: 6px; border: 1px solid rgba(255, 255, 255, 0.16); background: rgba(255, 255, 255, 0.05);
 		border-radius: 999px; padding: 2px 12px 2px 3px; color: #e5e7eb; cursor: pointer; font-size: 0.78rem; font-weight: 600; }
 	.tiebtn img { width: 1.5rem; height: 1.5rem; }

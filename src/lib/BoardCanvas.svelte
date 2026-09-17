@@ -15,7 +15,6 @@
 
 	export let pieces: Array<{ id: string; hex: string; team: string; role?: string; label?: string; color?: string }> = [];
 	export let onMovePiece: ((id: string, hex: string) => void) | null = null;
-	export let onRemovePiece: ((id: string) => void) | null = null;
 
 	const SQRT3 = Math.sqrt(3);
 	const tileSprites = import.meta.glob('./images/tiles/*.png', { eager: true, import: 'default' }) as Record<string, string>;
@@ -121,32 +120,60 @@
 	function onWheel(e: WheelEvent) {
 		if (!interactive) return;
 		e.preventDefault();
-		zoomAt(scale * (e.deltaY < 0 ? 1.12 : 1 / 1.12), e.clientX, e.clientY);
+		// Figma/Maps convention: pinch (trackpad) or ctrl/⌘+wheel = zoom;
+		// plain two-finger swipe / wheel = pan.
+		if (e.ctrlKey || e.metaKey) {
+			zoomAt(scale * (e.deltaY < 0 ? 1.1 : 1 / 1.1), e.clientX, e.clientY);
+		} else {
+			const m = svgEl?.getScreenCTM();
+			if (!m) return;
+			panX -= e.deltaX / m.a;
+			panY -= e.deltaY / m.d;
+		}
 	}
-	// pan by dragging empty board
-	let panning = false, p0 = { x: 0, y: 0 }, pan0 = { x: 0, y: 0 };
+	// ---- pan (drag anywhere) + click-to-move pieces ---------------------------
+	// Dragging always pans — even over a token — so a crowded board never traps
+	// the view. To move a piece you *click* it (it lifts/highlights), then click
+	// the destination hex. Click it again to deselect.
+	const DRAG_THRESHOLD = 6; // client px; below this a pointerup counts as a click
+	let panning = false, moved = false, p0 = { x: 0, y: 0 }, pan0 = { x: 0, y: 0 }, downC = { x: 0, y: 0 };
+	let pressId: string | null = null; // piece under the pointer at press, if any
+	let selected: string | null = null; // currently picked-up piece
 	function down(e: PointerEvent) {
 		if (!interactive) return;
-		panning = true; p0 = toUser(e.clientX, e.clientY); pan0 = { x: panX, y: panY };
+		panning = true; moved = false; p0 = toUser(e.clientX, e.clientY); pan0 = { x: panX, y: panY };
+		downC = { x: e.clientX, y: e.clientY };
 		wrapEl.setPointerCapture(e.pointerId);
 	}
 	function move(e: PointerEvent) {
 		if (!panning) return;
+		if (!moved && Math.hypot(e.clientX - downC.x, e.clientY - downC.y) >= DRAG_THRESHOLD) moved = true;
 		const p = toUser(e.clientX, e.clientY);
 		panX = pan0.x + (p.x - p0.x); panY = pan0.y + (p.y - p0.y);
 	}
-	function up(e: PointerEvent) { panning = false; try { wrapEl.releasePointerCapture(e.pointerId); } catch {} }
+	function up(e: PointerEvent) {
+		panning = false;
+		try { wrapEl.releasePointerCapture(e.pointerId); } catch {}
+		if (!moved) handleClick(e); // a tap, not a pan
+		pressId = null;
+	}
+	function handleClick(e: PointerEvent) {
+		if (!interactive || !onMovePiece) return;
+		if (pressId != null) {
+			selected = selected === pressId ? null : pressId; // toggle selection
+			return;
+		}
+		if (selected != null) { // clicked the board with a piece in hand → move it
+			const pt = toChild(e.clientX, e.clientY);
+			const hex = nearestHex(pt.x, pt.y);
+			if (hex) onMovePiece(selected, hex);
+			selected = null;
+		}
+	}
 
 	onMount(() => { if (interactive) wrapEl?.addEventListener('wheel', onWheel, { passive: false }); });
 	onDestroy(() => wrapEl?.removeEventListener('wheel', onWheel));
 
-	// ---- pieces: drag to snap onto the nearest hex ----------------------------
-	// A small movement threshold means a *click* on a token never nudges it — you
-	// only move a piece by deliberately dragging it, so clicking/panning near a
-	// token no longer grabs it by accident.
-	const DRAG_THRESHOLD = 6; // client px
-	let drag: { id: string; x: number; y: number } | null = null;
-	let pend: { id: string; hex: string; sx: number; sy: number; moved: boolean } | null = null;
 	function centerOf(id: string) {
 		const [c, r] = id.split('_').map(Number);
 		return { x: size * SQRT3 * (c + 0.5 * (r & 1)), y: size * 1.5 * r };
@@ -157,37 +184,6 @@
 		return best;
 	}
 	const pieceColor = (t: string) => (t === 'orange' ? '#ea6a1e' : t === 'blue' ? '#2f79e6' : '#9aa4b2');
-	function startDrag(e: PointerEvent, p: { id: string; hex: string }) {
-		if (!onMovePiece || !interactive) return;
-		e.stopPropagation(); e.preventDefault();
-		pend = { id: p.id, hex: p.hex, sx: e.clientX, sy: e.clientY, moved: false };
-		window.addEventListener('pointermove', onDragMove);
-		window.addEventListener('pointerup', onDragEnd);
-	}
-	function onDragMove(e: PointerEvent) {
-		if (!pend) return;
-		if (!pend.moved) {
-			if (Math.hypot(e.clientX - pend.sx, e.clientY - pend.sy) < DRAG_THRESHOLD) return;
-			pend.moved = true; // crossed the threshold → this is a real drag
-		}
-		const pt = toChild(e.clientX, e.clientY);
-		drag = { id: pend.id, x: pt.x, y: pt.y };
-	}
-	function onDragEnd(e: PointerEvent) {
-		window.removeEventListener('pointermove', onDragMove);
-		window.removeEventListener('pointerup', onDragEnd);
-		const moved = pend?.moved, id = pend?.id;
-		pend = null;
-		drag = null;
-		if (!moved || !id) return; // it was a click, not a drag — leave the piece put
-		const pt = toChild(e.clientX, e.clientY);
-		const hex = nearestHex(pt.x, pt.y);
-		if (!hex) return;
-		const c = centerOf(hex);
-		const off = Math.hypot(c.x - pt.x, c.y - pt.y) > size * 1.3;
-		if (off && onRemovePiece) onRemovePiece(id);
-		else if (onMovePiece) onMovePiece(id, hex);
-	}
 	const minionHref = (team: string, role?: string) =>
 		minionSprites[`./images/minions/${team === 'blue' ? 'blue' : 'orange'}_${role ?? 'melee'}.png`];
 </script>
@@ -220,18 +216,22 @@
 			{/each}
 
 			{#each pieces as p (p.id)}
-				{@const c = drag && drag.id === p.id ? { x: drag.x, y: drag.y } : centerOf(p.hex)}
-				<g class="piece" class:draggable={!!onMovePiece} class:dragging={drag?.id === p.id}
+				{@const c = centerOf(p.hex)}
+				{@const sel = selected === p.id}
+				<g class="piece" class:selectable={!!onMovePiece} class:selected={sel}
 					role="button" tabindex="-1"
 					aria-label={p.role ? `${p.team} ${p.role} minion` : `${p.team} ${p.label ?? 'piece'}`}
 					transform={rotEff ? `rotate(${-rotEff} ${c.x} ${c.y})` : undefined}
-					on:pointerdown={(e) => startDrag(e, p)}
+					on:pointerdown={() => { if (onMovePiece) pressId = p.id; }}
 				>
+					{#if sel}
+						<circle class="selring" cx={c.x} cy={c.y} r={size * 0.82} fill="none" stroke="#fde047" stroke-width={size * 0.1} stroke-dasharray="{size * 0.32} {size * 0.22}" />
+					{/if}
 					{#if p.role}
 						<circle cx={c.x} cy={c.y} r={size * 0.66} fill="#e2e8f0" stroke={pieceColor(p.team)} stroke-width={size * 0.14} />
 						<image href={minionHref(p.team, p.role)} x={c.x - size * 0.62} y={c.y - size * 0.62} width={size * 1.24} height={size * 1.24} preserveAspectRatio="xMidYMid meet" />
 					{:else}
-						<circle cx={c.x} cy={c.y} r={size * 0.62} fill={p.color ?? pieceColor(p.team)} stroke={pieceColor(p.team)} stroke-width={size * 0.16} />
+						<circle cx={c.x} cy={c.y} r={size * 0.62} fill={p.color ?? pieceColor(p.team)} stroke={sel ? '#fde047' : pieceColor(p.team)} stroke-width={size * 0.16} />
 						{#if p.label}
 							<text x={c.x} y={c.y} text-anchor="middle" dominant-baseline="central" font-size={size * 0.72} font-weight="800" fill="#0b1220" stroke="rgba(255,255,255,.6)" stroke-width={size * 0.02}>{p.label}</text>
 						{/if}
@@ -248,7 +248,8 @@
 	.board-wrap.interactive { cursor: grab; }
 	.board-wrap.interactive:active { cursor: grabbing; }
 	svg { position: absolute; inset: 0; width: 100%; height: 100%; }
-	.piece.draggable { cursor: grab; }
-	.piece.dragging { cursor: grabbing; }
-	.piece.dragging circle { filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.5)); }
+	.piece.selectable { cursor: pointer; }
+	.piece.selected circle { filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.6)); }
+	.selring { animation: spin 8s linear infinite; transform-box: fill-box; transform-origin: center; }
+	@keyframes spin { to { transform: rotate(360deg); } }
 </style>
