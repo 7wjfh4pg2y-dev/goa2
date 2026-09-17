@@ -60,23 +60,39 @@
 
 	let hudOpen = true;
 	let logOpen = true;
+	let confirmLeave = false;
 	$: log = $ms.log ?? [];
 	const hhmm = (t: number) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 </script>
+
+<svelte:window on:keydown={(e) => e.key === 'Escape' && confirmLeave && (confirmLeave = false)} />
 
 <div class="gamewrap">
 	<div class="ocean"></div>
 	<BoardCanvas bind:this={board} map={$ms.map ?? {}} rotation={orientation} interactive={true} pieces={boardPieces} onMovePiece={move} />
 
-	<button class="gbtn leave" on:click={onLeave}>← Leave</button>
-
-	<!-- view controls (bottom-left) -->
+	<!-- view controls (bottom-left): zoom, rotate both ways, recenter -->
 	<div class="viewctl">
 		<button class="vbtn" on:click={() => board?.zoomBtn(1.2)} title="Zoom in">＋</button>
 		<button class="vbtn" on:click={() => board?.zoomBtn(1 / 1.2)} title="Zoom out">−</button>
-		<button class="vbtn" on:click={() => board?.rotateBy(60)} title="Rotate">⟳</button>
+		<button class="vbtn" on:click={() => board?.rotateBy(-60)} title="Rotate counter-clockwise">⟲</button>
+		<button class="vbtn" on:click={() => board?.rotateBy(60)} title="Rotate clockwise">⟳</button>
 		<button class="vbtn" on:click={() => board?.reset()} title="Recenter">⤾</button>
+		<button class="vbtn leave" on:click={() => (confirmLeave = true)} title="Leave game">⎋</button>
 	</div>
+
+	{#if confirmLeave}
+		<div class="modal-scrim" on:click={() => (confirmLeave = false)} on:keydown={() => {}} role="presentation">
+			<div class="modal" on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" tabindex="-1">
+				<h3>Leave the game?</h3>
+				<p>You'll drop back to the menu. You can rejoin with the room code while the game is live.</p>
+				<div class="mrow">
+					<button class="mcancel" on:click={() => (confirmLeave = false)}>Stay</button>
+					<button class="mleave" on:click={onLeave}>Leave</button>
+				</div>
+			</div>
+		</div>
+	{/if}
 
 	<!-- game HUD (right) -->
 	<button class="hudtab" on:click={() => (hudOpen = !hudOpen)} title="Toggle HUD">{hudOpen ? '▶' : '◀'}</button>
@@ -135,20 +151,40 @@
 
 <style>
 	.gamewrap { position: fixed; inset: 0; color: #f1f5f9; overflow: hidden; }
-	/* ocean backdrop — the hex island floats on water */
-	.ocean { position: absolute; inset: 0; background: radial-gradient(130% 110% at 50% -10%, #12384c 0%, #0a2534 42%, #05141f 100%); }
-	.ocean::before { content: ''; position: absolute; inset: -25%; background: repeating-linear-gradient(115deg, rgba(140, 210, 240, 0.05) 0 2px, transparent 2px 30px); animation: drift 26s linear infinite; }
-	.ocean::after { content: ''; position: absolute; inset: -25%; background: repeating-linear-gradient(200deg, rgba(90, 170, 210, 0.04) 0 2px, transparent 2px 42px); animation: drift2 34s linear infinite; }
-	@keyframes drift { to { transform: translateX(70px); } }
-	@keyframes drift2 { to { transform: translateX(-60px); } }
-
-	.gbtn { border: 1px solid rgba(255, 255, 255, 0.2); background: rgba(0, 0, 0, 0.5); color: #e5e7eb; border-radius: 10px; padding: 0.45rem 0.9rem; cursor: pointer; font-weight: 600; }
-	.gbtn:hover { background: rgba(0, 0, 0, 0.7); }
-	.leave { position: absolute; top: 12px; left: 14px; z-index: 6; }
+	/* ocean backdrop — deep water with layered swells + moving caustics so the hex island reads as floating on sea */
+	.ocean { position: absolute; inset: 0;
+		background:
+			radial-gradient(60% 45% at 78% 12%, rgba(52, 128, 160, 0.35), transparent 60%),
+			radial-gradient(70% 60% at 20% 88%, rgba(20, 70, 110, 0.4), transparent 62%),
+			radial-gradient(140% 120% at 50% -15%, #1a4a63 0%, #0c3247 38%, #071f30 70%, #04121d 100%);
+	}
+	.ocean::before { content: ''; position: absolute; inset: -30%;
+		background:
+			repeating-linear-gradient(115deg, rgba(150, 220, 245, 0.045) 0 2px, transparent 2px 26px),
+			repeating-linear-gradient(160deg, rgba(120, 200, 230, 0.03) 0 3px, transparent 3px 40px);
+		animation: drift 24s linear infinite; }
+	.ocean::after { content: ''; position: absolute; inset: -30%;
+		background: repeating-linear-gradient(200deg, rgba(90, 175, 215, 0.035) 0 2px, transparent 2px 46px);
+		mix-blend-mode: screen; animation: drift2 32s linear infinite; }
+	@keyframes drift { to { transform: translate(64px, -22px); } }
+	@keyframes drift2 { to { transform: translate(-58px, 18px); } }
 
 	.viewctl { position: absolute; bottom: 14px; left: 14px; z-index: 6; display: flex; flex-direction: column; gap: 6px; }
-	.vbtn { width: 2.2rem; height: 2.2rem; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.18); background: rgba(9, 13, 22, 0.7); color: #e5e7eb; cursor: pointer; font-size: 1.1rem; line-height: 1; }
+	.vbtn { width: 2.2rem; height: 2.2rem; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.18); background: rgba(9, 13, 22, 0.7); backdrop-filter: blur(6px); color: #e5e7eb; cursor: pointer; font-size: 1.1rem; line-height: 1; }
 	.vbtn:hover { background: rgba(20, 28, 46, 0.85); }
+	.vbtn.leave { margin-top: 6px; border-color: rgba(239, 68, 68, 0.4); color: #fca5a5; }
+	.vbtn.leave:hover { background: rgba(80, 20, 24, 0.7); }
+
+	.modal-scrim { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; background: rgba(3, 8, 14, 0.6); backdrop-filter: blur(3px); }
+	.modal { width: min(360px, 90vw); background: rgba(12, 18, 32, 0.92); border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 16px; padding: 20px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6); }
+	.modal h3 { font-family: 'Modesto Poster', serif; font-size: 1.4rem; margin: 0 0 6px; }
+	.modal p { margin: 0 0 16px; color: #cbd5e1; font-size: 0.9rem; line-height: 1.45; }
+	.mrow { display: flex; gap: 10px; justify-content: flex-end; }
+	.mcancel, .mleave { border-radius: 10px; padding: 0.5rem 1.1rem; cursor: pointer; font-weight: 700; border: 1px solid transparent; }
+	.mcancel { background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.16); color: #e5e7eb; }
+	.mcancel:hover { background: rgba(255, 255, 255, 0.16); }
+	.mleave { background: #dc2626; color: #fff; }
+	.mleave:hover { background: #ef4444; }
 
 	.hudtab { position: absolute; top: 12px; right: 12px; z-index: 7; width: 1.8rem; height: 1.8rem; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.18); background: rgba(9, 13, 22, 0.75); color: #e5e7eb; cursor: pointer; }
 	.hud { position: absolute; top: 50px; right: 12px; z-index: 6; width: 220px; display: flex; flex-direction: column; gap: 10px; }
