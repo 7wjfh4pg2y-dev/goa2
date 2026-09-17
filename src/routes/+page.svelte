@@ -464,7 +464,7 @@
 {#if mode === 'draft' && session}
 	<HeroDraft {session} {state} {players} clientId={session.clientId} onLeave={leaveRoom} />
 {:else if mode === 'game' && session}
-	<GameView {session} ms={state} {players} {room} onLeave={leaveRoom} />
+	<GameView {session} ms={state} {players} clientId={session.clientId} {room} onLeave={leaveRoom} />
 {:else}
 <main class="wrap" class:landing={mode === 'landing'}>
 	<button class="home-link" class:hero={mode === 'landing'} on:click={onLogo} aria-label={mode === 'landing' ? 'Enter' : 'Main menu'}>
