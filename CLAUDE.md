@@ -67,4 +67,5 @@ Deployed to GitHub Pages: **https://7wjfh4pg2y-dev.github.io/goa2/**
 
 ## Status / next
 - Done: landing, role gate, create/join, lobby (seat-based teams + per-player coin flip), reconnect, connection indicator, **full hero draft (all 4 systems, timer, AFK/disconnect auto-resolve, announcement toast)**.
-- **Next frontier: the board.** After the draft, `game` mode is still a placeholder. Plan: render the chosen map (port `OLD/src/lib/BoardCanvas.svelte`, sprite-based 2D hex) + a synced HUD (shared waves, per-team Life, tie-breaker, round/turn) + piece movement (throttle drag broadcasts) + activity log.
+- **Board (in progress):** `src/lib/GameView.svelte` = full-screen board. `BoardCanvas.svelte` renders `$state.map` (sprite hex, pan/zoom). Hero tokens = coloured discs (player colour + hero initial + team ring), placed by the host via `placeHeroes()` on entering `game`. HUD (waves / per-team Life / tie-breaker / round-turn) + activity log, all synced via `session.update`/`act`. Piece drag broadcasts only on drop (BoardCanvas), logged via `act`.
+- **Next:** unique hero token art (currently colour discs), win/flow (wave depletion, life-to-0, last-push), and a planned **aesthetic overhaul** of the in-game UI (user flagged the game HUD/panels styling as temporary).

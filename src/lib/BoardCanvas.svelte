@@ -13,7 +13,7 @@
 	export let interactive = true
 
 	// pieces on the board + callbacks when one is moved or dragged off the board
-	export let pieces: Array<{ id: string; hex: string; team: string; role?: string; label?: string }> = []
+	export let pieces: Array<{ id: string; hex: string; team: string; role?: string; label?: string; color?: string }> = []
 	export let onMovePiece: ((id: string, hex: string) => void) | null = null
 	export let onRemovePiece: ((id: string) => void) | null = null
 
@@ -182,9 +182,9 @@
 						<circle cx={c.x} cy={c.y} r={size * 0.66} fill="#e2e8f0" stroke={pieceColor(p.team)} stroke-width={size * 0.14} />
 						<image href={minionHref(p.team, p.role)} x={c.x - size * 0.62} y={c.y - size * 0.62} width={size * 1.24} height={size * 1.24} preserveAspectRatio="xMidYMid meet" />
 					{:else}
-						<circle cx={c.x} cy={c.y} r={size * 0.6} fill={pieceColor(p.team)} stroke="#0b1220" stroke-width={size * 0.09} />
+						<circle cx={c.x} cy={c.y} r={size * 0.62} fill={p.color ?? pieceColor(p.team)} stroke={pieceColor(p.team)} stroke-width={size * 0.16} />
 						{#if p.label}
-							<text x={c.x} y={c.y} text-anchor="middle" dominant-baseline="central" font-size={size * 0.7} font-weight="700" fill="#0b1220">{p.label}</text>
+							<text x={c.x} y={c.y} text-anchor="middle" dominant-baseline="central" font-size={size * 0.72} font-weight="800" fill="#0b1220" stroke="rgba(255,255,255,.6)" stroke-width={size * 0.02}>{p.label}</text>
 						{/if}
 					{/if}
 				</g>

@@ -159,6 +159,36 @@ export interface Piece {
 	kind?: 'token' | 'minion' | 'hero'
 	role?: 'ranged' | 'melee' | 'heavy' // for minions
 	label?: string // for hero/token markers
+	color?: string // a PLAYER_COLORS id — the owning player's token colour
+	hero?: string // heroId, for hero pieces
+}
+
+/** Hexes belonging to a team's base zone (for spawning heroes). */
+function baseHexes(map: GameMap | null, team: Team): string[] {
+	const cells = map?.cells ?? {}
+	const want = team === 'orange' ? ['baseOrange', 'baseOrangeSpawn'] : ['baseBlue', 'baseBlueSpawn']
+	return Object.keys(cells).filter((id) => want.includes(cells[id])).sort()
+}
+
+/**
+ * Initial hero tokens: one per seated player who drafted a hero, placed on their
+ * team's base zone and coloured by the player's token colour. Called once by the
+ * host when the game starts.
+ */
+export function placeHeroes(state: MatchState, players: Player[]): Record<string, Piece> {
+	const seated = players.filter((p) => p.seat >= 0 && p.seat < state.seats)
+	const pieces: Record<string, Piece> = {}
+	for (const team of TEAMS) {
+		const bases = baseHexes(state.map, team)
+		const roster = seated.filter((p) => teamForSeat(p.seat, state.seats) === team).sort((a, b) => a.seat - b.seat)
+		roster.forEach((p, i) => {
+			const hero = state.draft?.picks[p.id]
+			if (!hero) return
+			const hex = bases[i % bases.length] ?? bases[0] ?? Object.keys(state.map?.cells ?? {})[0] ?? '0_0'
+			pieces[p.id] = { id: p.id, hex, team, kind: 'hero', hero, color: p.color }
+		})
+	}
+	return pieces
 }
 
 /** Life counters per team, from the rulebook setup table (base, single lane). */

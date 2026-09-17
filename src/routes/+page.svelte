@@ -19,6 +19,7 @@
 		PLAYER_COLORS,
 		teamForSeat,
 		buildDraft,
+		placeHeroes,
 		draftPoolMin,
 		DRAFT_SYSTEMS,
 		DRAFT_LABELS,
@@ -31,7 +32,7 @@
 	} from '$lib/match';
 	import { HEROES } from '$lib/heroes';
 	import HeroDraft from '$lib/HeroDraft.svelte';
-	import BoardCanvas from '$lib/BoardCanvas.svelte';
+	import GameView from '$lib/GameView.svelte';
 
 	type Mode = 'landing' | 'choose' | 'admin' | 'adminhub' | 'menu' | 'create' | 'join' | 'lobby' | 'draft' | 'game';
 	let mode: Mode = 'landing';
@@ -185,6 +186,10 @@
 	$: if (mode === 'lobby' && $state.draft && !$state.started && !coinShown) mode = 'draft';
 	$: if ((mode === 'lobby' || mode === 'draft') && $state.started && !coinShown) mode = 'game';
 	$: if ((mode === 'lobby' || mode === 'draft' || mode === 'game') && $state.closed) bail('The host closed the game.');
+	// host places hero tokens once, when the board first appears
+	$: if (mode === 'game' && iAmHost && session && $state.draft && !Object.keys($state.pieces).length) {
+		session.update({ pieces: placeHeroes(get(state), get(players)) });
+	}
 
 	function bail(msg: string) {
 		session?.leave();
@@ -459,14 +464,7 @@
 {#if mode === 'draft' && session}
 	<HeroDraft {session} {state} {players} clientId={session.clientId} onLeave={leaveRoom} />
 {:else if mode === 'game' && session}
-	<div class="gamewrap">
-		<BoardCanvas map={$state.map ?? {}} interactive={true} />
-		<div class="gamebar">
-			<button class="gbtn" on:click={leaveRoom}>← Leave</button>
-			<div class="gtitle"><span class="gname">{$state.map?.name ?? 'Board'}</span><span class="grcode mono">{room}</span></div>
-			<span class="conn {$connStatus}"><span class="cdot"></span>{connLabel($connStatus)}</span>
-		</div>
-	</div>
+	<GameView {session} ms={state} {players} {room} onLeave={leaveRoom} />
 {:else}
 <main class="wrap" class:landing={mode === 'landing'}>
 	<button class="home-link" class:hero={mode === 'landing'} on:click={onLogo} aria-label={mode === 'landing' ? 'Enter' : 'Main menu'}>
@@ -889,16 +887,6 @@
 	.coincap { margin: 0; font-size: 1.05rem; font-weight: 700; letter-spacing: 0.02em; color: #e2e8f0; }
 	.coincap.done { color: #6ee7b7; }
 	@keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
-
-	/* in-game board */
-	.gamewrap { position: fixed; inset: 0; background: #0b0f17; }
-	.gamebar { position: absolute; top: 0; left: 0; right: 0; z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; background: linear-gradient(180deg, rgba(9, 13, 22, 0.72), transparent); pointer-events: none; }
-	.gamebar > * { pointer-events: auto; }
-	.gbtn { border: 1px solid rgba(255, 255, 255, 0.2); background: rgba(0, 0, 0, 0.45); color: #e5e7eb; border-radius: 10px; padding: 0.5rem 1rem; cursor: pointer; font-weight: 600; }
-	.gbtn:hover { background: rgba(0, 0, 0, 0.65); }
-	.gtitle { display: flex; align-items: baseline; gap: 10px; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.7); }
-	.gname { font-family: 'Modesto Poster', serif; font-size: 1.25rem; letter-spacing: 0.01em; }
-	.grcode { color: #94a3b8; font-size: 0.8rem; }
 
 	@media (max-width: 560px) {
 		.grid2 { grid-template-columns: 1fr; gap: 16px; }
