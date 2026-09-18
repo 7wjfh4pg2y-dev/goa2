@@ -1,8 +1,10 @@
 <script lang="ts">
-	// The in-game card surface: a right-side board for every player (name · hero ·
-	// all-6 stats · current card), a click-to-open overlay of that player's whole
-	// board (the round's four turns, discard, removed), a card-examine lightbox,
-	// and the local player's private hand with commit / reveal / defend.
+	// The in-game card surface + turn engine.
+	//
+	// Flow per turn: players commit a card face-down (ready up) → once everyone is
+	// ready the host reveals all simultaneously → players resolve in descending
+	// initiative order, each confirming "Done" → after the last, the turn advances;
+	// after turn 4 the round ends and every hand is refreshed.
 	import type { Readable } from 'svelte/store';
 	import type { MatchSession, MatchState, Player } from '$lib/match';
 	import { teamForSeat } from '$lib/match';
@@ -12,9 +14,13 @@
 	import {
 		commitCard,
 		uncommit,
-		revealTurn,
+		passTurn,
+		revealPlayer,
 		discardCard,
 		undiscard,
+		endRoundAll,
+		PASS,
+		TURNS_PER_ROUND,
 		type PlayerCardState,
 		type StatKey
 	} from '$lib/cards/cardstate';
@@ -35,20 +41,22 @@
 		{ key: 'range', icon: 'item_range', baseIdx: null, label: 'Range' },
 		{ key: 'radius', icon: 'item_area', baseIdx: null, label: 'Radius' }
 	];
-	const ui = import.meta.glob('./cards/images/*.png', { eager: true, import: 'default' }) as Record<
-		string,
-		string
-	>;
+	const ui = import.meta.glob('./cards/images/*.png', { eager: true, import: 'default' }) as Record<string, string>;
 	const icon = (n: string) => ui[`./cards/images/${n}.png`];
 
-	// seated players, in seat order, with their team tint
 	$: seated = ($players ?? [])
 		.filter((p) => p.seat >= 0 && p.seat < $ms.seats)
 		.sort((a, b) => a.seat - b.seat);
 	$: cards = $ms.cards ?? {};
+	$: seatedWithCards = seated.filter((p) => cards[p.id]);
 	$: teamTint = (p: Player) => (teamForSeat(p.seat, $ms.seats) === 'orange' ? ORANGE : BLUE);
 	$: teamName = (p: Player) => (teamForSeat(p.seat, $ms.seats) === 'orange' ? 'Orange' : 'Blue');
 	$: firstBlueSeat = seated.find((p) => teamForSeat(p.seat, $ms.seats) === 'blue')?.seat ?? -1;
+
+	$: iAmHost = $ms.host === clientId;
+	$: phase = $ms.cardPhase ?? 'planning';
+	$: resolved = $ms.resolved ?? [];
+	$: turnIdx = $ms.turn - 1;
 
 	const allStats = (cs: PlayerCardState) =>
 		STAT_DEFS.map((d) => {
@@ -60,17 +68,67 @@
 		for (let i = cs.turns.length - 1; i >= 0; i--) if (cs.turns[i] != null) return cs.turns[i];
 		return null;
 	};
+	const cardInit = (cs: PlayerCardState, idx: number | null) =>
+		idx == null ? -1 : heroCards(cs.hero)[idx]?.initiative ?? 0;
 
-	// overlay + examine
+	// ── turn engine ────────────────────────────────────────────────────────
+	$: readyCount = seatedWithCards.filter((p) => cards[p.id].pending != null).length;
+	$: allReady = seatedWithCards.length > 0 && readyCount === seatedWithCards.length;
+	// resolution order: everyone who played a card this turn, highest initiative first
+	$: order =
+		phase === 'resolving'
+			? seatedWithCards
+					.filter((p) => cards[p.id].turns[turnIdx] != null)
+					.slice()
+					.sort((a, b) => cardInit(cards[b.id], cards[b.id].turns[turnIdx]) - cardInit(cards[a.id], cards[a.id].turns[turnIdx]) || a.seat - b.seat)
+			: [];
+	$: activeId = order.find((p) => !resolved.includes(p.id))?.id ?? null;
+	$: allResolved =
+		phase === 'resolving' &&
+		seatedWithCards.length > 0 &&
+		seatedWithCards.every((p) => resolved.includes(p.id));
+
+	// host-only transitions (self-terminating: each flips its own trigger condition)
+	$: if (iAmHost && phase === 'planning' && allReady) revealAll();
+	$: if (iAmHost && allResolved) advanceTurn();
+
+	function revealAll() {
+		const next: Record<string, PlayerCardState> = { ...cards };
+		const passers: string[] = [];
+		for (const p of seatedWithCards) {
+			next[p.id] = revealPlayer(cards[p.id], turnIdx);
+			if (next[p.id].turns[turnIdx] == null) passers.push(p.id); // no card = auto-resolved
+		}
+		session.act(`Turn ${$ms.turn} — reveal`, { cards: next, cardPhase: 'resolving', resolved: passers });
+	}
+	function advanceTurn() {
+		if ($ms.turn >= TURNS_PER_ROUND) {
+			session.act(`Round ${$ms.round} complete`, {
+				cards: endRoundAll(cards),
+				round: $ms.round + 1,
+				turn: 1,
+				cardPhase: 'planning',
+				resolved: []
+			});
+		} else {
+			session.act(`Turn ${$ms.turn + 1} — planning`, { turn: $ms.turn + 1, cardPhase: 'planning', resolved: [] });
+		}
+	}
+
+	// ── overlay + examine ──────────────────────────────────────────────────
 	let overlayId: string | null = null;
 	let examine: { hid: string; idx: number } | null = null;
 	$: ovPlayer = seated.find((p) => p.id === overlayId) ?? null;
 
-	// local player
+	// ── local player ───────────────────────────────────────────────────────
 	$: mine = cards[clientId] ?? null;
-	$: myTurnIdx = $ms.turn - 1;
+	$: myReady = mine?.pending != null;
+	$: isActive = activeId === clientId;
+	$: activePlayer = seated.find((p) => p.id === activeId) ?? null;
 	let selected: number | null = null;
+	$: if (phase !== 'planning' || myReady) selected = null; // no card magnify once readied/resolving
 
+	const myName = () => seated.find((p) => p.id === clientId)?.name ?? 'You';
 	function setCards(pid: string, next: PlayerCardState, label: string) {
 		session.act(label, { cards: { ...cards, [pid]: next } });
 	}
@@ -79,9 +137,10 @@
 		setCards(clientId, commitCard(mine, idx), `${myName()} committed a card`);
 		selected = null;
 	}
-	function reveal() {
-		if (!mine || mine.pending == null) return;
-		setCards(clientId, revealTurn(mine, myTurnIdx), `${myName()} revealed Turn ${$ms.turn}`);
+	function pass() {
+		if (!mine) return;
+		setCards(clientId, passTurn(mine), `${myName()} passed`);
+		selected = null;
 	}
 	function takeBack() {
 		if (!mine) return;
@@ -96,9 +155,11 @@
 		if (!mine) return;
 		setCards(clientId, undiscard(mine, idx), `${myName()} recovered a discard`);
 	}
-	const myName = () => seated.find((p) => p.id === clientId)?.name ?? 'You';
+	function confirmDone() {
+		if (!isActive) return;
+		session.act(`${myName()} resolved Turn ${$ms.turn}`, { resolved: [...resolved, clientId] });
+	}
 
-	// hand fan geometry
 	const fan = (k: number, n: number) => {
 		const t = n === 1 ? 0 : k / (n - 1) - 0.5;
 		return { rot: t * 12, y: Math.abs(t) * Math.abs(t) * 40 };
@@ -108,13 +169,19 @@
 {#if $ms.cards}
 	<!-- right-side player boards -->
 	<div class="ppanel">
-		<div class="pptitle">Players</div>
+		<div class="pptitle">
+			Players
+			<span class="phasetag" class:resolve={phase === 'resolving'}>
+				{phase === 'resolving' ? `Resolving · Turn ${$ms.turn}` : `Planning · Turn ${$ms.turn}`}
+			</span>
+		</div>
 		{#each seated as p (p.id)}
 			{@const cs = cards[p.id]}
 			{#if p.seat === firstBlueSeat}<div class="ppdiv"></div>{/if}
 			<button
 				class="prow"
 				class:mine={p.id === clientId}
+				class:active={phase === 'resolving' && activeId === p.id}
 				style="--tint:{teamTint(p)}"
 				on:click={() => (overlayId = p.id)}
 			>
@@ -124,14 +191,22 @@
 						{#if cs?.ultimate}<span class="crown">♛</span>{/if}
 					</span>
 					<span class="pmid">
-						<span class="pname">{p.name}<em>Lv {cs?.level ?? 1}</em></span>
+						<span class="pname">
+							{p.name}<em>Lv {cs?.level ?? 1}</em>
+							{#if phase === 'planning' && cs?.pending != null}<span class="rdy">Ready</span>{/if}
+							{#if phase === 'resolving' && cs && cs.turns[turnIdx] != null}<span class="initb">i{cardInit(cs, cs.turns[turnIdx])}</span>{/if}
+						</span>
 						<span class="phero">{cs ? heroName(cs.hero) : ''}</span>
 					</span>
 					{#if cs}
 						{@const lp = lastPlayed(cs)}
-						<span class="pcard" class:empty={lp == null}>
-							{#if lp != null}<Card heroId={cs.hero} card={heroCards(cs.hero)[lp]} />{/if}
-						</span>
+						{#if phase === 'planning' && cs.pending != null}
+							<span class="pcard back"><span class="bemblem"><img src={heroLogo(cs.hero)} alt="" /></span></span>
+						{:else if lp != null}
+							<span class="pcard"><Card heroId={cs.hero} card={heroCards(cs.hero)[lp]} /></span>
+						{:else}
+							<span class="pcard empty"></span>
+						{/if}
 					{/if}
 				</div>
 				{#if cs}
@@ -182,7 +257,7 @@
 				<div class="ilabel">This round <span class="hint">played cards are open · unplayed &amp; held are hidden</span></div>
 				<div class="turns">
 					{#each [0, 1, 2, 3] as t}
-						<div class="tbox" class:current={t === myTurnIdx} class:hidden={cs.turns[t] == null} style="--tint:{teamTint(ovPlayer)}">
+						<div class="tbox" class:current={t === turnIdx} class:hidden={cs.turns[t] == null} style="--tint:{teamTint(ovPlayer)}">
 							<div class="tlabel">Turn {t + 1}</div>
 							{#if cs.turns[t] != null}
 								<button class="tcard" on:click={() => (examine = { hid: oh, idx: cs.turns[t]! })}>
@@ -193,7 +268,7 @@
 									<span class="band top"></span>
 									<span class="emblem"><img src={heroLogo(oh)} alt="" /></span>
 									<span class="band bot"></span>
-									{#if t === myTurnIdx && cs.pending != null}<span class="pending">Committed</span>{/if}
+									{#if t === turnIdx && cs.pending != null}<span class="pending">{cs.pending === PASS ? 'Passing' : 'Committed'}</span>{/if}
 								</div>
 							{/if}
 						</div>
@@ -235,6 +310,9 @@
 
 	<!-- local player's private hand -->
 	{#if mine}
+		{#if selected != null}
+			<div class="handscrim" on:click={() => (selected = null)} on:keydown={(e) => e.key === 'Escape' && (selected = null)} role="presentation"></div>
+		{/if}
 		<div class="hand">
 			<div class="tray">
 				{#each mine.hand as idx, k (idx)}
@@ -243,8 +321,9 @@
 						class="hc"
 						class:sel={selected === idx}
 						class:committed={mine.pending === idx}
-						style="transform: translateY({selected === idx ? -26 : f.y}px) rotate({selected === idx ? 0 : f.rot}deg);"
-						on:click={() => (selected = selected === idx ? null : idx)}
+						class:dim={selected != null && selected !== idx}
+						style={selected === idx ? '' : `transform: translateY(${f.y}px) rotate(${f.rot}deg);`}
+						on:click|stopPropagation={() => (selected = selected === idx ? null : (phase === 'planning' && !myReady ? idx : null))}
 					>
 						<Card heroId={mine.hero} card={heroCards(mine.hero)[idx]} />
 					</button>
@@ -252,16 +331,25 @@
 			</div>
 
 			<div class="handbar">
-				{#if mine.pending != null}
-					<span class="pill">Turn {$ms.turn} committed</span>
-					<button class="act primary" on:click={reveal}>Reveal</button>
+				{#if phase === 'resolving'}
+					{#if isActive}
+						<span class="pill hot">Your turn — resolve on the board</span>
+						<button class="act primary" on:click={confirmDone}>Done</button>
+					{:else if activePlayer}
+						<span class="pill">Resolving: <b>{activePlayer.name}</b>{#if cards[activePlayer.id]?.turns[turnIdx] != null} · init {cardInit(cards[activePlayer.id], cards[activePlayer.id].turns[turnIdx])}{/if}</span>
+					{:else}
+						<span class="pill">Turn resolved…</span>
+					{/if}
+				{:else if myReady}
+					<span class="pill">{mine.pending === PASS ? 'Passing' : 'Ready'} ✓ · waiting {readyCount}/{seatedWithCards.length}</span>
 					<button class="act" on:click={takeBack}>Take back</button>
 				{:else if selected != null}
 					<button class="act primary" on:click={() => commit(selected!)}>Commit · Turn {$ms.turn}</button>
 					<button class="act danger" on:click={() => defend(selected!)}>Defend (discard)</button>
 					<button class="act" on:click={() => (selected = null)}>Cancel</button>
 				{:else}
-					<span class="hint2">Tap a card to play or defend</span>
+					<span class="hint2">Tap a card to play — {readyCount}/{seatedWithCards.length} ready</span>
+					<button class="act ghost" on:click={pass}>Pass turn</button>
 					{#if mine.discard.length}
 						<span class="recover">Recover:
 							{#each mine.discard as i}<button class="rec" on:click={() => pullBack(i)}>{heroCards(mine.hero)[i].name}</button>{/each}
@@ -278,24 +366,31 @@
 	.ppanel { position: absolute; top: 12px; right: 12px; bottom: 12px; z-index: 6; width: 244px; padding: 10px; overflow-y: auto;
 		display: flex; flex-direction: column; gap: 4px; color: #e5e7eb;
 		background: rgba(9,13,22,.72); backdrop-filter: blur(9px); border: 1px solid rgba(199,154,78,.4); border-radius: 14px; }
-	.pptitle { font-size: .6rem; letter-spacing: .16em; text-transform: uppercase; font-weight: 800; color: #b8a06a; padding: 2px 4px 4px; }
+	.pptitle { font-size: .6rem; letter-spacing: .16em; text-transform: uppercase; font-weight: 800; color: #b8a06a; padding: 2px 4px 4px; display: flex; flex-direction: column; gap: 3px; }
+	.phasetag { font-size: .58rem; letter-spacing: .06em; font-weight: 700; color: #7d8ba0; text-transform: none; }
+	.phasetag.resolve { color: #efb46a; }
 	.ppdiv { height: 1px; margin: 5px 2px; background: linear-gradient(90deg, transparent, rgba(199,154,78,.35), transparent); }
 	.prow { display: flex; flex-direction: column; gap: 6px; padding: 8px; border-radius: 12px; cursor: pointer; text-align: left;
 		background: rgba(12,18,32,.44); border: 1px solid rgba(255,255,255,.1); border-left: 3px solid var(--tint); color: #e5e7eb; transition: transform .12s, background .12s; }
 	.prow:hover { background: rgba(20,28,46,.6); transform: translateY(-2px); }
 	.prow.mine { border-color: rgba(199,154,78,.5); box-shadow: 0 0 0 1px rgba(199,154,78,.25); }
+	.prow.active { border-color: #efb46a; box-shadow: 0 0 0 1px rgba(239,180,106,.5), 0 0 16px rgba(239,180,106,.25); background: rgba(30,26,16,.6); }
 	.prtop { display: flex; align-items: center; gap: 9px; }
 	.pav { position: relative; width: 2.4rem; height: 2.4rem; border-radius: 50%; overflow: visible; border: 2px solid var(--tint); flex: none; }
 	.pav img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
 	.pav.ult { border-color: #b482f0; box-shadow: 0 0 9px rgba(160,110,235,.65); }
 	.pav .crown { position: absolute; top: -8px; right: -6px; font-size: .82rem; color: #d9b6ff; text-shadow: 0 1px 3px #000; }
 	.pmid { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; line-height: 1.05; }
-	.pname { font-family: 'Modesto Poster', serif; font-size: .9rem; color: #f3f6fb; display: flex; align-items: baseline; gap: 5px; }
+	.pname { font-family: 'Modesto Poster', serif; font-size: .9rem; color: #f3f6fb; display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
 	.pname em { font-style: normal; font-size: .58rem; font-weight: 700; color: #8b9bb0; }
+	.rdy { font-family: 'Inter', sans-serif; font-size: .5rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #16351f; background: #4ade80; border-radius: 5px; padding: 1px 5px; }
+	.initb { font-family: 'Inter', sans-serif; font-size: .54rem; font-weight: 800; color: #f6ead2; background: rgba(199,154,78,.3); border: 1px solid rgba(199,154,78,.5); border-radius: 5px; padding: 0 5px; }
 	.phero { font-size: .62rem; color: #93a3b8; }
 	.pcard { width: 2rem; height: 2.75rem; border-radius: 4px; overflow: hidden; box-shadow: 0 2px 5px rgba(0,0,0,.5); flex: none; }
 	.pcard.empty { background: rgba(255,255,255,.05); border: 1px dashed rgba(255,255,255,.18); box-shadow: none; }
 	.pcard :global(canvas) { border-radius: 4px; }
+	.pcard.back { display: grid; place-items: center; background: radial-gradient(120% 90% at 50% 0%, #223050, #101828 70%); border: 1px solid rgba(199,154,78,.4); }
+	.pcard.back .bemblem img { width: 74%; opacity: .6; }
 	.pstats { display: grid; grid-template-columns: repeat(6, 1fr); gap: 3px; }
 	.pstat { position: relative; display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 3px 0 2px; border-radius: 6px;
 		background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.06); }
@@ -374,20 +469,25 @@
 	.bigcard :global(canvas) { border-radius: 4%; }
 
 	/* local hand */
-	.hand { position: absolute; left: 0; right: 268px; bottom: 0; z-index: 7; display: flex; flex-direction: column; align-items: center; gap: 6px; padding-bottom: 6px; pointer-events: none; }
+	.handscrim { position: fixed; inset: 0; z-index: 8; background: rgba(3,6,12,.35); }
+	.hand { position: absolute; left: 0; right: 268px; bottom: 0; z-index: 9; display: flex; flex-direction: column; align-items: center; gap: 8px; padding-bottom: 8px; pointer-events: none; }
 	.tray { display: flex; align-items: flex-end; pointer-events: auto; }
-	.hc { width: 8vw; max-width: 122px; margin: 0 -1.3vw; padding: 0; background: none; border: none; cursor: pointer; transform-origin: bottom center; transition: transform .15s; }
+	.hc { width: 8vw; max-width: 122px; margin: 0 -1.3vw; padding: 0; background: none; border: none; cursor: pointer; transform-origin: bottom center; transition: transform .18s, opacity .18s; }
 	.hc :global(canvas) { border-radius: 5%; box-shadow: 0 10px 22px rgba(0,0,0,.55); }
-	.hc.sel { z-index: 3; }
-	.hc.sel :global(canvas) { outline: 2px solid #ef7d22; }
+	.hc.dim { opacity: .35; }
 	.hc.committed :global(canvas) { outline: 2px solid #efb46a; opacity: .8; }
-	.handbar { pointer-events: auto; display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 12px;
-		background: rgba(9,13,22,.8); backdrop-filter: blur(8px); border: 1px solid rgba(199,154,78,.4); min-height: 1.4rem; }
-	.pill { font-size: .68rem; font-weight: 800; letter-spacing: .04em; color: #f6ead2; }
+	/* selected card rises up, magnified enough to read */
+	.hc.sel { z-index: 12; transform: translateY(-38vh) scale(2.7); }
+	.hc.sel :global(canvas) { outline: 2px solid #ef7d22; box-shadow: 0 24px 60px rgba(0,0,0,.7); }
+	.handbar { pointer-events: auto; display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 12px; z-index: 13;
+		background: rgba(9,13,22,.85); backdrop-filter: blur(8px); border: 1px solid rgba(199,154,78,.4); min-height: 1.4rem; }
+	.pill { font-size: .74rem; font-weight: 700; letter-spacing: .02em; color: #cdd6e2; }
+	.pill.hot { color: #f6ead2; }
 	.hint2 { font-size: .72rem; color: #93a3b8; }
 	.act { border: 1px solid rgba(255,255,255,.2); background: rgba(255,255,255,.08); color: #e5e7eb; border-radius: 8px; padding: 5px 12px; font-weight: 700; cursor: pointer; font-size: .8rem; }
 	.act.primary { background: #ef7d22; color: #1a0f06; border-color: transparent; box-shadow: 0 3px 0 #a8560f; }
 	.act.danger { background: rgba(220,60,60,.2); border-color: rgba(220,60,60,.5); color: #ffb4b4; }
+	.act.ghost { background: transparent; }
 	.recover { font-size: .66rem; color: #93a3b8; display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
 	.rec { font-size: .62rem; padding: 2px 7px; border-radius: 6px; border: 1px solid rgba(255,255,255,.18); background: rgba(255,255,255,.06); color: #cbd5e1; cursor: pointer; }
 </style>
