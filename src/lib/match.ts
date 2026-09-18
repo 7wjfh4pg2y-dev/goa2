@@ -167,11 +167,15 @@ export interface Piece {
 	hero?: string // heroId, for hero pieces
 }
 
-/** Hexes belonging to a team's base zone (for spawning heroes). */
+/** Where a team's heroes start: the throne spawn points (gear/star) first, then
+ * the surrounding base-zone hexes for any extra players (4–5 per team). */
 function baseHexes(map: GameMap | null, team: Team): string[] {
 	const cells = map?.cells ?? {}
-	const want = team === 'orange' ? ['baseOrange', 'baseOrangeSpawn'] : ['baseBlue', 'baseBlueSpawn']
-	return Object.keys(cells).filter((id) => want.includes(cells[id])).sort()
+	const throne = team === 'orange' ? 'baseOrangeSpawn' : 'baseBlueSpawn'
+	const zone = team === 'orange' ? 'baseOrange' : 'baseBlue'
+	const thrones = Object.keys(cells).filter((id) => cells[id] === throne).sort()
+	const zoneHexes = Object.keys(cells).filter((id) => cells[id] === zone).sort()
+	return [...thrones, ...zoneHexes]
 }
 
 /**
@@ -195,41 +199,16 @@ export function placeHeroes(state: MatchState, players: Player[]): Record<string
 	return pieces
 }
 
-/** Initial minion wave: place a movable minion on each battle-zone hex.
- * Uses the map's authored `battleZone`; falls back to the central spawn tiles
- * so any map with spawn hexes still gets a wave. */
+/** Initial minion wave: place a movable minion on each hex the map author
+ * flagged as a starting spawn (map.battleZone, set in the editor). No guessing —
+ * a map with no battleZone simply spawns no minions until it's set up. */
 export function placeMinions(state: MatchState): Record<string, Piece> {
 	const pieces: Record<string, Piece> = {}
-	const zone = state.map?.battleZone?.length ? state.map.battleZone : deriveBattleZone(state.map)
-	for (const m of zone) {
+	for (const m of state.map?.battleZone ?? []) {
 		const id = `minion_${m.hex}`
 		pieces[id] = { id, hex: m.hex, team: m.team, kind: 'minion', role: m.kind }
 	}
 	return pieces
-}
-
-/** When a map has no authored battleZone, take the 6 spawn tiles per side
- * nearest the board centre as the opening wave. */
-function deriveBattleZone(map: GameMap | null): NonNullable<GameMap['battleZone']> {
-	const cells = map?.cells ?? {}
-	const ids = Object.keys(cells)
-	if (!ids.length) return []
-	const SQ = Math.sqrt(3)
-	const pos = (id: string): [number, number] => {
-		const [c, r] = id.split('_').map(Number)
-		return [SQ * (c + 0.5 * (r & 1)), 1.5 * r]
-	}
-	let cx = 0, cy = 0
-	for (const id of ids) { const [x, y] = pos(id); cx += x; cy += y }
-	cx /= ids.length; cy /= ids.length
-	const near = (t: string, n: number) =>
-		ids.filter((k) => cells[k] === t)
-			.map((k) => { const [x, y] = pos(k); return { k, d: (x - cx) ** 2 + (y - cy) ** 2 } })
-			.sort((a, b) => a.d - b.d).slice(0, n).map((o) => o.k)
-	const kinds: Array<'melee' | 'ranged' | 'heavy'> = ['melee', 'melee', 'ranged', 'ranged', 'heavy', 'heavy']
-	const mk = (t: string, team: 'orange' | 'blue') =>
-		near(t, 6).map((hex, i) => ({ hex, team, kind: kinds[i % kinds.length] }))
-	return [...mk('spawnOrange', 'orange'), ...mk('spawnBlue', 'blue')]
 }
 
 /** Life counters per team, from the rulebook setup table (base, single lane). */
@@ -428,10 +407,9 @@ export function initialMatchState(
 	const length = opts.length ?? 'long'
 	const players = opts.players ?? 6
 	const life = opts.life ?? lifeFor(length, players)
-	// NOTE: wave-counter counts are the victory track (per rulebook), NOT minion
-	// tokens. Exact starting counts still need confirming; default from wavesFor
-	// until the create-screen setting / rulebook numbers are wired in.
-	const wavesMax = opts.wavesMax ?? wavesFor(length)
+	// Wave-counter track = the victory track (removed on each lane push), set per
+	// map in the editor. Falls back to the rulebook default (3 quick / 5 long).
+	const wavesMax = opts.wavesMax ?? opts.map?.waves?.[length] ?? wavesFor(length)
 	const waves = opts.waves ?? wavesMax
 	return {
 		round: 1,

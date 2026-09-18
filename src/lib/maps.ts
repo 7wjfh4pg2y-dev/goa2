@@ -12,6 +12,8 @@ export interface GameMap {
 	meta?: Record<string, { m: string; dir: number; start?: boolean }>
 	/** Initial minion wave: which hexes get a minion at game start (set in the editor). */
 	battleZone?: Array<{ hex: string; team: 'orange' | 'blue'; kind: 'melee' | 'ranged' | 'heavy' }>
+	/** Wave-counter track length for this map, by game length (set in the editor). */
+	waves?: { quick: number; long: number }
 }
 
 export interface MapChoice {
