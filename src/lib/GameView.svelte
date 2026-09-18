@@ -91,16 +91,6 @@
 	<div class="ocean"></div>
 	<BoardCanvas bind:this={board} map={$ms.map ?? {}} rotation={orientation} interactive={true} pieces={boardPieces} onMovePiece={move} />
 
-	<!-- view controls (bottom-left): zoom, rotate both ways, recenter -->
-	<div class="viewctl">
-		<button class="vbtn" on:click={() => board?.zoomBtn(1.2)} title="Zoom in">＋</button>
-		<button class="vbtn" on:click={() => board?.zoomBtn(1 / 1.2)} title="Zoom out">−</button>
-		<button class="vbtn" on:click={() => board?.rotateBy(-60)} title="Rotate counter-clockwise">⟲</button>
-		<button class="vbtn" on:click={() => board?.rotateBy(60)} title="Rotate clockwise">⟳</button>
-		<button class="vbtn" on:click={() => board?.reset()} title="Recenter">⤾</button>
-		<button class="vbtn leave" on:click={() => (confirmLeave = true)} title="Leave game">⎋</button>
-	</div>
-
 	{#if confirmLeave}
 		<div class="modal-scrim" on:click={() => (confirmLeave = false)} on:keydown={() => {}} role="presentation">
 			<div class="modal" on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" tabindex="-1">
@@ -114,64 +104,70 @@
 		</div>
 	{/if}
 
-	<!-- room / connection (top-right corner) -->
+	<!-- room / connection (top-left corner) -->
 	<div class="corner">
 		<span class="rc mono">{room}</span>
 		<span class="conn {$status}"><span class="cdot"></span>{connLabel($status)}</span>
 	</div>
 
-	<!-- game HUD: ornate top strip -->
-	<div class="tophud">
-			<!-- Orange team Life: one medallion per starting Life; click to deplete/restore -->
-			<div class="teamlife orange">
-				<div class="tlabel"><span class="tn">Orange</span><span class="tc">{$ms.life.orange}<small>/{lifeMax}</small></span></div>
-				<div class="tokens">
-					{#each Array(lifeMax) as _, i}
-						<button class="ltok" class:dep={i >= $ms.life.orange}
-							style="background-image:url({lifeArt('orange', i < $ms.life.orange ? 'front' : 'back')})"
-							on:click={() => tokClick('orange', i)}
-							title="Orange Life {$ms.life.orange} / {lifeMax} — click to set"></button>
+	<!-- game HUD: right-side panel -->
+	<div class="hud">
+		<div class="mapname">{$ms.map?.name ?? 'Board'}</div>
+
+		<div class="hsec round">
+			<button class="mini" on:click={() => stepTurn(-1)} title="Previous turn">◀</button>
+			<span class="rt">Round {$ms.round} · Turn {$ms.turn}</span>
+			<button class="mini" on:click={() => stepTurn(1)} title="Next turn">▶</button>
+		</div>
+
+		<div class="hsec">
+			<div class="slabel">Waves <span class="cnt">{$ms.waves}</span></div>
+			<div class="waves">
+				<div class="wtoks">
+					{#each Array($ms.waves) as _, i}
+						<button class="wtok" style="background-image:url({waveIcon})" on:click={() => setWaves(i)} title="Waves {$ms.waves} — click to spend"></button>
 					{/each}
 				</div>
-			</div>
-
-			<!-- center plaque -->
-			<div class="plaque">
-				<div class="mapname">{$ms.map?.name ?? 'Board'}</div>
-				<div class="prow round">
-					<button class="mini" on:click={() => stepTurn(-1)} title="Previous turn">◀</button>
-					<span class="rt">Round {$ms.round} · Turn {$ms.turn}</span>
-					<button class="mini" on:click={() => stepTurn(1)} title="Next turn">▶</button>
-				</div>
-				<div class="prow foot">
-					<div class="waves">
-						<div class="wtoks">
-							{#each Array($ms.waves) as _, i}
-								<button class="wtok" style="background-image:url({waveIcon})" on:click={() => setWaves(i)} title="Waves {$ms.waves} — click to spend"></button>
-							{/each}
-						</div>
-						<button class="mini" on:click={() => adjWaves(1)} title="Add a wave">+</button>
-						<span class="wv">{$ms.waves} <small>waves</small></span>
-					</div>
-					<button class="tiebtn {$ms.tieBreaker}" on:click={flipTie} title="Flip the tie-breaker — {$ms.tieBreaker === 'orange' ? 'Orange' : 'Blue'} breaks ties">
-						<img src={tieArt($ms.tieBreaker)} alt="" /><span>Tie-breaker</span>
-					</button>
-				</div>
-			</div>
-
-			<!-- Blue team Life -->
-			<div class="teamlife blue">
-				<div class="tlabel"><span class="tn">Blue</span><span class="tc">{$ms.life.blue}<small>/{lifeMax}</small></span></div>
-				<div class="tokens">
-					{#each Array(lifeMax) as _, i}
-						<button class="ltok" class:dep={i >= $ms.life.blue}
-							style="background-image:url({lifeArt('blue', i < $ms.life.blue ? 'front' : 'back')})"
-							on:click={() => tokClick('blue', i)}
-							title="Blue Life {$ms.life.blue} / {lifeMax} — click to set"></button>
-					{/each}
-				</div>
+				<button class="mini" on:click={() => adjWaves(1)} title="Add a wave">+</button>
 			</div>
 		</div>
+
+		<!-- team Life: one medallion per starting Life; click to deplete/restore -->
+		<div class="hsec life orange">
+			<div class="slabel"><span class="tn">Orange</span><span class="tc">{$ms.life.orange}<small>/{lifeMax}</small></span></div>
+			<div class="tokens">
+				{#each Array(lifeMax) as _, i}
+					<button class="ltok" class:dep={i >= $ms.life.orange}
+						style="background-image:url({lifeArt('orange', i < $ms.life.orange ? 'front' : 'back')})"
+						on:click={() => tokClick('orange', i)} title="Orange Life {$ms.life.orange} / {lifeMax} — click to set"></button>
+				{/each}
+			</div>
+		</div>
+		<div class="hsec life blue">
+			<div class="slabel"><span class="tn">Blue</span><span class="tc">{$ms.life.blue}<small>/{lifeMax}</small></span></div>
+			<div class="tokens">
+				{#each Array(lifeMax) as _, i}
+					<button class="ltok" class:dep={i >= $ms.life.blue}
+						style="background-image:url({lifeArt('blue', i < $ms.life.blue ? 'front' : 'back')})"
+						on:click={() => tokClick('blue', i)} title="Blue Life {$ms.life.blue} / {lifeMax} — click to set"></button>
+				{/each}
+			</div>
+		</div>
+
+		<button class="tiebtn {$ms.tieBreaker}" on:click={flipTie} title="Flip the tie-breaker — {$ms.tieBreaker === 'orange' ? 'Orange' : 'Blue'} breaks ties">
+			<img src={tieArt($ms.tieBreaker)} alt="" /><span>Tie-breaker: {$ms.tieBreaker === 'orange' ? 'Orange' : 'Blue'}</span>
+		</button>
+
+		<!-- view controls, docked at the bottom of the HUD -->
+		<div class="viewctl">
+			<button class="vbtn" on:click={() => board?.zoomBtn(1.2)} title="Zoom in">＋</button>
+			<button class="vbtn" on:click={() => board?.zoomBtn(1 / 1.2)} title="Zoom out">−</button>
+			<button class="vbtn" on:click={() => board?.rotateBy(-60)} title="Rotate counter-clockwise">⟲</button>
+			<button class="vbtn" on:click={() => board?.rotateBy(60)} title="Rotate clockwise">⟳</button>
+			<button class="vbtn" on:click={() => board?.reset()} title="Recenter">⤾</button>
+			<button class="vbtn leave" on:click={() => (confirmLeave = true)} title="Leave game">⎋</button>
+		</div>
+	</div>
 
 	<!-- activity log (bottom-right) -->
 	<div class="logpanel" class:closed={!logOpen}>
@@ -208,10 +204,10 @@
 	@keyframes drift { to { transform: translate(64px, -22px); } }
 	@keyframes drift2 { to { transform: translate(-58px, 18px); } }
 
-	.viewctl { position: absolute; bottom: 14px; left: 14px; z-index: 6; display: flex; flex-direction: column; gap: 6px; }
-	.vbtn { width: 2.2rem; height: 2.2rem; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.18); background: rgba(9, 13, 22, 0.7); backdrop-filter: blur(6px); color: #e5e7eb; cursor: pointer; font-size: 1.1rem; line-height: 1; }
-	.vbtn:hover { background: rgba(20, 28, 46, 0.85); }
-	.vbtn.leave { margin-top: 6px; border-color: rgba(239, 68, 68, 0.4); color: #fca5a5; }
+	.viewctl { display: flex; gap: 5px; margin-top: auto; padding-top: 4px; }
+	.vbtn { flex: 1; height: 2rem; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.18); background: rgba(255, 255, 255, 0.05); color: #e5e7eb; cursor: pointer; font-size: 1rem; line-height: 1; }
+	.vbtn:hover { background: rgba(255, 255, 255, 0.16); }
+	.vbtn.leave { border-color: rgba(239, 68, 68, 0.4); color: #fca5a5; }
 	.vbtn.leave:hover { background: rgba(80, 20, 24, 0.7); }
 
 	.modal-scrim { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; background: rgba(3, 8, 14, 0.6); backdrop-filter: blur(3px); }
@@ -225,8 +221,8 @@
 	.mleave { background: #dc2626; color: #fff; }
 	.mleave:hover { background: #ef4444; }
 
-	/* room / connection cluster, tucked in the top-right corner */
-	.corner { position: absolute; top: 10px; right: 14px; z-index: 6; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.8); }
+	/* room / connection cluster, tucked in the top-left corner */
+	.corner { position: absolute; top: 10px; left: 14px; z-index: 6; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.8); }
 	.rc { color: #94a3b8; font-size: 0.78rem; }
 	.mono { font-family: ui-monospace, monospace; letter-spacing: 0.08em; }
 	.conn { display: inline-flex; align-items: center; gap: 5px; font-size: 0.7rem; font-weight: 600; color: #94a3b8; }
@@ -236,48 +232,49 @@
 	.conn.reconnecting, .conn.connecting { color: #fcd34d; }
 	.conn.closed { color: #fca5a5; } .conn.closed .cdot { background: #ef4444; }
 
-	/* ornate top strip: Life medallions flanking a central plaque */
-	.tophud { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 6; display: flex; align-items: center; gap: 18px; }
+	/* right-side HUD panel */
+	.hud { position: absolute; top: 12px; right: 12px; bottom: 12px; z-index: 6; width: 244px; display: flex; flex-direction: column; gap: 8px;
+		overflow-y: auto; background: rgba(9, 13, 22, 0.74); backdrop-filter: blur(8px); border: 1px solid rgba(199, 154, 78, 0.4);
+		border-radius: 14px; padding: 12px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), inset 0 0 26px rgba(199, 154, 78, 0.06); }
+	.hud .mapname { font-family: 'Modesto Poster', serif; font-size: 1.15rem; letter-spacing: 0.04em; color: #f6ead2; text-align: center; }
 
-	.teamlife { display: flex; flex-direction: column; gap: 3px; }
-	.tlabel { display: flex; align-items: baseline; gap: 6px; text-shadow: 0 2px 5px rgba(0, 0, 0, 0.8); }
-	.teamlife.blue .tlabel { justify-content: flex-end; }
-	.tn { font-family: 'Modesto Poster', serif; font-size: 0.95rem; }
+	.hsec { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border-radius: 10px;
+		background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); }
+	.hsec.round { flex-direction: row; align-items: center; justify-content: center; gap: 12px; }
+	.hsec.round .rt { font-weight: 700; font-size: 0.98rem; font-variant-numeric: tabular-nums; }
+	.hsec.life.orange { border-left: 3px solid #ef7d22; } .hsec.life.blue { border-left: 3px solid #2f7fe6; }
+
+	.slabel { display: flex; align-items: baseline; justify-content: space-between; gap: 6px;
+		font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 700; color: #93a3b8; }
+	.slabel .cnt { color: #f1f5f9; font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+	.slabel .tn { font-family: 'Modesto Poster', serif; font-size: 0.95rem; letter-spacing: 0.02em; text-transform: none; }
 	.orange .tn { color: #ef9a5a; } .blue .tn { color: #6ea8f0; }
-	.tc { font-weight: 800; font-variant-numeric: tabular-nums; font-size: 0.95rem; color: #f1f5f9; }
-	.tc small { color: #94a3b8; font-weight: 600; font-size: 0.72rem; }
-	.tokens { display: flex; gap: 2px; flex-wrap: nowrap; }
-	.teamlife.blue .tokens { justify-content: flex-end; }
-	.ltok { width: 34px; height: 32px; padding: 0; border: none; background: transparent no-repeat center / contain; cursor: pointer;
-		filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.55)); transition: transform 0.1s, filter 0.15s, opacity 0.15s; }
-	.ltok:hover { transform: translateY(-2px) scale(1.1); }
-	.ltok.dep { opacity: 0.85; filter: grayscale(0.35) brightness(0.72) drop-shadow(0 2px 3px rgba(0, 0, 0, 0.4)); }
+	.slabel .tc { font-weight: 800; font-variant-numeric: tabular-nums; font-size: 0.95rem; color: #f1f5f9; }
+	.slabel .tc small { color: #94a3b8; font-weight: 600; font-size: 0.72rem; }
+
+	.tokens { display: flex; gap: 2px; flex-wrap: wrap; }
+	.ltok { width: 26px; height: 25px; padding: 0; border: none; background: transparent no-repeat center / contain; cursor: pointer;
+		filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.55)); transition: transform 0.1s, filter 0.15s, opacity 0.15s; }
+	.ltok:hover { transform: translateY(-2px) scale(1.12); }
+	.ltok.dep { opacity: 0.85; filter: grayscale(0.35) brightness(0.72) drop-shadow(0 1px 3px rgba(0, 0, 0, 0.4)); }
 	.ltok.dep:hover { opacity: 1; filter: grayscale(0.15) brightness(0.9); }
 
-	.plaque { flex: none; display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 220px; white-space: nowrap;
-		background: rgba(9, 13, 22, 0.72); backdrop-filter: blur(8px); border: 1px solid rgba(199, 154, 78, 0.4); border-radius: 14px;
-		padding: 7px 18px 9px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5), inset 0 0 22px rgba(199, 154, 78, 0.06); }
-	.plaque .mapname { font-family: 'Modesto Poster', serif; font-size: 1.05rem; letter-spacing: 0.04em; color: #f6ead2; }
-	.prow { display: flex; align-items: center; gap: 10px; }
-	.prow.round .rt { font-weight: 700; font-size: 0.95rem; font-variant-numeric: tabular-nums; }
-	.prow.foot { gap: 14px; margin-top: 3px; }
-	.waves { display: flex; align-items: center; gap: 6px; }
-	.waves .wv { font-weight: 700; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
-	.waves .wv small { color: #94a3b8; font-weight: 600; font-size: 0.72rem; }
-	.wtoks { display: flex; gap: 2px; }
+	.waves { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+	.wtoks { display: flex; gap: 2px; flex-wrap: wrap; }
 	.wtok { width: 24px; height: 24px; padding: 0; border: none; border-radius: 50%; cursor: pointer;
 		background: rgba(0, 0, 0, 0.35) no-repeat center / 88%; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15);
 		filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5)); transition: transform 0.1s; }
 	.wtok:hover { transform: translateY(-2px) scale(1.12); }
-	.tiebtn { display: flex; align-items: center; gap: 6px; border: 1px solid rgba(255, 255, 255, 0.16); background: rgba(255, 255, 255, 0.05);
-		border-radius: 999px; padding: 2px 12px 2px 3px; color: #e5e7eb; cursor: pointer; font-size: 0.78rem; font-weight: 600; }
-	.tiebtn img { width: 1.5rem; height: 1.5rem; }
-	.tiebtn.orange { box-shadow: inset 0 0 12px rgba(239, 125, 34, 0.3); border-color: rgba(239, 125, 34, 0.4); }
-	.tiebtn.blue { box-shadow: inset 0 0 12px rgba(47, 127, 230, 0.3); border-color: rgba(47, 127, 230, 0.4); }
+
+	.tiebtn { display: flex; align-items: center; justify-content: center; gap: 7px; width: 100%; border: 1px solid rgba(255, 255, 255, 0.16);
+		background: rgba(255, 255, 255, 0.05); border-radius: 10px; padding: 5px 10px; color: #e5e7eb; cursor: pointer; font-size: 0.82rem; font-weight: 600; }
+	.tiebtn img { width: 1.6rem; height: 1.6rem; }
+	.tiebtn.orange { box-shadow: inset 0 0 14px rgba(239, 125, 34, 0.3); border-color: rgba(239, 125, 34, 0.4); }
+	.tiebtn.blue { box-shadow: inset 0 0 14px rgba(47, 127, 230, 0.3); border-color: rgba(47, 127, 230, 0.4); }
 	.mini { width: 1.5rem; height: 1.5rem; border-radius: 7px; border: 1px solid rgba(255, 255, 255, 0.2); background: rgba(255, 255, 255, 0.06); color: #e5e7eb; cursor: pointer; font-weight: 700; line-height: 1; }
 	.mini:hover { background: rgba(255, 255, 255, 0.16); }
 
-	.logpanel { position: absolute; bottom: 14px; right: 14px; z-index: 6; width: 270px; background: rgba(9, 13, 22, 0.76); backdrop-filter: blur(6px); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 12px; overflow: hidden; }
+	.logpanel { position: absolute; bottom: 14px; left: 14px; z-index: 6; width: 270px; background: rgba(9, 13, 22, 0.76); backdrop-filter: blur(6px); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 12px; overflow: hidden; }
 	.logpanel.closed { width: auto; }
 	.loghead { width: 100%; text-align: left; background: rgba(255, 255, 255, 0.05); border: none; color: #e5e7eb; padding: 6px 12px; cursor: pointer; font-weight: 700; font-size: 0.82rem; }
 	.logbody { max-height: 190px; overflow-y: auto; padding: 6px 12px 8px; display: flex; flex-direction: column; gap: 3px; }
