@@ -71,6 +71,10 @@
 		const patch = dir === 1 ? nextTurn($ms) : prevTurn($ms);
 		session.act(`Round ${patch.round ?? $ms.round} · Turn ${patch.turn ?? $ms.turn}`, patch);
 	}
+	function stepRound(dir: 1 | -1) {
+		const round = Math.max(1, $ms.round + dir);
+		if (round !== $ms.round) session.act(`Round → ${round}`, { round });
+	}
 	function flipTie() {
 		const next: Team = $ms.tieBreaker === 'orange' ? 'blue' : 'orange';
 		session.act(`Tie-breaker → ${next === 'orange' ? 'Orange' : 'Blue'}`, { tieBreaker: next });
@@ -114,10 +118,17 @@
 	<div class="hud">
 		<div class="mapname">{$ms.map?.name ?? 'Board'}</div>
 
-		<div class="hsec round">
-			<button class="mini" on:click={() => stepTurn(-1)} title="Previous turn">◀</button>
-			<span class="rt">Round {$ms.round} · Turn {$ms.turn}</span>
-			<button class="mini" on:click={() => stepTurn(1)} title="Next turn">▶</button>
+		<div class="hsec rt">
+			<div class="rline">
+				<button class="mini" on:click={() => stepRound(-1)} title="Previous round">◀</button>
+				<span class="rv">Round {$ms.round}</span>
+				<button class="mini" on:click={() => stepRound(1)} title="Next round">▶</button>
+			</div>
+			<div class="rline">
+				<button class="mini" on:click={() => stepTurn(-1)} title="Previous turn">◀</button>
+				<span class="rv">Turn {$ms.turn}</span>
+				<button class="mini" on:click={() => stepTurn(1)} title="Next turn">▶</button>
+			</div>
 		</div>
 
 		<div class="hsec">
@@ -222,7 +233,7 @@
 	.mleave:hover { background: #ef4444; }
 
 	/* room / connection cluster, tucked in the top-left corner */
-	.corner { position: absolute; top: 10px; left: 14px; z-index: 6; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.8); }
+	.corner { position: absolute; top: 10px; right: 14px; z-index: 6; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.8); }
 	.rc { color: #94a3b8; font-size: 0.78rem; }
 	.mono { font-family: ui-monospace, monospace; letter-spacing: 0.08em; }
 	.conn { display: inline-flex; align-items: center; gap: 5px; font-size: 0.7rem; font-weight: 600; color: #94a3b8; }
@@ -232,49 +243,50 @@
 	.conn.reconnecting, .conn.connecting { color: #fcd34d; }
 	.conn.closed { color: #fca5a5; } .conn.closed .cdot { background: #ef4444; }
 
-	/* right-side HUD panel */
-	.hud { position: absolute; top: 12px; right: 12px; bottom: 12px; z-index: 6; width: 244px; display: flex; flex-direction: column; gap: 8px;
+	/* left-side HUD panel — tightened */
+	.hud { position: absolute; top: 12px; left: 12px; bottom: 12px; z-index: 6; width: 194px; display: flex; flex-direction: column; gap: 6px;
 		overflow-y: auto; background: rgba(9, 13, 22, 0.74); backdrop-filter: blur(8px); border: 1px solid rgba(199, 154, 78, 0.4);
-		border-radius: 14px; padding: 12px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), inset 0 0 26px rgba(199, 154, 78, 0.06); }
-	.hud .mapname { font-family: 'Modesto Poster', serif; font-size: 1.15rem; letter-spacing: 0.04em; color: #f6ead2; text-align: center; }
+		border-radius: 12px; padding: 9px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), inset 0 0 26px rgba(199, 154, 78, 0.06); }
+	.hud .mapname { font-family: 'Modesto Poster', serif; font-size: 1.02rem; letter-spacing: 0.03em; color: #f6ead2; text-align: center; }
 
-	.hsec { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border-radius: 10px;
+	.hsec { display: flex; flex-direction: column; gap: 4px; padding: 6px 8px; border-radius: 9px;
 		background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); }
-	.hsec.round { flex-direction: row; align-items: center; justify-content: center; gap: 12px; }
-	.hsec.round .rt { font-weight: 700; font-size: 0.98rem; font-variant-numeric: tabular-nums; }
+	.hsec.rt { gap: 4px; }
+	.rline { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
+	.rline .rv { font-weight: 700; font-size: 0.82rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
 	.hsec.life.orange { border-left: 3px solid #ef7d22; } .hsec.life.blue { border-left: 3px solid #2f7fe6; }
 
 	.slabel { display: flex; align-items: baseline; justify-content: space-between; gap: 6px;
-		font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 700; color: #93a3b8; }
-	.slabel .cnt { color: #f1f5f9; font-size: 0.9rem; font-variant-numeric: tabular-nums; }
-	.slabel .tn { font-family: 'Modesto Poster', serif; font-size: 0.95rem; letter-spacing: 0.02em; text-transform: none; }
+		font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 700; color: #93a3b8; }
+	.slabel .cnt { color: #f1f5f9; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+	.slabel .tn { font-family: 'Modesto Poster', serif; font-size: 0.9rem; letter-spacing: 0.02em; text-transform: none; }
 	.orange .tn { color: #ef9a5a; } .blue .tn { color: #6ea8f0; }
-	.slabel .tc { font-weight: 800; font-variant-numeric: tabular-nums; font-size: 0.95rem; color: #f1f5f9; }
-	.slabel .tc small { color: #94a3b8; font-weight: 600; font-size: 0.72rem; }
+	.slabel .tc { font-weight: 800; font-variant-numeric: tabular-nums; font-size: 0.9rem; color: #f1f5f9; }
+	.slabel .tc small { color: #94a3b8; font-weight: 600; font-size: 0.7rem; }
 
 	.tokens { display: flex; gap: 2px; flex-wrap: wrap; }
-	.ltok { width: 26px; height: 25px; padding: 0; border: none; background: transparent no-repeat center / contain; cursor: pointer;
+	.ltok { width: 24px; height: 23px; padding: 0; border: none; background: transparent no-repeat center / contain; cursor: pointer;
 		filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.55)); transition: transform 0.1s, filter 0.15s, opacity 0.15s; }
 	.ltok:hover { transform: translateY(-2px) scale(1.12); }
 	.ltok.dep { opacity: 0.85; filter: grayscale(0.35) brightness(0.72) drop-shadow(0 1px 3px rgba(0, 0, 0, 0.4)); }
 	.ltok.dep:hover { opacity: 1; filter: grayscale(0.15) brightness(0.9); }
 
-	.waves { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+	.waves { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
 	.wtoks { display: flex; gap: 2px; flex-wrap: wrap; }
-	.wtok { width: 24px; height: 24px; padding: 0; border: none; border-radius: 50%; cursor: pointer;
+	.wtok { width: 22px; height: 22px; padding: 0; border: none; border-radius: 50%; cursor: pointer;
 		background: rgba(0, 0, 0, 0.35) no-repeat center / 88%; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15);
 		filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5)); transition: transform 0.1s; }
 	.wtok:hover { transform: translateY(-2px) scale(1.12); }
 
-	.tiebtn { display: flex; align-items: center; justify-content: center; gap: 7px; width: 100%; border: 1px solid rgba(255, 255, 255, 0.16);
-		background: rgba(255, 255, 255, 0.05); border-radius: 10px; padding: 5px 10px; color: #e5e7eb; cursor: pointer; font-size: 0.82rem; font-weight: 600; }
-	.tiebtn img { width: 1.6rem; height: 1.6rem; }
+	.tiebtn { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; border: 1px solid rgba(255, 255, 255, 0.16);
+		background: rgba(255, 255, 255, 0.05); border-radius: 9px; padding: 4px 8px; color: #e5e7eb; cursor: pointer; font-size: 0.76rem; font-weight: 600; }
+	.tiebtn img { width: 1.4rem; height: 1.4rem; }
 	.tiebtn.orange { box-shadow: inset 0 0 14px rgba(239, 125, 34, 0.3); border-color: rgba(239, 125, 34, 0.4); }
 	.tiebtn.blue { box-shadow: inset 0 0 14px rgba(47, 127, 230, 0.3); border-color: rgba(47, 127, 230, 0.4); }
-	.mini { width: 1.5rem; height: 1.5rem; border-radius: 7px; border: 1px solid rgba(255, 255, 255, 0.2); background: rgba(255, 255, 255, 0.06); color: #e5e7eb; cursor: pointer; font-weight: 700; line-height: 1; }
+	.mini { width: 1.35rem; height: 1.35rem; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.2); background: rgba(255, 255, 255, 0.06); color: #e5e7eb; cursor: pointer; font-weight: 700; line-height: 1; font-size: 0.75rem; flex: none; }
 	.mini:hover { background: rgba(255, 255, 255, 0.16); }
 
-	.logpanel { position: absolute; bottom: 14px; left: 14px; z-index: 6; width: 270px; background: rgba(9, 13, 22, 0.76); backdrop-filter: blur(6px); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 12px; overflow: hidden; }
+	.logpanel { position: absolute; bottom: 14px; right: 14px; z-index: 6; width: 270px; background: rgba(9, 13, 22, 0.76); backdrop-filter: blur(6px); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 12px; overflow: hidden; }
 	.logpanel.closed { width: auto; }
 	.loghead { width: 100%; text-align: left; background: rgba(255, 255, 255, 0.05); border: none; color: #e5e7eb; padding: 6px 12px; cursor: pointer; font-weight: 700; font-size: 0.82rem; }
 	.logbody { max-height: 190px; overflow-y: auto; padding: 6px 12px 8px; display: flex; flex-direction: column; gap: 3px; }
