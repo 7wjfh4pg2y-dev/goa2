@@ -76,10 +76,25 @@ export function initCards(picks: Record<string, string>): Record<string, PlayerC
 	return out
 }
 
+/** pending sentinel meaning the player readied without a card (passed this turn). */
+export const PASS = -1
+
 /** Commit a face-down card for the current turn (must be in hand). */
 export function commitCard(s: PlayerCardState, idx: number): PlayerCardState {
 	if (!s.hand.includes(idx)) return s
 	return { ...s, pending: idx }
+}
+
+/** Ready up with no card (nothing to play / choosing to pass this turn). */
+export function passTurn(s: PlayerCardState): PlayerCardState {
+	return { ...s, pending: PASS }
+}
+
+/** Reveal on the shared count-of-three: a real card lands in its slot; a pass clears. */
+export function revealPlayer(s: PlayerCardState, turn: number): PlayerCardState {
+	if (s.pending == null) return s
+	if (s.pending === PASS) return { ...s, pending: null }
+	return revealTurn(s, turn)
 }
 
 /** Take back the face-down card before reveal. */

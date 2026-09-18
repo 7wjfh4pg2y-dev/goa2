@@ -140,6 +140,8 @@ export interface MatchState {
 	map: GameMap | null // full board data, shared so everyone renders the same map
 	pieces: Record<string, Piece> // tokens on the board, keyed by id
 	cards?: Record<string, PlayerCardState> // per-player card state, keyed by playerId
+	cardPhase?: 'planning' | 'resolving' // planning = commit/ready; resolving = act in initiative order
+	resolved?: string[] // playerIds who have confirmed their action done this turn
 	seats: number // number of player seats the game is set up for (excl. spectators)
 	host: string // clientId of the host (the creator)
 	draftSystem: DraftSystem // how heroes are selected
@@ -431,6 +433,8 @@ export function initialMatchState(
 		mapId: opts.mapId ?? '',
 		map: opts.map ?? null,
 		pieces: {},
+		cardPhase: 'planning',
+		resolved: [],
 		seats: players,
 		host: '',
 		draftSystem: opts.draftSystem ?? 'all-pick',

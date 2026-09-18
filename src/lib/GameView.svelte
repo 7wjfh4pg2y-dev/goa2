@@ -80,6 +80,9 @@
 		const patch = dir === 1 ? nextTurn($ms) : prevTurn($ms);
 		// advancing past turn 4 starts a new round: every player's cards return to hand
 		if (dir === 1 && patch.round && $ms.cards) patch.cards = endRoundAll($ms.cards);
+		// a manual turn correction resets the card sub-phase back to planning
+		patch.cardPhase = 'planning';
+		patch.resolved = [];
 		session.act(`Round ${patch.round ?? $ms.round} · Turn ${patch.turn ?? $ms.turn}`, patch);
 	}
 	function stepRound(dir: 1 | -1) {
