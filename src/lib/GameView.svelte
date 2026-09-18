@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { afterUpdate } from 'svelte';
 	import type { Readable } from 'svelte/store';
 	import BoardCanvas from '$lib/BoardCanvas.svelte';
 	import { heroById } from '$lib/heroes';
@@ -95,6 +96,16 @@
 	let confirmLeave = false;
 	$: log = $ms.log ?? [];
 	const hhmm = (t: number) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+	// keep the activity log pinned to the most recent entry
+	let logEl: HTMLDivElement | undefined;
+	let lastLogLen = -1, lastOpen = false;
+	afterUpdate(() => {
+		if (logEl && (log.length !== lastLogLen || logOpen !== lastOpen)) {
+			logEl.scrollTop = logEl.scrollHeight;
+			lastLogLen = log.length; lastOpen = logOpen;
+		}
+	});
 </script>
 
 <svelte:window on:keydown={(e) => e.key === 'Escape' && confirmLeave && (confirmLeave = false)} />
@@ -183,7 +194,7 @@
 				<span>Activity</span><span class="chev">{logOpen ? '▾' : '▸'}</span>
 			</button>
 			{#if logOpen}
-				<div class="logbody">
+				<div class="logbody" bind:this={logEl}>
 					{#each log.slice(-40) as e (e.id)}
 						<div class="logline" title={hhmm(e.at)}><b>{e.by}</b> {e.text}</div>
 					{:else}
@@ -206,7 +217,7 @@
 </div>
 
 <style>
-	.gamewrap { position: fixed; inset: 0; color: #f1f5f9; overflow: hidden; }
+	.gamewrap { position: fixed; inset: 0; color: #f1f5f9; overflow: hidden; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 	/* ocean backdrop — deep water with layered swells + moving caustics so the hex island reads as floating on sea */
 	.ocean { position: absolute; inset: 0;
 		background:
@@ -254,7 +265,7 @@
 	.conn.closed { color: #fca5a5; } .conn.closed .cdot { background: #ef4444; }
 
 	/* left-side HUD panel — tightened */
-	.hud { position: absolute; top: 12px; left: 12px; bottom: 12px; z-index: 6; width: 194px; display: flex; flex-direction: column; gap: 6px;
+	.hud { position: absolute; top: 12px; left: 12px; bottom: 12px; z-index: 6; width: 204px; display: flex; flex-direction: column; gap: 6px;
 		overflow-y: auto; background: rgba(9, 13, 22, 0.74); backdrop-filter: blur(8px); border: 1px solid rgba(199, 154, 78, 0.4);
 		border-radius: 12px; padding: 9px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), inset 0 0 26px rgba(199, 154, 78, 0.06); }
 	.hud .mapname { font-family: 'Modesto Poster', serif; font-size: 1.02rem; letter-spacing: 0.03em; color: #f6ead2; text-align: center; }
@@ -274,7 +285,7 @@
 	.slabel .tc { font-weight: 800; font-variant-numeric: tabular-nums; font-size: 0.9rem; color: #f1f5f9; }
 	.slabel .tc small { color: #94a3b8; font-weight: 600; font-size: 0.7rem; }
 
-	.tokens { display: flex; gap: 2px; flex-wrap: wrap; max-width: 158px; } /* 5 life tokens per row (30px + 2 gap) */
+	.tokens { display: flex; gap: 2px; flex-wrap: wrap; } /* 5 life tokens per row via 30px token + panel width */
 	.ltok { width: 30px; height: 29px; padding: 0; border: none; background: transparent no-repeat center / contain; cursor: pointer;
 		perspective: 80px; filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.55)); transition: transform 0.1s, filter 0.15s, opacity 0.15s; }
 	.ltok:hover { transform: translateY(-2px) scale(1.1); }
@@ -282,7 +293,7 @@
 	.ltok.dep:hover { opacity: 1; filter: grayscale(0.15) brightness(0.9); }
 	.ltok.flip { animation: coinflip 0.45s ease-in-out; }
 
-	.wtoks { display: flex; gap: 2px; flex-wrap: wrap; max-width: 156px; } /* 7 wave tokens per row (20px + 2 gap = 152, with slack) */
+	.wtoks { display: flex; gap: 2px; flex-wrap: wrap; } /* 7 wave tokens per row via 20px token + panel width */
 	.wtok { width: 20px; height: 20px; padding: 0; border: none; border-radius: 50%; cursor: pointer;
 		background: rgba(0, 0, 0, 0.35) no-repeat center / 88%; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15);
 		filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5)); transition: transform 0.1s, filter 0.15s, opacity 0.15s; }

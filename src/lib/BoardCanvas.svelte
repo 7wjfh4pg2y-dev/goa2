@@ -145,7 +145,12 @@
 	let selected: string | null = null; // token picked up via tap (click-to-move)
 	function down(e: PointerEvent) {
 		if (!interactive) return;
-		panning = true; moved = false; p0 = toUser(e.clientX, e.clientY); pan0 = { x: panX, y: panY };
+		e.preventDefault(); // stop native text/element selection + image drag
+		// derive the pressed token fresh from the hit target — never a stale id
+		const el = (e.target as Element)?.closest?.('[data-piece]');
+		pressId = onMovePiece && el ? el.getAttribute('data-piece') : null;
+		panning = true; moved = false; dragId = null;
+		p0 = toUser(e.clientX, e.clientY); pan0 = { x: panX, y: panY };
 		downC = { x: e.clientX, y: e.clientY };
 		wrapEl.setPointerCapture(e.pointerId);
 	}
@@ -236,10 +241,9 @@
 				{@const c = carry ? dragPt : centerOf(p.hex)}
 				{@const sel = selected === p.id || carry}
 				<g class="piece" class:selectable={!!onMovePiece} class:selected={sel} class:carry
-					role="button" tabindex="-1"
+					role="button" tabindex="-1" data-piece={p.id}
 					aria-label={p.role ? `${p.team} ${p.role} minion` : `${p.team} ${p.label ?? 'piece'}`}
 					transform={rotEff ? `rotate(${-rotEff} ${c.x} ${c.y})` : undefined}
-					on:pointerdown={() => { if (onMovePiece) pressId = p.id; }}
 				>
 					{#if sel}
 						<circle class="selring" cx={c.x} cy={c.y} r={size * 0.82} fill="none" stroke="#fde047" stroke-width={size * 0.1} stroke-dasharray="{size * 0.32} {size * 0.22}" pointer-events="none" />
@@ -261,7 +265,8 @@
 </div>
 
 <style>
-	.board-wrap { position: absolute; inset: 0; overflow: hidden; touch-action: none; }
+	.board-wrap { position: absolute; inset: 0; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
+	.board-wrap :global(image) { -webkit-user-drag: none; user-select: none; }
 	.board-wrap.interactive { cursor: grab; }
 	.board-wrap.interactive:active { cursor: grabbing; }
 	svg { position: absolute; inset: 0; width: 100%; height: 100%; }
