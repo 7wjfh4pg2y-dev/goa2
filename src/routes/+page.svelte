@@ -502,11 +502,18 @@
 			</div>
 		{:else if mode === 'adminhub'}
 			<div class="step" transition:reveal bind:clientHeight={h['adminhub']}>
-				<div class="card form narrow">
-					<p class="roomline">You're in as <b class="admincol">Admin</b>.</p>
-					<p class="hint">GM tools coming soon.</p>
-					<div class="row"><button class="ghost" on:click={goHome}>Sign out</button></div>
+				<p class="roomline center">You're in as <b class="admincol">Admin</b>.</p>
+				<div class="cards">
+					<button class="card p" on:click={() => (mode = 'menu')}>
+						<span class="ic"><svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="#7dd3fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14" /></svg></span>
+						<span class="t">Create / Join</span><span class="s">Run a game</span>
+					</button>
+					<a class="card a" href={base + '/editor'}>
+						<span class="ic"><svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="#fdba74" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z" /><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" /><path d="M2 2l7.586 7.586" /><circle cx="11" cy="11" r="2" /></svg></span>
+						<span class="t">Map editor</span><span class="s">Paint maps & battle zones</span>
+					</a>
 				</div>
+				<div class="row center"><button class="ghost" on:click={goHome}>Sign out</button></div>
 			</div>
 		{:else if mode === 'menu'}
 			<div class="step" transition:reveal bind:clientHeight={h['menu']}>
@@ -765,6 +772,8 @@
 	.cards { display: flex; gap: 20px; justify-content: center; flex-wrap: wrap; }
 	.card { background: rgba(12, 18, 32, 0.44); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 18px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35); color: inherit; }
 	.cards .card { width: 210px; padding: 28px 20px; display: flex; flex-direction: column; align-items: center; gap: 11px; cursor: pointer; transition: transform 0.15s, background 0.15s; }
+	a.card { text-decoration: none; }
+	.center { text-align: center; justify-content: center; }
 	.cards .card:hover { transform: translateY(-4px); background: rgba(20, 28, 46, 0.6); }
 	.card.p { border-bottom: 3px solid #38bdf8; }
 	.card.a { border-bottom: 3px solid #f97316; }

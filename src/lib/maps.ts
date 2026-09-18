@@ -9,7 +9,7 @@ export interface GameMap {
 	name?: string
 	grid?: { size?: number; [k: string]: unknown }
 	cells?: Record<string, string>
-	meta?: Record<string, { m: string; dir: number }>
+	meta?: Record<string, { m: string; dir: number; start?: boolean }>
 	/** Initial minion wave: which hexes get a minion at game start (set in the editor). */
 	battleZone?: Array<{ hex: string; team: 'orange' | 'blue'; kind: 'melee' | 'ranged' | 'heavy' }>
 }
