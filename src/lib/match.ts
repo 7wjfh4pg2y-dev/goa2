@@ -407,9 +407,10 @@ export function initialMatchState(
 	const length = opts.length ?? 'long'
 	const players = opts.players ?? 6
 	const life = opts.life ?? lifeFor(length, players)
-	// Wave-counter track = the victory track (removed on each lane push), set per
-	// map in the editor. Falls back to the rulebook default (3 quick / 5 long).
-	const wavesMax = opts.wavesMax ?? opts.map?.waves?.[length] ?? wavesFor(length)
+	// Wave-counter track = the victory track (removed on each lane push). A custom
+	// game sets its own count; otherwise use the map's per-length value, then the
+	// rulebook default (3 quick / 5 long).
+	const wavesMax = opts.wavesMax ?? opts.waves ?? opts.map?.waves?.[length] ?? wavesFor(length)
 	const waves = opts.waves ?? wavesMax
 	return {
 		round: 1,
