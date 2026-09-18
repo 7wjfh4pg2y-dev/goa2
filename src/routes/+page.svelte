@@ -515,7 +515,7 @@
 			<div class="step" transition:reveal bind:clientHeight={h['adminhub']}>
 				<p class="roomline center">You're in as <b class="admincol">Admin</b>.</p>
 				<div class="cards">
-					<button class="card p" on:click={() => { randomRoom(); mode = 'menu'; }}>
+					<button class="card p" on:click={() => (mode = 'menu')}>
 						<span class="ic"><svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="#7dd3fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14" /></svg></span>
 						<span class="t">Create / Join</span><span class="s">Run a game</span>
 					</button>
@@ -534,7 +534,7 @@
 						<span class="ic"><svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="#7dd3fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14" /></svg></span>
 						<span class="t">Create game</span><span class="s">Set the ruleset & map</span>
 					</button>
-					<button class="card a" on:click={() => (mode = 'join')}>
+					<button class="card a" on:click={() => { room = ''; joinError = ''; mode = 'join'; }}>
 						<span class="ic"><svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="#fdba74" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" /><path d="M10 17l5-5-5-5" /><path d="M15 12H3" /></svg></span>
 						<span class="t">Join game</span><span class="s">Enter a room code</span>
 					</button>
