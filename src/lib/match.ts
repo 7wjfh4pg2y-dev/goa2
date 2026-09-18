@@ -428,7 +428,10 @@ export function initialMatchState(
 	const length = opts.length ?? 'long'
 	const players = opts.players ?? 6
 	const life = opts.life ?? lifeFor(length, players)
-	const wavesMax = opts.wavesMax ?? 14 // two-lane map default; 7 per lane row
+	// NOTE: wave-counter counts are the victory track (per rulebook), NOT minion
+	// tokens. Exact starting counts still need confirming; default from wavesFor
+	// until the create-screen setting / rulebook numbers are wired in.
+	const wavesMax = opts.wavesMax ?? wavesFor(length)
 	const waves = opts.waves ?? wavesMax
 	return {
 		round: 1,
