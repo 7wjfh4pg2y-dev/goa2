@@ -195,14 +195,41 @@ export function placeHeroes(state: MatchState, players: Player[]): Record<string
 	return pieces
 }
 
-/** Initial minion wave: place a movable minion on each battle-zone hex. */
+/** Initial minion wave: place a movable minion on each battle-zone hex.
+ * Uses the map's authored `battleZone`; falls back to the central spawn tiles
+ * so any map with spawn hexes still gets a wave. */
 export function placeMinions(state: MatchState): Record<string, Piece> {
 	const pieces: Record<string, Piece> = {}
-	for (const m of state.map?.battleZone ?? []) {
+	const zone = state.map?.battleZone?.length ? state.map.battleZone : deriveBattleZone(state.map)
+	for (const m of zone) {
 		const id = `minion_${m.hex}`
 		pieces[id] = { id, hex: m.hex, team: m.team, kind: 'minion', role: m.kind }
 	}
 	return pieces
+}
+
+/** When a map has no authored battleZone, take the 6 spawn tiles per side
+ * nearest the board centre as the opening wave. */
+function deriveBattleZone(map: GameMap | null): NonNullable<GameMap['battleZone']> {
+	const cells = map?.cells ?? {}
+	const ids = Object.keys(cells)
+	if (!ids.length) return []
+	const SQ = Math.sqrt(3)
+	const pos = (id: string): [number, number] => {
+		const [c, r] = id.split('_').map(Number)
+		return [SQ * (c + 0.5 * (r & 1)), 1.5 * r]
+	}
+	let cx = 0, cy = 0
+	for (const id of ids) { const [x, y] = pos(id); cx += x; cy += y }
+	cx /= ids.length; cy /= ids.length
+	const near = (t: string, n: number) =>
+		ids.filter((k) => cells[k] === t)
+			.map((k) => { const [x, y] = pos(k); return { k, d: (x - cx) ** 2 + (y - cy) ** 2 } })
+			.sort((a, b) => a.d - b.d).slice(0, n).map((o) => o.k)
+	const kinds: Array<'melee' | 'ranged' | 'heavy'> = ['melee', 'melee', 'ranged', 'ranged', 'heavy', 'heavy']
+	const mk = (t: string, team: 'orange' | 'blue') =>
+		near(t, 6).map((hex, i) => ({ hex, team, kind: kinds[i % kinds.length] }))
+	return [...mk('spawnOrange', 'orange'), ...mk('spawnBlue', 'blue')]
 }
 
 /** Life counters per team, from the rulebook setup table (base, single lane). */
