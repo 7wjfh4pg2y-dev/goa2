@@ -102,12 +102,22 @@
 		return { x: p.x, y: p.y };
 	}
 
+	// Keep the board from being panned off-screen: allow the overflow created by
+	// zoom, plus a fixed slice of wiggle room, but never enough to lose the board.
+	function clampPan() {
+		const margin = 0.28; // fraction of the board size you may pan past the edge
+		const mx = Math.max(0, (bounds.w * scale - bounds.w) / 2) + bounds.w * margin;
+		const my = Math.max(0, (bounds.h * scale - bounds.h) / 2) + bounds.h * margin;
+		panX = clamp(panX, -mx, mx);
+		panY = clamp(panY, -my, my);
+	}
 	function zoomAt(nextScale: number, clientX: number, clientY: number) {
 		const before = toChild(clientX, clientY); // board point under cursor
 		scale = clamp(nextScale, 0.4, 8);
 		const target = toUser(clientX, clientY); // fixed screen point in user coords
 		const q = new DOMPoint(before.x, before.y).matrixTransform(baseM());
 		panX = target.x - q.x; panY = target.y - q.y; // keep `before` under the cursor
+		clampPan();
 	}
 	export function zoomBtn(f: number) {
 		const r = wrapEl?.getBoundingClientRect();
@@ -129,6 +139,7 @@
 			if (!m) return;
 			panX -= e.deltaX / m.a;
 			panY -= e.deltaY / m.d;
+			clampPan();
 		}
 	}
 	// ---- pan / move-piece interaction -----------------------------------------
@@ -167,6 +178,7 @@
 		} else if (panning) {
 			const p = toUser(e.clientX, e.clientY);
 			panX = pan0.x + (p.x - p0.x); panY = pan0.y + (p.y - p0.y);
+			clampPan();
 		}
 	}
 	function up(e: PointerEvent) {

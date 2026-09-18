@@ -206,12 +206,12 @@
 
 		<!-- view controls, docked at the bottom of the HUD -->
 		<div class="viewctl">
-			<button class="vbtn" on:click={() => board?.zoomBtn(1.2)} title="Zoom in">＋</button>
-			<button class="vbtn" on:click={() => board?.zoomBtn(1 / 1.2)} title="Zoom out">−</button>
+			<button class="vbtn leave" on:click={() => (confirmLeave = true)} title="Leave game">⎋</button>
+			<button class="vbtn" on:click={() => board?.reset()} title="Recenter & reset view">⌖</button>
 			<button class="vbtn" on:click={() => board?.rotateBy(-60)} title="Rotate counter-clockwise">⟲</button>
 			<button class="vbtn" on:click={() => board?.rotateBy(60)} title="Rotate clockwise">⟳</button>
-			<button class="vbtn" on:click={() => board?.reset()} title="Recenter">⤾</button>
-			<button class="vbtn leave" on:click={() => (confirmLeave = true)} title="Leave game">⎋</button>
+			<button class="vbtn" on:click={() => board?.zoomBtn(1.2)} title="Zoom in">＋</button>
+			<button class="vbtn" on:click={() => board?.zoomBtn(1 / 1.2)} title="Zoom out">−</button>
 		</div>
 	</div>
 </div>
