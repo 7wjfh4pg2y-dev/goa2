@@ -32,6 +32,7 @@
 		type DraftSystem
 	} from '$lib/match';
 	import { HEROES } from '$lib/heroes';
+	import { initCards } from '$lib/cards/cardstate';
 	import HeroDraft from '$lib/HeroDraft.svelte';
 	import GameView from '$lib/GameView.svelte';
 
@@ -190,7 +191,10 @@
 	// host places hero tokens once, when the board first appears
 	$: if (mode === 'game' && iAmHost && session && $state.draft && !Object.keys($state.pieces).length) {
 		const s = get(state);
-		session.update({ pieces: { ...placeMinions(s), ...placeHeroes(s, get(players)) } });
+		session.update({
+			pieces: { ...placeMinions(s), ...placeHeroes(s, get(players)) },
+			cards: initCards(s.draft?.picks ?? {})
+		});
 	}
 
 	function bail(msg: string) {

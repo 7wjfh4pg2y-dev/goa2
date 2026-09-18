@@ -17,6 +17,7 @@ import { writable, type Readable } from 'svelte/store'
 import { supabase } from './supabase'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import type { GameMap } from './maps'
+import type { PlayerCardState } from './cards/cardstate'
 
 /** Realtime connection state, surfaced so the UI can show a status indicator. */
 export type ConnStatus = 'connecting' | 'connected' | 'reconnecting' | 'closed'
@@ -138,6 +139,7 @@ export interface MatchState {
 	mapId: string // id of the chosen board (from the maps registry)
 	map: GameMap | null // full board data, shared so everyone renders the same map
 	pieces: Record<string, Piece> // tokens on the board, keyed by id
+	cards?: Record<string, PlayerCardState> // per-player card state, keyed by playerId
 	seats: number // number of player seats the game is set up for (excl. spectators)
 	host: string // clientId of the host (the creator)
 	draftSystem: DraftSystem // how heroes are selected
