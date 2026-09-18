@@ -131,14 +131,18 @@
 			panY -= e.deltaY / m.d;
 		}
 	}
-	// ---- pan (drag anywhere) + click-to-move pieces ---------------------------
-	// Dragging always pans — even over a token — so a crowded board never traps
-	// the view. To move a piece you *click* it (it lifts/highlights), then click
-	// the destination hex. Click it again to deselect.
-	const DRAG_THRESHOLD = 6; // client px; below this a pointerup counts as a click
+	// ---- pan / move-piece interaction -----------------------------------------
+	// Only the visible disc of a token is clickable (sprite images are pointer
+	// transparent), so panning works everywhere else. Press an empty spot and
+	// drag → pan. Press a token and drag → carry it (click-hold-drag). Tap a
+	// token → pick it up (highlight); tap a hex → drop it there (click-to-move);
+	// tap it again → put it down.
+	const DRAG_THRESHOLD = 6; // client px; below this a pointerup counts as a tap
 	let panning = false, moved = false, p0 = { x: 0, y: 0 }, pan0 = { x: 0, y: 0 }, downC = { x: 0, y: 0 };
-	let pressId: string | null = null; // piece under the pointer at press, if any
-	let selected: string | null = null; // currently picked-up piece
+	let pressId: string | null = null; // token pressed at gesture start, if any
+	let dragId: string | null = null;  // token currently being carried
+	let dragPt = { x: 0, y: 0 };
+	let selected: string | null = null; // token picked up via tap (click-to-move)
 	function down(e: PointerEvent) {
 		if (!interactive) return;
 		panning = true; moved = false; p0 = toUser(e.clientX, e.clientY); pan0 = { x: panX, y: panY };
@@ -146,24 +150,36 @@
 		wrapEl.setPointerCapture(e.pointerId);
 	}
 	function move(e: PointerEvent) {
-		if (!panning) return;
-		if (!moved && Math.hypot(e.clientX - downC.x, e.clientY - downC.y) >= DRAG_THRESHOLD) moved = true;
-		const p = toUser(e.clientX, e.clientY);
-		panX = pan0.x + (p.x - p0.x); panY = pan0.y + (p.y - p0.y);
+		if (!panning && !dragId) return;
+		if (!moved) {
+			if (Math.hypot(e.clientX - downC.x, e.clientY - downC.y) < DRAG_THRESHOLD) return;
+			moved = true;
+			if (pressId && onMovePiece) { dragId = pressId; panning = false; } // grab the token
+		}
+		if (dragId) {
+			const pt = toChild(e.clientX, e.clientY);
+			dragPt = { x: pt.x, y: pt.y };
+		} else if (panning) {
+			const p = toUser(e.clientX, e.clientY);
+			panX = pan0.x + (p.x - p0.x); panY = pan0.y + (p.y - p0.y);
+		}
 	}
 	function up(e: PointerEvent) {
-		panning = false;
 		try { wrapEl.releasePointerCapture(e.pointerId); } catch {}
-		if (!moved) handleClick(e); // a tap, not a pan
-		pressId = null;
-	}
-	function handleClick(e: PointerEvent) {
-		if (!interactive || !onMovePiece) return;
-		if (pressId != null) {
-			selected = selected === pressId ? null : pressId; // toggle selection
-			return;
+		if (dragId) { // dropped a carried token
+			const pt = toChild(e.clientX, e.clientY);
+			const hex = nearestHex(pt.x, pt.y);
+			if (hex && onMovePiece) onMovePiece(dragId, hex);
+			dragId = null; selected = null;
+		} else if (!moved) {
+			handleTap(e);
 		}
-		if (selected != null) { // clicked the board with a piece in hand → move it
+		panning = false; pressId = null;
+	}
+	function handleTap(e: PointerEvent) {
+		if (!interactive || !onMovePiece) return;
+		if (pressId != null) { selected = selected === pressId ? null : pressId; return; } // pick up / put down
+		if (selected != null) { // tapped a hex with a token in hand → move it
 			const pt = toChild(e.clientX, e.clientY);
 			const hex = nearestHex(pt.x, pt.y);
 			if (hex) onMovePiece(selected, hex);
@@ -216,24 +232,25 @@
 			{/each}
 
 			{#each pieces as p (p.id)}
-				{@const c = centerOf(p.hex)}
-				{@const sel = selected === p.id}
-				<g class="piece" class:selectable={!!onMovePiece} class:selected={sel}
+				{@const carry = dragId === p.id}
+				{@const c = carry ? dragPt : centerOf(p.hex)}
+				{@const sel = selected === p.id || carry}
+				<g class="piece" class:selectable={!!onMovePiece} class:selected={sel} class:carry
 					role="button" tabindex="-1"
 					aria-label={p.role ? `${p.team} ${p.role} minion` : `${p.team} ${p.label ?? 'piece'}`}
 					transform={rotEff ? `rotate(${-rotEff} ${c.x} ${c.y})` : undefined}
 					on:pointerdown={() => { if (onMovePiece) pressId = p.id; }}
 				>
 					{#if sel}
-						<circle class="selring" cx={c.x} cy={c.y} r={size * 0.82} fill="none" stroke="#fde047" stroke-width={size * 0.1} stroke-dasharray="{size * 0.32} {size * 0.22}" />
+						<circle class="selring" cx={c.x} cy={c.y} r={size * 0.82} fill="none" stroke="#fde047" stroke-width={size * 0.1} stroke-dasharray="{size * 0.32} {size * 0.22}" pointer-events="none" />
 					{/if}
 					{#if p.role}
 						<circle cx={c.x} cy={c.y} r={size * 0.66} fill="#e2e8f0" stroke={pieceColor(p.team)} stroke-width={size * 0.14} />
-						<image href={minionHref(p.team, p.role)} x={c.x - size * 0.62} y={c.y - size * 0.62} width={size * 1.24} height={size * 1.24} preserveAspectRatio="xMidYMid meet" />
+						<image href={minionHref(p.team, p.role)} x={c.x - size * 0.62} y={c.y - size * 0.62} width={size * 1.24} height={size * 1.24} preserveAspectRatio="xMidYMid meet" pointer-events="none" />
 					{:else}
 						<circle cx={c.x} cy={c.y} r={size * 0.62} fill={p.color ?? pieceColor(p.team)} stroke={sel ? '#fde047' : pieceColor(p.team)} stroke-width={size * 0.16} />
 						{#if p.label}
-							<text x={c.x} y={c.y} text-anchor="middle" dominant-baseline="central" font-size={size * 0.72} font-weight="800" fill="#0b1220" stroke="rgba(255,255,255,.6)" stroke-width={size * 0.02}>{p.label}</text>
+							<text x={c.x} y={c.y} text-anchor="middle" dominant-baseline="central" font-size={size * 0.72} font-weight="800" fill="#0b1220" stroke="rgba(255,255,255,.6)" stroke-width={size * 0.02} pointer-events="none">{p.label}</text>
 						{/if}
 					{/if}
 				</g>
@@ -249,6 +266,7 @@
 	.board-wrap.interactive:active { cursor: grabbing; }
 	svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 	.piece.selectable { cursor: pointer; }
+	.piece.carry { cursor: grabbing; }
 	.piece.selected circle { filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.6)); }
 	.selring { animation: spin 8s linear infinite; transform-box: fill-box; transform-origin: center; }
 	@keyframes spin { to { transform: rotate(360deg); } }

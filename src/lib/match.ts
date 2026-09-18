@@ -130,6 +130,9 @@ export interface MatchState {
 	lastPush: Team | null // team that won the most recent Push the Lane
 	life: Record<Team, number> // per-team Life counters remaining; 0 = that team loses
 	lifeMax: number // starting Life per team (how many tokens to display)
+	lifeTok: Record<Team, boolean[]> // per-token full(true)/spent(false); count of trues = life
+	wavesMax: number // starting wave tokens (14 on a two-lane map)
+	waveTok: boolean[] // per wave token full(true)/spent(false); count of trues = waves
 	timer: TimerState
 	log: LogEntry[] // capped activity log (most recent last)
 	mapId: string // id of the chosen board (from the maps registry)
@@ -377,6 +380,7 @@ export function initialMatchState(
 		length?: 'quick' | 'long'
 		players?: number
 		waves?: number
+		wavesMax?: number
 		life?: number
 		mapId?: string
 		map?: GameMap | null
@@ -387,16 +391,20 @@ export function initialMatchState(
 	const length = opts.length ?? 'long'
 	const players = opts.players ?? 6
 	const life = opts.life ?? lifeFor(length, players)
-	const waves = opts.waves ?? wavesFor(length)
+	const wavesMax = opts.wavesMax ?? 14 // two-lane map default; 7 per lane row
+	const waves = opts.waves ?? wavesMax
 	return {
 		round: 1,
 		turn: 1,
 		phase: 'planning',
 		tieBreaker: 'orange',
 		waves,
+		wavesMax,
+		waveTok: Array(wavesMax).fill(true),
 		lastPush: null,
 		life: { orange: life, blue: life },
 		lifeMax: life,
+		lifeTok: { orange: Array(life).fill(true), blue: Array(life).fill(true) },
 		timer: { running: false, baseMs: 0, startedAt: null },
 		log: [],
 		mapId: opts.mapId ?? '',

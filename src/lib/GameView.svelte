@@ -16,8 +16,8 @@
 	export let onLeave: () => void;
 
 	const status = session.status;
-	const nameOf = (id: string) => $players.find((p) => p.id === id)?.name ?? 'Player';
-	const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
+	let logOpen = true;
+	$: lifeMax = $ms.lifeMax || ($ms.lifeTok?.orange?.length ?? 8);
 
 	// real game art for the HUD (life-counter medallions + tie-breaker token)
 	const art = import.meta.glob('./cards/images/{life_counter,tiebreaker}_*.png', { eager: true, import: 'default' }) as Record<string, string>;
@@ -27,22 +27,32 @@
 	// use the minion sprite as the wave token.
 	const minionArt = import.meta.glob('./images/minions/*.png', { eager: true, import: 'default' }) as Record<string, string>;
 	const waveIcon = minionArt['./images/minions/orange_melee.png'];
-	function setWaves(v: number) {
-		const next = Math.max(0, v);
-		if (next !== $ms.waves) session.act(`Waves ${$ms.waves} → ${next}`, { waves: next });
-	}
-	$: lifeMax = $ms.lifeMax || Math.max($ms.life.orange, $ms.life.blue, 8);
 
-	// Click a Life token to set the depletion boundary: clicking a full token
-	// depletes it (and any past it); clicking a spent token restores up to it.
-	function tokClick(team: Team, i: number) {
-		const cur = $ms.life[team];
-		setLife(team, i < cur ? i : i + 1);
+	// per-token flip animation (like the tie-breaker), keyed per token
+	let flips: Record<string, boolean> = {};
+	function flip(key: string) {
+		flips = { ...flips, [key]: false };
+		requestAnimationFrame(() => {
+			flips = { ...flips, [key]: true };
+			setTimeout(() => (flips = { ...flips, [key]: false }), 450);
+		});
 	}
-	function setLife(team: Team, value: number) {
-		const next = clamp(value, 0, lifeMax);
-		if (next !== $ms.life[team])
-			session.act(`${team === 'orange' ? 'Orange' : 'Blue'} Life ${$ms.life[team]} → ${next}`, { life: { ...$ms.life, [team]: next } });
+
+	// Each token toggles independently: click a token to flip it full ↔ spent.
+	function toggleLife(team: Team, i: number) {
+		const arr = [...($ms.lifeTok?.[team] ?? [])];
+		arr[i] = !arr[i];
+		const count = arr.filter(Boolean).length;
+		flip(`l${team}${i}`);
+		session.act(`${team === 'orange' ? 'Orange' : 'Blue'} Life ${$ms.life[team]} → ${count}`,
+			{ lifeTok: { ...$ms.lifeTok, [team]: arr }, life: { ...$ms.life, [team]: count } });
+	}
+	function toggleWave(i: number) {
+		const arr = [...($ms.waveTok ?? [])];
+		arr[i] = !arr[i];
+		const count = arr.filter(Boolean).length;
+		flip(`w${i}`);
+		session.act(`Waves ${$ms.waves} → ${count}`, { waveTok: arr, waves: count });
 	}
 
 	// orient the board so the local player's base sits at the bottom
@@ -62,10 +72,6 @@
 		const p = $ms.pieces[id];
 		const label = p?.hero ? heroById(p.hero)?.name ?? 'a piece' : 'a piece';
 		session.act(`moved ${label} → ${zoneName($ms.map, hex)}`, movePiece($ms, id, hex));
-	}
-	function adjWaves(d: number) {
-		const next = clamp($ms.waves + d, 0, 12);
-		if (next !== $ms.waves) session.act(`Waves ${$ms.waves} → ${next}`, { waves: next });
 	}
 	function stepTurn(dir: 1 | -1) {
 		const patch = dir === 1 ? nextTurn($ms) : prevTurn($ms);
@@ -134,32 +140,34 @@
 		</div>
 
 		<div class="hsec">
-			<div class="slabel"><span>Waves</span><span class="cnt">{$ms.waves}<button class="mini addw" on:click={() => adjWaves(1)} title="Add a wave">+</button></span></div>
+			<div class="slabel"><span>Waves</span><span class="cnt">{$ms.waves}</span></div>
 			<div class="wtoks">
-				{#each Array($ms.waves) as _, i}
-					<button class="wtok" style="background-image:url({waveIcon})" on:click={() => setWaves(i)} title="Waves {$ms.waves} — click to spend"></button>
+				{#each $ms.waveTok ?? [] as full, i}
+					<button class="wtok" class:dep={!full} class:flip={flips[`w${i}`]}
+						style="background-image:url({waveIcon})" on:click={() => toggleWave(i)}
+						title="Wave token — click to spend / restore"></button>
 				{/each}
 			</div>
 		</div>
 
-		<!-- team Life: one medallion per starting Life; click to deplete/restore -->
+		<!-- team Life: one token per starting Life; each toggles full ↔ spent -->
 		<div class="hsec life orange">
 			<div class="slabel"><span class="tn">Orange</span><span class="tc">{$ms.life.orange}<small>/{lifeMax}</small></span></div>
 			<div class="tokens">
-				{#each Array(lifeMax) as _, i}
-					<button class="ltok" class:dep={i >= $ms.life.orange}
-						style="background-image:url({lifeArt('orange', i < $ms.life.orange ? 'front' : 'back')})"
-						on:click={() => tokClick('orange', i)} title="Orange Life {$ms.life.orange} / {lifeMax} — click to set"></button>
+				{#each $ms.lifeTok?.orange ?? [] as full, i}
+					<button class="ltok" class:dep={!full} class:flip={flips[`lorange${i}`]}
+						style="background-image:url({lifeArt('orange', full ? 'front' : 'back')})"
+						on:click={() => toggleLife('orange', i)} title="Orange Life token — click to spend / restore"></button>
 				{/each}
 			</div>
 		</div>
 		<div class="hsec life blue">
 			<div class="slabel"><span class="tn">Blue</span><span class="tc">{$ms.life.blue}<small>/{lifeMax}</small></span></div>
 			<div class="tokens">
-				{#each Array(lifeMax) as _, i}
-					<button class="ltok" class:dep={i >= $ms.life.blue}
-						style="background-image:url({lifeArt('blue', i < $ms.life.blue ? 'front' : 'back')})"
-						on:click={() => tokClick('blue', i)} title="Blue Life {$ms.life.blue} / {lifeMax} — click to set"></button>
+				{#each $ms.lifeTok?.blue ?? [] as full, i}
+					<button class="ltok" class:dep={!full} class:flip={flips[`lblue${i}`]}
+						style="background-image:url({lifeArt('blue', full ? 'front' : 'back')})"
+						on:click={() => toggleLife('blue', i)} title="Blue Life token — click to spend / restore"></button>
 				{/each}
 			</div>
 		</div>
@@ -169,16 +177,20 @@
 			<span>Tie-breaker: {$ms.tieBreaker === 'orange' ? 'Orange' : 'Blue'}</span>
 		</button>
 
-		<!-- activity log fills the space between the tie-breaker and the controls -->
-		<div class="logpanel">
-			<div class="loghead">Activity</div>
-			<div class="logbody">
-				{#each log.slice(-40) as e (e.id)}
-					<div class="logline"><span class="lt">{hhmm(e.at)}</span> <b>{e.by}</b> {e.text}</div>
-				{:else}
-					<div class="logempty">No moves yet.</div>
-				{/each}
-			</div>
+		<!-- activity log fills the space between the tie-breaker and the controls; retractable -->
+		<div class="logpanel" class:collapsed={!logOpen}>
+			<button class="loghead" on:click={() => (logOpen = !logOpen)} title={logOpen ? 'Hide activity' : 'Show activity'}>
+				<span>Activity</span><span class="chev">{logOpen ? '▾' : '▸'}</span>
+			</button>
+			{#if logOpen}
+				<div class="logbody">
+					{#each log.slice(-40) as e (e.id)}
+						<div class="logline" title={hhmm(e.at)}><b>{e.by}</b> {e.text}</div>
+					{:else}
+						<div class="logempty">No moves yet.</div>
+					{/each}
+				</div>
+			{/if}
 		</div>
 
 		<!-- view controls, docked at the bottom of the HUD -->
@@ -256,25 +268,28 @@
 
 	.slabel { display: flex; align-items: baseline; justify-content: space-between; gap: 6px;
 		font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 700; color: #93a3b8; }
-	.slabel .cnt { display: flex; align-items: center; gap: 5px; color: #f1f5f9; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
-	.addw { width: 1.2rem; height: 1.2rem; border-radius: 5px; font-size: 0.7rem; }
+	.slabel .cnt { color: #f1f5f9; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
 	.slabel .tn { font-family: 'Modesto Poster', serif; font-size: 0.9rem; letter-spacing: 0.02em; text-transform: none; }
 	.orange .tn { color: #ef9a5a; } .blue .tn { color: #6ea8f0; }
 	.slabel .tc { font-weight: 800; font-variant-numeric: tabular-nums; font-size: 0.9rem; color: #f1f5f9; }
 	.slabel .tc small { color: #94a3b8; font-weight: 600; font-size: 0.7rem; }
 
-	.tokens { display: flex; gap: 2px; flex-wrap: wrap; max-width: 128px; } /* 5 life tokens per row */
-	.ltok { width: 24px; height: 23px; padding: 0; border: none; background: transparent no-repeat center / contain; cursor: pointer;
-		filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.55)); transition: transform 0.1s, filter 0.15s, opacity 0.15s; }
-	.ltok:hover { transform: translateY(-2px) scale(1.12); }
+	.tokens { display: flex; gap: 2px; flex-wrap: wrap; max-width: 158px; } /* 5 life tokens per row (30px + 2 gap) */
+	.ltok { width: 30px; height: 29px; padding: 0; border: none; background: transparent no-repeat center / contain; cursor: pointer;
+		perspective: 80px; filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.55)); transition: transform 0.1s, filter 0.15s, opacity 0.15s; }
+	.ltok:hover { transform: translateY(-2px) scale(1.1); }
 	.ltok.dep { opacity: 0.85; filter: grayscale(0.35) brightness(0.72) drop-shadow(0 1px 3px rgba(0, 0, 0, 0.4)); }
 	.ltok.dep:hover { opacity: 1; filter: grayscale(0.15) brightness(0.9); }
+	.ltok.flip { animation: coinflip 0.45s ease-in-out; }
 
 	.wtoks { display: flex; gap: 2px; flex-wrap: wrap; max-width: 156px; } /* 7 wave tokens per row (20px + 2 gap = 152, with slack) */
 	.wtok { width: 20px; height: 20px; padding: 0; border: none; border-radius: 50%; cursor: pointer;
 		background: rgba(0, 0, 0, 0.35) no-repeat center / 88%; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15);
-		filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5)); transition: transform 0.1s; }
+		filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5)); transition: transform 0.1s, filter 0.15s, opacity 0.15s; }
 	.wtok:hover { transform: translateY(-2px) scale(1.12); }
+	.wtok.dep { opacity: 0.55; filter: grayscale(0.9) brightness(0.5); }
+	.wtok.dep:hover { opacity: 0.8; filter: grayscale(0.5) brightness(0.7); }
+	.wtok.flip { animation: coinflip 0.45s ease-in-out; }
 
 	.tiebtn { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; border: 1px solid rgba(255, 255, 255, 0.16);
 		background: rgba(255, 255, 255, 0.05); border-radius: 9px; padding: 4px 8px; color: #e5e7eb; cursor: pointer; font-size: 0.76rem; font-weight: 600; }
@@ -287,13 +302,16 @@
 	.mini { width: 1.35rem; height: 1.35rem; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.2); background: rgba(255, 255, 255, 0.06); color: #e5e7eb; cursor: pointer; font-weight: 700; line-height: 1; font-size: 0.75rem; flex: none; }
 	.mini:hover { background: rgba(255, 255, 255, 0.16); }
 
-	/* activity log lives inside the HUD, filling the gap above the controls */
+	/* activity log lives inside the HUD, filling the gap above the controls; retractable */
 	.logpanel { flex: 1; min-height: 56px; display: flex; flex-direction: column; overflow: hidden;
 		border-radius: 9px; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); }
-	.loghead { padding: 5px 8px; background: rgba(255, 255, 255, 0.04); color: #93a3b8; font-weight: 700; font-size: 0.66rem; letter-spacing: 0.1em; text-transform: uppercase; }
+	.logpanel.collapsed { flex: none; min-height: 0; }
+	.loghead { display: flex; align-items: center; justify-content: space-between; width: 100%; border: none; cursor: pointer;
+		padding: 5px 8px; background: rgba(255, 255, 255, 0.04); color: #93a3b8; font-weight: 700; font-size: 0.66rem; letter-spacing: 0.1em; text-transform: uppercase; }
+	.loghead:hover { background: rgba(255, 255, 255, 0.08); }
+	.loghead .chev { letter-spacing: 0; }
 	.logbody { flex: 1; overflow-y: auto; padding: 5px 8px; display: flex; flex-direction: column; gap: 3px; }
 	.logline { font-size: 0.72rem; color: #cbd5e1; line-height: 1.3; }
-	.logline .lt { color: #64748b; font-variant-numeric: tabular-nums; margin-right: 3px; }
 	.logline b { color: #f1f5f9; }
 	.logempty { font-size: 0.72rem; color: #64748b; }
 </style>
