@@ -75,15 +75,17 @@
 		const round = Math.max(1, $ms.round + dir);
 		if (round !== $ms.round) session.act(`Round → ${round}`, { round });
 	}
+	let tieFlip = false;
 	function flipTie() {
 		const next: Team = $ms.tieBreaker === 'orange' ? 'blue' : 'orange';
+		tieFlip = false; // restart the flip even on rapid re-clicks
+		requestAnimationFrame(() => { tieFlip = true; setTimeout(() => (tieFlip = false), 450); });
 		session.act(`Tie-breaker → ${next === 'orange' ? 'Orange' : 'Blue'}`, { tieBreaker: next });
 	}
 
 	const connLabel = (s: ConnStatus) =>
 		s === 'connected' ? 'Connected' : s === 'reconnecting' ? 'Reconnecting…' : s === 'closed' ? 'Disconnected' : 'Connecting…';
 
-	let logOpen = true;
 	let confirmLeave = false;
 	$: log = $ms.log ?? [];
 	const hhmm = (t: number) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -132,14 +134,11 @@
 		</div>
 
 		<div class="hsec">
-			<div class="slabel">Waves <span class="cnt">{$ms.waves}</span></div>
-			<div class="waves">
-				<div class="wtoks">
-					{#each Array($ms.waves) as _, i}
-						<button class="wtok" style="background-image:url({waveIcon})" on:click={() => setWaves(i)} title="Waves {$ms.waves} — click to spend"></button>
-					{/each}
-				</div>
-				<button class="mini" on:click={() => adjWaves(1)} title="Add a wave">+</button>
+			<div class="slabel"><span>Waves</span><span class="cnt">{$ms.waves}<button class="mini addw" on:click={() => adjWaves(1)} title="Add a wave">+</button></span></div>
+			<div class="wtoks">
+				{#each Array($ms.waves) as _, i}
+					<button class="wtok" style="background-image:url({waveIcon})" on:click={() => setWaves(i)} title="Waves {$ms.waves} — click to spend"></button>
+				{/each}
 			</div>
 		</div>
 
@@ -166,8 +165,21 @@
 		</div>
 
 		<button class="tiebtn {$ms.tieBreaker}" on:click={flipTie} title="Flip the tie-breaker — {$ms.tieBreaker === 'orange' ? 'Orange' : 'Blue'} breaks ties">
-			<img src={tieArt($ms.tieBreaker)} alt="" /><span>Tie-breaker: {$ms.tieBreaker === 'orange' ? 'Orange' : 'Blue'}</span>
+			<span class="coin"><img src={tieArt($ms.tieBreaker)} class:flip={tieFlip} alt="" /></span>
+			<span>Tie-breaker: {$ms.tieBreaker === 'orange' ? 'Orange' : 'Blue'}</span>
 		</button>
+
+		<!-- activity log fills the space between the tie-breaker and the controls -->
+		<div class="logpanel">
+			<div class="loghead">Activity</div>
+			<div class="logbody">
+				{#each log.slice(-40) as e (e.id)}
+					<div class="logline"><span class="lt">{hhmm(e.at)}</span> <b>{e.by}</b> {e.text}</div>
+				{:else}
+					<div class="logempty">No moves yet.</div>
+				{/each}
+			</div>
+		</div>
 
 		<!-- view controls, docked at the bottom of the HUD -->
 		<div class="viewctl">
@@ -178,20 +190,6 @@
 			<button class="vbtn" on:click={() => board?.reset()} title="Recenter">⤾</button>
 			<button class="vbtn leave" on:click={() => (confirmLeave = true)} title="Leave game">⎋</button>
 		</div>
-	</div>
-
-	<!-- activity log (bottom-right) -->
-	<div class="logpanel" class:closed={!logOpen}>
-		<button class="loghead" on:click={() => (logOpen = !logOpen)}>Activity {logOpen ? '▾' : '▸'}</button>
-		{#if logOpen}
-			<div class="logbody">
-				{#each log.slice(-14) as e (e.id)}
-					<div class="logline"><span class="lt">{hhmm(e.at)}</span> <b>{e.by}</b> {e.text}</div>
-				{:else}
-					<div class="logempty">No moves yet.</div>
-				{/each}
-			</div>
-		{/if}
 	</div>
 </div>
 
@@ -258,40 +256,44 @@
 
 	.slabel { display: flex; align-items: baseline; justify-content: space-between; gap: 6px;
 		font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 700; color: #93a3b8; }
-	.slabel .cnt { color: #f1f5f9; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+	.slabel .cnt { display: flex; align-items: center; gap: 5px; color: #f1f5f9; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+	.addw { width: 1.2rem; height: 1.2rem; border-radius: 5px; font-size: 0.7rem; }
 	.slabel .tn { font-family: 'Modesto Poster', serif; font-size: 0.9rem; letter-spacing: 0.02em; text-transform: none; }
 	.orange .tn { color: #ef9a5a; } .blue .tn { color: #6ea8f0; }
 	.slabel .tc { font-weight: 800; font-variant-numeric: tabular-nums; font-size: 0.9rem; color: #f1f5f9; }
 	.slabel .tc small { color: #94a3b8; font-weight: 600; font-size: 0.7rem; }
 
-	.tokens { display: flex; gap: 2px; flex-wrap: wrap; }
+	.tokens { display: flex; gap: 2px; flex-wrap: wrap; max-width: 128px; } /* 5 life tokens per row */
 	.ltok { width: 24px; height: 23px; padding: 0; border: none; background: transparent no-repeat center / contain; cursor: pointer;
 		filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.55)); transition: transform 0.1s, filter 0.15s, opacity 0.15s; }
 	.ltok:hover { transform: translateY(-2px) scale(1.12); }
 	.ltok.dep { opacity: 0.85; filter: grayscale(0.35) brightness(0.72) drop-shadow(0 1px 3px rgba(0, 0, 0, 0.4)); }
 	.ltok.dep:hover { opacity: 1; filter: grayscale(0.15) brightness(0.9); }
 
-	.waves { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
-	.wtoks { display: flex; gap: 2px; flex-wrap: wrap; }
-	.wtok { width: 22px; height: 22px; padding: 0; border: none; border-radius: 50%; cursor: pointer;
+	.wtoks { display: flex; gap: 2px; flex-wrap: wrap; max-width: 156px; } /* 7 wave tokens per row (20px + 2 gap = 152, with slack) */
+	.wtok { width: 20px; height: 20px; padding: 0; border: none; border-radius: 50%; cursor: pointer;
 		background: rgba(0, 0, 0, 0.35) no-repeat center / 88%; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15);
 		filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5)); transition: transform 0.1s; }
 	.wtok:hover { transform: translateY(-2px) scale(1.12); }
 
 	.tiebtn { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; border: 1px solid rgba(255, 255, 255, 0.16);
 		background: rgba(255, 255, 255, 0.05); border-radius: 9px; padding: 4px 8px; color: #e5e7eb; cursor: pointer; font-size: 0.76rem; font-weight: 600; }
-	.tiebtn img { width: 1.4rem; height: 1.4rem; }
+	.tiebtn .coin { width: 1.5rem; height: 1.5rem; perspective: 60px; flex: none; }
+	.tiebtn .coin img { width: 100%; height: 100%; display: block; }
+	.tiebtn .coin img.flip { animation: coinflip 0.45s ease-in-out; }
+	@keyframes coinflip { 0% { transform: rotateY(0); } 100% { transform: rotateY(360deg); } }
 	.tiebtn.orange { box-shadow: inset 0 0 14px rgba(239, 125, 34, 0.3); border-color: rgba(239, 125, 34, 0.4); }
 	.tiebtn.blue { box-shadow: inset 0 0 14px rgba(47, 127, 230, 0.3); border-color: rgba(47, 127, 230, 0.4); }
 	.mini { width: 1.35rem; height: 1.35rem; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.2); background: rgba(255, 255, 255, 0.06); color: #e5e7eb; cursor: pointer; font-weight: 700; line-height: 1; font-size: 0.75rem; flex: none; }
 	.mini:hover { background: rgba(255, 255, 255, 0.16); }
 
-	.logpanel { position: absolute; bottom: 14px; right: 14px; z-index: 6; width: 270px; background: rgba(9, 13, 22, 0.76); backdrop-filter: blur(6px); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 12px; overflow: hidden; }
-	.logpanel.closed { width: auto; }
-	.loghead { width: 100%; text-align: left; background: rgba(255, 255, 255, 0.05); border: none; color: #e5e7eb; padding: 6px 12px; cursor: pointer; font-weight: 700; font-size: 0.82rem; }
-	.logbody { max-height: 190px; overflow-y: auto; padding: 6px 12px 8px; display: flex; flex-direction: column; gap: 3px; }
-	.logline { font-size: 0.78rem; color: #cbd5e1; }
+	/* activity log lives inside the HUD, filling the gap above the controls */
+	.logpanel { flex: 1; min-height: 56px; display: flex; flex-direction: column; overflow: hidden;
+		border-radius: 9px; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); }
+	.loghead { padding: 5px 8px; background: rgba(255, 255, 255, 0.04); color: #93a3b8; font-weight: 700; font-size: 0.66rem; letter-spacing: 0.1em; text-transform: uppercase; }
+	.logbody { flex: 1; overflow-y: auto; padding: 5px 8px; display: flex; flex-direction: column; gap: 3px; }
+	.logline { font-size: 0.72rem; color: #cbd5e1; line-height: 1.3; }
 	.logline .lt { color: #64748b; font-variant-numeric: tabular-nums; margin-right: 3px; }
 	.logline b { color: #f1f5f9; }
-	.logempty { font-size: 0.78rem; color: #64748b; }
+	.logempty { font-size: 0.72rem; color: #64748b; }
 </style>
