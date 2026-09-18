@@ -18,6 +18,34 @@ import { supabase } from './supabase'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import type { GameMap } from './maps'
 import type { PlayerCardState } from './cards/cardstate'
+import { commitCard, passTurn, uncommit, discardCard, undiscard } from './cards/cardstate'
+
+/** A per-player card instruction, applied authoritatively by the host. */
+export type CardReq =
+	| { kind: 'commit'; pid: string; idx: number }
+	| { kind: 'pass'; pid: string }
+	| { kind: 'uncommit'; pid: string }
+	| { kind: 'defend'; pid: string; idx: number }
+	| { kind: 'undiscard'; pid: string; idx: number }
+	| { kind: 'done'; pid: string }
+
+/** Apply a card instruction to the shared state, returning the patch to broadcast. */
+export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
+	if (req.kind === 'done') {
+		const resolved = s.resolved ?? []
+		return resolved.includes(req.pid) ? {} : { resolved: [...resolved, req.pid] }
+	}
+	const cards = s.cards ?? {}
+	const cs = cards[req.pid]
+	if (!cs) return {}
+	let next = cs
+	if (req.kind === 'commit') next = commitCard(cs, req.idx)
+	else if (req.kind === 'pass') next = passTurn(cs)
+	else if (req.kind === 'uncommit') next = uncommit(cs)
+	else if (req.kind === 'defend') next = discardCard(cs, req.idx)
+	else if (req.kind === 'undiscard') next = undiscard(cs, req.idx)
+	return { cards: { ...cards, [req.pid]: next } }
+}
 
 /** Realtime connection state, surfaced so the UI can show a status indicator. */
 export type ConnStatus = 'connecting' | 'connected' | 'reconnecting' | 'closed'
@@ -480,6 +508,13 @@ export interface MatchSession {
 	act: (text: string, patch: Partial<MatchState>) => void
 	/** Update this client's name, colour, ready state and/or seat. */
 	setSelf: (info: { name?: string; color?: string; ready?: boolean; seat?: number }) => void
+	/**
+	 * Per-player card action (commit/pass/defend/…). Routed through the host so
+	 * concurrent edits to the shared `cards` map can't clobber each other under
+	 * last-write-wins. The host applies it authoritatively; everyone else's edit
+	 * to their own card state travels as a small instruction, not a full snapshot.
+	 */
+	cardAction: (req: CardReq) => void
 	/** Host: ask a player (by clientId) to leave the room. */
 	kick: (id: string) => void
 	/** Becomes true when THIS client has been kicked. */
@@ -568,6 +603,12 @@ export function joinMatch(
 			})
 			.on('broadcast', { event: 'kick' }, ({ payload }) => {
 				if ((payload as { id: string }).id === clientId) kicked.set(true)
+			})
+			.on('broadcast', { event: 'cardreq' }, ({ payload }) => {
+				// only the host is authoritative for the shared card map / resolved list
+				if (local.host !== clientId) return
+				const patch = applyCardReq(local, payload as CardReq)
+				if (Object.keys(patch).length) update(patch)
 			})
 			.on('presence', { event: 'sync' }, () => {
 				const raw = ch.presenceState() as Record<string, Array<Partial<Player>>>
@@ -691,6 +732,18 @@ export function joinMatch(
 		scheduleTrack()
 	}
 
+	// Per-player card action. The host applies directly (it IS the authority);
+	// everyone else broadcasts the instruction for the host to apply, so two
+	// players committing at once can't overwrite each other's card state.
+	const cardAction = (req: CardReq) => {
+		if (local.host === clientId) {
+			const patch = applyCardReq(local, req)
+			if (Object.keys(patch).length) update(patch)
+		} else {
+			try { channel.send({ type: 'broadcast', event: 'cardreq', payload: req }) } catch { /* ignore */ }
+		}
+	}
+
 	// host asks a player to leave; the target client observes and leaves itself
 	const kick = (id: string) => {
 		channel.send({ type: 'broadcast', event: 'kick', payload: { id } })
@@ -709,7 +762,7 @@ export function joinMatch(
 		}
 	}
 
-	return { state, players, update, act, setSelf, kick, kicked, notFound, status: conn, leave, clientId }
+	return { state, players, update, act, setSelf, cardAction, kick, kicked, notFound, status: conn, leave, clientId }
 }
 
 // ---- Round/turn helpers (encode the rulebook's structure) -------------------

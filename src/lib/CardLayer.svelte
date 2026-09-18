@@ -12,12 +12,7 @@
 	import { heroCards, heroName, heroTitle, heroStat } from '$lib/cards/deck';
 	import { heroAvatar, heroLogo } from '$lib/heroes';
 	import {
-		commitCard,
-		uncommit,
-		passTurn,
 		revealPlayer,
-		discardCard,
-		undiscard,
 		endRoundAll,
 		PASS,
 		TURNS_PER_ROUND,
@@ -128,36 +123,33 @@
 	let selected: number | null = null;
 	$: if (phase !== 'planning' || myReady) selected = null; // no card magnify once readied/resolving
 
-	const myName = () => seated.find((p) => p.id === clientId)?.name ?? 'You';
-	function setCards(pid: string, next: PlayerCardState, label: string) {
-		session.act(label, { cards: { ...cards, [pid]: next } });
-	}
+	// all per-player card actions route through the host (see session.cardAction)
 	function commit(idx: number) {
 		if (!mine) return;
-		setCards(clientId, commitCard(mine, idx), `${myName()} committed a card`);
+		session.cardAction({ kind: 'commit', pid: clientId, idx });
 		selected = null;
 	}
 	function pass() {
 		if (!mine) return;
-		setCards(clientId, passTurn(mine), `${myName()} passed`);
+		session.cardAction({ kind: 'pass', pid: clientId });
 		selected = null;
 	}
 	function takeBack() {
 		if (!mine) return;
-		setCards(clientId, uncommit(mine), `${myName()} took back their card`);
+		session.cardAction({ kind: 'uncommit', pid: clientId });
 	}
 	function defend(idx: number) {
 		if (!mine) return;
-		setCards(clientId, discardCard(mine, idx), `${myName()} defended (discard)`);
+		session.cardAction({ kind: 'defend', pid: clientId, idx });
 		selected = null;
 	}
 	function pullBack(idx: number) {
 		if (!mine) return;
-		setCards(clientId, undiscard(mine, idx), `${myName()} recovered a discard`);
+		session.cardAction({ kind: 'undiscard', pid: clientId, idx });
 	}
 	function confirmDone() {
 		if (!isActive) return;
-		session.act(`${myName()} resolved Turn ${$ms.turn}`, { resolved: [...resolved, clientId] });
+		session.cardAction({ kind: 'done', pid: clientId });
 	}
 
 	const fan = (k: number, n: number) => {
