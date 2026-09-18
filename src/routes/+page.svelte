@@ -119,9 +119,12 @@
 			mode = 'join';
 			return;
 		}
-		// otherwise, if we were in a room and the page reloaded, rejoin it
+		// otherwise, if we were in a room and the page reloaded, rejoin it.
+		// "TABLE" was the old buggy fallback code shared across all games — never
+		// auto-resume into it; clear it so it can't drag anyone into a stale game.
 		const active = readActive();
-		if (active?.room) resume(active);
+		if (active?.room && active.room !== 'TABLE') resume(active);
+		else if (active?.room === 'TABLE') clearActive();
 	});
 
 	// rejoin a room after a refresh, as the same player (stable clientId)
@@ -353,7 +356,11 @@
 	function createGame() {
 		persistName();
 		if (!name) return; // name is required
-		room = room.trim().toUpperCase() || 'TABLE';
+		// Always mint a fresh room code. The create form has no code field, so a
+		// stale/empty `room` must never fall back to a fixed code (e.g. "TABLE") —
+		// that collides with a previous game's persisted state on the server and
+		// drops the host into that old (often already-started) game instead.
+		randomRoom();
 		const chosen = maps.find((m) => m.id === mapId) ?? maps[0];
 		const seed = initialMatchState({
 			length: ruleset === 'custom' ? 'long' : ruleset,
@@ -508,7 +515,7 @@
 			<div class="step" transition:reveal bind:clientHeight={h['adminhub']}>
 				<p class="roomline center">You're in as <b class="admincol">Admin</b>.</p>
 				<div class="cards">
-					<button class="card p" on:click={() => (mode = 'menu')}>
+					<button class="card p" on:click={() => { randomRoom(); mode = 'menu'; }}>
 						<span class="ic"><svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="#7dd3fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14" /></svg></span>
 						<span class="t">Create / Join</span><span class="s">Run a game</span>
 					</button>
