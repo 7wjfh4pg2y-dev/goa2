@@ -19,6 +19,9 @@
 	const SQRT3 = Math.sqrt(3);
 	const tileSprites = import.meta.glob('./images/tiles/*.png', { eager: true, import: 'default' }) as Record<string, string>;
 	const minionSprites = import.meta.glob('./images/minions/*.png', { eager: true, import: 'default' }) as Record<string, string>;
+	const minionTokens = import.meta.glob('./images/minion_tokens/*.png', { eager: true, import: 'default' }) as Record<string, string>;
+	const minionToken = (team: string, role?: string) =>
+		minionTokens[`./images/minion_tokens/${team === 'blue' ? 'blue' : 'orange'}_${role ?? 'melee'}.png`];
 
 	$: cells = map.cells ?? {};
 	$: meta = map.meta ?? {};
@@ -217,8 +220,6 @@
 		return best;
 	}
 	const pieceColor = (t: string) => (t === 'orange' ? '#ea6a1e' : t === 'blue' ? '#2f79e6' : '#9aa4b2');
-	const minionHref = (team: string, role?: string) =>
-		minionSprites[`./images/minions/${team === 'blue' ? 'blue' : 'orange'}_${role ?? 'melee'}.png`];
 </script>
 
 <div
@@ -261,8 +262,8 @@
 						<circle class="selring" cx={c.x} cy={c.y} r={size * 0.82} fill="none" stroke="#fde047" stroke-width={size * 0.1} stroke-dasharray="{size * 0.32} {size * 0.22}" pointer-events="none" />
 					{/if}
 					{#if p.role}
-						<circle cx={c.x} cy={c.y} r={size * 0.66} fill="#e2e8f0" stroke={pieceColor(p.team)} stroke-width={size * 0.14} />
-						<image href={minionHref(p.team, p.role)} x={c.x - size * 0.62} y={c.y - size * 0.62} width={size * 1.24} height={size * 1.24} preserveAspectRatio="xMidYMid meet" pointer-events="none" />
+						<image href={minionToken(p.team, p.role)} x={c.x - size * 0.7} y={c.y - size * 0.7} width={size * 1.4} height={size * 1.4} preserveAspectRatio="xMidYMid meet" pointer-events="none" />
+						<circle cx={c.x} cy={c.y} r={size * 0.66} fill="transparent" stroke={sel ? '#fde047' : pieceColor(p.team)} stroke-width={size * 0.14} />
 					{:else}
 						<circle cx={c.x} cy={c.y} r={size * 0.62} fill={p.color ?? pieceColor(p.team)} stroke={sel ? '#fde047' : pieceColor(p.team)} stroke-width={size * 0.16} />
 						{#if p.label}

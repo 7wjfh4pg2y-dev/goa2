@@ -20,6 +20,7 @@
 		teamForSeat,
 		buildDraft,
 		placeHeroes,
+		placeMinions,
 		draftPoolMin,
 		DRAFT_SYSTEMS,
 		DRAFT_LABELS,
@@ -188,7 +189,8 @@
 	$: if ((mode === 'lobby' || mode === 'draft' || mode === 'game') && $state.closed) bail('The host closed the game.');
 	// host places hero tokens once, when the board first appears
 	$: if (mode === 'game' && iAmHost && session && $state.draft && !Object.keys($state.pieces).length) {
-		session.update({ pieces: placeHeroes(get(state), get(players)) });
+		const s = get(state);
+		session.update({ pieces: { ...placeMinions(s), ...placeHeroes(s, get(players)) } });
 	}
 
 	function bail(msg: string) {

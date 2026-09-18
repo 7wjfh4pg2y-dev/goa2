@@ -195,6 +195,16 @@ export function placeHeroes(state: MatchState, players: Player[]): Record<string
 	return pieces
 }
 
+/** Initial minion wave: place a movable minion on each battle-zone hex. */
+export function placeMinions(state: MatchState): Record<string, Piece> {
+	const pieces: Record<string, Piece> = {}
+	for (const m of state.map?.battleZone ?? []) {
+		const id = `minion_${m.hex}`
+		pieces[id] = { id, hex: m.hex, team: m.team, kind: 'minion', role: m.kind }
+	}
+	return pieces
+}
+
 /** Life counters per team, from the rulebook setup table (base, single lane). */
 export function lifeFor(length: 'quick' | 'long', players: number): number {
 	if (length === 'quick') return players <= 4 ? 4 : 5

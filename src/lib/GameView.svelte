@@ -62,7 +62,7 @@
 	$: orientation = myTeam === 'orange' ? 180 : 0;
 
 	$: boardPieces = Object.values($ms.pieces).map((p) => ({
-		id: p.id, hex: p.hex, team: p.team,
+		id: p.id, hex: p.hex, team: p.team, role: p.role,
 		label: p.hero ? (heroById(p.hero)?.name?.[0]?.toUpperCase() ?? '?') : (p.label ?? ''),
 		color: p.color ? colorHex(p.color) : undefined
 	}));
