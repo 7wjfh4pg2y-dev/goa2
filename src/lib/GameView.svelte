@@ -2,8 +2,10 @@
 	import { afterUpdate } from 'svelte';
 	import type { Readable } from 'svelte/store';
 	import BoardCanvas from '$lib/BoardCanvas.svelte';
+	import CardLayer from '$lib/CardLayer.svelte';
 	import { heroById } from '$lib/heroes';
 	import { zoneName } from '$lib/zones';
+	import { endRoundAll } from '$lib/cards/cardstate';
 	import {
 		colorHex, movePiece, nextTurn, prevTurn, teamForSeat,
 		type MatchState, type Player, type MatchSession, type Team, type ConnStatus
@@ -76,6 +78,8 @@
 	}
 	function stepTurn(dir: 1 | -1) {
 		const patch = dir === 1 ? nextTurn($ms) : prevTurn($ms);
+		// advancing past turn 4 starts a new round: every player's cards return to hand
+		if (dir === 1 && patch.round && $ms.cards) patch.cards = endRoundAll($ms.cards);
 		session.act(`Round ${patch.round ?? $ms.round} · Turn ${patch.turn ?? $ms.turn}`, patch);
 	}
 	function stepRound(dir: 1 | -1) {
@@ -113,6 +117,8 @@
 <div class="gamewrap">
 	<div class="ocean"></div>
 	<BoardCanvas bind:this={board} map={$ms.map ?? {}} rotation={orientation} interactive={true} pieces={boardPieces} onMovePiece={move} />
+
+	<CardLayer {session} {ms} {players} {clientId} />
 
 	{#if confirmLeave}
 		<div class="modal-scrim" on:click={() => (confirmLeave = false)} on:keydown={() => {}} role="presentation">

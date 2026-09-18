@@ -155,6 +155,15 @@ export function applyLevelUp(
 	}
 }
 
+/** Run endRound over every player's card state (called when a new round starts). */
+export function endRoundAll(
+	cards: Record<string, PlayerCardState>
+): Record<string, PlayerCardState> {
+	const out: Record<string, PlayerCardState> = {}
+	for (const pid in cards) out[pid] = endRound(cards[pid])
+	return out
+}
+
 /** Unlock the ultimate (level-8 step): no card swap, just flip the flag + level. */
 export function unlockUltimate(s: PlayerCardState): PlayerCardState {
 	const ult = ultimateIndex(s.hero)
