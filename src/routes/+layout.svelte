@@ -1,5 +1,23 @@
 <script lang="ts">
 	import '../app.postcss';
+	import { onMount } from 'svelte';
+	import { browser } from '$app/environment';
+	import { updated } from '$app/stores';
+
+	// When SvelteKit detects a new deploy (via version polling), reload so players
+	// always run the latest build — no manual hard refresh / cache clearing.
+	$: if (browser && $updated) location.reload();
+
+	// Also check the moment the tab regains focus, so returning picks up a deploy fast.
+	onMount(() => {
+		const check = () => { if (document.visibilityState === 'visible') updated.check(); };
+		document.addEventListener('visibilitychange', check);
+		window.addEventListener('focus', check);
+		return () => {
+			document.removeEventListener('visibilitychange', check);
+			window.removeEventListener('focus', check);
+		};
+	});
 </script>
 
 <!-- Global battlefield background, fixed behind every page -->
