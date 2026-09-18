@@ -56,6 +56,7 @@
 	let cells: Record<string, HexType> = {};
 	let meta: Record<string, { m: Minion; dir: number; start?: boolean }> = {};
 	let name = 'forgotten_island';
+	let waveQuick = 3, waveLong = 5; // wave-counter track length by game length
 	let selected: HexType | 'erase' = 'beach';
 	let minionKind: Minion = 'melee';
 	let tool: 'paint' | 'rotate' | 'battle' = 'paint';
@@ -153,13 +154,15 @@
 
 	const WORK = 'goa2-map-work-v1', MAPS = 'goa2-maps-v1';
 	let saved: Record<string, unknown> = {};
-	function snapshot() { return { name, grid: { size, originX, originY, rot, cols, rows }, cells, meta, battleZone }; }
+	function snapshot() { return { name, grid: { size, originX, originY, rot, cols, rows }, cells, meta, battleZone, waves: { quick: waveQuick, long: waveLong } }; }
 	function applyMap(m: Record<string, unknown>) {
 		cells = (m.cells as typeof cells) ?? {}; meta = (m.meta as typeof meta) ?? {};
 		const g = (m.grid as Record<string, number>) ?? {};
 		size = g.size ?? size; originX = g.originX ?? originX; originY = g.originY ?? originY;
 		rot = g.rot ?? rot; cols = g.cols ?? cols; rows = g.rows ?? rows;
 		name = (m.name as string) ?? name;
+		const w = m.waves as { quick?: number; long?: number } | undefined;
+		waveQuick = w?.quick ?? waveQuick; waveLong = w?.long ?? waveLong;
 	}
 	function saveMap() { saved = { ...saved, [name]: snapshot() }; try { localStorage.setItem(MAPS, JSON.stringify(saved)); } catch {} }
 	function loadMap(n: string) { if (saved[n]) applyMap(saved[n] as Record<string, unknown>); }
@@ -167,7 +170,7 @@
 	function newMap() { if (confirm('Start a new blank map?')) { cells = {}; meta = {}; name = 'untitled'; } }
 	function clearPaint() { if (confirm('Clear all painted hexes on this map?')) { cells = {}; meta = {}; } }
 
-	$: workJson = JSON.stringify({ name, grid: { size, originX, originY, rot, cols, rows }, cells, meta, battleZone });
+	$: workJson = JSON.stringify({ name, grid: { size, originX, originY, rot, cols, rows }, cells, meta, battleZone, waves: { quick: waveQuick, long: waveLong } });
 	let savedAt = 0, saveError = false;
 	$: if (loaded && workJson) { try { localStorage.setItem(WORK, workJson); savedAt = Date.now(); saveError = false; } catch { saveError = true; } }
 	$: savedClock = savedAt ? new Date(savedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '';
@@ -273,6 +276,15 @@
 			<p class="tip">Rulebook default per team: 4 Melee · 1 Ranged · 1 Heavy.</p>
 		</div>
 
+		<div class="bz">
+			<b>Wave counters</b>
+			<div class="waverow">
+				<label>Quick <input type="number" min="1" max="20" bind:value={waveQuick} /></label>
+				<label>Long <input type="number" min="1" max="20" bind:value={waveLong} /></label>
+			</div>
+			<p class="tip">Victory track length for this map (single-lane: one shared track).</p>
+		</div>
+
 		<div class="row">
 			<label class="ck"><input type="checkbox" bind:checked={tileMode} /> 3D tiles</label>
 			<label class="ck"><input type="checkbox" bind:checked={showImage} disabled={tileMode} /> tracing</label>
@@ -352,6 +364,9 @@
 	.bz { border: 1px solid #374151; border-radius: 8px; padding: 8px 10px; margin: 8px 0; font-size: 12.5px; }
 	.bz b { font-size: 13px; }
 	.bzrow { margin-top: 4px; } .bzrow .o { color: #f2985a; font-weight: 700; } .bzrow .b { color: #6ea8f0; font-weight: 700; }
+	.waverow { display: flex; gap: 12px; margin-top: 6px; }
+	.waverow label { display: flex; align-items: center; gap: 6px; margin: 0; }
+	.waverow input { width: 56px; background: #1f2937; color: #fff; border: 1px solid #374151; border-radius: 6px; padding: 4px 6px; }
 	.row { display: flex; gap: 8px; margin: 8px 0; align-items: center; }
 	.ck { display: flex; align-items: center; gap: 6px; font-size: 12.5px; }
 	.tip { font-size: 11.5px; color: #93c5fd; margin: 2px 0 10px; }
