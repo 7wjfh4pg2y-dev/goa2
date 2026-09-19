@@ -34,25 +34,26 @@
 	$: throneAt = Object.fromEntries(thrones.map((t) => [t.hex, t.team]));
 	const throneTile = (team: string) => tileSprites[`./images/tiles/${team === 'orange' ? 'baseOrangeSpawn' : 'baseBlueSpawn'}.png`];
 
-	// base-zone centroids (board coords), so minions can face the enemy throne
-	$: baseCentroids = (() => {
-		const acc: Record<string, { x: number; y: number; n: number }> = { orange: { x: 0, y: 0, n: 0 }, blue: { x: 0, y: 0, n: 0 } };
+	// each team's minion facing = the direction its spawn hexes point on the map
+	// (dominant meta.dir among that team's spawn cells). Minions — including ones
+	// spawned from the HUD — always face this way, matching the spawn points.
+	$: teamSpawnDir = (() => {
+		const acc: Record<string, Record<number, number>> = { orange: {}, blue: {} };
 		for (const id in cells) {
-			const key = cells[id] === 'baseOrange' ? 'orange' : cells[id] === 'baseBlue' ? 'blue' : null;
-			if (!key) continue;
-			const [c, r] = id.split('_').map(Number);
-			acc[key].x += size * SQRT3 * (c + 0.5 * (r & 1)); acc[key].y += size * 1.5 * r; acc[key].n++;
+			const team = cells[id] === 'spawnOrange' ? 'orange' : cells[id] === 'spawnBlue' ? 'blue' : null;
+			if (!team) continue;
+			const d = meta[id]?.dir ?? 0;
+			acc[team][d] = (acc[team][d] ?? 0) + 1;
 		}
-		return {
-			orange: acc.orange.n ? { x: acc.orange.x / acc.orange.n, y: acc.orange.y / acc.orange.n } : null,
-			blue: acc.blue.n ? { x: acc.blue.x / acc.blue.n, y: acc.blue.y / acc.blue.n } : null
-		} as Record<string, { x: number; y: number } | null>;
+		const dom = (o: Record<number, number>) => { let bd = 0, bc = -1; for (const k in o) if (o[k] > bc) { bc = o[k]; bd = +k; } return bd; };
+		return { orange: dom(acc.orange), blue: dom(acc.blue) } as Record<string, number>;
 	})();
-	// a minion sprite faces the enemy base; mirror it when the enemy is to its left
-	function faceFlip(p: { team: string; role?: string }, cx: number): boolean {
-		if (!p.role) return false;
-		const enemy = p.team === 'orange' ? baseCentroids.blue : baseCentroids.orange;
-		return !!enemy && enemy.x < cx;
+	// board-space rotation for a minion so it matches its team's spawn tiles.
+	// (rotEff undoes the piece group's counter-rotation, keeping it map-relative.)
+	function minionRot(p: { team: string; role?: string }, cx: number, cy: number): string | undefined {
+		if (!p.role) return undefined;
+		const deg = rotEff + (teamSpawnDir[p.team] ?? 0) * 60;
+		return deg ? `rotate(${deg} ${cx} ${cy})` : undefined;
 	}
 
 	// fan out pieces that share a hex so each stays individually grabbable
@@ -318,7 +319,7 @@
 						<image href={tokenImg(p.token)} x={c.x - size * 0.5} y={c.y - size * 0.5} width={size} height={size} preserveAspectRatio="xMidYMid meet" pointer-events="none" />
 					{:else if p.role}
 						<image href={minionToken(p.team, p.role)} x={c.x - size * 0.7} y={c.y - size * 0.7} width={size * 1.4} height={size * 1.4} preserveAspectRatio="xMidYMid meet" pointer-events="none"
-							transform={faceFlip(p, c.x) ? `translate(${2 * c.x} 0) scale(-1 1)` : undefined} />
+							transform={minionRot(p, c.x, c.y)} />
 						<circle cx={c.x} cy={c.y} r={size * 0.66} fill="transparent" stroke={sel ? '#fde047' : pieceColor(p.team)} stroke-width={size * 0.14} />
 					{:else}
 						<circle cx={c.x} cy={c.y} r={size * 0.62} fill={p.color ?? pieceColor(p.team)} stroke={sel ? '#fde047' : pieceColor(p.team)} stroke-width={size * 0.16} />
