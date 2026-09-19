@@ -20,7 +20,6 @@
 		teamForSeat,
 		buildDraft,
 		placeHeroes,
-		placeMinions,
 		draftPoolMin,
 		DRAFT_SYSTEMS,
 		DRAFT_LABELS,
@@ -195,7 +194,8 @@
 	$: if (mode === 'game' && iAmHost && session && $state.draft && !Object.keys($state.pieces).length) {
 		const s = get(state);
 		session.update({
-			pieces: { ...placeMinions(s), ...placeHeroes(s, get(players)) },
+			// minions are spawned manually from the HUD for now (auto-wave WIP)
+			pieces: { ...placeHeroes(s, get(players)) },
 			cards: initCards(s.draft?.picks ?? {})
 		});
 	}

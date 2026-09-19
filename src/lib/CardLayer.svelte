@@ -265,8 +265,13 @@
 						<div class="mnm">{ovPlayer.name} · {heroName(oh)}</div>
 						<div class="mtt">{heroTitle(oh)} · {teamName(ovPlayer)} · Lv {levelOf(cs)}</div>
 					</div>
+					{#if cs.ultimate && ultimateIndex(oh) >= 0}
+						<button class="ultchip" on:click={() => examineCard(oh, ultimateIndex(oh))} title="Ultimate — click to enlarge">
+							<span class="ultchip-card"><Card heroId={oh} card={od[ultimateIndex(oh)]} /></span>
+							<span class="ultchip-tx"><b>Ultimate Unlocked</b><em>{od[ultimateIndex(oh)]?.name}</em></span>
+						</button>
+					{/if}
 					<span class="coin lg" title="Coins">{cs.coins}</span>
-					{#if cs.ultimate}<span class="mult">♛ Ultimate</span>{/if}
 					<button class="ix" on:click={() => (overlayId = null)}>✕</button>
 				</div>
 				<div class="stats6">
@@ -279,14 +284,6 @@
 						</div>
 					{/each}
 				</div>
-				{#if cs.ultimate && ultimateIndex(oh) >= 0}
-					<div class="ultbanner">
-						<button class="ultcard" on:click={() => examineCard(oh, ultimateIndex(oh))} title="Click to enlarge">
-							<Card heroId={oh} card={od[ultimateIndex(oh)]} />
-						</button>
-						<div class="ulttext"><b>Ultimate unlocked</b><span>{ovPlayer.name} reached level 8 — click the card to view.</span></div>
-					</div>
-				{/if}
 				<div class="turns" style="margin-top:10px">
 					{#each [0, 1, 2, 3] as t}
 						<div class="tbox" class:current={t === turnIdx} style="--tint:{teamTint(ovPlayer)}">
@@ -340,9 +337,25 @@
 					<button class="ix" on:click={() => { deckOpen = false; deckSel = null; }}>✕</button>
 				</div>
 
-				<!-- HAND: basics pinned on the left, then colour cards; ult sits apart -->
+				<!-- HAND: ultimate parked far left, then basics, then colour cards -->
 				<div class="dklabel">Your hand <span class="ct">{mine.hand.length}</span> <span class="zhint">double-click any card to enlarge it</span></div>
 				<div class="dkhand">
+					<!-- Ultimate: never in hand; previewable; unlock appears once you hit level 8 -->
+					{#if myUlt >= 0}
+						<div class="ultslot" class:on={mine.ultimate}>
+							<button class="dkcard ult" class:locked={!mine.ultimate} on:dblclick={() => examineCard(dh, myUlt)} title="Double-click to preview your ultimate">
+								<Card heroId={dh} card={heroCards(dh)[myUlt]} />
+								{#if !mine.ultimate}<span class="ultlock">🔒 Lv 8</span>{/if}
+							</button>
+							{#if mine.ultimate}
+								<button class="act ghost sm" on:click={() => toggleUlt(false)}>Re-lock</button>
+							{:else if levelOf(mine) >= 7}
+								<button class="act sm ultbtn" on:click={() => toggleUlt(true)}>Unlock ★</button>
+							{/if}
+						</div>
+						<span class="dkpart tall" title="Ultimate"></span>
+					{/if}
+
 					{#each split.basics as i (i)}
 						<div class="dkcard basic" title="Basic card — stays in your hand" on:dblclick={() => examineCard(dh, i)} role="presentation">
 							<Card heroId={dh} card={heroCards(dh)[i]} />
@@ -356,22 +369,6 @@
 						</button>
 					{/each}
 					{#if !split.rest.length}<span class="empty-note">—</span>{/if}
-
-					<!-- Ultimate: never in hand; locked until level 8, always previewable -->
-					{#if myUlt >= 0}
-						<span class="dkpart tall" title="Ultimate"></span>
-						<div class="ultslot" class:on={mine.ultimate}>
-							<button class="dkcard ult" class:locked={!mine.ultimate} on:dblclick={() => examineCard(dh, myUlt)} title="Double-click to preview your ultimate">
-								<Card heroId={dh} card={heroCards(dh)[myUlt]} />
-								{#if !mine.ultimate}<span class="ultlock">🔒 Lv 8</span>{/if}
-							</button>
-							{#if mine.ultimate}
-								<button class="act ghost sm" on:click={() => toggleUlt(false)}>Re-lock</button>
-							{:else}
-								<button class="act sm ultbtn" on:click={() => toggleUlt(true)}>Unlock ★</button>
-							{/if}
-						</div>
-					{/if}
 				</div>
 
 				<!-- UPGRADE DECK grid (fixed positions; status shows where each card is) -->
@@ -562,9 +559,12 @@
 					<div class="dm-slot disc">
 						<span class="roman sm">DISC</span>
 						{#if mine.discard.length}
-							<div class="dm-on dm-dstack">
-								{#each mine.discard.slice(-3) as i, di}<button class="dm-dc" style="--i:{di}" on:click={() => preview(i, 'discard')}><Card heroId={mine.hero} card={heroCards(mine.hero)[i]} /></button>{/each}
-							</div>
+							<button class="discstack" on:click={() => preview(mine.discard[mine.discard.length - 1], 'discard')} title="Discard — click to recover the top card">
+								{#each mine.discard.slice(-3) as i, di}
+									<span class="disc-card" style="--i:{di}"><Card heroId={mine.hero} card={heroCards(mine.hero)[i]} /></span>
+								{/each}
+								<span class="ds-count">{mine.discard.length}</span>
+							</button>
 						{/if}
 					</div>
 				</div>
@@ -609,8 +609,11 @@
 	.ppdiv { height: 1px; margin: 5px 2px; background: linear-gradient(90deg, transparent, rgba(199,154,78,.35), transparent); }
 	.prow { display: flex; flex-direction: column; gap: 4px; padding: 6px 7px; border-radius: 11px; cursor: pointer; text-align: left; background: rgba(12,18,32,.44); border: 1px solid rgba(255,255,255,.1); border-left: 3px solid var(--tint); color: #e5e7eb; transition: transform .12s, background .12s; }
 	.prow:hover { background: rgba(20,28,46,.6); transform: translateY(-2px); }
-	/* level-8 opponent: a rare purple aura on their HUD row */
-	.prow.ultrow { border-color: rgba(165,110,230,.55); box-shadow: inset 0 0 0 1px rgba(165,110,230,.35), 0 0 16px rgba(165,110,230,.3); animation: ultpulse 3.4s ease-in-out infinite; }
+	/* level-8 opponent: team colour stays on the left, purple washes to the right */
+	.prow.ultrow { border-color: rgba(165,110,230,.5); border-left-color: var(--tint);
+		background: linear-gradient(90deg, rgba(12,18,32,.5) 0%, rgba(120,60,190,.24) 52%, rgba(155,92,232,.36) 100%);
+		box-shadow: inset 0 0 0 1px rgba(165,110,230,.26), 0 0 15px rgba(165,110,230,.26); animation: ultpulse 3.4s ease-in-out infinite; }
+	.prow.ultrow:hover { background: linear-gradient(90deg, rgba(20,28,46,.6) 0%, rgba(130,70,200,.3) 52%, rgba(165,100,240,.42) 100%); }
 	.prow.ultrow::after { content: '★'; position: absolute; top: 5px; right: 8px; font-size: .7rem; color: #d9b6ff; text-shadow: 0 0 6px rgba(165,110,230,.9); }
 	.prow { position: relative; }
 	.prtop { display: flex; align-items: center; gap: 8px; }
@@ -657,15 +660,15 @@
 	.mav.ult { border-color: #b482f0; box-shadow: 0 0 11px rgba(160,110,235,.7); }
 	.mnm { font-family: 'Modesto Poster', serif; font-size: 1.25rem; color: #f6ead2; }
 	.mtt { font-size: .72rem; color: #b8a06a; }
-	.mult { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 8px; font-size: .72rem; font-weight: 800; letter-spacing: .04em; color: #efe0ff; background: linear-gradient(90deg, rgba(139,79,214,.34), rgba(139,79,214,.14)); border: 1px solid rgba(180,130,240,.55); }
-	/* opponent overlay: their ultimate card, shown only once unlocked */
-	.ultbanner { display: flex; align-items: center; gap: 14px; margin: 12px 0 4px; padding: 10px 12px; border-radius: 14px; background: linear-gradient(90deg, rgba(139,79,214,.2), rgba(139,79,214,.05)); border: 1px solid rgba(180,130,240,.5); }
-	.ultcard { width: 96px; padding: 0; background: none; border: none; cursor: zoom-in; border-radius: 6px; overflow: hidden; box-shadow: 0 0 0 2px #b482f0, 0 0 18px rgba(165,110,230,.6), 0 6px 16px rgba(0,0,0,.6); transition: transform .12s; flex: none; }
-	.ultcard:hover { transform: translateY(-3px) scale(1.02); }
-	.ultcard :global(canvas) { display: block; width: 100%; border-radius: 6px; }
-	.ulttext { display: flex; flex-direction: column; gap: 3px; }
-	.ulttext b { font-family: 'Modesto Poster', serif; font-size: 1.05rem; color: #efe0ff; }
-	.ulttext span { font-size: .72rem; color: #b9a6d6; }
+	/* opponent overlay: compact ultimate chip next to the name (only once unlocked) */
+	.ultchip { display: flex; align-items: center; gap: 8px; padding: 4px 10px 4px 4px; border-radius: 10px; cursor: zoom-in;
+		background: linear-gradient(90deg, rgba(139,79,214,.34), rgba(139,79,214,.14)); border: 1px solid rgba(180,130,240,.55); }
+	.ultchip:hover { background: linear-gradient(90deg, rgba(139,79,214,.5), rgba(139,79,214,.22)); }
+	.ultchip-card { width: 34px; border-radius: 4px; overflow: hidden; flex: none; box-shadow: 0 0 0 1.5px #b482f0, 0 2px 6px rgba(0,0,0,.5); }
+	.ultchip-card :global(canvas) { display: block; width: 100%; border-radius: 4px; }
+	.ultchip-tx { display: flex; flex-direction: column; line-height: 1.05; text-align: left; }
+	.ultchip-tx b { font-size: .6rem; letter-spacing: .06em; text-transform: uppercase; color: #cbb0f0; }
+	.ultchip-tx em { font-family: 'Modesto Poster', serif; font-style: normal; font-size: .82rem; color: #efe0ff; }
 	.ix { margin-left: auto; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.16); color: #cbd5e1; border-radius: 7px; width: 1.9rem; height: 1.9rem; cursor: pointer; flex: none; }
 	.ilabel { font-size: .64rem; letter-spacing: .12em; text-transform: uppercase; font-weight: 700; color: #93a3b8; display: flex; align-items: center; gap: 6px; margin: 10px 0 6px; }
 	.ilabel .ct { color: #f1f5f9; background: rgba(255,255,255,.08); border-radius: 5px; padding: 0 6px; }
@@ -870,8 +873,10 @@
 	.dm-slot .roman { position: absolute; inset: 0; display: grid; place-items: center; font-family: 'Modesto Poster', serif; font-size: 1.6rem; color: rgba(255,255,255,.09); pointer-events: none; }
 	.dm-slot .roman.sm { font-size: .8rem; letter-spacing: .06em; }
 	.dm-on { position: relative; z-index: 1; width: 100%; }
-	.dm-dstack { display: flex; align-items: flex-start; }
-	.dm-dc { width: 38px; margin-left: -22px; padding: 0; background: none; border: none; cursor: pointer; border-radius: 4px; overflow: hidden; box-shadow: 0 2px 5px rgba(0,0,0,.6); }
-	.dm-dc:first-child { margin-left: 0; }
-	.dm-dc :global(canvas) { display: block; width: 100%; border-radius: 4px; }
+	/* face-up discard stack (mirrors the deck stack, but cards show face-up) + count */
+	.discstack { position: relative; z-index: 1; width: 38px; height: 50px; padding: 0; background: none; border: none; cursor: pointer; }
+	.discstack:hover .disc-card { filter: brightness(1.06); }
+	.disc-card { position: absolute; left: 50%; top: 0; width: 38px; margin-left: -19px; border-radius: 4px; overflow: hidden;
+		box-shadow: 0 2px 5px rgba(0,0,0,.6); transform: translate(calc(var(--i) * 2.5px), calc(var(--i) * 2.5px)); z-index: var(--i); }
+	.disc-card :global(canvas) { display: block; width: 100%; border-radius: 4px; }
 </style>

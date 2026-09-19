@@ -232,36 +232,58 @@ export interface Piece {
 	owner?: string // clientId of the player who placed this token
 }
 
-/** Where a team's heroes start: the throne spawn points (gear/star) first, then
- * the surrounding base-zone hexes for any extra players (4–5 per team). */
-function baseHexes(map: GameMap | null, team: Team): string[] {
-	const cells = map?.cells ?? {}
-	const throne = team === 'orange' ? 'baseOrangeSpawn' : 'baseBlueSpawn'
-	const zone = team === 'orange' ? 'baseOrange' : 'baseBlue'
-	const thrones = Object.keys(cells).filter((id) => cells[id] === throne).sort()
-	const zoneHexes = Object.keys(cells).filter((id) => cells[id] === zone).sort()
-	return [...thrones, ...zoneHexes]
+/** Hex id "c_r" → pixel-ish centre (size factored out; only used for centroids). */
+function hexXY(id: string): { x: number; y: number } {
+	const [c, r] = id.split('_').map(Number)
+	return { x: Math.sqrt(3) * (c + 0.5 * (r & 1)), y: 1.5 * r }
 }
 
 /**
- * Initial hero tokens: one per seated player who drafted a hero, placed on their
- * team's base zone and coloured by the player's token colour. Called once by the
- * host when the game starts.
+ * A team's throne — the gear (orange) / star (blue) hex where its heroes start.
+ * Uses an explicitly-labelled spawn cell if the map has one, otherwise the base
+ * hex nearest the base zone's centre.
+ */
+export function throneHex(map: GameMap | null, team: Team): string | null {
+	const cells = map?.cells ?? {}
+	const label = team === 'orange' ? 'baseOrangeSpawn' : 'baseBlueSpawn'
+	const explicit = Object.keys(cells).filter((id) => cells[id] === label).sort()
+	if (explicit.length) return explicit[0]
+	const zone = team === 'orange' ? 'baseOrange' : 'baseBlue'
+	const hexes = Object.keys(cells).filter((id) => cells[id] === zone)
+	if (!hexes.length) return null
+	const cx = hexes.reduce((s, h) => s + hexXY(h).x, 0) / hexes.length
+	const cy = hexes.reduce((s, h) => s + hexXY(h).y, 0) / hexes.length
+	let best = hexes[0], bd = Infinity
+	for (const h of hexes) { const p = hexXY(h); const d = (p.x - cx) ** 2 + (p.y - cy) ** 2; if (d < bd) { bd = d; best = h } }
+	return best
+}
+
+/**
+ * Initial hero tokens: one per seated player who drafted a hero, all placed on
+ * their team's throne (gear/star) hex and coloured by the player's token colour.
+ * Called once by the host when the game starts.
  */
 export function placeHeroes(state: MatchState, players: Player[]): Record<string, Piece> {
 	const seated = players.filter((p) => p.seat >= 0 && p.seat < state.seats)
 	const pieces: Record<string, Piece> = {}
+	const fallback = Object.keys(state.map?.cells ?? {})[0] ?? '0_0'
 	for (const team of TEAMS) {
-		const bases = baseHexes(state.map, team)
-		const roster = seated.filter((p) => teamForSeat(p.seat, state.seats) === team).sort((a, b) => a.seat - b.seat)
-		roster.forEach((p, i) => {
+		const throne = throneHex(state.map, team) ?? fallback
+		const roster = seated.filter((p) => teamForSeat(p.seat, state.seats) === team)
+		for (const p of roster) {
 			const hero = state.draft?.picks[p.id]
-			if (!hero) return
-			const hex = bases[i % bases.length] ?? bases[0] ?? Object.keys(state.map?.cells ?? {})[0] ?? '0_0'
-			pieces[p.id] = { id: p.id, hex, team, kind: 'hero', hero, color: p.color }
-		})
+			if (!hero) continue
+			pieces[p.id] = { id: p.id, hex: throne, team, kind: 'hero', hero, color: p.color }
+		}
 	}
 	return pieces
+}
+
+/** Build a fresh minion piece for a team, placed on that team's throne hex. */
+export function spawnMinion(state: MatchState, team: Team, role: 'melee' | 'ranged' | 'heavy'): Piece {
+	const hex = throneHex(state.map, team) ?? Object.keys(state.map?.cells ?? {})[0] ?? '0_0'
+	const id = `minion_${team}_${role}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 5)}`
+	return { id, hex, team, kind: 'minion', role }
 }
 
 /** Initial minion wave: place a movable minion on each hex the map author

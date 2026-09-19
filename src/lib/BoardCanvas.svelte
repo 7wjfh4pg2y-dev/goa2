@@ -15,6 +15,9 @@
 
 	export let pieces: Array<{ id: string; hex: string; team: string; role?: string; label?: string; color?: string; token?: string }> = [];
 	export let onMovePiece: ((id: string, hex: string) => void) | null = null;
+	export let onSelect: (id: string | null) => void = () => {};
+	// hexes that hold a team's throne (gear/star) — drawn on top of the base tile
+	export let thrones: Array<{ hex: string; team: string }> = [];
 
 	const SQRT3 = Math.sqrt(3);
 	const tileSprites = import.meta.glob('./images/tiles/*.png', { eager: true, import: 'default' }) as Record<string, string>;
@@ -28,6 +31,45 @@
 	$: cells = map.cells ?? {};
 	$: meta = map.meta ?? {};
 	$: size = map.grid?.size ?? 60;
+	$: throneAt = Object.fromEntries(thrones.map((t) => [t.hex, t.team]));
+	const throneTile = (team: string) => tileSprites[`./images/tiles/${team === 'orange' ? 'baseOrangeSpawn' : 'baseBlueSpawn'}.png`];
+
+	// base-zone centroids (board coords), so minions can face the enemy throne
+	$: baseCentroids = (() => {
+		const acc: Record<string, { x: number; y: number; n: number }> = { orange: { x: 0, y: 0, n: 0 }, blue: { x: 0, y: 0, n: 0 } };
+		for (const id in cells) {
+			const key = cells[id] === 'baseOrange' ? 'orange' : cells[id] === 'baseBlue' ? 'blue' : null;
+			if (!key) continue;
+			const [c, r] = id.split('_').map(Number);
+			acc[key].x += size * SQRT3 * (c + 0.5 * (r & 1)); acc[key].y += size * 1.5 * r; acc[key].n++;
+		}
+		return {
+			orange: acc.orange.n ? { x: acc.orange.x / acc.orange.n, y: acc.orange.y / acc.orange.n } : null,
+			blue: acc.blue.n ? { x: acc.blue.x / acc.blue.n, y: acc.blue.y / acc.blue.n } : null
+		} as Record<string, { x: number; y: number } | null>;
+	})();
+	// a minion sprite faces the enemy base; mirror it when the enemy is to its left
+	function faceFlip(p: { team: string; role?: string }, cx: number): boolean {
+		if (!p.role) return false;
+		const enemy = p.team === 'orange' ? baseCentroids.blue : baseCentroids.orange;
+		return !!enemy && enemy.x < cx;
+	}
+
+	// fan out pieces that share a hex so each stays individually grabbable
+	$: pieceOffset = (() => {
+		const groups: Record<string, string[]> = {};
+		for (const p of pieces) (groups[p.hex] ??= []).push(p.id);
+		const off: Record<string, { x: number; y: number }> = {};
+		for (const hex in groups) {
+			const ids = groups[hex], n = ids.length;
+			ids.forEach((id, i) => {
+				if (n === 1) { off[id] = { x: 0, y: 0 }; return; }
+				const ang = (i / n) * Math.PI * 2 - Math.PI / 2, rad = size * (n > 4 ? 0.5 : 0.4);
+				off[id] = { x: Math.cos(ang) * rad, y: Math.sin(ang) * rad };
+			});
+		}
+		return off;
+	})();
 
 	const isSpawn = (t: string) => t === 'spawnOrange' || t === 'spawnBlue';
 	const isThrone = (t: string) => t === 'baseOrangeSpawn' || t === 'baseBlueSpawn';
@@ -159,6 +201,8 @@
 	let dragId: string | null = null;  // token currently being carried
 	let dragPt = { x: 0, y: 0 };
 	let selected: string | null = null; // token picked up via tap (click-to-move)
+	let lastSel: string | null | undefined = undefined;
+	$: if (selected !== lastSel) { lastSel = selected; onSelect(selected); }
 	function down(e: PointerEvent) {
 		if (!interactive) return;
 		e.preventDefault(); // stop native text/element selection + image drag
@@ -247,13 +291,19 @@
 				{:else}
 					<image href={spriteFor(h.id, h.t)} x={h.x - SQRT3 * size * 0.53} y={h.y - size * 1.06}
 						width={SQRT3 * size * 1.06} height={size * 2 * 1.06} preserveAspectRatio="none" />
+					{#if throneAt[h.id]}
+						<image href={throneTile(throneAt[h.id])} x={h.x - SQRT3 * size * 0.53} y={h.y - size * 1.06}
+							width={SQRT3 * size * 1.06} height={size * 2 * 1.06} preserveAspectRatio="none" pointer-events="none" />
+					{/if}
 				{/if}
 				<polygon points={poly(h.x, h.y, size)} fill="none" stroke="rgba(6,10,18,.7)" stroke-width="4" stroke-linejoin="round" />
 			{/each}
 
 			{#each pieces as p (p.id)}
 				{@const carry = dragId === p.id}
-				{@const c = carry ? dragPt : centerOf(p.hex)}
+				{@const base = centerOf(p.hex)}
+				{@const off = pieceOffset[p.id] ?? { x: 0, y: 0 }}
+				{@const c = carry ? dragPt : { x: base.x + off.x, y: base.y + off.y }}
 				{@const sel = selected === p.id || carry}
 				<g class="piece" class:selectable={!!onMovePiece} class:selected={sel} class:carry
 					role="button" tabindex="-1" data-piece={p.id}
@@ -267,7 +317,8 @@
 						<circle cx={c.x} cy={c.y} r={size * 0.6} fill="rgba(9,13,22,.82)" stroke={sel ? '#fde047' : pieceColor(p.team)} stroke-width={size * 0.12} />
 						<image href={tokenImg(p.token)} x={c.x - size * 0.5} y={c.y - size * 0.5} width={size} height={size} preserveAspectRatio="xMidYMid meet" pointer-events="none" />
 					{:else if p.role}
-						<image href={minionToken(p.team, p.role)} x={c.x - size * 0.7} y={c.y - size * 0.7} width={size * 1.4} height={size * 1.4} preserveAspectRatio="xMidYMid meet" pointer-events="none" />
+						<image href={minionToken(p.team, p.role)} x={c.x - size * 0.7} y={c.y - size * 0.7} width={size * 1.4} height={size * 1.4} preserveAspectRatio="xMidYMid meet" pointer-events="none"
+							transform={faceFlip(p, c.x) ? `translate(${2 * c.x} 0) scale(-1 1)` : undefined} />
 						<circle cx={c.x} cy={c.y} r={size * 0.66} fill="transparent" stroke={sel ? '#fde047' : pieceColor(p.team)} stroke-width={size * 0.14} />
 					{:else}
 						<circle cx={c.x} cy={c.y} r={size * 0.62} fill={p.color ?? pieceColor(p.team)} stroke={sel ? '#fde047' : pieceColor(p.team)} stroke-width={size * 0.16} />
