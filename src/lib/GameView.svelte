@@ -121,7 +121,7 @@
 	<div class="ocean"></div>
 	<BoardCanvas bind:this={board} map={$ms.map ?? {}} rotation={orientation} interactive={true} pieces={boardPieces} onMovePiece={move} />
 
-	<CardLayer {session} {ms} {players} {clientId} />
+	<CardLayer {session} {ms} {players} {clientId} onAdvanceTurn={() => stepTurn(1)} />
 
 	{#if confirmLeave}
 		<div class="modal-scrim" on:click={() => (confirmLeave = false)} on:keydown={() => {}} role="presentation">
