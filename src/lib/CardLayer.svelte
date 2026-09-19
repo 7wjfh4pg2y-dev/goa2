@@ -11,7 +11,7 @@
 	import Card from '$lib/cards/Card.svelte';
 	import TurnSlot from '$lib/cards/TurnSlot.svelte';
 	import { heroCards, heroName, heroTitle, heroStat } from '$lib/cards/deck';
-	import { heroAvatar } from '$lib/heroes';
+	import { heroAvatar, heroLogo } from '$lib/heroes';
 	import { PASS, type PlayerCardState, type StatKey } from '$lib/cards/cardstate';
 
 	export let session: MatchSession;
@@ -91,6 +91,29 @@
 	function forceReveal() { if (iAmHost) session.cardAction({ kind: 'forcepass', pid: clientId }); }
 	function changeCoins(d: number) { if (mine) session.cardAction({ kind: 'coins', pid: clientId, delta: d }); }
 	const ROMAN = ['I', 'II', 'III', 'IV'];
+
+	// ── dramatic reveal curtain: when everyone's ready, all cards flip up at once ──
+	import { onDestroy } from 'svelte';
+	let curtain = false; // overlay visible
+	let curtainFlip = false; // cards flipped face-up
+	let wasRevealed = false;
+	let curtainTimers: ReturnType<typeof setTimeout>[] = [];
+	$: syncCurtain(revealed);
+	function syncCurtain(r: boolean) {
+		if (r && !wasRevealed) { wasRevealed = true; showCurtain(); }
+		else if (!r) { wasRevealed = false; }
+	}
+	function showCurtain() {
+		curtainTimers.forEach(clearTimeout);
+		curtain = true;
+		curtainFlip = false;
+		curtainTimers = [
+			setTimeout(() => (curtainFlip = true), 650), // flip all at once
+			setTimeout(() => (curtain = false), 5400) // hold ~4.75s then return
+		];
+	}
+	function skipCurtain() { curtainTimers.forEach(clearTimeout); curtain = false; }
+	onDestroy(() => curtainTimers.forEach(clearTimeout));
 
 	// ── token / marker tray (heroes with the TOKENS trait) ────────────────────
 	const TOKENS = ['token_barrier', 'token_blast', 'token_dud', 'token_familiar', 'token_glitch', 'token_grenade', 'token_ice', 'token_illusion', 'token_magma', 'token_rock', 'token_smoke_bomb', 'token_totem', 'token_tree', 'token_zombie'];
@@ -184,6 +207,7 @@
 						<div class="mnm">{ovPlayer.name} · {heroName(oh)}</div>
 						<div class="mtt">{heroTitle(oh)} · {teamName(ovPlayer)} · Lv {cs.level}</div>
 					</div>
+					<span class="coin lg" title="Coins">{cs.coins}</span>
 					{#if cs.ultimate}<span class="mult">♛ Ultimate</span>{/if}
 					<button class="ix" on:click={() => (overlayId = null)}>✕</button>
 				</div>
@@ -197,8 +221,7 @@
 						</div>
 					{/each}
 				</div>
-				<div class="ilabel">This round <span class="hint">played cards are open · unplayed are hidden</span></div>
-				<div class="turns">
+				<div class="turns" style="margin-top:10px">
 					{#each [0, 1, 2, 3] as t}
 						<div class="tbox" class:current={t === turnIdx} style="--tint:{teamTint(ovPlayer)}">
 							<div class="tlabel">Turn {t + 1}</div>
@@ -290,51 +313,49 @@
 				</span>
 			</button>
 
+			<!-- token / marker tray (shown for all; disabled if this hero has none) -->
+			<div class="tokwrap">
+				<button class="tokbtn" class:on={tokenDrawer} class:dis={!heroEmblem} disabled={!heroEmblem}
+					on:click={() => (tokenDrawer = !tokenDrawer)} title={heroEmblem ? 'Place tokens on the board' : 'This hero has no tokens'}>
+					<img src={heroEmblem ?? icon('token_totem')} alt="" /><span>Tokens{#if myTokenCount} · {myTokenCount}{/if}</span>
+				</button>
+				{#if tokenDrawer && heroEmblem}
+					<div class="tokdrawer">
+						<div class="tokgrid">
+							<button class="tok emblem" on:click={() => placeToken(`trait_tokens_${mine.hero}`)} title="Signature token"><img src={heroEmblem} alt="" /></button>
+							{#each TOKENS as tk}
+								<button class="tok" on:click={() => placeToken(tk)} title={tk.replace('token_', '').replace('_', ' ')}><img src={icon(tk)} alt="" /></button>
+							{/each}
+						</div>
+						<div class="tokfoot">
+							<span class="tokhint">Places on your hero — drag it where you need.</span>
+							{#if myTokenCount}<button class="act ghost sm" on:click={clearTokens}>Clear mine</button>{/if}
+						</div>
+					</div>
+				{/if}
+			</div>
+
+			<!-- centre: status line (thematic readiness) -->
+			<div class="dstatus">
+				{#if revealed}
+					<span class="pill">Cards revealed — resolve on the board</span>
+					<button class="act primary sm" on:click={onAdvanceTurn}>Next turn →</button>
+				{:else}
+					<div class="rmeter" title="{readyCount} of {seatedWithCards.length} ready">
+						<span class="rlabel">War council</span>
+						<span class="rpips">{#each seatedWithCards as p}<span class="rp" class:on={isReady(cards[p.id])}></span>{/each}</span>
+						<span class="rcount">{readyCount}/{seatedWithCards.length}</span>
+					</div>
+					{#if myReady}<button class="act sm" on:click={takeBack}>Take back</button>{/if}
+					{#if iAmHost}<button class="act ghost sm" on:click={forceReveal} title="Reveal now — skip anyone not ready">Reveal</button>{/if}
+				{/if}
+			</div>
+
 			<!-- money: coins from killing minions, spent on level-ups -->
 			<div class="coinctl" title="Coins — killing minions earns them, spend on level-ups">
 				<button class="cbtn" on:click={() => changeCoins(-1)} aria-label="Remove coin">−</button>
 				<span class="coin lg">{mine.coins}</span>
 				<button class="cbtn" on:click={() => changeCoins(1)} aria-label="Add coin">+</button>
-			</div>
-
-			<!-- token / marker tray (only for token-using heroes) -->
-			{#if heroEmblem}
-				<div class="tokwrap">
-					<button class="tokbtn" class:on={tokenDrawer} on:click={() => (tokenDrawer = !tokenDrawer)} title="Place tokens on the board">
-						<img src={heroEmblem} alt="" /><span>Tokens{#if myTokenCount} · {myTokenCount}{/if}</span>
-					</button>
-					{#if tokenDrawer}
-						<div class="tokdrawer">
-							<div class="tokgrid">
-								<button class="tok emblem" on:click={() => placeToken(`trait_tokens_${mine.hero}`)} title="Signature token"><img src={heroEmblem} alt="" /></button>
-								{#each TOKENS as tk}
-									<button class="tok" on:click={() => placeToken(tk)} title={tk.replace('token_', '').replace('_', ' ')}><img src={icon(tk)} alt="" /></button>
-								{/each}
-							</div>
-							<div class="tokfoot">
-								<span class="tokhint">Places on your hero — drag it where you need.</span>
-								{#if myTokenCount}<button class="act ghost sm" on:click={clearTokens}>Clear mine</button>{/if}
-							</div>
-						</div>
-					{/if}
-				</div>
-			{/if}
-
-			<!-- centre: status line -->
-			<div class="dstatus">
-				{#if revealed}
-					<span class="pill">Cards revealed — resolve on the board</span>
-					<button class="act primary sm" on:click={onAdvanceTurn}>Next turn →</button>
-				{:else if myReady}
-					<span class="pill">Committed ✓ · {readyCount}/{seatedWithCards.length} ready</span>
-					<button class="act sm" on:click={takeBack}>Take back</button>
-					{#if iAmHost}<button class="act ghost sm" on:click={forceReveal} title="Reveal now — skip anyone not ready">Force reveal</button>{/if}
-				{:else if mine.hand.length === 0}
-					<span class="hint2">No cards to play — {readyCount}/{seatedWithCards.length} ready</span>
-					{#if iAmHost}<button class="act ghost sm" on:click={forceReveal}>Force reveal</button>{/if}
-				{:else}
-					<span class="hint2">Tap a card to preview — {readyCount}/{seatedWithCards.length} ready</span>
-				{/if}
 			</div>
 
 			<!-- right: your round at a glance (4 turns + discard); numerals sit behind -->
@@ -359,6 +380,33 @@
 						{/if}
 					</div>
 				</div>
+			</div>
+		</div>
+	{/if}
+
+	<!-- ───────── dramatic simultaneous reveal ───────── -->
+	{#if curtain}
+		<div class="curtain" on:click={skipCurtain} on:keydown={(e) => e.key === 'Escape' && skipCurtain()} role="presentation">
+			<div class="curtain-inner">
+				<div class="curtain-title">Reveal — Turn {$ms.turn}</div>
+				<div class="curtain-cards">
+					{#each seatedWithCards as p (p.id)}
+						{@const cs = cards[p.id]}
+						{@const idx = cs.pending}
+						<div class="cc" style="--tint:{teamTint(p)}">
+							{#if idx != null && idx !== PASS}
+								<div class="cc-flip" class:up={curtainFlip}>
+									<div class="cc-face cc-back"><span class="band top"></span><span class="emblem"><img src={heroLogo(cs.hero)} alt="" /></span><span class="band bot"></span></div>
+									<div class="cc-face cc-front"><Card heroId={cs.hero} card={heroCards(cs.hero)[idx]} /></div>
+								</div>
+							{:else}
+								<div class="cc-flip skip">—</div>
+							{/if}
+							<div class="cc-name"><img src={heroAvatar(cs.hero)} alt="" />{p.name}</div>
+						</div>
+					{/each}
+				</div>
+				<div class="curtain-hint">Resuming…</div>
 			</div>
 		</div>
 	{/if}
@@ -420,7 +468,6 @@
 	.ix { margin-left: auto; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.16); color: #cbd5e1; border-radius: 7px; width: 1.9rem; height: 1.9rem; cursor: pointer; flex: none; }
 	.ilabel { font-size: .64rem; letter-spacing: .12em; text-transform: uppercase; font-weight: 700; color: #93a3b8; display: flex; align-items: center; gap: 6px; margin: 10px 0 6px; }
 	.ilabel .ct { color: #f1f5f9; background: rgba(255,255,255,.08); border-radius: 5px; padding: 0 6px; }
-	.ilabel .hint { margin-left: auto; font-size: .54rem; letter-spacing: .04em; text-transform: none; font-weight: 600; color: #6b7a8d; }
 	.stats6 { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
 	.stat6 { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 12px 4px 7px; border-radius: 12px; background: rgba(12,18,32,.5); border: 1px solid rgba(255,255,255,.1); }
 	.stat6 .si { height: 1.3rem; filter: brightness(0) invert(1); opacity: .55; }
@@ -445,6 +492,32 @@
 	.rcard:first-child { margin-left: 0; }
 	.rcard:hover { transform: translateY(-6px); opacity: 1; z-index: 2; }
 	.empty-note { color: #55637a; font-size: .8rem; padding: 4px; }
+
+	/* dramatic reveal curtain */
+	.curtain { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; cursor: pointer;
+		background: radial-gradient(120% 90% at 50% 40%, rgba(20,14,6,.86), rgba(3,5,10,.96)); backdrop-filter: blur(6px); animation: curtainIn .35s ease; }
+	@keyframes curtainIn { from { opacity: 0; } to { opacity: 1; } }
+	.curtain-inner { display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 24px; max-width: 94vw; }
+	.curtain-title { font-family: 'Modesto Poster', serif; font-size: 2rem; letter-spacing: .06em; color: #f6ead2; text-shadow: 0 2px 12px rgba(0,0,0,.7), 0 0 22px rgba(199,154,78,.4); }
+	.curtain-cards { display: flex; flex-wrap: wrap; justify-content: center; gap: 18px; }
+	.cc { display: flex; flex-direction: column; align-items: center; gap: 8px; perspective: 1300px; }
+	.cc-flip { width: 150px; aspect-ratio: 1192 / 1664; position: relative; transform-style: preserve-3d; transition: transform .7s cubic-bezier(.34,.08,.2,1); }
+	.cc-face { box-shadow: 0 12px 30px rgba(0,0,0,.6); }
+	.cc-flip.up { transform: rotateY(180deg) scale(1.04); }
+	.cc-flip.skip { display: grid; place-items: center; border: 1.5px dashed rgba(255,255,255,.2); border-radius: 5%; color: #6b7a8d; font-size: 2rem; }
+	.cc-face { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; border-radius: 5%; overflow: hidden; }
+	.cc-face.cc-front { transform: rotateY(180deg); box-shadow: 0 0 0 2px var(--tint); }
+	.cc-face.cc-front :global(canvas) { display: block; width: 100%; border-radius: 5%; }
+	.cc-back { display: flex; flex-direction: column; box-shadow: 0 0 0 2px var(--tint);
+		background: repeating-linear-gradient(135deg, rgba(90,70,40,.04) 0 1px, transparent 1px 5px), radial-gradient(115% 78% at 50% 40%, #fdfcf8, #efe9db 62%, #ddd4c1 100%); }
+	.cc-back .band { position: relative; height: 13%; background: linear-gradient(180deg, #2c333f, #1a1f28); }
+	.cc-back .band::after { content: ''; position: absolute; left: 8%; right: 8%; height: 2px; background: linear-gradient(90deg, transparent, #caa25e 25%, #f2d89e 50%, #caa25e 75%, transparent); }
+	.cc-back .band.top::after { bottom: 0; } .cc-back .band.bot::after { top: 0; }
+	.cc-back .emblem { flex: 1; display: grid; place-items: center; padding: 12%; }
+	.cc-back .emblem img { width: 76%; max-height: 100%; object-fit: contain; filter: drop-shadow(0 2px 5px rgba(0,0,0,.4)); }
+	.cc-name { display: flex; align-items: center; gap: 6px; font-family: 'Modesto Poster', serif; font-size: .92rem; color: #eef2f8; }
+	.cc-name img { width: 1.5rem; height: 1.5rem; border-radius: 50%; object-fit: cover; border: 2px solid var(--tint); }
+	.curtain-hint { font-size: .7rem; letter-spacing: .18em; text-transform: uppercase; color: #8b7a52; }
 
 	/* examine */
 	.scrim2 { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; background: rgba(2,4,9,.8); backdrop-filter: blur(4px); }
@@ -491,7 +564,14 @@
 	.hc:hover { transform: translateY(calc(var(--y) - 22px)) rotate(var(--rot)) scale(1.08); z-index: 5; }
 	.dstatus { flex: 1; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; }
 	.pill { font-size: .74rem; font-weight: 700; color: #cdd6e2; }
-	.hint2 { font-size: .72rem; color: #93a3b8; }
+	/* thematic readiness meter */
+	.rmeter { display: inline-flex; align-items: center; gap: 8px; padding: 4px 12px; border-radius: 999px;
+		background: linear-gradient(180deg, rgba(199,154,78,.16), rgba(199,154,78,.06)); border: 1px solid rgba(199,154,78,.4); }
+	.rlabel { font-family: 'Modesto Poster', serif; font-size: .74rem; letter-spacing: .04em; color: #f0dcae; }
+	.rpips { display: inline-flex; gap: 4px; }
+	.rp { width: .55rem; height: .55rem; border-radius: 50%; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.18); transition: background .3s, box-shadow .3s; }
+	.rp.on { background: radial-gradient(circle at 35% 30%, #a6f5b6, #35c257); border-color: transparent; box-shadow: 0 0 6px rgba(53,194,87,.8); }
+	.rcount { font-size: .64rem; font-weight: 800; color: #cbb488; font-variant-numeric: tabular-nums; }
 	.act { border: 1px solid rgba(255,255,255,.2); background: rgba(255,255,255,.08); color: #e5e7eb; border-radius: 8px; padding: 6px 14px; font-weight: 700; cursor: pointer; font-size: .82rem; }
 	.act.sm { padding: 4px 10px; font-size: .76rem; }
 	.act.primary { background: #ef7d22; color: #1a0f06; border-color: transparent; box-shadow: 0 3px 0 #a8560f; }
@@ -508,6 +588,7 @@
 	.tokbtn { display: flex; align-items: center; gap: 5px; padding: 5px 9px; border-radius: 9px; cursor: pointer; color: #e8dcc0; font-size: .74rem; font-weight: 700;
 		background: rgba(199,154,78,.14); border: 1px solid rgba(199,154,78,.4); }
 	.tokbtn.on { background: rgba(199,154,78,.28); }
+	.tokbtn.dis { opacity: .4; cursor: not-allowed; filter: grayscale(1); }
 	.tokbtn img { width: 1.3rem; height: 1.3rem; object-fit: contain; }
 	.tokdrawer { position: absolute; left: 0; bottom: calc(100% + 8px); z-index: 14; width: 232px; padding: 9px; border-radius: 12px;
 		background: rgba(11,16,26,.96); border: 1px solid rgba(199,154,78,.5); box-shadow: 0 16px 40px rgba(0,0,0,.6); }

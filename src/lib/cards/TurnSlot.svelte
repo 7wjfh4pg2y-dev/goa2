@@ -42,7 +42,7 @@
 {/if}
 
 <style>
-	.slot { width: 100%; aspect-ratio: 3 / 4; border: none; padding: 0; background: none; display: block; }
+	.slot { width: 100%; aspect-ratio: 3 / 4; border: none; padding: 0; background: none; display: block; perspective: 700px; }
 	.slot.btn { cursor: zoom-in; }
 	.static :global(canvas) { display: block; width: 100%; border-radius: 6%; box-shadow: 0 3px 8px rgba(0, 0, 0, 0.5); }
 	.slot.blank { display: grid; place-items: center; border: 1px dashed rgba(255, 255, 255, 0.14); border-radius: 5px;
