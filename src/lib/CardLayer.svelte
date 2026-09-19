@@ -89,6 +89,8 @@
 	function defend(idx: number) { if (mine) { session.cardAction({ kind: 'defend', pid: clientId, idx }); selected = null; } }
 	function pullBack(idx: number) { if (mine) { session.cardAction({ kind: 'undiscard', pid: clientId, idx }); selected = null; } }
 	function forceReveal() { if (iAmHost) session.cardAction({ kind: 'forcepass', pid: clientId }); }
+	function changeCoins(d: number) { if (mine) session.cardAction({ kind: 'coins', pid: clientId, delta: d }); }
+	const ROMAN = ['I', 'II', 'III', 'IV'];
 
 	// ── token / marker tray (heroes with the TOKENS trait) ────────────────────
 	const TOKENS = ['token_barrier', 'token_blast', 'token_dud', 'token_familiar', 'token_glitch', 'token_grenade', 'token_ice', 'token_illusion', 'token_magma', 'token_rock', 'token_smoke_bomb', 'token_totem', 'token_tree', 'token_zombie'];
@@ -136,7 +138,7 @@
 					<span class="pmid">
 						<span class="pname">
 							{p.name}<em>Lv {cs?.level ?? 1}</em>
-							{#if !revealed && cs?.pending != null}<span class="rdy">Ready</span>{/if}
+							{#if cs}<span class="coin" title="Coins">{cs.coins}</span>{/if}
 						</span>
 						<span class="phero">{cs ? heroName(cs.hero) : ''}</span>
 					</span>
@@ -145,6 +147,7 @@
 							<TurnSlot heroId={cs.hero} played={cs.turns[turnIdx]} pending={cs.pending} isCurrent {revealed} />
 						</span>
 					{/if}
+					{#if cs && !revealed}<span class="rdot" class:on={isReady(cs)} title={isReady(cs) ? 'Ready' : 'Not ready'}></span>{/if}
 				</div>
 				{#if cs}
 					<div class="pstats">
@@ -159,7 +162,7 @@
 					{#if !dense}
 						<div class="pturns">
 							{#each [0, 1, 2, 3] as t}
-								<TurnSlot heroId={cs.hero} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} label={`${t + 1}`} />
+								<TurnSlot heroId={cs.hero} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} label={ROMAN[t]} />
 							{/each}
 						</div>
 					{/if}
@@ -287,6 +290,13 @@
 				</span>
 			</button>
 
+			<!-- money: coins from killing minions, spent on level-ups -->
+			<div class="coinctl" title="Coins — killing minions earns them, spend on level-ups">
+				<button class="cbtn" on:click={() => changeCoins(-1)} aria-label="Remove coin">−</button>
+				<span class="coin lg">{mine.coins}</span>
+				<button class="cbtn" on:click={() => changeCoins(1)} aria-label="Add coin">+</button>
+			</div>
+
 			<!-- token / marker tray (only for token-using heroes) -->
 			{#if heroEmblem}
 				<div class="tokwrap">
@@ -371,9 +381,16 @@
 	.pmid { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; line-height: 1.05; }
 	.pname { font-family: 'Modesto Poster', serif; font-size: .84rem; color: #f3f6fb; display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
 	.pname em { font-style: normal; font-size: .56rem; font-weight: 700; color: #8b9bb0; }
-	.rdy { font-family: 'Inter', sans-serif; font-size: .48rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #16351f; background: #4ade80; border-radius: 5px; padding: 1px 5px; }
 	.phero { font-size: .58rem; color: #93a3b8; }
 	.dslot { width: 1.7rem; flex: none; }
+	/* gold coin chip */
+	.coin { display: inline-flex; align-items: center; justify-content: center; min-width: 1.05rem; height: 1.05rem; padding: 0 4px; border-radius: 999px;
+		background: linear-gradient(#f2d072, #c99a3e); color: #3a2a10; font-size: .58rem; font-weight: 900; font-variant-numeric: tabular-nums;
+		border: 1px solid rgba(0,0,0,.3); box-shadow: inset 0 1px 0 rgba(255,255,255,.45); }
+	.coin.lg { min-width: 1.5rem; height: 1.5rem; font-size: .82rem; }
+	/* ready light — red until committed, then green (right-aligned, tiny) */
+	.rdot { flex: none; width: .7rem; height: .7rem; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #ff8a8a, #d13a3a); box-shadow: 0 0 5px rgba(209,58,58,.7); }
+	.rdot.on { background: radial-gradient(circle at 35% 30%, #a6f5b6, #35c257); box-shadow: 0 0 6px rgba(53,194,87,.8); }
 	.pstats { display: grid; grid-template-columns: repeat(6, 1fr); gap: 3px; }
 	.pstat { position: relative; display: flex; flex-direction: column; align-items: center; gap: 0; padding: 2px 0 1px; border-radius: 5px; background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.06); }
 	.pstat img { height: .74rem; filter: brightness(0) invert(1); opacity: .55; }
@@ -480,6 +497,11 @@
 	.act.primary { background: #ef7d22; color: #1a0f06; border-color: transparent; box-shadow: 0 3px 0 #a8560f; }
 	.act.danger { background: rgba(220,60,60,.25); border-color: rgba(220,60,60,.5); color: #ffb4b4; }
 	.act.ghost { background: transparent; }
+
+	/* coin control (your dash) */
+	.coinctl { flex: none; display: flex; align-items: center; gap: 4px; padding: 3px 5px; border-radius: 9px; background: rgba(199,154,78,.12); border: 1px solid rgba(199,154,78,.35); }
+	.cbtn { width: 1.15rem; height: 1.15rem; border-radius: 6px; border: 1px solid rgba(255,255,255,.2); background: rgba(255,255,255,.08); color: #e5e7eb; font-weight: 800; cursor: pointer; line-height: 1; padding: 0; }
+	.cbtn:hover { background: rgba(255,255,255,.16); }
 
 	/* token tray */
 	.tokwrap { position: relative; flex: none; }

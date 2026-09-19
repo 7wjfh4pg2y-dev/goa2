@@ -25,7 +25,8 @@ import {
 	discardCard,
 	undiscard,
 	revealPlayer,
-	endRoundAll
+	endRoundAll,
+	addCoins
 } from './cards/cardstate'
 
 /** A per-player card instruction, applied authoritatively by the host. */
@@ -35,6 +36,7 @@ export type CardReq =
 	| { kind: 'uncommit'; pid: string }
 	| { kind: 'defend'; pid: string; idx: number }
 	| { kind: 'undiscard'; pid: string; idx: number }
+	| { kind: 'coins'; pid: string; delta: number }
 	| { kind: 'forcepass'; pid: string } // host: pass everyone not yet committed
 	| { kind: 'advance'; pid: string } // host: lock this turn's cards into their slots, go to next turn
 
@@ -66,6 +68,7 @@ export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 	else if (req.kind === 'uncommit') next = uncommit(cs)
 	else if (req.kind === 'defend') next = discardCard(cs, req.idx)
 	else if (req.kind === 'undiscard') next = undiscard(cs, req.idx)
+	else if (req.kind === 'coins') next = addCoins(cs, req.delta)
 	return { cards: { ...cards, [req.pid]: next } }
 }
 
