@@ -12,7 +12,7 @@
 	import TurnSlot from '$lib/cards/TurnSlot.svelte';
 	import { heroCards, heroName, heroTitle, heroStat } from '$lib/cards/deck';
 	import { heroAvatar, heroLogo } from '$lib/heroes';
-	import { PASS, statDeltas, levelOf, type PlayerCardState, type StatKey, type CardZone } from '$lib/cards/cardstate';
+	import { PASS, statDeltas, levelOf, ultimateIndex, type PlayerCardState, type StatKey, type CardZone } from '$lib/cards/cardstate';
 
 	export let session: MatchSession;
 	export let ms: Readable<MatchState>;
@@ -143,6 +143,11 @@
 		const map: Record<string, string> = { ATTACK: 'item_attack', DEFENSE: 'item_defense', INITIATIVE: 'item_initiative', MOVEMENT: 'item_movement', RANGE: 'item_range', AREA: 'item_area' };
 		return itemName ? icon(map[itemName]) : undefined;
 	}
+	// the ultimate (PURPLE) card — shown separately, unlocked at level 8
+	$: myUlt = mine ? ultimateIndex(mine.hero) : -1;
+	function toggleUlt(on: boolean) { if (mine) session.cardAction({ kind: 'ult', pid: clientId, on }); }
+	// double-click any card in the deck view to examine it full size
+	function examineCard(hid: string, idx: number) { if (idx >= 0) examine = { hid, idx }; }
 
 	// ── dramatic reveal curtain: when everyone's ready, all cards flip up at once ──
 	import { onDestroy } from 'svelte';
@@ -204,7 +209,7 @@
 		{#each others as p (p.id)}
 			{@const cs = cards[p.id]}
 			{#if p.id === firstBlueId}<div class="ppdiv"></div>{/if}
-			<button class="prow" style="--tint:{teamTint(p)}" on:click={() => (overlayId = p.id)}>
+			<button class="prow" class:ultrow={cs?.ultimate} style="--tint:{teamTint(p)}" on:click={() => (overlayId = p.id)}>
 				<div class="prtop">
 					<span class="pav" class:ult={cs?.ultimate}>
 						<img src={heroAvatar(cs?.hero ?? '')} alt="" />
@@ -274,6 +279,14 @@
 						</div>
 					{/each}
 				</div>
+				{#if cs.ultimate && ultimateIndex(oh) >= 0}
+					<div class="ultbanner">
+						<button class="ultcard" on:click={() => examineCard(oh, ultimateIndex(oh))} title="Click to enlarge">
+							<Card heroId={oh} card={od[ultimateIndex(oh)]} />
+						</button>
+						<div class="ulttext"><b>Ultimate unlocked</b><span>{ovPlayer.name} reached level 8 — click the card to view.</span></div>
+					</div>
+				{/if}
 				<div class="turns" style="margin-top:10px">
 					{#each [0, 1, 2, 3] as t}
 						<div class="tbox" class:current={t === turnIdx} style="--tint:{teamTint(ovPlayer)}">
@@ -327,23 +340,37 @@
 					<button class="ix" on:click={() => { deckOpen = false; deckSel = null; }}>✕</button>
 				</div>
 
-				<!-- HAND: colour cards on the left, basics pinned on the right -->
-				<div class="dklabel">Your hand <span class="ct">{mine.hand.length}</span></div>
+				<!-- HAND: basics pinned on the left, then colour cards; ult sits apart -->
+				<div class="dklabel">Your hand <span class="ct">{mine.hand.length}</span> <span class="zhint">double-click any card to enlarge it</span></div>
 				<div class="dkhand">
+					{#each split.basics as i (i)}
+						<div class="dkcard basic" title="Basic card — stays in your hand" on:dblclick={() => examineCard(dh, i)} role="presentation">
+							<Card heroId={dh} card={heroCards(dh)[i]} />
+							<span class="dklock">🔒</span>
+						</div>
+					{/each}
+					{#if split.basics.length}<span class="dkpart" title="Basics stay in hand"></span>{/if}
 					{#each split.rest as i (i)}
-						<button class="dkcard" class:sel={deckSel === i} on:click={() => (deckSel = i)}>
+						<button class="dkcard" class:sel={deckSel === i} on:click={() => (deckSel = i)} on:dblclick={() => examineCard(dh, i)}>
 							<Card heroId={dh} card={heroCards(dh)[i]} />
 						</button>
 					{/each}
 					{#if !split.rest.length}<span class="empty-note">—</span>{/if}
-					{#if split.basics.length}
-						<span class="dkpart" title="Basic cards — always in hand"></span>
-						{#each split.basics as i (i)}
-							<div class="dkcard basic" title="Basic card — stays in your hand">
-								<Card heroId={dh} card={heroCards(dh)[i]} />
-								<span class="dklock">🔒</span>
-							</div>
-						{/each}
+
+					<!-- Ultimate: never in hand; locked until level 8, always previewable -->
+					{#if myUlt >= 0}
+						<span class="dkpart tall" title="Ultimate"></span>
+						<div class="ultslot" class:on={mine.ultimate}>
+							<button class="dkcard ult" class:locked={!mine.ultimate} on:dblclick={() => examineCard(dh, myUlt)} title="Double-click to preview your ultimate">
+								<Card heroId={dh} card={heroCards(dh)[myUlt]} />
+								{#if !mine.ultimate}<span class="ultlock">🔒 Lv 8</span>{/if}
+							</button>
+							{#if mine.ultimate}
+								<button class="act ghost sm" on:click={() => toggleUlt(false)}>Re-lock</button>
+							{:else}
+								<button class="act sm ultbtn" on:click={() => toggleUlt(true)}>Unlock ★</button>
+							{/if}
+						</div>
 					{/if}
 				</div>
 
@@ -355,7 +382,7 @@
 							{#if cell.idx >= 0}
 								{@const z = zoneOf(mine, cell.idx)}
 								<button class="dkcard" class:sel={deckSel === cell.idx} class:zhand={z === 'hand'} class:zupg={z === 'upgrade'} class:zrem={z === 'removed'} class:zdeck={z === null}
-									on:click={() => (deckSel = cell.idx)}>
+									on:click={() => (deckSel = cell.idx)} on:dblclick={() => examineCard(dh, cell.idx)}>
 									<Card heroId={dh} card={heroCards(dh)[cell.idx]} />
 									{#if z === 'hand'}<span class="dkbadge hand">In hand</span>
 									{:else if z === 'upgrade'}<span class="dkbadge upg">Upgrade</span>
@@ -383,7 +410,7 @@
 						<div class="dkrow">
 							{#each mine.upgrade as i (i)}
 								{@const it = heroCards(dh)[i]?.item}
-								<button class="dkcard sm" class:sel={deckSel === i} on:click={() => (deckSel = i)}>
+								<button class="dkcard sm" class:sel={deckSel === i} on:click={() => (deckSel = i)} on:dblclick={() => examineCard(dh, i)}>
 									<Card heroId={dh} card={heroCards(dh)[i]} />
 									{#if statIcon(it)}<span class="dkitem"><img src={statIcon(it)} alt="" />+1</span>{/if}
 								</button>
@@ -395,7 +422,7 @@
 						<div class="dklabel">Removed <span class="ct">{mine.removed.length}</span> <span class="zhint">open to all players</span></div>
 						<div class="dkrow">
 							{#each mine.removed as i (i)}
-								<button class="dkcard sm" class:sel={deckSel === i} on:click={() => (deckSel = i)}>
+								<button class="dkcard sm" class:sel={deckSel === i} on:click={() => (deckSel = i)} on:dblclick={() => examineCard(dh, i)}>
 									<Card heroId={dh} card={heroCards(dh)[i]} />
 								</button>
 							{/each}
@@ -427,7 +454,7 @@
 				<div class="pvflip" class:up={committing}>
 					<div class="pvface front"><Card heroId={mine.hero} card={heroCards(mine.hero)[selected]} /></div>
 					<div class="pvface back">
-						<span class="band top"></span><span class="emblem"><img src={heroAvatar(mine.hero)} alt="" /></span><span class="band bot"></span>
+						<span class="band top"></span><span class="emblem sym"><img src={heroLogo(mine.hero)} alt="" /></span><span class="band bot"></span>
 					</div>
 				</div>
 			</div>
@@ -455,7 +482,7 @@
 			{/each}
 		</div>
 
-		<div class="dash">
+		<div class="dash" class:ultdash={mine.ultimate}>
 			<!-- left: your stats -->
 			<button class="dself" on:click={() => (overlayId = clientId)} title="Open your board">
 				<span class="dav" class:ult={mine.ultimate}>
@@ -502,7 +529,7 @@
 				<button class="deckstack" on:click={() => (deckOpen = true)} title="View & manage your deck">
 					<span class="ds-card ds3"></span>
 					<span class="ds-card ds2"></span>
-					<span class="ds-card ds1"><img src={heroEmblem ?? icon('small_logo')} alt="" /></span>
+					<span class="ds-card ds1"><img src={heroLogo(mine.hero)} alt="" /></span>
 					<span class="ds-count">{deckCards(mine).length}</span>
 				</button>
 				{#if revealed}
@@ -582,6 +609,10 @@
 	.ppdiv { height: 1px; margin: 5px 2px; background: linear-gradient(90deg, transparent, rgba(199,154,78,.35), transparent); }
 	.prow { display: flex; flex-direction: column; gap: 4px; padding: 6px 7px; border-radius: 11px; cursor: pointer; text-align: left; background: rgba(12,18,32,.44); border: 1px solid rgba(255,255,255,.1); border-left: 3px solid var(--tint); color: #e5e7eb; transition: transform .12s, background .12s; }
 	.prow:hover { background: rgba(20,28,46,.6); transform: translateY(-2px); }
+	/* level-8 opponent: a rare purple aura on their HUD row */
+	.prow.ultrow { border-color: rgba(165,110,230,.55); box-shadow: inset 0 0 0 1px rgba(165,110,230,.35), 0 0 16px rgba(165,110,230,.3); animation: ultpulse 3.4s ease-in-out infinite; }
+	.prow.ultrow::after { content: '★'; position: absolute; top: 5px; right: 8px; font-size: .7rem; color: #d9b6ff; text-shadow: 0 0 6px rgba(165,110,230,.9); }
+	.prow { position: relative; }
 	.prtop { display: flex; align-items: center; gap: 8px; }
 	.pav { position: relative; width: 2.1rem; height: 2.1rem; border-radius: 50%; overflow: visible; border: 2px solid var(--tint); flex: none; }
 	.pav img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
@@ -627,6 +658,14 @@
 	.mnm { font-family: 'Modesto Poster', serif; font-size: 1.25rem; color: #f6ead2; }
 	.mtt { font-size: .72rem; color: #b8a06a; }
 	.mult { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 8px; font-size: .72rem; font-weight: 800; letter-spacing: .04em; color: #efe0ff; background: linear-gradient(90deg, rgba(139,79,214,.34), rgba(139,79,214,.14)); border: 1px solid rgba(180,130,240,.55); }
+	/* opponent overlay: their ultimate card, shown only once unlocked */
+	.ultbanner { display: flex; align-items: center; gap: 14px; margin: 12px 0 4px; padding: 10px 12px; border-radius: 14px; background: linear-gradient(90deg, rgba(139,79,214,.2), rgba(139,79,214,.05)); border: 1px solid rgba(180,130,240,.5); }
+	.ultcard { width: 96px; padding: 0; background: none; border: none; cursor: zoom-in; border-radius: 6px; overflow: hidden; box-shadow: 0 0 0 2px #b482f0, 0 0 18px rgba(165,110,230,.6), 0 6px 16px rgba(0,0,0,.6); transition: transform .12s; flex: none; }
+	.ultcard:hover { transform: translateY(-3px) scale(1.02); }
+	.ultcard :global(canvas) { display: block; width: 100%; border-radius: 6px; }
+	.ulttext { display: flex; flex-direction: column; gap: 3px; }
+	.ulttext b { font-family: 'Modesto Poster', serif; font-size: 1.05rem; color: #efe0ff; }
+	.ulttext span { font-size: .72rem; color: #b9a6d6; }
 	.ix { margin-left: auto; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.16); color: #cbd5e1; border-radius: 7px; width: 1.9rem; height: 1.9rem; cursor: pointer; flex: none; }
 	.ilabel { font-size: .64rem; letter-spacing: .12em; text-transform: uppercase; font-weight: 700; color: #93a3b8; display: flex; align-items: center; gap: 6px; margin: 10px 0 6px; }
 	.ilabel .ct { color: #f1f5f9; background: rgba(255,255,255,.08); border-radius: 5px; padding: 0 6px; }
@@ -678,6 +717,15 @@
 	.dkcard.basic:hover { transform: none; }
 	.dklock { position: absolute; top: 3px; right: 4px; font-size: .7rem; filter: drop-shadow(0 1px 2px #000); }
 	.dkpart { width: 1px; align-self: stretch; margin: 2px 4px; background: linear-gradient(180deg, transparent, rgba(199,154,78,.6), transparent); }
+	.dkpart.tall { margin: 2px 8px; background: linear-gradient(180deg, transparent, rgba(165,110,230,.7), transparent); width: 2px; }
+	/* ultimate slot in the deck view: never in hand, locked until level 8 */
+	.ultslot { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+	.dkcard.ult { width: 72px; box-shadow: 0 0 0 2px rgba(165,110,230,.7), 0 6px 16px rgba(0,0,0,.55); cursor: zoom-in; }
+	.dkcard.ult.locked { filter: grayscale(.85) brightness(.5); }
+	.dkcard.ult.locked:hover { transform: none; }
+	.ultlock { position: absolute; inset: 0; display: grid; place-items: center; font-size: .6rem; font-weight: 800; letter-spacing: .04em; color: #e9dcff; background: rgba(20,10,35,.5); }
+	.ultslot.on .dkcard.ult { box-shadow: 0 0 0 2px #b482f0, 0 0 16px rgba(165,110,230,.75), 0 6px 16px rgba(0,0,0,.55); }
+	.ultbtn { background: linear-gradient(180deg, rgba(165,110,230,.3), rgba(165,110,230,.16)); border-color: rgba(180,130,240,.6); color: #efe0ff; }
 	/* grid card status: available = bright, placed elsewhere = tinted + dim */
 	.dkgrid .dkcard.zdeck { filter: grayscale(.5) brightness(.66); }
 	.dkgrid .dkcard.zhand { outline: 2px solid #ef7d22; }
@@ -745,11 +793,15 @@
 	.pvface.back .band.top::after { bottom: 0; } .pvface.back .band.bot::after { top: 0; }
 	.pvface.back .emblem { flex: 1; display: grid; place-items: center; padding: 12%; }
 	.pvface.back .emblem img { width: 60%; border-radius: 50%; opacity: .85; }
+	.pvface.back .emblem.sym img { width: 74%; border-radius: 0; opacity: 1; filter: drop-shadow(0 2px 4px rgba(0,0,0,.4)); }
 	.pvbar { position: fixed; left: 224px; right: 260px; bottom: 74px; z-index: 32; pointer-events: none; display: flex; gap: 8px; justify-content: center; }
 	.pvbar .act { pointer-events: auto; }
 
 	/* bottom dashboard */
 	.dash { position: absolute; left: 224px; right: 260px; bottom: 12px; z-index: 11; display: flex; align-items: center; gap: 14px; padding: 6px 14px; border-radius: 13px; background: rgba(9,13,22,.82); backdrop-filter: blur(9px); border: 1px solid rgba(199,154,78,.45); box-shadow: 0 12px 34px rgba(0,0,0,.5); color: #e5e7eb; }
+	/* level-8 aura on your own dash — present but not blinding */
+	.dash.ultdash { border-color: rgba(165,110,230,.6); box-shadow: 0 12px 34px rgba(0,0,0,.5), 0 0 22px rgba(165,110,230,.28); animation: ultpulse 3.4s ease-in-out infinite; }
+	@keyframes ultpulse { 0%, 100% { box-shadow: 0 12px 34px rgba(0,0,0,.5), 0 0 18px rgba(165,110,230,.22); } 50% { box-shadow: 0 12px 34px rgba(0,0,0,.5), 0 0 30px rgba(165,110,230,.42); } }
 	/* single-row profile: avatar · name/hero · stats (to cut dashboard height) */
 	.dself { display: flex; align-items: center; gap: 9px; background: none; border: none; cursor: pointer; color: inherit; text-align: left; flex: none; }
 	.dself:hover .dsname { color: #fff; }
