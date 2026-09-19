@@ -25,11 +25,63 @@ export interface PlayerCardState {
 	pending: number | null
 	/** Cards spent this round (defended with, or removed by effects). */
 	discard: number[]
-	/** Cards permanently gone (returned to the box on level-up). */
+	/** Cards taken out of play (open information — every player can see these). */
 	removed: number[]
-	/** Permanent +N per stat from level-up items. */
+	/**
+	 * Cards fed into the level-up area: the upgrade cards you did NOT keep. They
+	 * grant permanent stat growth (each card's printed item = +1 to that stat).
+	 * Hidden from opponents — only the resulting stat growth is public.
+	 */
+	upgrade: number[]
+	/** Extra manual +N per stat (rarely needed; stat growth is mostly derived). */
 	items: Partial<Record<StatKey, number>>
 	ultimate: boolean
+}
+
+/** A place a card can live in a player's collection. */
+export type CardZone = 'hand' | 'removed' | 'upgrade' | 'deck'
+
+/** Card "item" symbol → the stat it grows. */
+const ITEM_STAT: Record<string, StatKey> = {
+	ATTACK: 'atk',
+	DEFENSE: 'def',
+	INITIATIVE: 'init',
+	MOVEMENT: 'move',
+	RANGE: 'range',
+	AREA: 'radius'
+}
+
+/** Permanent stat growth: manual items plus +1 per card sitting in the upgrade area. */
+export function statDeltas(s: PlayerCardState): Partial<Record<StatKey, number>> {
+	const out: Partial<Record<StatKey, number>> = { ...s.items }
+	const cards = heroCards(s.hero)
+	for (const idx of s.upgrade) {
+		const item = cards[idx]?.item
+		const k = item ? ITEM_STAT[item] : undefined
+		if (k) out[k] = (out[k] ?? 0) + 1
+	}
+	return out
+}
+
+/** Level = base 1, +1 per upgrade card fed in, +1 once the ultimate is unlocked. */
+export function levelOf(s: PlayerCardState): number {
+	return 1 + s.upgrade.length + (s.ultimate ? 1 : 0)
+}
+
+/**
+ * Move a card between zones (manual deck management). The card leaves every pile
+ * it might be in and lands in the target; 'deck' means "not held anywhere" (back
+ * in the draw pile). The basics/turns/discard/pending piles are left untouched.
+ */
+export function moveCard(s: PlayerCardState, idx: number, to: CardZone): PlayerCardState {
+	const hand = s.hand.filter((i) => i !== idx)
+	const removed = s.removed.filter((i) => i !== idx)
+	const upgrade = s.upgrade.filter((i) => i !== idx)
+	if (to === 'hand') hand.push(idx)
+	else if (to === 'removed') removed.push(idx)
+	else if (to === 'upgrade') upgrade.push(idx)
+	hand.sort((a, b) => a - b)
+	return { ...s, hand, removed, upgrade }
 }
 
 const isColor = (c: string, ...want: string[]) => want.includes(c)
@@ -64,6 +116,7 @@ export function newPlayerCardState(hero: string): PlayerCardState {
 		pending: null,
 		discard: [],
 		removed: [],
+		upgrade: [],
 		items: {},
 		ultimate: false
 	}
@@ -120,16 +173,6 @@ export function revealTurn(s: PlayerCardState, turn: number): PlayerCardState {
 export function discardCard(s: PlayerCardState, idx: number): PlayerCardState {
 	if (!s.hand.includes(idx)) return s
 	return { ...s, hand: s.hand.filter((i) => i !== idx), discard: [...s.discard, idx] }
-}
-
-/**
- * Manually swap a card in or out of the hand (deck management between rounds).
- * If the card is in hand it leaves (back to the deck); otherwise it joins the
- * hand. Mirrors picking cards up from / setting them down into your deck.
- */
-export function swapCard(s: PlayerCardState, idx: number): PlayerCardState {
-	if (s.hand.includes(idx)) return { ...s, hand: s.hand.filter((i) => i !== idx) }
-	return { ...s, hand: [...s.hand, idx].sort((a, b) => a - b) }
 }
 
 /** Undo a discard (pull it back into hand). */

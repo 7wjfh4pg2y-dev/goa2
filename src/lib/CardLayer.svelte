@@ -12,7 +12,7 @@
 	import TurnSlot from '$lib/cards/TurnSlot.svelte';
 	import { heroCards, heroName, heroTitle, heroStat } from '$lib/cards/deck';
 	import { heroAvatar, heroLogo } from '$lib/heroes';
-	import { PASS, type PlayerCardState, type StatKey } from '$lib/cards/cardstate';
+	import { PASS, statDeltas, levelOf, type PlayerCardState, type StatKey, type CardZone } from '$lib/cards/cardstate';
 
 	export let session: MatchSession;
 	export let ms: Readable<MatchState>;
@@ -43,22 +43,25 @@
 	$: teamName = (p: Player) => (teamForSeat(p.seat, $ms.seats) === 'orange' ? 'Orange' : 'Blue');
 	$: firstBlueId = others.find((p) => teamForSeat(p.seat, $ms.seats) === 'blue')?.id ?? '';
 
-	$: iAmHost = $ms.host === clientId;
 	$: turnIdx = $ms.turn - 1;
 	$: seatedWithCards = seated.filter((p) => cards[p.id]);
 	// DERIVED reveal: everyone ready ⇒ all cards face-up (same for every client).
 	// A player is ready when they've committed, or when they simply have no cards
 	// left to play (there is no "pass" in GoA2 — you play a card unless you can't).
 	const isReady = (cs: PlayerCardState) => cs.pending != null || cs.hand.length === 0;
+	// no cards left to play this turn ⇒ automatically skipped (the one reveal exception)
+	const isSkipped = (cs: PlayerCardState) => cs.pending == null && cs.hand.length === 0;
 	$: readyCount = seatedWithCards.filter((p) => isReady(cards[p.id])).length;
 	$: revealed = seatedWithCards.length > 0 && readyCount === seatedWithCards.length;
 
-	const allStats = (cs: PlayerCardState) =>
-		STAT_DEFS.map((d) => {
+	const allStats = (cs: PlayerCardState) => {
+		const deltas = statDeltas(cs);
+		return STAT_DEFS.map((d) => {
 			const base = d.baseIdx !== null ? heroStat(cs.hero, d.baseIdx) : null;
-			const delta = cs.items?.[d.key] ?? 0;
+			const delta = deltas[d.key] ?? 0;
 			return { ...d, base, delta, cur: (base ?? 0) + delta };
 		});
+	};
 
 	// overlay + examine
 	let overlayId: string | null = null;
@@ -88,16 +91,17 @@
 	function takeBack() { if (mine && !revealed) session.cardAction({ kind: 'uncommit', pid: clientId }); }
 	function defend(idx: number) { if (mine) { session.cardAction({ kind: 'defend', pid: clientId, idx }); selected = null; } }
 	function pullBack(idx: number) { if (mine) { session.cardAction({ kind: 'undiscard', pid: clientId, idx }); selected = null; } }
-	function forceReveal() { if (iAmHost) session.cardAction({ kind: 'forcepass', pid: clientId }); }
 	function changeCoins(d: number) { if (mine) session.cardAction({ kind: 'coins', pid: clientId, delta: d }); }
 	const ROMAN = ['I', 'II', 'III', 'IV'];
 
-	// ── deck view: the level 2 / 3 upgrade cards, laid out as a fixed grid ──────
-	// Columns run RED, BLUE, GREEN with each colour's primary (variant A) left of
-	// its alternative (variant B); row 1 = the Tier-II cards, row 2 = Tier-III:
+	// ── deck view: manage your cards across hand / deck / upgrade / removed ──────
+	// The upgrade cards (Tier II & III) sit in a fixed grid. Columns run RED, BLUE,
+	// GREEN with each colour's primary (variant A) left of its alternative (B); the
+	// top row is Tier II, the bottom Tier III:
 	//   PR2 AR2 PB2 AB2 PG2 AG2   (level 2)
 	//   PR3 AR3 PB3 AB3 PG3 AG3   (level 3)
 	let deckOpen = false;
+	let deckSel: number | null = null; // card being managed (selected in the deck view)
 	const GRID_COLORS = ['RED', 'BLUE', 'GREEN'];
 	function findCard(hero: string, color: string, level: number, first: number): number {
 		return heroCards(hero).findIndex(
@@ -113,12 +117,32 @@
 		);
 	}
 	$: myGrid = mine ? deckGrid(mine.hero) : [];
-	// every upgrade-card index that isn't currently in the hand = "still in the deck"
-	function deckCards(cs: PlayerCardState) {
-		const all = deckGrid(cs.hero).flat().map((g) => g.idx).filter((i) => i >= 0);
-		return all.filter((i) => !cs.hand.includes(i));
+	// basics never leave the hand — pin them to the right with a partition
+	const isBasic = (hero: string, idx: number) => ['GOLD', 'SILVER'].includes(heroCards(hero)[idx]?.color);
+	function handSplit(cs: PlayerCardState) {
+		const basics: number[] = [], rest: number[] = [];
+		for (const i of cs.hand) (isBasic(cs.hero, i) ? basics : rest).push(i);
+		return { basics, rest };
 	}
-	function swap(idx: number) { if (mine && idx >= 0) session.cardAction({ kind: 'swap', pid: clientId, idx }); }
+	// which zone a card index is in for this player (null = still in the draw deck)
+	function zoneOf(cs: PlayerCardState, idx: number): CardZone | null {
+		if (cs.hand.includes(idx)) return 'hand';
+		if (cs.upgrade.includes(idx)) return 'upgrade';
+		if (cs.removed.includes(idx)) return 'removed';
+		return null; // in the deck
+	}
+	// count of upgrade cards still available to draw (not held, upgraded or removed)
+	function deckCards(cs: PlayerCardState) {
+		return deckGrid(cs.hero).flat().map((g) => g.idx).filter((i) => i >= 0 && zoneOf(cs, i) === null);
+	}
+	function moveTo(idx: number, to: CardZone) {
+		if (mine && idx >= 0) session.cardAction({ kind: 'cardmove', pid: clientId, idx, to });
+		deckSel = null;
+	}
+	function statIcon(itemName: string | undefined) {
+		const map: Record<string, string> = { ATTACK: 'item_attack', DEFENSE: 'item_defense', INITIATIVE: 'item_initiative', MOVEMENT: 'item_movement', RANGE: 'item_range', AREA: 'item_area' };
+		return itemName ? icon(map[itemName]) : undefined;
+	}
 
 	// ── dramatic reveal curtain: when everyone's ready, all cards flip up at once ──
 	import { onDestroy } from 'svelte';
@@ -188,7 +212,7 @@
 					</span>
 					<span class="pmid">
 						<span class="pname">
-							{p.name}<em>Lv {cs?.level ?? 1}</em>
+							{p.name}<em>Lv {cs ? levelOf(cs) : 1}</em>
 							{#if cs}<span class="coin" title="Coins">{cs.coins}</span>{/if}
 						</span>
 						<span class="phero">{cs ? heroName(cs.hero) : ''}</span>
@@ -198,7 +222,8 @@
 							<TurnSlot heroId={cs.hero} played={cs.turns[turnIdx]} pending={cs.pending} isCurrent {revealed} />
 						</span>
 					{/if}
-					{#if cs && !revealed}<span class="rdot" class:on={isReady(cs)} title={isReady(cs) ? 'Ready' : 'Not ready'}></span>{/if}
+					{#if cs && isSkipped(cs)}<span class="skiptag" title="No cards left — skipped this turn">skip</span>
+					{:else if cs && !revealed}<span class="rdot" class:on={isReady(cs)} title={isReady(cs) ? 'Ready' : 'Not ready'}></span>{/if}
 				</div>
 				{#if cs}
 					<div class="pstats">
@@ -233,7 +258,7 @@
 					<span class="mav" class:ult={cs.ultimate} style="--tint:{teamTint(ovPlayer)}"><img src={heroAvatar(oh)} alt="" /></span>
 					<div class="mtitle">
 						<div class="mnm">{ovPlayer.name} · {heroName(oh)}</div>
-						<div class="mtt">{heroTitle(oh)} · {teamName(ovPlayer)} · Lv {cs.level}</div>
+						<div class="mtt">{heroTitle(oh)} · {teamName(ovPlayer)} · Lv {levelOf(cs)}</div>
 					</div>
 					<span class="coin lg" title="Coins">{cs.coins}</span>
 					{#if cs.ultimate}<span class="mult">♛ Ultimate</span>{/if}
@@ -285,40 +310,56 @@
 		</div>
 	{/if}
 
-	<!-- ───────── deck view: manage your upgrade cards ───────── -->
+	<!-- ───────── deck view: manage your cards across the four zones ───────── -->
 	{#if deckOpen && mine}
 		{@const dh = mine.hero}
-		<div class="scrim" on:click={() => (deckOpen = false)} on:keydown={(e) => e.key === 'Escape' && (deckOpen = false)} role="presentation">
+		{@const split = handSplit(mine)}
+		{@const selZone = deckSel != null ? zoneOf(mine, deckSel) : null}
+		{@const selInGrid = deckSel != null && myGrid.flat().some((g) => g.idx === deckSel)}
+		<div class="scrim" on:click={() => { deckOpen = false; deckSel = null; }} on:keydown={(e) => e.key === 'Escape' && (deckOpen = false)} role="presentation">
 			<div class="deckmodal" on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" tabindex="-1">
 				<div class="mhead">
 					<span class="mav" style="--tint:{ORANGE}"><img src={heroLogo(dh)} alt="" /></span>
 					<div class="mtitle">
 						<div class="mnm">{heroName(dh)} · Deck</div>
-						<div class="mtt">Tap a card to move it between your hand and your deck</div>
+						<div class="mtt">Select a card, then send it to your hand, upgrade area or removed pile</div>
 					</div>
-					<button class="ix" on:click={() => (deckOpen = false)}>✕</button>
+					<button class="ix" on:click={() => { deckOpen = false; deckSel = null; }}>✕</button>
 				</div>
 
+				<!-- HAND: colour cards on the left, basics pinned on the right -->
 				<div class="dklabel">Your hand <span class="ct">{mine.hand.length}</span></div>
 				<div class="dkhand">
-					{#each mine.hand as i (i)}
-						<button class="dkcard inhand" on:click={() => swap(i)} title="Move to deck">
+					{#each split.rest as i (i)}
+						<button class="dkcard" class:sel={deckSel === i} on:click={() => (deckSel = i)}>
 							<Card heroId={dh} card={heroCards(dh)[i]} />
 						</button>
 					{/each}
-					{#if !mine.hand.length}<span class="empty-note">—</span>{/if}
+					{#if !split.rest.length}<span class="empty-note">—</span>{/if}
+					{#if split.basics.length}
+						<span class="dkpart" title="Basic cards — always in hand"></span>
+						{#each split.basics as i (i)}
+							<div class="dkcard basic" title="Basic card — stays in your hand">
+								<Card heroId={dh} card={heroCards(dh)[i]} />
+								<span class="dklock">🔒</span>
+							</div>
+						{/each}
+					{/if}
 				</div>
 
-				<div class="dklabel">Upgrade deck — Tier II &amp; III <span class="ct">{deckCards(mine).length}</span></div>
+				<!-- UPGRADE DECK grid (fixed positions; status shows where each card is) -->
+				<div class="dklabel">Upgrade deck — Tier II &amp; III <span class="ct">{deckCards(mine).length} in deck</span></div>
 				<div class="dkgrid">
 					{#each myGrid as row}
 						{#each row as cell (cell.color + cell.level + cell.first)}
 							{#if cell.idx >= 0}
-								{@const held = mine.hand.includes(cell.idx)}
-								<button class="dkcard" class:held on:click={() => swap(cell.idx)}
-									title={held ? 'In hand — tap to return to deck' : 'Tap to add to hand'}>
+								{@const z = zoneOf(mine, cell.idx)}
+								<button class="dkcard" class:sel={deckSel === cell.idx} class:zhand={z === 'hand'} class:zupg={z === 'upgrade'} class:zrem={z === 'removed'} class:zdeck={z === null}
+									on:click={() => (deckSel = cell.idx)}>
 									<Card heroId={dh} card={heroCards(dh)[cell.idx]} />
-									{#if held}<span class="dkbadge">✓ In hand</span>{/if}
+									{#if z === 'hand'}<span class="dkbadge hand">In hand</span>
+									{:else if z === 'upgrade'}<span class="dkbadge upg">Upgrade</span>
+									{:else if z === 'removed'}<span class="dkbadge rem">Removed</span>{/if}
 								</button>
 							{:else}
 								<div class="dkcard empty"></div>
@@ -326,6 +367,54 @@
 						{/each}
 					{/each}
 				</div>
+
+				<!-- UPGRADE + REMOVED zones -->
+				<div class="dkzones">
+					<div class="dkzone upg">
+						<div class="dklabel">
+							Upgrade area <span class="ct">{mine.upgrade.length}</span>
+							<span class="zhint">stat growth · hidden from others</span>
+							<span class="zgrow">
+								{#each allStats(mine).filter((r) => r.delta > 0) as r}
+									<span class="growchip"><img src={icon(r.icon)} alt={r.label} />+{r.delta}</span>
+								{/each}
+							</span>
+						</div>
+						<div class="dkrow">
+							{#each mine.upgrade as i (i)}
+								{@const it = heroCards(dh)[i]?.item}
+								<button class="dkcard sm" class:sel={deckSel === i} on:click={() => (deckSel = i)}>
+									<Card heroId={dh} card={heroCards(dh)[i]} />
+									{#if statIcon(it)}<span class="dkitem"><img src={statIcon(it)} alt="" />+1</span>{/if}
+								</button>
+							{/each}
+							{#if !mine.upgrade.length}<span class="empty-note">Cards you skip on level-up go here</span>{/if}
+						</div>
+					</div>
+					<div class="dkzone rem">
+						<div class="dklabel">Removed <span class="ct">{mine.removed.length}</span> <span class="zhint">open to all players</span></div>
+						<div class="dkrow">
+							{#each mine.removed as i (i)}
+								<button class="dkcard sm" class:sel={deckSel === i} on:click={() => (deckSel = i)}>
+									<Card heroId={dh} card={heroCards(dh)[i]} />
+								</button>
+							{/each}
+							{#if !mine.removed.length}<span class="empty-note">Drop cards taken out of play here</span>{/if}
+						</div>
+					</div>
+				</div>
+
+				<!-- action bar: destinations for the selected card -->
+				{#if deckSel != null}
+					<div class="dkbar">
+						<span class="dksel">Selected · {heroCards(dh)[deckSel]?.name}</span>
+						{#if selZone !== 'hand'}<button class="act primary sm" on:click={() => moveTo(deckSel!, 'hand')}>→ Hand</button>{/if}
+						{#if selZone !== 'upgrade'}<button class="act sm" on:click={() => moveTo(deckSel!, 'upgrade')}>→ Upgrade</button>{/if}
+						{#if selZone !== 'removed'}<button class="act danger sm" on:click={() => moveTo(deckSel!, 'removed')}>→ Removed</button>{/if}
+						{#if selInGrid && selZone !== null}<button class="act ghost sm" on:click={() => moveTo(deckSel!, 'deck')}>→ Deck</button>{/if}
+						<button class="act ghost sm" on:click={() => (deckSel = null)}>Cancel</button>
+					</div>
+				{/if}
 			</div>
 		</div>
 	{/if}
@@ -373,7 +462,7 @@
 					<img src={heroAvatar(mine.hero)} alt="" />{#if mine.ultimate}<span class="crown">♛</span>{/if}
 				</span>
 				<span class="dsmid">
-					<span class="dsname">{myName}<em>Lv {mine.level}</em></span>
+					<span class="dsname">{myName}<em>Lv {levelOf(mine)}</em></span>
 					<span class="dshero">{heroName(mine.hero)}</span>
 				</span>
 				<span class="dstats">
@@ -418,9 +507,8 @@
 				</button>
 				{#if revealed}
 					<button class="act primary sm" on:click={onAdvanceTurn}>Next turn →</button>
-				{:else}
-					{#if myReady}<button class="act sm" on:click={takeBack}>Take back</button>{/if}
-					{#if iAmHost}<button class="act ghost sm" on:click={forceReveal} title="Reveal now — skip anyone not ready">Reveal</button>{/if}
+				{:else if myReady}
+					<button class="act sm" on:click={takeBack}>Take back</button>
 				{/if}
 			</div>
 
@@ -512,6 +600,7 @@
 	/* ready light — red until committed, then green (right-aligned, tiny) */
 	.rdot { flex: none; width: .7rem; height: .7rem; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #ff8a8a, #d13a3a); box-shadow: 0 0 5px rgba(209,58,58,.7); }
 	.rdot.on { background: radial-gradient(circle at 35% 30%, #a6f5b6, #35c257); box-shadow: 0 0 6px rgba(53,194,87,.8); }
+	.skiptag { flex: none; font-size: .5rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #8b9bb0; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.14); border-radius: 5px; padding: 1px 5px; }
 	.pstats { display: grid; grid-template-columns: repeat(6, 1fr); gap: 3px; }
 	.pstat { position: relative; display: flex; flex-direction: column; align-items: center; gap: 0; padding: 2px 0 1px; border-radius: 5px; background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.06); }
 	.pstat img { height: .74rem; filter: brightness(0) invert(1); opacity: .55; }
@@ -565,25 +654,50 @@
 	.rcard:hover { transform: translateY(-6px); opacity: 1; z-index: 2; }
 	.empty-note { color: #55637a; font-size: .8rem; padding: 4px; }
 
-	/* deck view (manage upgrade cards) */
-	.deckmodal { width: min(760px, 94vw); max-height: 90vh; overflow-y: auto; padding: 16px 18px; color: #e5e7eb; background: rgba(11,16,26,.95); border: 1px solid rgba(199,154,78,.5); border-radius: 16px; box-shadow: 0 24px 70px rgba(0,0,0,.7); }
+	/* deck view (manage cards across zones) */
+	.deckmodal { width: min(880px, 95vw); max-height: 92vh; overflow-y: auto; padding: 16px 18px 12px; color: #e5e7eb; background: rgba(11,16,26,.96); border: 1px solid rgba(199,154,78,.5); border-radius: 16px; box-shadow: 0 24px 70px rgba(0,0,0,.7); }
 	.deckmodal .mav { overflow: visible; border-color: rgba(199,154,78,.6); display: grid; place-items: center; }
 	.deckmodal .mav img { width: 76%; height: 76%; object-fit: contain; border-radius: 0; }
-	.dklabel { font-size: .64rem; letter-spacing: .12em; text-transform: uppercase; font-weight: 700; color: #93a3b8; display: flex; align-items: center; gap: 6px; margin: 14px 0 8px; }
-	.dklabel .ct { color: #f1f5f9; background: rgba(255,255,255,.08); border-radius: 5px; padding: 0 6px; }
+	.dklabel { font-size: .62rem; letter-spacing: .1em; text-transform: uppercase; font-weight: 700; color: #93a3b8; display: flex; align-items: center; gap: 6px; margin: 12px 0 7px; flex-wrap: wrap; }
+	.dklabel .ct { color: #f1f5f9; background: rgba(255,255,255,.08); border-radius: 5px; padding: 0 6px; text-transform: none; letter-spacing: normal; }
+	.zhint { text-transform: none; letter-spacing: normal; font-weight: 600; color: #6b7a8d; font-size: .62rem; }
+	.zgrow { display: inline-flex; gap: 5px; margin-left: auto; }
+	.growchip { display: inline-flex; align-items: center; gap: 2px; font-size: .64rem; font-weight: 800; color: #ffcfa3; background: rgba(239,125,34,.16); border: 1px solid rgba(239,125,34,.4); border-radius: 6px; padding: 1px 5px; text-transform: none; }
+	.growchip img { height: .74rem; filter: brightness(0) invert(1); }
 	.dkhand { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px; border-radius: 12px; background: rgba(239,125,34,.08); border: 1px solid rgba(239,125,34,.25); min-height: 40px; align-items: center; }
 	.dkgrid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
 	.dkcard { position: relative; width: 100%; padding: 0; background: none; border: none; cursor: pointer; border-radius: 6px; overflow: hidden; box-shadow: 0 3px 8px rgba(0,0,0,.5); transition: transform .12s; }
-	.dkhand .dkcard { width: 74px; }
+	.dkhand .dkcard { width: 72px; }
+	.dkcard.sm { width: 58px; }
 	.dkcard:hover { transform: translateY(-4px); z-index: 2; }
 	.dkcard :global(canvas) { display: block; width: 100%; border-radius: 6px; }
+	.dkcard.sel { outline: 3px solid #efb46a; box-shadow: 0 0 0 3px rgba(239,180,106,.4), 0 6px 16px rgba(0,0,0,.6); }
 	.dkcard.empty { cursor: default; box-shadow: none; aspect-ratio: 1192 / 1664; border: 1px dashed rgba(255,255,255,.1); background: rgba(255,255,255,.02); }
 	.dkcard.empty:hover { transform: none; }
-	/* grid cards not in hand read as "in the deck": dimmed until you add them */
-	.dkgrid .dkcard:not(.held) { filter: grayscale(.55) brightness(.62); }
-	.dkgrid .dkcard.held { outline: 2px solid #ef7d22; }
-	.dkbadge { position: absolute; left: 4px; bottom: 4px; right: 4px; font-size: .56rem; font-weight: 800; letter-spacing: .04em; text-align: center; padding: 2px 0; border-radius: 5px; background: rgba(239,125,34,.9); color: #1a0f06; }
-	.dkhand .dkcard.inhand::after { content: ''; position: absolute; inset: 0; border-radius: 6px; box-shadow: inset 0 0 0 2px rgba(239,125,34,.5); }
+	.dkcard.basic { cursor: default; }
+	.dkcard.basic:hover { transform: none; }
+	.dklock { position: absolute; top: 3px; right: 4px; font-size: .7rem; filter: drop-shadow(0 1px 2px #000); }
+	.dkpart { width: 1px; align-self: stretch; margin: 2px 4px; background: linear-gradient(180deg, transparent, rgba(199,154,78,.6), transparent); }
+	/* grid card status: available = bright, placed elsewhere = tinted + dim */
+	.dkgrid .dkcard.zdeck { filter: grayscale(.5) brightness(.66); }
+	.dkgrid .dkcard.zhand { outline: 2px solid #ef7d22; }
+	.dkgrid .dkcard.zupg { outline: 2px solid #3f7fe0; filter: brightness(.8); }
+	.dkgrid .dkcard.zrem { outline: 2px solid rgba(150,160,175,.6); filter: grayscale(.85) brightness(.55); }
+	.dkbadge { position: absolute; left: 3px; bottom: 3px; right: 3px; font-size: .54rem; font-weight: 800; letter-spacing: .02em; text-align: center; padding: 2px 0; border-radius: 5px; }
+	.dkbadge.hand { background: rgba(239,125,34,.92); color: #1a0f06; }
+	.dkbadge.upg { background: rgba(63,127,224,.92); color: #04122b; }
+	.dkbadge.rem { background: rgba(150,160,175,.9); color: #10151d; }
+	.dkitem { position: absolute; bottom: 3px; right: 3px; display: inline-flex; align-items: center; gap: 1px; font-size: .56rem; font-weight: 900; color: #ffcfa3; background: rgba(20,14,6,.85); border: 1px solid rgba(239,125,34,.5); border-radius: 5px; padding: 0 3px; }
+	.dkitem img { height: .66rem; filter: brightness(0) invert(1); }
+	.dkzones { display: grid; grid-template-columns: 1.3fr 1fr; gap: 14px; margin-top: 4px; }
+	.dkzone { padding: 8px; border-radius: 12px; }
+	.dkzone.upg { background: rgba(63,127,224,.08); border: 1px solid rgba(63,127,224,.28); }
+	.dkzone.rem { background: rgba(150,160,175,.06); border: 1px solid rgba(150,160,175,.22); }
+	.dkrow { display: flex; flex-wrap: wrap; gap: 6px; min-height: 42px; align-items: center; }
+	/* action bar for the selected card */
+	.dkbar { position: sticky; bottom: 0; margin: 12px -18px -12px; padding: 10px 18px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+		background: linear-gradient(0deg, rgba(11,16,26,.99), rgba(11,16,26,.9)); border-top: 1px solid rgba(199,154,78,.4); }
+	.dksel { font-size: .74rem; font-weight: 700; color: #f0dcae; margin-right: auto; }
 
 	/* dramatic reveal curtain */
 	.curtain { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; cursor: pointer;

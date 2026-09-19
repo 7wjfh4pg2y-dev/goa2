@@ -27,7 +27,8 @@ import {
 	revealPlayer,
 	endRoundAll,
 	addCoins,
-	swapCard
+	moveCard,
+	type CardZone
 } from './cards/cardstate'
 
 /** A per-player card instruction, applied authoritatively by the host. */
@@ -38,7 +39,7 @@ export type CardReq =
 	| { kind: 'defend'; pid: string; idx: number }
 	| { kind: 'undiscard'; pid: string; idx: number }
 	| { kind: 'coins'; pid: string; delta: number }
-	| { kind: 'swap'; pid: string; idx: number } // toggle a card in/out of the hand (deck management)
+	| { kind: 'cardmove'; pid: string; idx: number; to: CardZone } // move a card between hand/deck/upgrade/removed
 	| { kind: 'forcepass'; pid: string } // host: pass everyone not yet committed
 	| { kind: 'advance'; pid: string } // host: lock this turn's cards into their slots, go to next turn
 
@@ -71,7 +72,7 @@ export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 	else if (req.kind === 'defend') next = discardCard(cs, req.idx)
 	else if (req.kind === 'undiscard') next = undiscard(cs, req.idx)
 	else if (req.kind === 'coins') next = addCoins(cs, req.delta)
-	else if (req.kind === 'swap') next = swapCard(cs, req.idx)
+	else if (req.kind === 'cardmove') next = moveCard(cs, req.idx, req.to)
 	return { cards: { ...cards, [req.pid]: next } }
 }
 
