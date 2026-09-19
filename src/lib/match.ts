@@ -40,6 +40,7 @@ export type CardReq =
 	| { kind: 'undiscard'; pid: string; idx: number }
 	| { kind: 'coins'; pid: string; delta: number }
 	| { kind: 'cardmove'; pid: string; idx: number; to: CardZone } // move a card between hand/deck/upgrade/removed
+	| { kind: 'ult'; pid: string; on: boolean } // unlock / relock the ultimate (level 8)
 	| { kind: 'forcepass'; pid: string } // host: pass everyone not yet committed
 	| { kind: 'advance'; pid: string } // host: lock this turn's cards into their slots, go to next turn
 
@@ -73,6 +74,7 @@ export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 	else if (req.kind === 'undiscard') next = undiscard(cs, req.idx)
 	else if (req.kind === 'coins') next = addCoins(cs, req.delta)
 	else if (req.kind === 'cardmove') next = moveCard(cs, req.idx, req.to)
+	else if (req.kind === 'ult') next = { ...cs, ultimate: req.on }
 	return { cards: { ...cards, [req.pid]: next } }
 }
 
