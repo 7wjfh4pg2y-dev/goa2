@@ -5,9 +5,8 @@
 	import CardLayer from '$lib/CardLayer.svelte';
 	import { heroById } from '$lib/heroes';
 	import { zoneName } from '$lib/zones';
-	import { endRoundAll } from '$lib/cards/cardstate';
 	import {
-		colorHex, movePiece, nextTurn, prevTurn, teamForSeat,
+		colorHex, movePiece, prevTurn, teamForSeat,
 		type MatchState, type Player, type MatchSession, type Team, type ConnStatus
 	} from '$lib/match';
 
@@ -77,12 +76,10 @@
 		session.act(`moved ${label} → ${zoneName($ms.map, hex)}`, movePiece($ms, id, hex));
 	}
 	function stepTurn(dir: 1 | -1) {
-		const patch = dir === 1 ? nextTurn($ms) : prevTurn($ms);
-		// advancing past turn 4 starts a new round: every player's cards return to hand
-		if (dir === 1 && patch.round && $ms.cards) patch.cards = endRoundAll($ms.cards);
-		// a manual turn correction resets the card sub-phase back to planning
-		patch.cardPhase = 'planning';
-		patch.resolved = [];
+		// forward = the real card-flow advance (host-routed: locks played cards into
+		// their slots, refreshes hands after turn 4); backward = a manual correction
+		if (dir === 1) { session.cardAction({ kind: 'advance', pid: clientId }); return; }
+		const patch = prevTurn($ms);
 		session.act(`Round ${patch.round ?? $ms.round} · Turn ${patch.turn ?? $ms.turn}`, patch);
 	}
 	function stepRound(dir: 1 | -1) {

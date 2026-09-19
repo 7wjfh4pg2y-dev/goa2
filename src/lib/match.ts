@@ -18,7 +18,15 @@ import { supabase } from './supabase'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import type { GameMap } from './maps'
 import type { PlayerCardState } from './cards/cardstate'
-import { commitCard, passTurn, uncommit, discardCard, undiscard } from './cards/cardstate'
+import {
+	commitCard,
+	passTurn,
+	uncommit,
+	discardCard,
+	undiscard,
+	revealPlayer,
+	endRoundAll
+} from './cards/cardstate'
 
 /** A per-player card instruction, applied authoritatively by the host. */
 export type CardReq =
@@ -27,15 +35,29 @@ export type CardReq =
 	| { kind: 'uncommit'; pid: string }
 	| { kind: 'defend'; pid: string; idx: number }
 	| { kind: 'undiscard'; pid: string; idx: number }
-	| { kind: 'done'; pid: string }
+	| { kind: 'forcepass'; pid: string } // host: pass everyone not yet committed
+	| { kind: 'advance'; pid: string } // host: lock this turn's cards into their slots, go to next turn
 
 /** Apply a card instruction to the shared state, returning the patch to broadcast. */
 export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
-	if (req.kind === 'done') {
-		const resolved = s.resolved ?? []
-		return resolved.includes(req.pid) ? {} : { resolved: [...resolved, req.pid] }
-	}
 	const cards = s.cards ?? {}
+	const turnIdx = s.turn - 1
+
+	// host: make everyone who hasn't committed pass, so the turn can reveal/advance
+	if (req.kind === 'forcepass') {
+		const next: Record<string, PlayerCardState> = { ...cards }
+		for (const pid in next) if (next[pid].pending == null) next[pid] = passTurn(next[pid])
+		return { cards: next }
+	}
+	// host: lock each committed card into its turn slot, then move to the next turn;
+	// after turn 4 the round ends and hands refresh
+	if (req.kind === 'advance') {
+		const migrated: Record<string, PlayerCardState> = {}
+		for (const pid in cards) migrated[pid] = revealPlayer(cards[pid], turnIdx)
+		if (s.turn >= TURNS_PER_ROUND) return { cards: endRoundAll(migrated), round: s.round + 1, turn: 1 }
+		return { cards: migrated, turn: s.turn + 1 }
+	}
+
 	const cs = cards[req.pid]
 	if (!cs) return {}
 	let next = cs
