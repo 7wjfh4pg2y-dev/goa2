@@ -6,7 +6,7 @@
 	import { heroById } from '$lib/heroes';
 	import { zoneName } from '$lib/zones';
 	import {
-		colorHex, movePiece, prevTurn, teamForSeat,
+		colorHex, movePiece, prevTurn, teamForSeat, throneHex, spawnMinion,
 		type MatchState, type Player, type MatchSession, type Team, type ConnStatus
 	} from '$lib/match';
 
@@ -70,10 +70,39 @@
 
 	let board: BoardCanvas;
 
+	// gear/star throne hexes, so the board can draw them and heroes/minions spawn there
+	$: thrones = [
+		{ hex: throneHex($ms.map ?? null, 'orange'), team: 'orange' },
+		{ hex: throneHex($ms.map ?? null, 'blue'), team: 'blue' }
+	].filter((t): t is { hex: string; team: string } => !!t.hex);
+
 	function move(id: string, hex: string) {
 		const p = $ms.pieces[id];
 		const label = p?.hero ? heroById(p.hero)?.name ?? 'a piece' : 'a piece';
 		session.act(`moved ${label} → ${zoneName($ms.map, hex)}`, movePiece($ms, id, hex));
+	}
+
+	// ── minion spawn (temporary manual controls) + piece delete ────────────────
+	let spawnTeam: Team | null = null; // which team's spawn menu is open
+	const MINION_ROLES: Array<'melee' | 'ranged' | 'heavy'> = ['melee', 'ranged', 'heavy'];
+	function spawn(team: Team | null, role: 'melee' | 'ranged' | 'heavy') {
+		if (!team) return;
+		const m = spawnMinion($ms, team, role);
+		session.act(`spawned a ${team} ${role} minion`, { pieces: { ...$ms.pieces, [m.id]: m } });
+		spawnTeam = null;
+	}
+
+	let selPieceId: string | null = null;
+	function onSelectPiece(id: string | null) { selPieceId = id; }
+	$: selPiece = selPieceId ? $ms.pieces[selPieceId] : null;
+	let confirmDelete = false;
+	function doDelete() {
+		if (!selPiece) return;
+		const next = { ...$ms.pieces };
+		delete next[selPiece.id];
+		const what = selPiece.role ? `${selPiece.team} ${selPiece.role} minion` : (selPiece.token ? 'a token' : 'a piece');
+		session.act(`removed ${what}`, { pieces: next });
+		confirmDelete = false; selPieceId = null;
 	}
 	function stepTurn(dir: 1 | -1) {
 		// forward = the real card-flow advance (host-routed: locks played cards into
@@ -116,9 +145,30 @@
 
 <div class="gamewrap">
 	<div class="ocean"></div>
-	<BoardCanvas bind:this={board} map={$ms.map ?? {}} rotation={orientation} interactive={true} pieces={boardPieces} onMovePiece={move} />
+	<BoardCanvas bind:this={board} map={$ms.map ?? {}} rotation={orientation} interactive={true} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} {thrones} />
 
 	<CardLayer {session} {ms} {players} {clientId} onAdvanceTurn={() => stepTurn(1)} />
+
+	<!-- selected minion/token: offer delete (heroes aren't deletable) -->
+	{#if selPiece && (selPiece.role || selPiece.token)}
+		<div class="pietool">
+			<span class="pietxt">{selPiece.role ? `${selPiece.team} ${selPiece.role} minion` : 'token'}</span>
+			<button class="piedel" on:click={() => (confirmDelete = true)}>Delete</button>
+		</div>
+	{/if}
+
+	{#if confirmDelete && selPiece}
+		<div class="modal-scrim" on:click={() => (confirmDelete = false)} on:keydown={() => {}} role="presentation">
+			<div class="modal" on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" tabindex="-1">
+				<h3>Delete this {selPiece.role ? 'minion' : 'token'}?</h3>
+				<p>This removes the {selPiece.role ? `${selPiece.team} ${selPiece.role} minion` : 'token'} from the board. This can't be undone.</p>
+				<div class="mrow">
+					<button class="mcancel" on:click={() => (confirmDelete = false)}>Cancel</button>
+					<button class="mleave" on:click={doDelete}>Delete</button>
+				</div>
+			</div>
+		</div>
+	{/if}
 
 	{#if confirmLeave}
 		<div class="modal-scrim" on:click={() => (confirmLeave = false)} on:keydown={() => {}} role="presentation">
@@ -187,6 +237,22 @@
 						on:click={() => toggleLife('blue', i)} title="Blue Life token — click to spend / restore"></button>
 				{/each}
 			</div>
+		</div>
+
+		<!-- temporary manual minion spawns (auto-waves WIP) -->
+		<div class="hsec">
+			<div class="slabel"><span>Spawn minion</span></div>
+			<div class="spawnrow">
+				<button class="spbtn orange" class:on={spawnTeam === 'orange'} on:click={() => (spawnTeam = spawnTeam === 'orange' ? null : 'orange')}>Orange ▾</button>
+				<button class="spbtn blue" class:on={spawnTeam === 'blue'} on:click={() => (spawnTeam = spawnTeam === 'blue' ? null : 'blue')}>Blue ▾</button>
+			</div>
+			{#if spawnTeam}
+				<div class="spmenu {spawnTeam}">
+					{#each MINION_ROLES as role}
+						<button class="sprole" on:click={() => spawn(spawnTeam, role)}>{role}</button>
+					{/each}
+				</div>
+			{/if}
 		</div>
 
 		<button class="tiebtn {$ms.tieBreaker}" on:click={flipTie} title="Flip the tie-breaker — {$ms.tieBreaker === 'orange' ? 'Orange' : 'Blue'} breaks ties">
@@ -318,6 +384,28 @@
 	.tiebtn.blue { box-shadow: inset 0 0 14px rgba(47, 127, 230, 0.3); border-color: rgba(47, 127, 230, 0.4); }
 	.mini { width: 1.35rem; height: 1.35rem; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.2); background: rgba(255, 255, 255, 0.06); color: #e5e7eb; cursor: pointer; font-weight: 700; line-height: 1; font-size: 0.75rem; flex: none; }
 	.mini:hover { background: rgba(255, 255, 255, 0.16); }
+
+	/* minion spawn controls */
+	.spawnrow { display: flex; gap: 5px; }
+	.spbtn { flex: 1; border-radius: 8px; padding: 4px 6px; font-size: 0.72rem; font-weight: 700; cursor: pointer; color: #f1f5f9; border: 1px solid transparent; }
+	.spbtn.orange { background: rgba(239, 125, 34, 0.18); border-color: rgba(239, 125, 34, 0.5); }
+	.spbtn.orange.on, .spbtn.orange:hover { background: rgba(239, 125, 34, 0.34); }
+	.spbtn.blue { background: rgba(47, 127, 230, 0.18); border-color: rgba(47, 127, 230, 0.5); }
+	.spbtn.blue.on, .spbtn.blue:hover { background: rgba(47, 127, 230, 0.34); }
+	.spmenu { display: flex; gap: 4px; margin-top: 5px; }
+	.sprole { flex: 1; text-transform: capitalize; border-radius: 7px; padding: 4px 2px; font-size: 0.68rem; font-weight: 700; cursor: pointer;
+		color: #e5e7eb; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.18); }
+	.sprole:hover { background: rgba(255, 255, 255, 0.18); }
+	.spmenu.orange .sprole:hover { background: rgba(239, 125, 34, 0.3); }
+	.spmenu.blue .sprole:hover { background: rgba(47, 127, 230, 0.3); }
+
+	/* floating delete toolbar for a selected minion/token */
+	.pietool { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); z-index: 8; display: flex; align-items: center; gap: 10px;
+		padding: 6px 8px 6px 12px; border-radius: 999px; background: rgba(9, 13, 22, 0.9); backdrop-filter: blur(8px);
+		border: 1px solid rgba(255, 255, 255, 0.18); box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5); }
+	.pietxt { font-size: 0.78rem; font-weight: 700; color: #e5e7eb; text-transform: capitalize; }
+	.piedel { border: 1px solid rgba(239, 68, 68, 0.5); background: rgba(220, 60, 60, 0.28); color: #ffb4b4; border-radius: 999px; padding: 4px 12px; font-weight: 700; cursor: pointer; font-size: 0.76rem; }
+	.piedel:hover { background: rgba(220, 60, 60, 0.45); }
 
 	/* activity log lives inside the HUD, filling the gap above the controls; retractable */
 	.logpanel { flex: 1; min-height: 56px; display: flex; flex-direction: column; overflow: hidden;
