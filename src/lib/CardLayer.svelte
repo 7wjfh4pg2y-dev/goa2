@@ -221,13 +221,14 @@
 					</div>
 				</div>
 			</div>
-			<div class="pvbar">
-				{#if canCommit}
-					<button class="act primary" on:click={() => commit(selected!)}>Commit · Turn {$ms.turn}</button>
-					<button class="act danger" on:click={() => defend(selected!)}>Defend (discard)</button>
-				{/if}
-				<button class="act" on:click={closePreview}>Close</button>
-			</div>
+		</div>
+		<!-- actions sit in the freed space below the hand -->
+		<div class="pvbar">
+			{#if canCommit}
+				<button class="act primary" on:click={() => commit(selected!)}>Commit · Turn {$ms.turn}</button>
+				<button class="act danger" on:click={() => defend(selected!)}>Defend (discard)</button>
+			{/if}
+			<button class="act" on:click={closePreview}>Close</button>
 		</div>
 	{/if}
 
@@ -384,7 +385,7 @@
 
 	/* centered preview of a picked hand card */
 	.pvscrim { position: fixed; inset: 0; z-index: 30; background: rgba(3,6,12,.55); backdrop-filter: blur(3px); }
-	.pvwrap { position: fixed; inset: 0; z-index: 31; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; pointer-events: none; }
+	.pvwrap { position: fixed; inset: 0 0 96px 0; z-index: 31; display: flex; align-items: center; justify-content: center; pointer-events: none; }
 	.pvcard { width: min(320px, 56vw); border-radius: 5%; pointer-events: auto; perspective: 1400px; }
 	.pvflip { position: relative; width: 100%; aspect-ratio: 1192 / 1664; transform-style: preserve-3d; transition: transform .46s cubic-bezier(.4,.15,.2,1); }
 	.pvflip.up { transform: rotateY(180deg); }
@@ -397,24 +398,26 @@
 	.pvface.back .band.top::after { bottom: 0; } .pvface.back .band.bot::after { top: 0; }
 	.pvface.back .emblem { flex: 1; display: grid; place-items: center; padding: 12%; }
 	.pvface.back .emblem img { width: 60%; border-radius: 50%; opacity: .85; }
-	.pvbar { pointer-events: auto; display: flex; gap: 8px; }
+	.pvbar { position: fixed; left: 224px; right: 260px; bottom: 74px; z-index: 32; pointer-events: none; display: flex; gap: 8px; justify-content: center; }
+	.pvbar .act { pointer-events: auto; }
 
 	/* bottom dashboard */
-	.dash { position: absolute; left: 224px; right: 260px; bottom: 12px; z-index: 9; display: flex; align-items: center; gap: 14px; padding: 8px 14px; border-radius: 14px; background: rgba(9,13,22,.82); backdrop-filter: blur(9px); border: 1px solid rgba(199,154,78,.45); box-shadow: 0 12px 34px rgba(0,0,0,.5); color: #e5e7eb; }
-	.dself { display: grid; grid-template-columns: auto 1fr; grid-template-areas: 'av mid' 'stats stats'; gap: 5px 8px; align-items: center; background: none; border: none; cursor: pointer; color: inherit; text-align: left; flex: none; }
+	.dash { position: absolute; left: 224px; right: 260px; bottom: 12px; z-index: 9; display: flex; align-items: center; gap: 14px; padding: 6px 14px; border-radius: 13px; background: rgba(9,13,22,.82); backdrop-filter: blur(9px); border: 1px solid rgba(199,154,78,.45); box-shadow: 0 12px 34px rgba(0,0,0,.5); color: #e5e7eb; }
+	/* single-row profile: avatar · name/hero · stats (to cut dashboard height) */
+	.dself { display: flex; align-items: center; gap: 9px; background: none; border: none; cursor: pointer; color: inherit; text-align: left; flex: none; }
 	.dself:hover .dsname { color: #fff; }
-	.dav { grid-area: av; position: relative; width: 2.6rem; height: 2.6rem; border-radius: 50%; overflow: visible; border: 2px solid rgba(199,154,78,.6); flex: none; }
+	.dav { position: relative; width: 2.3rem; height: 2.3rem; border-radius: 50%; overflow: visible; border: 2px solid rgba(199,154,78,.6); flex: none; }
 	.dav img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
 	.dav.ult { border-color: #b482f0; box-shadow: 0 0 10px rgba(160,110,235,.7); }
 	.dav .crown { position: absolute; top: -8px; right: -6px; font-size: .9rem; color: #d9b6ff; text-shadow: 0 1px 3px #000; }
-	.dsmid { grid-area: mid; display: flex; flex-direction: column; gap: 2px; line-height: 1.05; }
-	.dsname { font-family: 'Modesto Poster', serif; font-size: 1rem; color: #f6ead2; display: flex; align-items: baseline; gap: 5px; }
-	.dsname em { font-style: normal; font-size: .6rem; font-weight: 700; color: #9aa8bc; }
-	.dshero { font-size: .64rem; color: #93a3b8; }
-	.dstats { grid-area: stats; display: grid; grid-template-columns: repeat(6, 1fr); gap: 3px; width: 12.5rem; }
+	.dsmid { display: flex; flex-direction: column; gap: 1px; line-height: 1.02; }
+	.dsname { font-family: 'Modesto Poster', serif; font-size: .92rem; color: #f6ead2; display: flex; align-items: baseline; gap: 5px; }
+	.dsname em { font-style: normal; font-size: .56rem; font-weight: 700; color: #9aa8bc; }
+	.dshero { font-size: .58rem; color: #93a3b8; }
+	.dstats { display: grid; grid-template-columns: repeat(6, 1.7rem); gap: 3px; }
 
-	/* hand floats above the dashboard */
-	.tray { position: absolute; left: 224px; right: 260px; bottom: 92px; z-index: 10; display: flex; align-items: flex-end; justify-content: center; pointer-events: none; }
+	/* hand floats above the dashboard, with a clear gap */
+	.tray { position: absolute; left: 224px; right: 260px; bottom: 118px; z-index: 10; display: flex; align-items: flex-end; justify-content: center; pointer-events: none; }
 	.hc { width: 96px; margin: 0 -12px; padding: 0; background: none; border: none; cursor: pointer; pointer-events: auto; transform-origin: bottom center; transform: translateY(var(--y)) rotate(var(--rot)); transition: transform .16s; }
 	.hc :global(canvas) { display: block; width: 100%; border-radius: 6%; box-shadow: 0 8px 18px rgba(0,0,0,.55); }
 	.hc:hover { transform: translateY(calc(var(--y) - 22px)) rotate(var(--rot)) scale(1.08); z-index: 5; }
