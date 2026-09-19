@@ -243,38 +243,42 @@ function hexXY(id: string): { x: number; y: number } {
  * Uses an explicitly-labelled spawn cell if the map has one, otherwise the base
  * hex nearest the base zone's centre.
  */
-export function throneHex(map: GameMap | null, team: Team): string | null {
+export function throneHexes(map: GameMap | null, team: Team): string[] {
 	const cells = map?.cells ?? {}
 	const label = team === 'orange' ? 'baseOrangeSpawn' : 'baseBlueSpawn'
 	const explicit = Object.keys(cells).filter((id) => cells[id] === label).sort()
-	if (explicit.length) return explicit[0]
+	if (explicit.length) return explicit
 	const zone = team === 'orange' ? 'baseOrange' : 'baseBlue'
 	const hexes = Object.keys(cells).filter((id) => cells[id] === zone)
-	if (!hexes.length) return null
+	if (!hexes.length) return []
 	const cx = hexes.reduce((s, h) => s + hexXY(h).x, 0) / hexes.length
 	const cy = hexes.reduce((s, h) => s + hexXY(h).y, 0) / hexes.length
 	let best = hexes[0], bd = Infinity
 	for (const h of hexes) { const p = hexXY(h); const d = (p.x - cx) ** 2 + (p.y - cy) ** 2; if (d < bd) { bd = d; best = h } }
-	return best
+	return [best]
+}
+export function throneHex(map: GameMap | null, team: Team): string | null {
+	return throneHexes(map, team)[0] ?? null
 }
 
 /**
- * Initial hero tokens: one per seated player who drafted a hero, all placed on
- * their team's throne (gear/star) hex and coloured by the player's token colour.
- * Called once by the host when the game starts.
+ * Initial hero tokens: one per seated player who drafted a hero, spread across
+ * their team's throne (gear/star) hexes and coloured by the player's token
+ * colour. Called once by the host when the game starts.
  */
 export function placeHeroes(state: MatchState, players: Player[]): Record<string, Piece> {
 	const seated = players.filter((p) => p.seat >= 0 && p.seat < state.seats)
 	const pieces: Record<string, Piece> = {}
 	const fallback = Object.keys(state.map?.cells ?? {})[0] ?? '0_0'
 	for (const team of TEAMS) {
-		const throne = throneHex(state.map, team) ?? fallback
-		const roster = seated.filter((p) => teamForSeat(p.seat, state.seats) === team)
-		for (const p of roster) {
+		const thrones = throneHexes(state.map, team)
+		const roster = seated.filter((p) => teamForSeat(p.seat, state.seats) === team).sort((a, b) => a.seat - b.seat)
+		roster.forEach((p, i) => {
 			const hero = state.draft?.picks[p.id]
-			if (!hero) continue
-			pieces[p.id] = { id: p.id, hex: throne, team, kind: 'hero', hero, color: p.color }
-		}
+			if (!hero) return
+			const hex = thrones.length ? thrones[i % thrones.length] : fallback
+			pieces[p.id] = { id: p.id, hex, team, kind: 'hero', hero, color: p.color }
+		})
 	}
 	return pieces
 }
