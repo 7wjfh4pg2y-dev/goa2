@@ -231,8 +231,17 @@
 		</div>
 	{/if}
 
-	<!-- ───────── bottom dashboard: your board + hand + your turns ───────── -->
+	<!-- ───────── bottom: hand floats ABOVE the dashboard ───────── -->
 	{#if mine}
+		<div class="tray">
+			{#each mine.hand as idx, k (idx)}
+				{@const f = fan(k, mine.hand.length)}
+				<button class="hc" style="--rot:{f.rot}deg; --y:{f.y}px" on:click={() => preview(idx)}>
+					<Card heroId={mine.hero} card={heroCards(mine.hero)[idx]} />
+				</button>
+			{/each}
+		</div>
+
 		<div class="dash">
 			<!-- left: your stats -->
 			<button class="dself" on:click={() => (overlayId = clientId)} title="Open your board">
@@ -253,30 +262,20 @@
 				</span>
 			</button>
 
-			<!-- centre: hand + status line -->
-			<div class="dhand">
-				<div class="tray">
-					{#each mine.hand as idx, k (idx)}
-						{@const f = fan(k, mine.hand.length)}
-						<button class="hc" class:committed={mine.pending === idx} style="--rot:{f.rot}deg; --y:{f.y}px" on:click={() => preview(idx)}>
-							<Card heroId={mine.hero} card={heroCards(mine.hero)[idx]} />
-						</button>
-					{/each}
-				</div>
-				<div class="dstatus">
-					{#if revealed}
-						<span class="pill">Cards revealed — resolve on the board</span>
-						<button class="act primary sm" on:click={onAdvanceTurn}>Next turn →</button>
-					{:else if myReady}
-						<span class="pill">{mine.pending === PASS ? 'Passing' : 'Ready'} ✓ · {readyCount}/{seatedWithCards.length} ready</span>
-						<button class="act sm" on:click={takeBack}>Take back</button>
-						{#if iAmHost}<button class="act ghost sm" on:click={forceReveal} title="Reveal now — auto-pass anyone not ready">Force reveal</button>{/if}
-					{:else}
-						<span class="hint2">Tap a card to preview — {readyCount}/{seatedWithCards.length} ready</span>
-						<button class="act ghost sm" on:click={pass}>Pass</button>
-						{#if mine.discard.length}<span class="recover">Recover: {#each mine.discard as i}<button class="rec" on:click={() => pullBack(i)}>{heroCards(mine.hero)[i].name}</button>{/each}</span>{/if}
-					{/if}
-				</div>
+			<!-- centre: status line -->
+			<div class="dstatus">
+				{#if revealed}
+					<span class="pill">Cards revealed — resolve on the board</span>
+					<button class="act primary sm" on:click={onAdvanceTurn}>Next turn →</button>
+				{:else if myReady}
+					<span class="pill">{mine.pending === PASS ? 'Passing' : 'Ready'} ✓ · {readyCount}/{seatedWithCards.length} ready</span>
+					<button class="act sm" on:click={takeBack}>Take back</button>
+					{#if iAmHost}<button class="act ghost sm" on:click={forceReveal} title="Reveal now — auto-pass anyone not ready">Force reveal</button>{/if}
+				{:else}
+					<span class="hint2">Tap a card to preview — {readyCount}/{seatedWithCards.length} ready</span>
+					<button class="act ghost sm" on:click={pass}>Pass</button>
+					{#if mine.discard.length}<span class="recover">Recover: {#each mine.discard as i}<button class="rec" on:click={() => pullBack(i)}>{heroCards(mine.hero)[i].name}</button>{/each}</span>{/if}
+				{/if}
 			</div>
 
 			<!-- right: your round at a glance (4 turns + discard) -->
@@ -310,28 +309,28 @@
 	.phasetag { font-size: .56rem; letter-spacing: .04em; font-weight: 700; color: #7d8ba0; text-transform: none; }
 	.phasetag.resolve { color: #efb46a; }
 	.ppdiv { height: 1px; margin: 5px 2px; background: linear-gradient(90deg, transparent, rgba(199,154,78,.35), transparent); }
-	.prow { display: flex; flex-direction: column; gap: 5px; padding: 7px; border-radius: 12px; cursor: pointer; text-align: left; background: rgba(12,18,32,.44); border: 1px solid rgba(255,255,255,.1); border-left: 3px solid var(--tint); color: #e5e7eb; transition: transform .12s, background .12s; }
+	.prow { display: flex; flex-direction: column; gap: 4px; padding: 6px 7px; border-radius: 11px; cursor: pointer; text-align: left; background: rgba(12,18,32,.44); border: 1px solid rgba(255,255,255,.1); border-left: 3px solid var(--tint); color: #e5e7eb; transition: transform .12s, background .12s; }
 	.prow:hover { background: rgba(20,28,46,.6); transform: translateY(-2px); }
-	.prtop { display: flex; align-items: center; gap: 9px; }
-	.pav { position: relative; width: 2.4rem; height: 2.4rem; border-radius: 50%; overflow: visible; border: 2px solid var(--tint); flex: none; }
+	.prtop { display: flex; align-items: center; gap: 8px; }
+	.pav { position: relative; width: 2.1rem; height: 2.1rem; border-radius: 50%; overflow: visible; border: 2px solid var(--tint); flex: none; }
 	.pav img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
 	.pav.ult { border-color: #b482f0; box-shadow: 0 0 9px rgba(160,110,235,.65); }
 	.pav .crown { position: absolute; top: -8px; right: -6px; font-size: .82rem; color: #d9b6ff; text-shadow: 0 1px 3px #000; }
 	.pmid { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; line-height: 1.05; }
-	.pname { font-family: 'Modesto Poster', serif; font-size: .9rem; color: #f3f6fb; display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
-	.pname em { font-style: normal; font-size: .58rem; font-weight: 700; color: #8b9bb0; }
-	.rdy { font-family: 'Inter', sans-serif; font-size: .5rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #16351f; background: #4ade80; border-radius: 5px; padding: 1px 5px; }
-	.phero { font-size: .62rem; color: #93a3b8; }
-	.dslot { width: 2rem; flex: none; }
+	.pname { font-family: 'Modesto Poster', serif; font-size: .84rem; color: #f3f6fb; display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+	.pname em { font-style: normal; font-size: .56rem; font-weight: 700; color: #8b9bb0; }
+	.rdy { font-family: 'Inter', sans-serif; font-size: .48rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #16351f; background: #4ade80; border-radius: 5px; padding: 1px 5px; }
+	.phero { font-size: .58rem; color: #93a3b8; }
+	.dslot { width: 1.7rem; flex: none; }
 	.pstats { display: grid; grid-template-columns: repeat(6, 1fr); gap: 3px; }
-	.pstat { position: relative; display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 3px 0 2px; border-radius: 6px; background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.06); }
-	.pstat img { height: .82rem; filter: brightness(0) invert(1); opacity: .55; }
-	.pstat b { font-size: .68rem; font-weight: 800; color: #b9c4d2; font-variant-numeric: tabular-nums; }
-	.pstat .stripes { position: absolute; top: 2px; left: 0; right: 0; display: flex; justify-content: center; gap: 1.5px; height: 3px; }
+	.pstat { position: relative; display: flex; flex-direction: column; align-items: center; gap: 0; padding: 2px 0 1px; border-radius: 5px; background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.06); }
+	.pstat img { height: .74rem; filter: brightness(0) invert(1); opacity: .55; }
+	.pstat b { font-size: .64rem; font-weight: 800; color: #b9c4d2; font-variant-numeric: tabular-nums; }
+	.pstat .stripes { position: absolute; top: 1px; left: 0; right: 0; display: flex; justify-content: center; gap: 1.5px; height: 3px; }
 	.pstat .stripe { width: 4px; height: 2px; transform: skewX(-24deg); background: #ffb774; border-radius: 1px; }
-	.pstat.up { background: rgba(239,125,34,.16); border-color: rgba(239,125,34,.45); padding-top: 6px; }
+	.pstat.up { background: rgba(239,125,34,.16); border-color: rgba(239,125,34,.45); padding-top: 5px; }
 	.pstat.up img { opacity: 1; } .pstat.up b { color: #ffcfa3; }
-	.pturns { display: grid; grid-template-columns: repeat(4, 47px); gap: 4px; justify-content: center; }
+	.pturns { display: grid; grid-template-columns: repeat(4, 40px); gap: 4px; justify-content: center; }
 	.ppanel.dense .prow { gap: 4px; padding: 5px 6px; }
 	.ppanel.dense .pav { width: 1.9rem; height: 1.9rem; }
 	.ppanel.dense .pname { font-size: .78rem; }
@@ -401,7 +400,7 @@
 	.pvbar { pointer-events: auto; display: flex; gap: 8px; }
 
 	/* bottom dashboard */
-	.dash { position: absolute; left: 224px; right: 260px; bottom: 12px; z-index: 9; display: flex; align-items: flex-end; gap: 12px; padding: 10px 14px; border-radius: 16px; background: rgba(9,13,22,.82); backdrop-filter: blur(9px); border: 1px solid rgba(199,154,78,.45); box-shadow: 0 12px 34px rgba(0,0,0,.5); color: #e5e7eb; }
+	.dash { position: absolute; left: 224px; right: 260px; bottom: 12px; z-index: 9; display: flex; align-items: center; gap: 14px; padding: 8px 14px; border-radius: 14px; background: rgba(9,13,22,.82); backdrop-filter: blur(9px); border: 1px solid rgba(199,154,78,.45); box-shadow: 0 12px 34px rgba(0,0,0,.5); color: #e5e7eb; }
 	.dself { display: grid; grid-template-columns: auto 1fr; grid-template-areas: 'av mid' 'stats stats'; gap: 5px 8px; align-items: center; background: none; border: none; cursor: pointer; color: inherit; text-align: left; flex: none; }
 	.dself:hover .dsname { color: #fff; }
 	.dav { grid-area: av; position: relative; width: 2.6rem; height: 2.6rem; border-radius: 50%; overflow: visible; border: 2px solid rgba(199,154,78,.6); flex: none; }
@@ -414,13 +413,12 @@
 	.dshero { font-size: .64rem; color: #93a3b8; }
 	.dstats { grid-area: stats; display: grid; grid-template-columns: repeat(6, 1fr); gap: 3px; width: 12.5rem; }
 
-	.dhand { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; }
-	.tray { display: flex; align-items: flex-end; justify-content: center; height: 130px; }
-	.hc { width: 92px; margin: 0 -12px; padding: 0; background: none; border: none; cursor: pointer; transform-origin: bottom center; transform: translateY(var(--y)) rotate(var(--rot)); transition: transform .16s; }
+	/* hand floats above the dashboard */
+	.tray { position: absolute; left: 224px; right: 260px; bottom: 92px; z-index: 10; display: flex; align-items: flex-end; justify-content: center; pointer-events: none; }
+	.hc { width: 96px; margin: 0 -12px; padding: 0; background: none; border: none; cursor: pointer; pointer-events: auto; transform-origin: bottom center; transform: translateY(var(--y)) rotate(var(--rot)); transition: transform .16s; }
 	.hc :global(canvas) { display: block; width: 100%; border-radius: 6%; box-shadow: 0 8px 18px rgba(0,0,0,.55); }
-	.hc:hover { transform: translateY(calc(var(--y) - 20px)) rotate(var(--rot)) scale(1.07); z-index: 5; }
-	.hc.committed :global(canvas) { outline: 2px solid #efb46a; opacity: .75; }
-	.dstatus { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; }
+	.hc:hover { transform: translateY(calc(var(--y) - 22px)) rotate(var(--rot)) scale(1.08); z-index: 5; }
+	.dstatus { flex: 1; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; }
 	.pill { font-size: .74rem; font-weight: 700; color: #cdd6e2; }
 	.hint2 { font-size: .72rem; color: #93a3b8; }
 	.recover { font-size: .64rem; color: #93a3b8; display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }

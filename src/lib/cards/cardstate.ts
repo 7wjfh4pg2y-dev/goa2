@@ -79,10 +79,14 @@ export function initCards(picks: Record<string, string>): Record<string, PlayerC
 /** pending sentinel meaning the player readied without a card (passed this turn). */
 export const PASS = -1
 
-/** Commit a face-down card for the current turn (must be in hand). */
+/**
+ * Commit a card for the current turn: it leaves the hand immediately and sits
+ * face-down as `pending` (placed on the mat), so the hand shows only the cards
+ * you have left — just like the physical game.
+ */
 export function commitCard(s: PlayerCardState, idx: number): PlayerCardState {
 	if (!s.hand.includes(idx)) return s
-	return { ...s, pending: idx }
+	return { ...s, hand: s.hand.filter((i) => i !== idx), pending: idx }
 }
 
 /** Ready up with no card (nothing to play / choosing to pass this turn). */
@@ -97,17 +101,19 @@ export function revealPlayer(s: PlayerCardState, turn: number): PlayerCardState 
 	return revealTurn(s, turn)
 }
 
-/** Take back the face-down card before reveal. */
+/** Take back the face-down card before reveal (returns it to hand). */
 export function uncommit(s: PlayerCardState): PlayerCardState {
-	return s.pending == null ? s : { ...s, pending: null }
+	if (s.pending == null) return s
+	if (s.pending === PASS) return { ...s, pending: null }
+	return { ...s, hand: [...s.hand, s.pending].sort((a, b) => a - b), pending: null }
 }
 
-/** Reveal: move the pending card into the given turn slot and out of hand. */
+/** Reveal: lock the pending card into its turn slot (it already left the hand at commit). */
 export function revealTurn(s: PlayerCardState, turn: number): PlayerCardState {
 	if (s.pending == null || turn < 0 || turn >= TURNS_PER_ROUND) return s
 	const turns = s.turns.slice()
 	turns[turn] = s.pending
-	return { ...s, turns, pending: null, hand: s.hand.filter((i) => i !== s.pending) }
+	return { ...s, turns, pending: null }
 }
 
 /** Defend / effect-discard: spend a card from hand this round. */
@@ -131,7 +137,7 @@ export function undiscard(s: PlayerCardState, idx: number): PlayerCardState {
  */
 export function endRound(s: PlayerCardState): PlayerCardState {
 	const back = [...s.turns.filter((x): x is number => x != null), ...s.discard]
-	if (s.pending != null) back.push(s.pending)
+	if (s.pending != null && s.pending !== PASS) back.push(s.pending)
 	return {
 		...s,
 		hand: [...s.hand, ...back].sort((a, b) => a - b),
