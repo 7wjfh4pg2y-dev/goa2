@@ -92,6 +92,34 @@
 	function changeCoins(d: number) { if (mine) session.cardAction({ kind: 'coins', pid: clientId, delta: d }); }
 	const ROMAN = ['I', 'II', 'III', 'IV'];
 
+	// ── deck view: the level 2 / 3 upgrade cards, laid out as a fixed grid ──────
+	// Columns run RED, BLUE, GREEN with each colour's primary (variant A) left of
+	// its alternative (variant B); row 1 = the Tier-II cards, row 2 = Tier-III:
+	//   PR2 AR2 PB2 AB2 PG2 AG2   (level 2)
+	//   PR3 AR3 PB3 AB3 PG3 AG3   (level 3)
+	let deckOpen = false;
+	const GRID_COLORS = ['RED', 'BLUE', 'GREEN'];
+	function findCard(hero: string, color: string, level: number, first: number): number {
+		return heroCards(hero).findIndex(
+			(c) => c.color === color && (c.level ?? 1) === level && (c.variant?.first ?? 1) === first
+		);
+	}
+	// grid rows (level 2 then 3); each row is 6 cells, ordered by colour then variant
+	function deckGrid(hero: string) {
+		return [2, 3].map((level) =>
+			GRID_COLORS.flatMap((color) =>
+				[1, 2].map((first) => ({ color, level, first, idx: findCard(hero, color, level, first) }))
+			)
+		);
+	}
+	$: myGrid = mine ? deckGrid(mine.hero) : [];
+	// every upgrade-card index that isn't currently in the hand = "still in the deck"
+	function deckCards(cs: PlayerCardState) {
+		const all = deckGrid(cs.hero).flat().map((g) => g.idx).filter((i) => i >= 0);
+		return all.filter((i) => !cs.hand.includes(i));
+	}
+	function swap(idx: number) { if (mine && idx >= 0) session.cardAction({ kind: 'swap', pid: clientId, idx }); }
+
 	// ── dramatic reveal curtain: when everyone's ready, all cards flip up at once ──
 	import { onDestroy } from 'svelte';
 	let curtain = false; // overlay visible
@@ -178,7 +206,7 @@
 							<span class="pstat" class:up={r.delta > 0}>
 								<span class="stripes">{#each Array(r.delta) as _}<span class="stripe"></span>{/each}</span>
 								<img src={icon(r.icon)} alt={r.label} />
-								<b>{r.base === null && r.delta === 0 ? '–' : r.cur}</b>
+								<b>{r.delta > 0 ? '+' + r.delta : '–'}</b>
 							</span>
 						{/each}
 					</div>
@@ -216,7 +244,7 @@
 						<div class="stat6" class:up={r.delta > 0}>
 							<div class="stripes">{#each Array(r.delta) as _}<span class="stripe"></span>{/each}</div>
 							<img class="si" src={icon(r.icon)} alt={r.label} />
-							<div class="sv">{r.base === null && r.delta === 0 ? '–' : r.cur}{#if r.delta > 0}<em>+{r.delta}</em>{/if}</div>
+							<div class="sv">{r.delta > 0 ? '+' + r.delta : '–'}</div>
 							<div class="slbl">{r.label}</div>
 						</div>
 					{/each}
@@ -254,6 +282,51 @@
 	{#if examine}
 		<div class="scrim2" on:click={() => (examine = null)} on:keydown={(e) => e.key === 'Escape' && (examine = null)} role="presentation">
 			<div class="bigcard" role="dialog" aria-modal="true" tabindex="-1"><Card heroId={examine.hid} card={heroCards(examine.hid)[examine.idx]} /></div>
+		</div>
+	{/if}
+
+	<!-- ───────── deck view: manage your upgrade cards ───────── -->
+	{#if deckOpen && mine}
+		{@const dh = mine.hero}
+		<div class="scrim" on:click={() => (deckOpen = false)} on:keydown={(e) => e.key === 'Escape' && (deckOpen = false)} role="presentation">
+			<div class="deckmodal" on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" tabindex="-1">
+				<div class="mhead">
+					<span class="mav" style="--tint:{ORANGE}"><img src={heroLogo(dh)} alt="" /></span>
+					<div class="mtitle">
+						<div class="mnm">{heroName(dh)} · Deck</div>
+						<div class="mtt">Tap a card to move it between your hand and your deck</div>
+					</div>
+					<button class="ix" on:click={() => (deckOpen = false)}>✕</button>
+				</div>
+
+				<div class="dklabel">Your hand <span class="ct">{mine.hand.length}</span></div>
+				<div class="dkhand">
+					{#each mine.hand as i (i)}
+						<button class="dkcard inhand" on:click={() => swap(i)} title="Move to deck">
+							<Card heroId={dh} card={heroCards(dh)[i]} />
+						</button>
+					{/each}
+					{#if !mine.hand.length}<span class="empty-note">—</span>{/if}
+				</div>
+
+				<div class="dklabel">Upgrade deck — Tier II &amp; III <span class="ct">{deckCards(mine).length}</span></div>
+				<div class="dkgrid">
+					{#each myGrid as row}
+						{#each row as cell (cell.color + cell.level + cell.first)}
+							{#if cell.idx >= 0}
+								{@const held = mine.hand.includes(cell.idx)}
+								<button class="dkcard" class:held on:click={() => swap(cell.idx)}
+									title={held ? 'In hand — tap to return to deck' : 'Tap to add to hand'}>
+									<Card heroId={dh} card={heroCards(dh)[cell.idx]} />
+									{#if held}<span class="dkbadge">✓ In hand</span>{/if}
+								</button>
+							{:else}
+								<div class="dkcard empty"></div>
+							{/if}
+						{/each}
+					{/each}
+				</div>
+			</div>
 		</div>
 	{/if}
 
@@ -307,7 +380,7 @@
 					{#each allStats(mine) as r}
 						<span class="pstat" class:up={r.delta > 0}>
 							<span class="stripes">{#each Array(r.delta) as _}<span class="stripe"></span>{/each}</span>
-							<img src={icon(r.icon)} alt={r.label} /><b>{r.base === null && r.delta === 0 ? '–' : r.cur}</b>
+							<img src={icon(r.icon)} alt={r.label} /><b>{r.delta > 0 ? '+' + r.delta : '–'}</b>
 						</span>
 					{/each}
 				</span>
@@ -335,17 +408,17 @@
 				{/if}
 			</div>
 
-			<!-- centre: status line (thematic readiness) -->
+			<!-- centre: your deck (face-down stack) + contextual buttons -->
 			<div class="dstatus">
+				<button class="deckstack" on:click={() => (deckOpen = true)} title="View & manage your deck">
+					<span class="ds-card ds3"></span>
+					<span class="ds-card ds2"></span>
+					<span class="ds-card ds1"><img src={heroEmblem ?? icon('small_logo')} alt="" /></span>
+					<span class="ds-count">{deckCards(mine).length}</span>
+				</button>
 				{#if revealed}
-					<span class="pill">Cards revealed — resolve on the board</span>
 					<button class="act primary sm" on:click={onAdvanceTurn}>Next turn →</button>
 				{:else}
-					<div class="rmeter" title="{readyCount} of {seatedWithCards.length} ready">
-						<span class="rlabel">War council</span>
-						<span class="rpips">{#each seatedWithCards as p}<span class="rp" class:on={isReady(cards[p.id])}></span>{/each}</span>
-						<span class="rcount">{readyCount}/{seatedWithCards.length}</span>
-					</div>
 					{#if myReady}<button class="act sm" on:click={takeBack}>Take back</button>{/if}
 					{#if iAmHost}<button class="act ghost sm" on:click={forceReveal} title="Reveal now — skip anyone not ready">Reveal</button>{/if}
 				{/if}
@@ -472,12 +545,11 @@
 	.stat6 { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 12px 4px 7px; border-radius: 12px; background: rgba(12,18,32,.5); border: 1px solid rgba(255,255,255,.1); }
 	.stat6 .si { height: 1.3rem; filter: brightness(0) invert(1); opacity: .55; }
 	.stat6 .sv { font-size: 1.1rem; font-weight: 800; color: #c3ccd8; font-variant-numeric: tabular-nums; display: flex; align-items: baseline; gap: 3px; }
-	.stat6 .sv em { font-style: normal; font-size: .66rem; font-weight: 800; color: #8b9bb0; }
 	.stat6 .slbl { font-size: .5rem; letter-spacing: .08em; text-transform: uppercase; color: #6b7a8d; }
 	.stat6 .stripes { position: absolute; top: 5px; left: 0; right: 0; display: flex; justify-content: center; gap: 3px; height: 5px; }
 	.stat6 .stripe { width: 9px; height: 3px; transform: skewX(-24deg); border-radius: 1px; background: linear-gradient(90deg, #efb46a, #ef7d22); box-shadow: 0 0 5px rgba(239,125,34,.6); }
 	.stat6.up { background: linear-gradient(180deg, rgba(239,125,34,.2), rgba(239,125,34,.05)); border-color: rgba(239,125,34,.5); box-shadow: 0 0 0 1px rgba(239,125,34,.15), 0 6px 18px rgba(239,125,34,.12); }
-	.stat6.up .si { opacity: 1; } .stat6.up .sv { color: #ffd7ad; } .stat6.up .sv em { color: #ffb774; } .stat6.up .slbl { color: #d8a878; }
+	.stat6.up .si { opacity: 1; } .stat6.up .sv { color: #ffd7ad; } .stat6.up .slbl { color: #d8a878; }
 	.turns { display: flex; align-items: stretch; gap: 10px; }
 	.tbox { flex: 1; display: flex; flex-direction: column; gap: 7px; padding: 9px 8px 10px; border-radius: 16px; background: rgba(12,18,32,.46); border: 1px solid rgba(255,255,255,.12); border-bottom: 3px solid var(--tint); box-shadow: 0 12px 30px rgba(0,0,0,.4); }
 	.tbox.current { border-color: rgba(199,154,78,.5); border-bottom-color: #efb46a; box-shadow: 0 0 0 1px rgba(199,154,78,.3), 0 12px 34px rgba(199,154,78,.18); }
@@ -492,6 +564,26 @@
 	.rcard:first-child { margin-left: 0; }
 	.rcard:hover { transform: translateY(-6px); opacity: 1; z-index: 2; }
 	.empty-note { color: #55637a; font-size: .8rem; padding: 4px; }
+
+	/* deck view (manage upgrade cards) */
+	.deckmodal { width: min(760px, 94vw); max-height: 90vh; overflow-y: auto; padding: 16px 18px; color: #e5e7eb; background: rgba(11,16,26,.95); border: 1px solid rgba(199,154,78,.5); border-radius: 16px; box-shadow: 0 24px 70px rgba(0,0,0,.7); }
+	.deckmodal .mav { overflow: visible; border-color: rgba(199,154,78,.6); display: grid; place-items: center; }
+	.deckmodal .mav img { width: 76%; height: 76%; object-fit: contain; border-radius: 0; }
+	.dklabel { font-size: .64rem; letter-spacing: .12em; text-transform: uppercase; font-weight: 700; color: #93a3b8; display: flex; align-items: center; gap: 6px; margin: 14px 0 8px; }
+	.dklabel .ct { color: #f1f5f9; background: rgba(255,255,255,.08); border-radius: 5px; padding: 0 6px; }
+	.dkhand { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px; border-radius: 12px; background: rgba(239,125,34,.08); border: 1px solid rgba(239,125,34,.25); min-height: 40px; align-items: center; }
+	.dkgrid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+	.dkcard { position: relative; width: 100%; padding: 0; background: none; border: none; cursor: pointer; border-radius: 6px; overflow: hidden; box-shadow: 0 3px 8px rgba(0,0,0,.5); transition: transform .12s; }
+	.dkhand .dkcard { width: 74px; }
+	.dkcard:hover { transform: translateY(-4px); z-index: 2; }
+	.dkcard :global(canvas) { display: block; width: 100%; border-radius: 6px; }
+	.dkcard.empty { cursor: default; box-shadow: none; aspect-ratio: 1192 / 1664; border: 1px dashed rgba(255,255,255,.1); background: rgba(255,255,255,.02); }
+	.dkcard.empty:hover { transform: none; }
+	/* grid cards not in hand read as "in the deck": dimmed until you add them */
+	.dkgrid .dkcard:not(.held) { filter: grayscale(.55) brightness(.62); }
+	.dkgrid .dkcard.held { outline: 2px solid #ef7d22; }
+	.dkbadge { position: absolute; left: 4px; bottom: 4px; right: 4px; font-size: .56rem; font-weight: 800; letter-spacing: .04em; text-align: center; padding: 2px 0; border-radius: 5px; background: rgba(239,125,34,.9); color: #1a0f06; }
+	.dkhand .dkcard.inhand::after { content: ''; position: absolute; inset: 0; border-radius: 6px; box-shadow: inset 0 0 0 2px rgba(239,125,34,.5); }
 
 	/* dramatic reveal curtain */
 	.curtain { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; cursor: pointer;
@@ -562,16 +654,20 @@
 	.hc { width: 96px; margin: 0 -12px; padding: 0; background: none; border: none; cursor: pointer; pointer-events: auto; transform-origin: bottom center; transform: translateY(var(--y)) rotate(var(--rot)); transition: transform .16s; }
 	.hc :global(canvas) { display: block; width: 100%; border-radius: 6%; box-shadow: 0 8px 18px rgba(0,0,0,.55); }
 	.hc:hover { transform: translateY(calc(var(--y) - 22px)) rotate(var(--rot)) scale(1.08); z-index: 5; }
-	.dstatus { flex: 1; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; }
-	.pill { font-size: .74rem; font-weight: 700; color: #cdd6e2; }
-	/* thematic readiness meter */
-	.rmeter { display: inline-flex; align-items: center; gap: 8px; padding: 4px 12px; border-radius: 999px;
-		background: linear-gradient(180deg, rgba(199,154,78,.16), rgba(199,154,78,.06)); border: 1px solid rgba(199,154,78,.4); }
-	.rlabel { font-family: 'Modesto Poster', serif; font-size: .74rem; letter-spacing: .04em; color: #f0dcae; }
-	.rpips { display: inline-flex; gap: 4px; }
-	.rp { width: .55rem; height: .55rem; border-radius: 50%; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.18); transition: background .3s, box-shadow .3s; }
-	.rp.on { background: radial-gradient(circle at 35% 30%, #a6f5b6, #35c257); border-color: transparent; box-shadow: 0 0 6px rgba(53,194,87,.8); }
-	.rcount { font-size: .64rem; font-weight: 800; color: #cbb488; font-variant-numeric: tabular-nums; }
+	.dstatus { flex: 1; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center; }
+	/* face-down deck stack on the dash (opens the deck view) */
+	.deckstack { position: relative; width: 40px; height: 54px; background: none; border: none; padding: 0; cursor: pointer; flex: none; }
+	.deckstack:hover .ds1 { transform: translateY(-3px); }
+	.ds-card { position: absolute; inset: 0; border-radius: 5px; box-shadow: 0 3px 8px rgba(0,0,0,.55);
+		background: repeating-linear-gradient(135deg, rgba(90,70,40,.05) 0 1px, transparent 1px 5px), radial-gradient(115% 78% at 50% 40%, #fdfcf8, #efe9db 62%, #ddd4c1 100%);
+		border: 1px solid rgba(120,95,55,.5); }
+	.ds3 { transform: translate(5px, 5px); opacity: .7; }
+	.ds2 { transform: translate(2.5px, 2.5px); opacity: .85; }
+	.ds1 { display: grid; place-items: center; transition: transform .14s; }
+	.ds1 img { width: 68%; max-height: 74%; object-fit: contain; filter: drop-shadow(0 1px 2px rgba(0,0,0,.4)); }
+	.ds-count { position: absolute; bottom: -5px; right: -6px; z-index: 2; min-width: 1.05rem; height: 1.05rem; padding: 0 4px; border-radius: 999px;
+		display: grid; place-items: center; background: linear-gradient(#2b3444, #171d27); border: 1px solid rgba(199,154,78,.6); color: #f0dcae;
+		font-size: .6rem; font-weight: 900; font-variant-numeric: tabular-nums; box-shadow: 0 2px 5px rgba(0,0,0,.5); }
 	.act { border: 1px solid rgba(255,255,255,.2); background: rgba(255,255,255,.08); color: #e5e7eb; border-radius: 8px; padding: 6px 14px; font-weight: 700; cursor: pointer; font-size: .82rem; }
 	.act.sm { padding: 4px 10px; font-size: .76rem; }
 	.act.primary { background: #ef7d22; color: #1a0f06; border-color: transparent; box-shadow: 0 3px 0 #a8560f; }
