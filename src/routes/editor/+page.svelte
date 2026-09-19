@@ -24,6 +24,13 @@
 
 	const tileSprites = import.meta.glob('../../lib/images/tiles/*.png', { eager: true, import: 'default' }) as Record<string, string>;
 	const minionSprites = import.meta.glob('../../lib/images/minions/*.png', { eager: true, import: 'default' }) as Record<string, string>;
+	// bundled maps that ship with the app (so they can be opened & edited here)
+	const bundledMapFiles = import.meta.glob('../../lib/maps/*.json', { eager: true, import: 'default' }) as Record<string, Record<string, unknown>>;
+	const bundledMaps = Object.entries(bundledMapFiles).map(([path, data]) => ({
+		file: path.split('/').pop()!.replace(/\.json$/, ''),
+		label: (typeof data.name === 'string' && data.name) || path.split('/').pop()!.replace(/\.json$/, ''),
+		data
+	}));
 	type Minion = 'ranged' | 'melee' | 'heavy';
 	function spriteFor(id: string, t: HexType): string | undefined {
 		if (t === 'spawnOrange') return minionSprites[`../../lib/images/minions/orange_${meta[id]?.m ?? 'melee'}.png`];
@@ -167,6 +174,10 @@
 	function saveMap() { saved = { ...saved, [name]: snapshot() }; try { localStorage.setItem(MAPS, JSON.stringify(saved)); } catch {} }
 	function loadMap(n: string) { if (saved[n]) applyMap(saved[n] as Record<string, unknown>); }
 	function deleteMap(n: string) { const s = { ...saved }; delete s[n]; saved = s; try { localStorage.setItem(MAPS, JSON.stringify(saved)); } catch {} }
+	function loadBundled(data: Record<string, unknown>) {
+		if (paintedCount && !confirm('Load this map into the editor? Your current working map will be replaced (saved maps are untouched).')) return;
+		applyMap(data);
+	}
 	function newMap() { if (confirm('Start a new blank map?')) { cells = {}; meta = {}; name = 'untitled'; } }
 	function clearPaint() { if (confirm('Clear all painted hexes on this map?')) { cells = {}; meta = {}; } }
 
@@ -315,6 +326,15 @@
 					{/each}
 				</div>
 			{/if}
+			{#if bundledMaps.length}
+				<div class="bundled">
+					<span class="blbl">Built-in maps</span>
+					{#each bundledMaps as bm}
+						<div class="savedrow"><button class="link" on:click={() => loadBundled(bm.data)}>{bm.label}</button><span class="tag">built-in</span></div>
+					{/each}
+					<p class="tip">Load one to edit it, then Save (keeps the same name so it replaces the built-in in games).</p>
+				</div>
+			{/if}
 		</div>
 
 		<div class="row"><button on:click={exportMap} disabled={!paintedCount}>{copied ? 'Copied!' : 'Export map JSON'}</button></div>
@@ -377,6 +397,9 @@
 	.txt { width: 100%; margin-top: 4px; background: #1f2937; color: #fff; border: 1px solid #374151; border-radius: 6px; padding: 6px; }
 	.maps { border-top: 1px solid #374151; margin-top: 10px; padding-top: 10px; }
 	.saved { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
+	.bundled { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; }
+	.blbl { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: #9ca3af; font-weight: 700; }
+	.tag { font-size: 10px; color: #93c5fd; background: rgba(59,130,246,.14); border: 1px solid rgba(59,130,246,.3); border-radius: 9999px; padding: 1px 7px; }
 	.savedrow { display: flex; justify-content: space-between; align-items: center; background: #0b1220; border: 1px solid #1e293b; border-radius: 6px; padding: 2px 4px 2px 8px; }
 	.link { background: none; border: none; color: #93c5fd; cursor: pointer; font-size: 13px; padding: 4px 0; }
 	.x { background: none; border: none; color: #ef4444; cursor: pointer; }
