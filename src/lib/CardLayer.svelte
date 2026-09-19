@@ -154,6 +154,22 @@
 							</span>
 						{/each}
 					</div>
+					<!-- 4-6p: the round's played cards, so you can read spent colours at a glance -->
+					{#if !dense}
+						<div class="pturns">
+							{#each [0, 1, 2, 3] as t}
+								<div class="pt" class:cur={t === turnIdx}>
+									{#if cs.turns[t] != null}
+										<div class="ptc"><Card heroId={cs.hero} card={heroCards(cs.hero)[cs.turns[t]!]} /></div>
+									{:else if t === turnIdx && cs.pending != null}
+										<div class="ptback"><img src={heroLogo(cs.hero)} alt="" /></div>
+									{:else}
+										<div class="ptempty">{t + 1}</div>
+									{/if}
+								</div>
+							{/each}
+						</div>
+					{/if}
 				{/if}
 			</button>
 		{/each}
@@ -321,7 +337,7 @@
 	.phasetag { font-size: .56rem; letter-spacing: .04em; font-weight: 700; color: #7d8ba0; text-transform: none; }
 	.phasetag.resolve { color: #efb46a; }
 	.ppdiv { height: 1px; margin: 5px 2px; background: linear-gradient(90deg, transparent, rgba(199,154,78,.35), transparent); }
-	.prow { display: flex; flex-direction: column; gap: 6px; padding: 8px; border-radius: 12px; cursor: pointer; text-align: left;
+	.prow { display: flex; flex-direction: column; gap: 5px; padding: 7px; border-radius: 12px; cursor: pointer; text-align: left;
 		background: rgba(12,18,32,.44); border: 1px solid rgba(255,255,255,.1); border-left: 3px solid var(--tint); color: #e5e7eb; transition: transform .12s, background .12s; }
 	.prow:hover { background: rgba(20,28,46,.6); transform: translateY(-2px); }
 	.prtop { display: flex; align-items: center; gap: 9px; }
@@ -348,6 +364,18 @@
 	.pstat .stripe { width: 4px; height: 2px; transform: skewX(-24deg); background: #ffb774; border-radius: 1px; }
 	.pstat.up { background: rgba(239,125,34,.16); border-color: rgba(239,125,34,.45); padding-top: 6px; }
 	.pstat.up img { opacity: 1; } .pstat.up b { color: #ffcfa3; }
+	/* per-round played-card strip (4-6p) */
+	.pturns { display: grid; grid-template-columns: repeat(4, 47px); gap: 4px; justify-content: center; }
+	.pt { aspect-ratio: 3 / 4; border-radius: 4px; overflow: hidden; }
+	.pt.cur { outline: 1.5px solid rgba(239,180,106,.6); outline-offset: 1px; border-radius: 5px; }
+	.ptc { width: 100%; height: 100%; }
+	.ptc :global(canvas) { display: block; width: 100%; border-radius: 4px; }
+	.ptempty { width: 100%; height: 100%; display: grid; place-items: center; border: 1px dashed rgba(255,255,255,.14);
+		border-radius: 4px; background: rgba(255,255,255,.02); color: #3d4a5e; font-size: .62rem; font-weight: 700; }
+	.pt.cur .ptempty { color: #8b9bb0; }
+	.ptback { width: 100%; height: 100%; display: grid; place-items: center; border-radius: 4px;
+		background: radial-gradient(120% 90% at 50% 0%, #223050, #101828 70%); border: 1px solid rgba(199,154,78,.4); }
+	.ptback img { width: 62%; opacity: .55; }
 	/* dense mode (8p/10p): shrink so ~9 opponents fit without scrolling */
 	.ppanel.dense .prow { gap: 4px; padding: 5px 6px; }
 	.ppanel.dense .pav { width: 1.9rem; height: 1.9rem; }
