@@ -122,6 +122,16 @@ export function discardCard(s: PlayerCardState, idx: number): PlayerCardState {
 	return { ...s, hand: s.hand.filter((i) => i !== idx), discard: [...s.discard, idx] }
 }
 
+/**
+ * Manually swap a card in or out of the hand (deck management between rounds).
+ * If the card is in hand it leaves (back to the deck); otherwise it joins the
+ * hand. Mirrors picking cards up from / setting them down into your deck.
+ */
+export function swapCard(s: PlayerCardState, idx: number): PlayerCardState {
+	if (s.hand.includes(idx)) return { ...s, hand: s.hand.filter((i) => i !== idx) }
+	return { ...s, hand: [...s.hand, idx].sort((a, b) => a - b) }
+}
+
 /** Undo a discard (pull it back into hand). */
 export function undiscard(s: PlayerCardState, idx: number): PlayerCardState {
 	if (!s.discard.includes(idx)) return s
