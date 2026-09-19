@@ -219,6 +219,8 @@ export interface Piece {
 	label?: string // for hero/token markers
 	color?: string // a PLAYER_COLORS id — the owning player's token colour
 	hero?: string // heroId, for hero pieces
+	token?: string // token image name (e.g. "token_tree"), for token markers
+	owner?: string // clientId of the player who placed this token
 }
 
 /** Where a team's heroes start: the throne spawn points (gear/star) first, then

@@ -46,8 +46,11 @@
 	$: iAmHost = $ms.host === clientId;
 	$: turnIdx = $ms.turn - 1;
 	$: seatedWithCards = seated.filter((p) => cards[p.id]);
-	// DERIVED reveal: everyone ready ⇒ all cards face-up (same for every client)
-	$: readyCount = seatedWithCards.filter((p) => cards[p.id].pending != null).length;
+	// DERIVED reveal: everyone ready ⇒ all cards face-up (same for every client).
+	// A player is ready when they've committed, or when they simply have no cards
+	// left to play (there is no "pass" in GoA2 — you play a card unless you can't).
+	const isReady = (cs: PlayerCardState) => cs.pending != null || cs.hand.length === 0;
+	$: readyCount = seatedWithCards.filter((p) => isReady(cards[p.id])).length;
 	$: revealed = seatedWithCards.length > 0 && readyCount === seatedWithCards.length;
 
 	const allStats = (cs: PlayerCardState) =>
@@ -67,10 +70,11 @@
 	$: myReady = mine?.pending != null;
 	$: canCommit = !!mine && !myReady && !revealed;
 	let selected: number | null = null; // card being previewed (centered)
+	let previewSrc: 'hand' | 'discard' = 'hand'; // where the previewed card came from
 	let committing = false; // preview flip animation on commit
 	$: myName = seated.find((p) => p.id === clientId)?.name ?? 'You';
 
-	function preview(idx: number) { selected = idx; }
+	function preview(idx: number, src: 'hand' | 'discard' = 'hand') { selected = idx; previewSrc = src; }
 	function closePreview() { if (!committing) selected = null; }
 	function commit(idx: number) {
 		if (!canCommit) return;
@@ -81,11 +85,29 @@
 			selected = null;
 		}, 460);
 	}
-	function pass() { if (mine && !myReady && !revealed) session.cardAction({ kind: 'pass', pid: clientId }); }
 	function takeBack() { if (mine && !revealed) session.cardAction({ kind: 'uncommit', pid: clientId }); }
 	function defend(idx: number) { if (mine) { session.cardAction({ kind: 'defend', pid: clientId, idx }); selected = null; } }
-	function pullBack(idx: number) { if (mine) session.cardAction({ kind: 'undiscard', pid: clientId, idx }); }
+	function pullBack(idx: number) { if (mine) { session.cardAction({ kind: 'undiscard', pid: clientId, idx }); selected = null; } }
 	function forceReveal() { if (iAmHost) session.cardAction({ kind: 'forcepass', pid: clientId }); }
+
+	// ── token / marker tray (heroes with the TOKENS trait) ────────────────────
+	const TOKENS = ['token_barrier', 'token_blast', 'token_dud', 'token_familiar', 'token_glitch', 'token_grenade', 'token_ice', 'token_illusion', 'token_magma', 'token_rock', 'token_smoke_bomb', 'token_totem', 'token_tree', 'token_zombie'];
+	let tokenDrawer = false;
+	$: heroEmblem = mine ? icon(`trait_tokens_${mine.hero}`) : undefined; // set ⇒ this hero uses tokens
+	$: mySeat = seated.find((p) => p.id === clientId)?.seat ?? -1;
+	$: myTeam = mySeat >= 0 ? teamForSeat(mySeat, $ms.seats) : 'orange';
+	$: myTokenCount = Object.values($ms.pieces ?? {}).filter((p) => p.kind === 'token' && p.owner === clientId).length;
+	function placeToken(name: string) {
+		const myHex = $ms.pieces?.[clientId]?.hex;
+		if (!myHex) return;
+		const id = `tok_${clientId}_${Date.now().toString(36)}`;
+		session.act(`placed a token`, { pieces: { ...$ms.pieces, [id]: { id, hex: myHex, team: myTeam ?? 'neutral', kind: 'token' as const, token: name, owner: clientId } } });
+	}
+	function clearTokens() {
+		const next = { ...$ms.pieces };
+		for (const id in next) if (next[id].kind === 'token' && next[id].owner === clientId) delete next[id];
+		session.act('cleared their tokens', { pieces: next });
+	}
 
 	const fan = (k: number, n: number) => {
 		const t = n === 1 ? 0 : k / (n - 1) - 0.5;
@@ -224,7 +246,9 @@
 		</div>
 		<!-- actions sit in the freed space below the hand -->
 		<div class="pvbar">
-			{#if canCommit}
+			{#if previewSrc === 'discard'}
+				<button class="act primary" on:click={() => pullBack(selected!)}>Recover to hand</button>
+			{:else if canCommit}
 				<button class="act primary" on:click={() => commit(selected!)}>Commit · Turn {$ms.turn}</button>
 				<button class="act danger" on:click={() => defend(selected!)}>Defend (discard)</button>
 			{/if}
@@ -263,39 +287,66 @@
 				</span>
 			</button>
 
+			<!-- token / marker tray (only for token-using heroes) -->
+			{#if heroEmblem}
+				<div class="tokwrap">
+					<button class="tokbtn" class:on={tokenDrawer} on:click={() => (tokenDrawer = !tokenDrawer)} title="Place tokens on the board">
+						<img src={heroEmblem} alt="" /><span>Tokens{#if myTokenCount} · {myTokenCount}{/if}</span>
+					</button>
+					{#if tokenDrawer}
+						<div class="tokdrawer">
+							<div class="tokgrid">
+								<button class="tok emblem" on:click={() => placeToken(`trait_tokens_${mine.hero}`)} title="Signature token"><img src={heroEmblem} alt="" /></button>
+								{#each TOKENS as tk}
+									<button class="tok" on:click={() => placeToken(tk)} title={tk.replace('token_', '').replace('_', ' ')}><img src={icon(tk)} alt="" /></button>
+								{/each}
+							</div>
+							<div class="tokfoot">
+								<span class="tokhint">Places on your hero — drag it where you need.</span>
+								{#if myTokenCount}<button class="act ghost sm" on:click={clearTokens}>Clear mine</button>{/if}
+							</div>
+						</div>
+					{/if}
+				</div>
+			{/if}
+
 			<!-- centre: status line -->
 			<div class="dstatus">
 				{#if revealed}
 					<span class="pill">Cards revealed — resolve on the board</span>
 					<button class="act primary sm" on:click={onAdvanceTurn}>Next turn →</button>
 				{:else if myReady}
-					<span class="pill">{mine.pending === PASS ? 'Passing' : 'Ready'} ✓ · {readyCount}/{seatedWithCards.length} ready</span>
+					<span class="pill">Committed ✓ · {readyCount}/{seatedWithCards.length} ready</span>
 					<button class="act sm" on:click={takeBack}>Take back</button>
-					{#if iAmHost}<button class="act ghost sm" on:click={forceReveal} title="Reveal now — auto-pass anyone not ready">Force reveal</button>{/if}
+					{#if iAmHost}<button class="act ghost sm" on:click={forceReveal} title="Reveal now — skip anyone not ready">Force reveal</button>{/if}
+				{:else if mine.hand.length === 0}
+					<span class="hint2">No cards to play — {readyCount}/{seatedWithCards.length} ready</span>
+					{#if iAmHost}<button class="act ghost sm" on:click={forceReveal}>Force reveal</button>{/if}
 				{:else}
 					<span class="hint2">Tap a card to preview — {readyCount}/{seatedWithCards.length} ready</span>
-					<button class="act ghost sm" on:click={pass}>Pass</button>
-					{#if mine.discard.length}<span class="recover">Recover: {#each mine.discard as i}<button class="rec" on:click={() => pullBack(i)}>{heroCards(mine.hero)[i].name}</button>{/each}</span>{/if}
 				{/if}
 			</div>
 
-			<!-- right: your round at a glance (4 turns + discard) -->
+			<!-- right: your round at a glance (4 turns + discard); numerals sit behind -->
 			<div class="dmine">
-				<div class="dm-label">This round</div>
 				<div class="dm-turns">
 					{#each [0, 1, 2, 3] as t}
+						{@const has = mine.turns[t] != null || (t === turnIdx && mine.pending != null && mine.pending !== PASS)}
 						<div class="dm-slot">
-							<span class="dm-n">{t + 1}</span>
-							<TurnSlot heroId={mine.hero} played={mine.turns[t]} pending={mine.pending} isCurrent={t === turnIdx} {revealed}
-								examinable on:click={() => { const i = mine.turns[t] ?? (t === turnIdx && revealed ? mine.pending : null); if (i != null && i !== PASS) examine = { hid: mine.hero, idx: i }; }} />
+							<span class="roman">{['I', 'II', 'III', 'IV'][t]}</span>
+							{#if has}
+								<div class="dm-on"><TurnSlot heroId={mine.hero} played={mine.turns[t]} pending={mine.pending} isCurrent={t === turnIdx} {revealed}
+									examinable on:click={() => { const i = mine.turns[t] ?? (t === turnIdx && revealed ? mine.pending : null); if (i != null && i !== PASS) examine = { hid: mine.hero, idx: i }; }} /></div>
+							{/if}
 						</div>
 					{/each}
-					<div class="dm-disc">
-						<span class="dm-n">Disc {mine.discard.length}</span>
-						<div class="dm-dstack">
-							{#each mine.discard.slice(-3) as i, di}<button class="dm-dc" style="--i:{di}" on:click={() => (examine = { hid: mine.hero, idx: i })}><Card heroId={mine.hero} card={heroCards(mine.hero)[i]} /></button>{/each}
-							{#if !mine.discard.length}<span class="dm-empty">—</span>{/if}
-						</div>
+					<div class="dm-slot disc">
+						<span class="roman sm">DISC</span>
+						{#if mine.discard.length}
+							<div class="dm-on dm-dstack">
+								{#each mine.discard.slice(-3) as i, di}<button class="dm-dc" style="--i:{di}" on:click={() => preview(i, 'discard')}><Card heroId={mine.hero} card={heroCards(mine.hero)[i]} /></button>{/each}
+							</div>
+						{/if}
 					</div>
 				</div>
 			</div>
@@ -402,7 +453,7 @@
 	.pvbar .act { pointer-events: auto; }
 
 	/* bottom dashboard */
-	.dash { position: absolute; left: 224px; right: 260px; bottom: 12px; z-index: 9; display: flex; align-items: center; gap: 14px; padding: 6px 14px; border-radius: 13px; background: rgba(9,13,22,.82); backdrop-filter: blur(9px); border: 1px solid rgba(199,154,78,.45); box-shadow: 0 12px 34px rgba(0,0,0,.5); color: #e5e7eb; }
+	.dash { position: absolute; left: 224px; right: 260px; bottom: 12px; z-index: 11; display: flex; align-items: center; gap: 14px; padding: 6px 14px; border-radius: 13px; background: rgba(9,13,22,.82); backdrop-filter: blur(9px); border: 1px solid rgba(199,154,78,.45); box-shadow: 0 12px 34px rgba(0,0,0,.5); color: #e5e7eb; }
 	/* single-row profile: avatar · name/hero · stats (to cut dashboard height) */
 	.dself { display: flex; align-items: center; gap: 9px; background: none; border: none; cursor: pointer; color: inherit; text-align: left; flex: none; }
 	.dself:hover .dsname { color: #fff; }
@@ -424,23 +475,38 @@
 	.dstatus { flex: 1; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; }
 	.pill { font-size: .74rem; font-weight: 700; color: #cdd6e2; }
 	.hint2 { font-size: .72rem; color: #93a3b8; }
-	.recover { font-size: .64rem; color: #93a3b8; display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
-	.rec { font-size: .6rem; padding: 2px 7px; border-radius: 6px; border: 1px solid rgba(255,255,255,.18); background: rgba(255,255,255,.06); color: #cbd5e1; cursor: pointer; }
 	.act { border: 1px solid rgba(255,255,255,.2); background: rgba(255,255,255,.08); color: #e5e7eb; border-radius: 8px; padding: 6px 14px; font-weight: 700; cursor: pointer; font-size: .82rem; }
 	.act.sm { padding: 4px 10px; font-size: .76rem; }
 	.act.primary { background: #ef7d22; color: #1a0f06; border-color: transparent; box-shadow: 0 3px 0 #a8560f; }
 	.act.danger { background: rgba(220,60,60,.25); border-color: rgba(220,60,60,.5); color: #ffb4b4; }
 	.act.ghost { background: transparent; }
 
-	.dmine { flex: none; display: flex; flex-direction: column; gap: 4px; }
-	.dm-label { font-size: .56rem; letter-spacing: .12em; text-transform: uppercase; font-weight: 800; color: #b8a06a; }
-	.dm-turns { display: flex; gap: 5px; align-items: flex-start; }
-	.dm-slot { width: 42px; display: flex; flex-direction: column; align-items: center; gap: 2px; }
-	.dm-n { font-size: .5rem; font-weight: 700; color: #8b9bb0; letter-spacing: .04em; }
-	.dm-disc { display: flex; flex-direction: column; align-items: center; gap: 2px; padding-left: 6px; border-left: 1px solid rgba(255,255,255,.12); }
-	.dm-dstack { display: flex; width: 52px; height: 56px; align-items: flex-start; }
-	.dm-dc { width: 40px; margin-left: -24px; padding: 0; background: none; border: none; cursor: zoom-in; border-radius: 4px; overflow: hidden; box-shadow: 0 2px 5px rgba(0,0,0,.6); }
+	/* token tray */
+	.tokwrap { position: relative; flex: none; }
+	.tokbtn { display: flex; align-items: center; gap: 5px; padding: 5px 9px; border-radius: 9px; cursor: pointer; color: #e8dcc0; font-size: .74rem; font-weight: 700;
+		background: rgba(199,154,78,.14); border: 1px solid rgba(199,154,78,.4); }
+	.tokbtn.on { background: rgba(199,154,78,.28); }
+	.tokbtn img { width: 1.3rem; height: 1.3rem; object-fit: contain; }
+	.tokdrawer { position: absolute; left: 0; bottom: calc(100% + 8px); z-index: 14; width: 232px; padding: 9px; border-radius: 12px;
+		background: rgba(11,16,26,.96); border: 1px solid rgba(199,154,78,.5); box-shadow: 0 16px 40px rgba(0,0,0,.6); }
+	.tokgrid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
+	.tok { padding: 4px; border-radius: 8px; cursor: pointer; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.1); display: grid; place-items: center; }
+	.tok:hover { background: rgba(199,154,78,.2); border-color: rgba(199,154,78,.5); }
+	.tok img { width: 100%; aspect-ratio: 1; object-fit: contain; }
+	.tok.emblem { background: rgba(199,154,78,.16); border-color: rgba(199,154,78,.45); }
+	.tokfoot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
+	.tokhint { font-size: .58rem; color: #8b9bb0; }
+
+	.dmine { flex: none; display: flex; align-items: center; }
+	.dm-turns { display: flex; gap: 5px; align-items: center; }
+	/* each slot: a faint Roman numeral behind, the card (if any) on top */
+	.dm-slot { position: relative; width: 42px; height: 56px; display: grid; place-items: center; }
+	.dm-slot.disc { width: 50px; margin-left: 6px; padding-left: 8px; border-left: 1px solid rgba(255,255,255,.12); }
+	.dm-slot .roman { position: absolute; inset: 0; display: grid; place-items: center; font-family: 'Modesto Poster', serif; font-size: 1.6rem; color: rgba(255,255,255,.09); pointer-events: none; }
+	.dm-slot .roman.sm { font-size: .8rem; letter-spacing: .06em; }
+	.dm-on { position: relative; z-index: 1; width: 100%; }
+	.dm-dstack { display: flex; align-items: flex-start; }
+	.dm-dc { width: 38px; margin-left: -22px; padding: 0; background: none; border: none; cursor: pointer; border-radius: 4px; overflow: hidden; box-shadow: 0 2px 5px rgba(0,0,0,.6); }
 	.dm-dc:first-child { margin-left: 0; }
 	.dm-dc :global(canvas) { display: block; width: 100%; border-radius: 4px; }
-	.dm-empty { color: #55637a; font-size: .8rem; }
 </style>
