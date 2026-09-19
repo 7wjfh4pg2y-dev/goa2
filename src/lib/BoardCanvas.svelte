@@ -13,7 +13,7 @@
 	export let interactive = true;
 	export let rotation = 0; // base orientation in degrees (e.g. 180 so your base sits at the bottom)
 
-	export let pieces: Array<{ id: string; hex: string; team: string; role?: string; label?: string; color?: string }> = [];
+	export let pieces: Array<{ id: string; hex: string; team: string; role?: string; label?: string; color?: string; token?: string }> = [];
 	export let onMovePiece: ((id: string, hex: string) => void) | null = null;
 
 	const SQRT3 = Math.sqrt(3);
@@ -22,6 +22,8 @@
 	const minionTokens = import.meta.glob('./images/minion_tokens/*.png', { eager: true, import: 'default' }) as Record<string, string>;
 	const minionToken = (team: string, role?: string) =>
 		minionTokens[`./images/minion_tokens/${team === 'blue' ? 'blue' : 'orange'}_${role ?? 'melee'}.png`];
+	const tokenArt = import.meta.glob('./cards/images/*.png', { eager: true, import: 'default' }) as Record<string, string>;
+	const tokenImg = (name?: string) => (name ? tokenArt[`./cards/images/${name}.png`] : undefined);
 
 	$: cells = map.cells ?? {};
 	$: meta = map.meta ?? {};
@@ -261,7 +263,10 @@
 					{#if sel}
 						<circle class="selring" cx={c.x} cy={c.y} r={size * 0.82} fill="none" stroke="#fde047" stroke-width={size * 0.1} stroke-dasharray="{size * 0.32} {size * 0.22}" pointer-events="none" />
 					{/if}
-					{#if p.role}
+					{#if p.token}
+						<circle cx={c.x} cy={c.y} r={size * 0.6} fill="rgba(9,13,22,.82)" stroke={sel ? '#fde047' : pieceColor(p.team)} stroke-width={size * 0.12} />
+						<image href={tokenImg(p.token)} x={c.x - size * 0.5} y={c.y - size * 0.5} width={size} height={size} preserveAspectRatio="xMidYMid meet" pointer-events="none" />
+					{:else if p.role}
 						<image href={minionToken(p.team, p.role)} x={c.x - size * 0.7} y={c.y - size * 0.7} width={size * 1.4} height={size * 1.4} preserveAspectRatio="xMidYMid meet" pointer-events="none" />
 						<circle cx={c.x} cy={c.y} r={size * 0.66} fill="transparent" stroke={sel ? '#fde047' : pieceColor(p.team)} stroke-width={size * 0.14} />
 					{:else}
