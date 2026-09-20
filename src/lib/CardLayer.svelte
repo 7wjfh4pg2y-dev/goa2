@@ -174,6 +174,8 @@
 
 	// ── token / marker tray (heroes with the TOKENS trait) ────────────────────
 	const TOKENS = ['token_barrier', 'token_blast', 'token_dud', 'token_familiar', 'token_glitch', 'token_grenade', 'token_ice', 'token_illusion', 'token_magma', 'token_rock', 'token_smoke_bomb', 'token_totem', 'token_tree', 'token_zombie'];
+	// shared circular markers any hero may need (e.g. Tigerclaw poison, Bain bounty, Snorri runes)
+	const MARKERS = ['marker_poison', 'marker_bounty', 'rune_anvil_marker', 'rune_axe_marker', 'rune_bird_marker', 'rune_horn_marker'];
 	let tokenDrawer = false;
 	$: heroEmblem = mine ? icon(`trait_tokens_${mine.hero}`) : undefined; // set ⇒ this hero uses tokens
 	$: mySeat = seated.find((p) => p.id === clientId)?.seat ?? -1;
@@ -499,18 +501,27 @@
 				</span>
 			</button>
 
-			<!-- token / marker tray (shown for all; disabled if this hero has none) -->
+			<!-- token / marker tray (shown for all: signature tokens + shared markers) -->
 			<div class="tokwrap">
-				<button class="tokbtn" class:on={tokenDrawer} class:dis={!heroEmblem} disabled={!heroEmblem}
-					on:click={() => (tokenDrawer = !tokenDrawer)} title={heroEmblem ? 'Place tokens on the board' : 'This hero has no tokens'}>
-					<img src={heroEmblem ?? icon('token_totem')} alt="" /><span>Tokens{#if myTokenCount} · {myTokenCount}{/if}</span>
+				<button class="tokbtn" class:on={tokenDrawer}
+					on:click={() => (tokenDrawer = !tokenDrawer)} title="Place tokens & markers on the board">
+					<img src={heroEmblem ?? icon('marker_poison')} alt="" /><span>Tokens{#if myTokenCount} · {myTokenCount}{/if}</span>
 				</button>
-				{#if tokenDrawer && heroEmblem}
+				{#if tokenDrawer}
 					<div class="tokdrawer">
+						{#if heroEmblem}
+							<div class="toklbl">{heroName(mine.hero)} tokens</div>
+							<div class="tokgrid">
+								<button class="tok emblem" on:click={() => placeToken(`trait_tokens_${mine.hero}`)} title="Signature token"><img src={heroEmblem} alt="" /></button>
+								{#each TOKENS as tk}
+									<button class="tok" on:click={() => placeToken(tk)} title={tk.replace('token_', '').replace('_', ' ')}><img src={icon(tk)} alt="" /></button>
+								{/each}
+							</div>
+						{/if}
+						<div class="toklbl">Markers</div>
 						<div class="tokgrid">
-							<button class="tok emblem" on:click={() => placeToken(`trait_tokens_${mine.hero}`)} title="Signature token"><img src={heroEmblem} alt="" /></button>
-							{#each TOKENS as tk}
-								<button class="tok" on:click={() => placeToken(tk)} title={tk.replace('token_', '').replace('_', ' ')}><img src={icon(tk)} alt="" /></button>
+							{#each MARKERS as mk}
+								<button class="tok marker" on:click={() => placeToken(mk)} title={mk.replace('marker_', '').replace('rune_', 'rune ').replace('_marker', '').replace('_', ' ')}><img src={icon(mk)} alt="" /></button>
 							{/each}
 						</div>
 						<div class="tokfoot">
@@ -853,15 +864,17 @@
 	.tokbtn { display: flex; align-items: center; gap: 5px; padding: 5px 9px; border-radius: 9px; cursor: pointer; color: #e8dcc0; font-size: .74rem; font-weight: 700;
 		background: rgba(199,154,78,.14); border: 1px solid rgba(199,154,78,.4); }
 	.tokbtn.on { background: rgba(199,154,78,.28); }
-	.tokbtn.dis { opacity: .4; cursor: not-allowed; filter: grayscale(1); }
 	.tokbtn img { width: 1.3rem; height: 1.3rem; object-fit: contain; }
 	.tokdrawer { position: absolute; left: 0; bottom: calc(100% + 8px); z-index: 14; width: 232px; padding: 9px; border-radius: 12px;
 		background: rgba(11,16,26,.96); border: 1px solid rgba(199,154,78,.5); box-shadow: 0 16px 40px rgba(0,0,0,.6); }
+	.toklbl { font-size: .56rem; letter-spacing: .1em; text-transform: uppercase; font-weight: 800; color: #b8a06a; margin: 2px 2px 5px; }
+	.toklbl + .tokgrid { margin-bottom: 8px; }
 	.tokgrid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
 	.tok { padding: 4px; border-radius: 8px; cursor: pointer; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.1); display: grid; place-items: center; }
 	.tok:hover { background: rgba(199,154,78,.2); border-color: rgba(199,154,78,.5); }
 	.tok img { width: 100%; aspect-ratio: 1; object-fit: contain; }
 	.tok.emblem { background: rgba(199,154,78,.16); border-color: rgba(199,154,78,.45); }
+	.tok.marker img { border-radius: 50%; }
 	.tokfoot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
 	.tokhint { font-size: .58rem; color: #8b9bb0; }
 
