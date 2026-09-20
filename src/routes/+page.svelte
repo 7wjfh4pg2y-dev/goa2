@@ -52,7 +52,7 @@
 	let customWaves = 3;
 	let customLife = 6;
 	let draftSystem: DraftSystem = 'all-pick';
-	let draftStars = [1, 2, 3, 4];
+	let draftStars = [1, 2, 3]; // 4★ heroes disabled for now (extra dev work pending)
 	let maps: MapChoice[] = [];
 	let mapId = '';
 
@@ -150,6 +150,7 @@
 	$: previewLife = ruleset === 'custom' ? customLife : lifeFor(ruleset, playerCount);
 	// draft pool sizing: eligible heroes must cover the chosen system for the seats
 	function toggleStar(s: number) {
+		if (s === 4) return; // 4★ heroes are disabled for now
 		draftStars = draftStars.includes(s) ? draftStars.filter((x) => x !== s) : [...draftStars, s].sort();
 	}
 	$: eligibleCount = HEROES.filter((h) => draftStars.includes(h.stars)).length;
@@ -590,7 +591,8 @@
 							<span>Hero complexity</span>
 							<div class="chips">
 								{#each [1, 2, 3, 4] as s (s)}
-									<button class="chip star" class:on={draftStars.includes(s)} on:click={() => toggleStar(s)}>{'★'.repeat(s)}</button>
+									<button class="chip star" class:on={draftStars.includes(s)} class:locked={s === 4} disabled={s === 4}
+										title={s === 4 ? '4★ heroes coming soon' : ''} on:click={() => toggleStar(s)}>{'★'.repeat(s)}{#if s === 4}<span class="soon">soon</span>{/if}</button>
 								{/each}
 							</div>
 						</div>
@@ -812,6 +814,8 @@
 	.hint.warn { color: #fca5a5; }
 	.draftfld { border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 12px; margin-top: 1px; }
 	.chip.star { letter-spacing: 1px; }
+	.chip.locked { opacity: 0.4; cursor: not-allowed; filter: grayscale(1); position: relative; }
+	.chip.locked .soon { margin-left: 5px; font-size: 0.6rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: #cbd5e1; background: rgba(255, 255, 255, 0.12); border-radius: 5px; padding: 1px 5px; }
 	.joincols { display: flex; flex-direction: column; gap: 14px; }
 	.joincols.two { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; align-items: start; }
 	.jcol { display: flex; flex-direction: column; gap: 13px; min-width: 0; }

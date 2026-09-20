@@ -223,11 +223,13 @@
 		<div class="rightcol">
 			<div class="browse">
 				{#each HEROES_ALPHA as h (h.id)}
-					<button class="hero" class:on={sel === h.id} class:gone={unavailable(h.id)}
+					<button class="hero" class:on={sel === h.id} class:gone={unavailable(h.id)} class:locked={h.stars === 4}
 						class:dim={d.system === 'single-draft' && myTurn && inPool.has(h.id) && !d.offer.includes(h.id) && !blocked.has(h.id)}
-						disabled={!inPool.has(h.id)}
+						disabled={!inPool.has(h.id) || h.stars === 4}
+						title={h.stars === 4 ? `${h.name} — 4★ heroes coming soon` : h.name}
 						on:click={() => (sel = h.id)}>
 						<img src={heroAvatar(h.id)} alt={h.name} />
+						{#if h.stars === 4}<span class="soon">soon</span>{/if}
 					</button>
 				{/each}
 			</div>
@@ -319,6 +321,10 @@
 	.hero.on { box-shadow: 0 0 0 2px #f59e0b; border-color: transparent; }
 	.hero.gone { filter: grayscale(1) brightness(0.4); pointer-events: none; }
 	.hero.dim { filter: brightness(0.55); }
+	.hero { position: relative; }
+	.hero.locked { filter: grayscale(1) brightness(0.42); pointer-events: none; }
+	.hero.locked img { opacity: 0.9; }
+	.hero .soon { position: absolute; left: 0; right: 0; bottom: 0; font-size: 0.5rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; text-align: center; color: #f1f5f9; background: rgba(0,0,0,0.72); padding: 1px 0; }
 	.lockin { width: 100%; border: 1px solid rgba(255,255,255,0.32); color: #fff; border-radius: 12px; padding: 0.85rem 1rem; font-weight: 700; font-size: 1.05rem; cursor: pointer; box-shadow: 0 8px 24px rgba(0,0,0,0.45); }
 	.lockin:disabled { opacity: 0.45; cursor: not-allowed; }
 
