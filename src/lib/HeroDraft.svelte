@@ -101,10 +101,9 @@
 	let now = Date.now();
 	let selfLocked = false; // guard so the grace auto-lock only fires once
 	$: isAllPick = !!d && d.order.length === 0 && d.system === 'all-pick';
-	// my time is up but I haven't locked in → grace/overtime: selection is frozen
+	// my time is up but I haven't locked in → grace/overtime: extra time on a red
+	// clock; you can still switch heroes, and whatever you're on locks in at 0.
 	$: overtime = isAllPick && !!d && d.deadline > 0 && !complete && !myPick && now >= d.deadline;
-	// during grace you can't switch heroes any more — locked onto your current pick
-	$: locked = overtime;
 	$: secsLeft = (() => {
 		if (!d || !d.deadline || complete) return null;
 		const dl = isAllPick && !myPick && now >= d.deadline ? d.deadline + GRACE_MS : d.deadline;
@@ -240,13 +239,13 @@
 		</div>
 
 		<div class="rightcol">
-			<div class="browse" class:lockedgrid={locked}>
+			<div class="browse">
 				{#each HEROES_ALPHA as h (h.id)}
 					<button class="hero" class:on={sel === h.id} class:gone={unavailable(h.id)} class:locked={h.stars === 4}
 						class:dim={d.system === 'single-draft' && myTurn && inPool.has(h.id) && !d.offer.includes(h.id) && !blocked.has(h.id)}
-						disabled={!inPool.has(h.id) || h.stars === 4 || (locked && sel !== h.id)}
+						disabled={!inPool.has(h.id) || h.stars === 4}
 						title={h.stars === 4 ? `${h.name} — 4★ heroes coming soon` : h.name}
-						on:click={() => { if (!locked) sel = h.id; }}>
+						on:click={() => (sel = h.id)}>
 						<img src={heroAvatar(h.id)} alt={h.name} />
 						{#if h.stars === 4}<span class="soon">soon</span>{/if}
 					</button>
@@ -348,9 +347,6 @@
 	.hero img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
 	.hero:hover { transform: scale(1.06); }
 	.hero.on { box-shadow: 0 0 0 2px #f59e0b; border-color: transparent; }
-	/* grace lock-on: everything but your pick dims and can't be clicked */
-	.browse.lockedgrid .hero:not(.on) { filter: grayscale(0.7) brightness(0.42); }
-	.browse.lockedgrid .hero.on { box-shadow: 0 0 0 3px #ef4444, 0 0 16px rgba(239,68,68,0.6); }
 	.hero.gone { filter: grayscale(1) brightness(0.4); pointer-events: none; }
 	.hero.dim { filter: brightness(0.55); }
 	.hero { position: relative; }
