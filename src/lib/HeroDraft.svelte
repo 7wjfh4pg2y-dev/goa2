@@ -180,7 +180,7 @@
 
 {#if d && selHero}
 <div class="draft">
-	<button class="leave" on:click={onLeave} title="Leave">✕</button>
+	<button class="leave" on:click={onLeave} title="Leave the draft"><span class="lv-x">←</span> Leave</button>
 	<div class="stage">
 		<img class="splash" src={heroSplash(sel)} alt={selHero.name} />
 		<div class="scrim"></div>
@@ -261,8 +261,11 @@
 
 <style>
 	.draft { min-height: 100vh; display: flex; flex-direction: column; color: #f1f5f9; }
-	.leave { position: absolute; top: 14px; left: 16px; z-index: 5; width: 34px; height: 34px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.4); color: #e5e7eb; cursor: pointer; font-size: 0.9rem; }
-	.leave:hover { background: rgba(0,0,0,0.6); }
+	.leave { position: absolute; top: 16px; left: 18px; z-index: 6; display: inline-flex; align-items: center; gap: 7px;
+		padding: 8px 15px; border-radius: 999px; border: 1px solid rgba(239,68,68,0.5); background: rgba(40,12,14,0.6); backdrop-filter: blur(6px);
+		color: #fca5a5; cursor: pointer; font-weight: 700; font-size: 0.86rem; letter-spacing: 0.02em; box-shadow: 0 6px 18px rgba(0,0,0,0.45); }
+	.leave:hover { background: rgba(120,28,32,0.72); color: #fecaca; border-color: rgba(239,68,68,0.75); }
+	.leave .lv-x { font-size: 1rem; line-height: 1; }
 	.stage { position: relative; flex: 1; overflow: hidden; }
 	.splash { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 28%; }
 	.scrim { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(9,13,22,0.94) 0%, rgba(9,13,22,0.6) 40%, rgba(9,13,22,0.12) 66%, rgba(9,13,22,0.35) 100%); }
@@ -292,7 +295,7 @@
 	.dot { width: 0.6rem; height: 0.6rem; border-radius: 50%; background: #ef7d22; box-shadow: 0 0 10px #ef7d22; }
 	.t-blue .dot { background: #2f7fe6; box-shadow: 0 0 10px #2f7fe6; }
 
-	.stats { position: absolute; top: 26px; left: 34px; display: flex; flex-direction: column; gap: 9px; }
+	.stats { position: absolute; top: 70px; left: 34px; display: flex; flex-direction: column; gap: 9px; }
 	.cx { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
 	.star { width: 26px; height: 26px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.6)); }
 	.pack { font-family: 'Modesto Poster', serif; letter-spacing: 0.04em; font-size: 1.1rem; text-shadow: 0 2px 6px rgba(0,0,0,0.7); }
