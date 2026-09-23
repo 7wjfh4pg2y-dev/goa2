@@ -13,7 +13,7 @@
 	export let interactive = true;
 	export let rotation = 0; // base orientation in degrees (e.g. 180 so your base sits at the bottom)
 
-	export let pieces: Array<{ id: string; hex: string; team: string; role?: string; label?: string; color?: string; token?: string }> = [];
+	export let pieces: Array<{ id: string; hex: string; team: string; role?: string; label?: string; color?: string; token?: string; sym?: string }> = [];
 	export let onMovePiece: ((id: string, hex: string) => void) | null = null;
 	export let onSelect: (id: string | null) => void = () => {};
 	// hexes that hold a team's throne (gear/star) — drawn on top of the base tile
@@ -347,8 +347,11 @@
 							transform={minionRot(p, c.x, c.y)} />
 						<circle cx={c.x} cy={c.y} r={size * 0.66} fill="transparent" stroke={sel ? '#fde047' : pieceColor(p.team)} stroke-width={size * 0.14} />
 					{:else}
-						<circle cx={c.x} cy={c.y} r={size * 0.62} fill={p.color ?? pieceColor(p.team)} stroke={sel ? '#fde047' : pieceColor(p.team)} stroke-width={size * 0.16} />
-						{#if p.label}
+						<!-- hero token: team-colour disc, hero symbol, player-colour outline -->
+						<circle cx={c.x} cy={c.y} r={size * 0.62} fill={pieceColor(p.team)} stroke={sel ? '#fde047' : (p.color ?? pieceColor(p.team))} stroke-width={size * 0.16} />
+						{#if p.sym}
+							<image href={p.sym} x={c.x - size * 0.46} y={c.y - size * 0.46} width={size * 0.92} height={size * 0.92} preserveAspectRatio="xMidYMid meet" pointer-events="none" style="filter:drop-shadow(0 1px 2px rgba(0,0,0,.6))" />
+						{:else if p.label}
 							<text x={c.x} y={c.y} text-anchor="middle" dominant-baseline="central" font-size={size * 0.72} font-weight="800" fill="#0b1220" stroke="rgba(255,255,255,.6)" stroke-width={size * 0.02} pointer-events="none">{p.label}</text>
 						{/if}
 					{/if}
