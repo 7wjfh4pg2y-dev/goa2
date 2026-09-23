@@ -567,7 +567,7 @@
 							{/if}
 							<div class="fld">
 								<span>Players (seats)</span>
-								<div class="chips">{#each [4, 6, 8, 10] as n (n)}<button class="chip" class:on={playerCount === n} on:click={() => (playerCount = n)}>{n}</button>{/each}</div>
+								<div class="chips">{#each [4, 6, 8, 10] as n (n)}<button class="chip" class:on={playerCount === n} class:locked={n > 6} disabled={n > 6} title={n > 6 ? 'Coming soon' : ''} on:click={() => (playerCount = n)}>{n}{#if n > 6}<span class="soon">soon</span>{/if}</button>{/each}</div>
 							</div>
 						</div>
 						<div class="col">
@@ -583,7 +583,7 @@
 							<span>Hero draft</span>
 							<div class="chips">
 								{#each DRAFT_SYSTEMS as sys (sys)}
-									<button class="chip" class:on={draftSystem === sys} on:click={() => (draftSystem = sys)}>{DRAFT_LABELS[sys]}</button>
+									<button class="chip" class:on={draftSystem === sys} class:locked={sys !== 'all-pick'} disabled={sys !== 'all-pick'} title={sys !== 'all-pick' ? 'Coming soon' : ''} on:click={() => (draftSystem = sys)}>{DRAFT_LABELS[sys]}{#if sys !== 'all-pick'}<span class="soon">soon</span>{/if}</button>
 								{/each}
 							</div>
 						</div>
