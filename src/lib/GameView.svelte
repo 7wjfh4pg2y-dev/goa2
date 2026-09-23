@@ -3,7 +3,7 @@
 	import type { Readable } from 'svelte/store';
 	import BoardCanvas from '$lib/BoardCanvas.svelte';
 	import CardLayer from '$lib/CardLayer.svelte';
-	import { heroById } from '$lib/heroes';
+	import { heroById, heroLogo } from '$lib/heroes';
 	import { zoneName } from '$lib/zones';
 	import {
 		colorHex, movePiece, prevTurn, teamForSeat, throneHex, spawnMinion,
@@ -64,6 +64,7 @@
 
 	$: boardPieces = Object.values($ms.pieces).map((p) => ({
 		id: p.id, hex: p.hex, team: p.team, role: p.role, token: p.token,
+		sym: p.hero ? heroLogo(p.hero) : undefined,
 		label: p.hero ? (heroById(p.hero)?.name?.[0]?.toUpperCase() ?? '?') : (p.label ?? ''),
 		color: p.color ? colorHex(p.color) : undefined
 	}));
