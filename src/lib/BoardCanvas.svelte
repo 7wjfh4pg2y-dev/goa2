@@ -204,18 +204,37 @@
 	let selected: string | null = null; // token picked up via tap (click-to-move)
 	let lastSel: string | null | undefined = undefined;
 	$: if (selected !== lastSel) { lastSel = selected; onSelect(selected); }
+	// ---- two-finger pinch-to-zoom (touch) ----
+	const activePointers = new Map<number, { x: number; y: number }>();
+	let pinch: { dist: number; scale0: number } | null = null;
+	const twoDist = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.hypot(a.x - b.x, a.y - b.y);
 	function down(e: PointerEvent) {
 		if (!interactive) return;
 		e.preventDefault(); // stop native text/element selection + image drag
+		activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+		try { wrapEl.setPointerCapture(e.pointerId); } catch {}
+		if (activePointers.size >= 2) {
+			// second finger down → start a pinch, cancel any pan/drag in progress
+			const [a, b] = [...activePointers.values()];
+			pinch = { dist: twoDist(a, b) || 1, scale0: scale };
+			panning = false; moved = true; dragId = null; pressId = null;
+			return;
+		}
 		// derive the pressed token fresh from the hit target — never a stale id
 		const el = (e.target as Element)?.closest?.('[data-piece]');
 		pressId = onMovePiece && el ? el.getAttribute('data-piece') : null;
 		panning = true; moved = false; dragId = null;
 		p0 = toUser(e.clientX, e.clientY); pan0 = { x: panX, y: panY };
 		downC = { x: e.clientX, y: e.clientY };
-		wrapEl.setPointerCapture(e.pointerId);
 	}
 	function move(e: PointerEvent) {
+		if (activePointers.has(e.pointerId)) activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+		// pinch: zoom around the midpoint of the two fingers
+		if (pinch && activePointers.size >= 2) {
+			const [a, b] = [...activePointers.values()];
+			zoomAt(pinch.scale0 * (twoDist(a, b) / pinch.dist), (a.x + b.x) / 2, (a.y + b.y) / 2);
+			return;
+		}
 		if (!panning && !dragId) return;
 		if (!moved) {
 			if (Math.hypot(e.clientX - downC.x, e.clientY - downC.y) < DRAG_THRESHOLD) return;
@@ -233,6 +252,12 @@
 	}
 	function up(e: PointerEvent) {
 		try { wrapEl.releasePointerCapture(e.pointerId); } catch {}
+		activePointers.delete(e.pointerId);
+		if (pinch) { // finishing (or stepping out of) a pinch — don't treat as pan/tap
+			if (activePointers.size < 2) pinch = null;
+			panning = false; pressId = null; moved = false;
+			return;
+		}
 		if (dragId) { // dropped a carried token
 			const pt = toChild(e.clientX, e.clientY);
 			const hex = nearestHex(pt.x, pt.y);
