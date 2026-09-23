@@ -97,8 +97,19 @@
 	$: toastHero = toastAction ? heroById(toastAction.hero) : undefined;
 
 	// ---- resilience: countdown + host watchdog --------------------------------
+	const GRACE_MS = 10000; // all-pick: extra locked window after the clock runs out
 	let now = Date.now();
-	$: secsLeft = d && d.deadline && !complete ? Math.max(0, Math.ceil((d.deadline - now) / 1000)) : null;
+	let selfLocked = false; // guard so the grace auto-lock only fires once
+	$: isAllPick = !!d && d.order.length === 0 && d.system === 'all-pick';
+	// my time is up but I haven't locked in → grace/overtime: selection is frozen
+	$: overtime = isAllPick && !!d && d.deadline > 0 && !complete && !myPick && now >= d.deadline;
+	// during grace you can't switch heroes any more — locked onto your current pick
+	$: locked = overtime;
+	$: secsLeft = (() => {
+		if (!d || !d.deadline || complete) return null;
+		const dl = isAllPick && !myPick && now >= d.deadline ? d.deadline + GRACE_MS : d.deadline;
+		return Math.max(0, Math.ceil((dl - now) / 1000));
+	})();
 	$: countdown = secsLeft == null ? '' : `${Math.floor(secsLeft / 60)}:${String(secsLeft % 60).padStart(2, '0')}`;
 
 	const randomFrom = (dd: typeof d): string => {
@@ -133,7 +144,13 @@
 	let absentAt = 0;
 	function watchdog() {
 		now = Date.now();
-		if (!iAmHost || !d || complete) { absentActor = ''; return; }
+		if (!d || complete) { absentActor = ''; return; }
+		// client-side: when MY grace window ends, lock in whatever hero I'm on
+		if (isAllPick && d.deadline > 0 && !myPick && !selfLocked && now >= d.deadline + GRACE_MS) {
+			selfLocked = true;
+			if (sel && canAct(sel)) act();
+		}
+		if (!iAmHost) { absentActor = ''; return; }
 		const timedOut = d.deadline > 0 && now >= d.deadline;
 		if (d.order.length) {
 			const actor = activeActor;
@@ -142,8 +159,10 @@
 			else if (actor && absentActor !== actor) { absentActor = actor; absentAt = now; }
 			const dropped = !present && !!actor && now - absentAt > 8000;
 			if (timedOut || dropped) { absentActor = ''; autoAdvance(); }
-		} else if (timedOut) {
-			fillMissing(); // all-pick phase timer elapsed
+		} else if (now >= d.deadline + GRACE_MS + 2000) {
+			// safety net: after the grace window, the host fills anyone still missing
+			// (disconnected players who couldn't self-lock) with a random hero
+			fillMissing();
 		}
 	}
 	let ticker: ReturnType<typeof setInterval>;
@@ -184,7 +203,7 @@
 	<div class="stage">
 		<img class="splash" src={heroSplash(sel)} alt={selHero.name} />
 		<div class="scrim"></div>
-		<div class="turn t-{bannerTeam ?? 'orange'}"><span class="dot"></span><span class="btxt">{banner}</span>{#if countdown}<span class="sep">—</span><span class="clock" class:urgent={secsLeft != null && secsLeft <= 10}>{countdown}</span>{/if}{#if !complete && d.order.length}<span class="mode">· {DRAFT_LABELS[d.system]}</span>{/if}</div>
+		<div class="turn t-{bannerTeam ?? 'orange'}" class:overtime><span class="dot"></span><span class="btxt">{overtime ? 'Lock in!' : banner}</span>{#if countdown}<span class="sep">—</span><span class="clock" class:urgent={secsLeft != null && secsLeft <= 10}>{countdown}</span>{/if}{#if !complete && d.order.length}<span class="mode">· {DRAFT_LABELS[d.system]}</span>{/if}</div>
 		{#if toastAction && toastHero}
 			<div class="toast t-{toastAction.team}" class:ban={toastAction.type === 'ban'}>
 				<div class="tav"><img src={heroAvatar(toastAction.hero)} alt="" />{#if toastAction.type === 'ban'}<span class="tban">✕</span>{/if}</div>
@@ -221,13 +240,13 @@
 		</div>
 
 		<div class="rightcol">
-			<div class="browse">
+			<div class="browse" class:lockedgrid={locked}>
 				{#each HEROES_ALPHA as h (h.id)}
 					<button class="hero" class:on={sel === h.id} class:gone={unavailable(h.id)} class:locked={h.stars === 4}
 						class:dim={d.system === 'single-draft' && myTurn && inPool.has(h.id) && !d.offer.includes(h.id) && !blocked.has(h.id)}
-						disabled={!inPool.has(h.id) || h.stars === 4}
+						disabled={!inPool.has(h.id) || h.stars === 4 || (locked && sel !== h.id)}
 						title={h.stars === 4 ? `${h.name} — 4★ heroes coming soon` : h.name}
-						on:click={() => (sel = h.id)}>
+						on:click={() => { if (!locked) sel = h.id; }}>
 						<img src={heroAvatar(h.id)} alt={h.name} />
 						{#if h.stars === 4}<span class="soon">soon</span>{/if}
 					</button>
@@ -275,6 +294,11 @@
 	.turn .mode { color: #94a3b8; font-weight: 600; font-size: 0.85rem; }
 	.turn .clock { font-family: 'Modesto Poster', serif; font-variant-numeric: tabular-nums; letter-spacing: 0.04em; font-size: 1.3rem; padding: 0 4px; }
 	.turn .clock.urgent { color: #fca5a5; box-shadow: 0 0 0 1px rgba(239,68,68,0.5); }
+	/* all-pick grace/overtime: the whole banner + timer go red and pulse */
+	.turn.overtime { border-color: rgba(239,68,68,0.7); background: rgba(60,10,12,0.6); box-shadow: 0 0 0 1px rgba(239,68,68,0.45), 0 0 22px rgba(239,68,68,0.5); animation: otpulse 1s ease-in-out infinite; }
+	.turn.overtime .btxt, .turn.overtime .sep, .turn.overtime .clock { color: #fca5a5; }
+	.turn.overtime .dot { background: #ef4444; box-shadow: 0 0 10px #ef4444; }
+	@keyframes otpulse { 0%, 100% { box-shadow: 0 0 0 1px rgba(239,68,68,0.4), 0 0 14px rgba(239,68,68,0.35); } 50% { box-shadow: 0 0 0 1px rgba(239,68,68,0.6), 0 0 26px rgba(239,68,68,0.6); } }
 	.toast { position: absolute; top: 62px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; background: linear-gradient(180deg, rgba(16,22,38,0.82), rgba(9,13,22,0.82)); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.12); border-left-width: 4px; border-radius: 12px; padding: 8px 16px 8px 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); white-space: nowrap; animation: toastIn 0.3s cubic-bezier(0.2,0.9,0.2,1); }
 	.toast.t-orange { border-left-color: #ef7d22; }
 	.toast.t-blue { border-left-color: #2f7fe6; }
@@ -324,6 +348,9 @@
 	.hero img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
 	.hero:hover { transform: scale(1.06); }
 	.hero.on { box-shadow: 0 0 0 2px #f59e0b; border-color: transparent; }
+	/* grace lock-on: everything but your pick dims and can't be clicked */
+	.browse.lockedgrid .hero:not(.on) { filter: grayscale(0.7) brightness(0.42); }
+	.browse.lockedgrid .hero.on { box-shadow: 0 0 0 3px #ef4444, 0 0 16px rgba(239,68,68,0.6); }
 	.hero.gone { filter: grayscale(1) brightness(0.4); pointer-events: none; }
 	.hero.dim { filter: brightness(0.55); }
 	.hero { position: relative; }
