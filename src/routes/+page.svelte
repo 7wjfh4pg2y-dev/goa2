@@ -20,6 +20,7 @@
 		teamForSeat,
 		buildDraft,
 		placeHeroes,
+		placeMinions,
 		draftPoolMin,
 		DRAFT_SYSTEMS,
 		DRAFT_LABELS,
@@ -178,7 +179,7 @@
 	// avoid a freeColor↔color reactive cycle)
 	function firstFreeColor(): string {
 		return PLAYER_COLORS.find((c) => !takenColors.has(c.id) && c.id !== color)?.id
-			?? PLAYER_COLORS.find((c) => !takenColors.has(c.id))?.id ?? 'red';
+			?? PLAYER_COLORS.find((c) => !takenColors.has(c.id))?.id ?? PLAYER_COLORS[0].id;
 	}
 	$: orangeSeats = Array.from({ length: half }, (_, i) => i);
 	$: blueSeats = Array.from({ length: seatCount - half }, (_, i) => half + i);
@@ -195,8 +196,7 @@
 	$: if (mode === 'game' && iAmHost && session && $state.draft && !Object.keys($state.pieces).length) {
 		const s = get(state);
 		session.update({
-			// minions are spawned manually from the HUD for now (auto-wave WIP)
-			pieces: { ...placeHeroes(s, get(players)) },
+			pieces: { ...placeMinions(s), ...placeHeroes(s, get(players)) },
 			cards: initCards(s.draft?.picks ?? {})
 		});
 	}
@@ -567,7 +567,7 @@
 							{/if}
 							<div class="fld">
 								<span>Players (seats)</span>
-								<div class="chips">{#each [4, 6, 8, 10] as n (n)}<button class="chip" class:on={playerCount === n} class:locked={n > 6} disabled={n > 6} title={n > 6 ? 'Coming soon' : ''} on:click={() => (playerCount = n)}>{n}{#if n > 6}<span class="soon">soon</span>{/if}</button>{/each}</div>
+								<div class="chips two">{#each [4, 6, 8, 10] as n (n)}<button class="chip" class:on={playerCount === n} class:locked={n > 6} disabled={n > 6} title={n > 6 ? 'Coming soon' : ''} on:click={() => (playerCount = n)}>{n}</button>{/each}</div>
 							</div>
 						</div>
 						<div class="col">
@@ -581,9 +581,9 @@
 					<div class="grid2 draftfld">
 						<div class="fld">
 							<span>Hero draft</span>
-							<div class="chips">
+							<div class="chips two">
 								{#each DRAFT_SYSTEMS as sys (sys)}
-									<button class="chip" class:on={draftSystem === sys} class:locked={sys !== 'all-pick'} disabled={sys !== 'all-pick'} title={sys !== 'all-pick' ? 'Coming soon' : ''} on:click={() => (draftSystem = sys)}>{DRAFT_LABELS[sys]}{#if sys !== 'all-pick'}<span class="soon">soon</span>{/if}</button>
+									<button class="chip" class:on={draftSystem === sys} class:locked={sys !== 'all-pick'} disabled={sys !== 'all-pick'} title={sys !== 'all-pick' ? 'Coming soon' : ''} on:click={() => (draftSystem = sys)}>{DRAFT_LABELS[sys]}</button>
 								{/each}
 							</div>
 						</div>
@@ -592,7 +592,7 @@
 							<div class="chips">
 								{#each [1, 2, 3, 4] as s (s)}
 									<button class="chip star" class:on={draftStars.includes(s)} class:locked={s === 4} disabled={s === 4}
-										title={s === 4 ? '4★ heroes coming soon' : ''} on:click={() => toggleStar(s)}>{'★'.repeat(s)}{#if s === 4}<span class="soon">soon</span>{/if}</button>
+										title={s === 4 ? '4★ heroes coming soon' : ''} on:click={() => toggleStar(s)}>{'★'.repeat(s)}</button>
 								{/each}
 							</div>
 						</div>
@@ -684,16 +684,16 @@
 									{#each orangeSeats as i (i)}
 										{@const p = bySeat[i]}
 										{#if p}
-											<div class="tseat" class:mine={p.id === session?.clientId}>
+											<div class="tseat" class:mine={p.id === session?.clientId} class:isready={p.ready}>
 												<div class="av" style="background:{colorHex(p.color)}">
 													{#if p.id === $state.host}<span class="crown" title="Host">♛</span>{/if}
+													{#if p.ready}<span class="rok" title="Ready">✓</span>{/if}
 													{#if iAmHost && p.id !== session?.clientId}<button class="kick" title="Kick" on:click={() => kick(p.id)}>✕</button>{/if}
 												</div>
 												<div class="hn">{p.name}{p.id === session?.clientId ? ' (you)' : ''}</div>
-												<div class="hr" class:ok={p.ready}>{p.ready ? 'ready' : '…'}</div>
 											</div>
 										{:else}
-											<button class="tseat open" class:swap={mySeat >= 0 && !ready} on:click={() => sit(i)} disabled={mySeat < 0 || ready}><div class="av av-empty"></div><div class="hn muted">open</div><div class="hr">&nbsp;</div></button>
+											<button class="tseat open" class:swap={mySeat >= 0 && !ready} on:click={() => sit(i)} disabled={mySeat < 0 || ready}><div class="av av-empty"></div><div class="hn muted">open</div></button>
 										{/if}
 									{/each}
 								</div>
@@ -704,16 +704,16 @@
 									{#each blueSeats as i (i)}
 										{@const p = bySeat[i]}
 										{#if p}
-											<div class="tseat" class:mine={p.id === session?.clientId}>
+											<div class="tseat" class:mine={p.id === session?.clientId} class:isready={p.ready}>
 												<div class="av" style="background:{colorHex(p.color)}">
 													{#if p.id === $state.host}<span class="crown" title="Host">♛</span>{/if}
+													{#if p.ready}<span class="rok" title="Ready">✓</span>{/if}
 													{#if iAmHost && p.id !== session?.clientId}<button class="kick" title="Kick" on:click={() => kick(p.id)}>✕</button>{/if}
 												</div>
 												<div class="hn">{p.name}{p.id === session?.clientId ? ' (you)' : ''}</div>
-												<div class="hr" class:ok={p.ready}>{p.ready ? 'ready' : '…'}</div>
 											</div>
 										{:else}
-											<button class="tseat open" class:swap={mySeat >= 0 && !ready} on:click={() => sit(i)} disabled={mySeat < 0 || ready}><div class="av av-empty"></div><div class="hn muted">open</div><div class="hr">&nbsp;</div></button>
+											<button class="tseat open" class:swap={mySeat >= 0 && !ready} on:click={() => sit(i)} disabled={mySeat < 0 || ready}><div class="av av-empty"></div><div class="hn muted">open</div></button>
 										{/if}
 									{/each}
 								</div>
@@ -723,11 +723,13 @@
 
 					<div class="fld">
 						<span>Your token {mySeat < 0 ? '· pick a colour, then flip in' : ready ? '· 🔒 locked in' : ''}</span>
-						<div class="swatches">
-							{#each PLAYER_COLORS as c (c.id)}
-								<button title={c.label} aria-label={c.label} class="sw" class:sel={(mySeat < 0 ? pick : color) === c.id} disabled={takenColors.has(c.id) || (mySeat >= 0 && ready)} style="--sc:{c.hex}" on:click={() => pickColor(c.id)}></button>
-							{/each}
-							{#if mySeat >= 0 && !ready}<button class="chip" on:click={spectate}>Spectate</button>{/if}
+						<div class="tokenrow">
+							<div class="swatches">
+								{#each PLAYER_COLORS as c (c.id)}
+									<button title={c.label} aria-label={c.label} class="sw" class:sel={(mySeat < 0 ? pick : color) === c.id} disabled={takenColors.has(c.id) || (mySeat >= 0 && ready)} style="--sc:{c.hex}" on:click={() => pickColor(c.id)}></button>
+								{/each}
+							</div>
+							{#if mySeat >= 0 && !ready}<button class="chip spec" on:click={spectate}>Spectate</button>{/if}
 						</div>
 						{#if spectators.length}
 							<p class="specs">Spectating: {#each spectators as sp, i (sp.id)}{sp.name}{sp.id === session?.clientId ? ' (you)' : ''}{#if iAmHost && sp.id !== session?.clientId}<button class="kickx" title="Kick" on:click={() => kick(sp.id)}>✕</button>{/if}{i < spectators.length - 1 ? ', ' : ''}{/each}</p>
@@ -805,6 +807,7 @@
 	.field { width: 100%; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.18); background: rgba(8, 12, 22, 0.6); padding: 0.55rem 0.7rem; color: white; }
 	.field.up { text-transform: uppercase; }
 	.chips, .swatches { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+	.chips.two { display: grid; grid-template-columns: 1fr 1fr; }
 	.chip { border: 1px solid rgba(255, 255, 255, 0.16); background: rgba(255, 255, 255, 0.05); color: #e5e7eb; border-radius: 999px; padding: 0.35rem 0.8rem; font-size: 0.85rem; cursor: pointer; }
 	.chip.on { background: var(--hl); border-color: rgba(255, 255, 255, 0.3); color: white; }
 	.sw { width: 1.5rem; height: 1.5rem; border-radius: 50%; background: var(--sc); border: 2px solid rgba(255, 255, 255, 0.25); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35); cursor: pointer; padding: 0; }
@@ -814,8 +817,7 @@
 	.hint.warn { color: #fca5a5; }
 	.draftfld { border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 12px; margin-top: 1px; }
 	.chip.star { letter-spacing: 1px; }
-	.chip.locked { opacity: 0.4; cursor: not-allowed; filter: grayscale(1); position: relative; }
-	.chip.locked .soon { margin-left: 5px; font-size: 0.6rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: #cbd5e1; background: rgba(255, 255, 255, 0.12); border-radius: 5px; padding: 1px 5px; }
+	.chip.locked { opacity: 0.4; cursor: not-allowed; filter: grayscale(1); }
 	.joincols { display: flex; flex-direction: column; gap: 14px; }
 	.joincols.two { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; align-items: start; }
 	.jcol { display: flex; flex-direction: column; gap: 13px; min-width: 0; }
@@ -899,8 +901,11 @@
 	.kick { position: absolute; top: -6px; right: -6px; border: none; background: #b91c1c; color: #fff; width: 18px; height: 18px; border-radius: 50%; cursor: pointer; line-height: 1; font-size: 11px; padding: 0; }
 	.hn { font-size: 0.8rem; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 	.hn.muted { color: #64748b; }
-	.hr { font-size: 0.62rem; text-transform: uppercase; color: #94a3b8; }
-	.hr.ok { color: #6ee7b7; }
+	.tseat.isready .av { box-shadow: 0 0 0 2px #16a34a, 0 0 8px rgba(22, 163, 74, 0.6); }
+	.rok { position: absolute; bottom: -5px; right: -5px; width: 15px; height: 15px; border-radius: 50%; background: #16a34a; color: #fff; font-size: 10px; font-weight: 900; display: grid; place-items: center; border: 1.5px solid #0b0f17; }
+	.tokenrow { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+	.tokenrow .swatches { flex: 1; }
+	.chip.spec { flex: none; align-self: flex-start; }
 	.specs { font-size: 0.75rem; color: #94a3b8; margin: 8px 0 0; }
 	.kickx { border: none; background: transparent; color: #fca5a5; cursor: pointer; font-size: 0.7rem; padding: 0 2px; }
 

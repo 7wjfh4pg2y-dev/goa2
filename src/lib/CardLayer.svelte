@@ -53,6 +53,17 @@
 	const isSkipped = (cs: PlayerCardState) => cs.pending == null && cs.hand.length === 0;
 	$: readyCount = seatedWithCards.filter((p) => isReady(cards[p.id])).length;
 	$: revealed = seatedWithCards.length > 0 && readyCount === seatedWithCards.length;
+	// end-of-round flow: turn 4 → Minion Battle (manual, no rules yet) → Next round
+	$: isFinalTurn = $ms.turn >= 4;
+	$: battlePhase = $ms.battlePhase ?? false;
+	function startBattle() { session.act('the minion battle begins', { battlePhase: true }); }
+
+	// "Round X" banner that pops for a few seconds when a new round starts
+	let roundBanner = 0;
+	let roundTimer: ReturnType<typeof setTimeout> | null = null;
+	let lastRound: number | null = null;
+	$: { const r = $ms.round; if (lastRound === null) lastRound = r; else if (r > lastRound) { lastRound = r; showRoundBanner(r); } else lastRound = r; }
+	function showRoundBanner(r: number) { if (roundTimer) clearTimeout(roundTimer); roundBanner = r; roundTimer = setTimeout(() => (roundBanner = 0), 3200); }
 
 	const allStats = (cs: PlayerCardState) => {
 		const deltas = statDeltas(cs);
@@ -170,7 +181,7 @@
 		];
 	}
 	function skipCurtain() { curtainTimers.forEach(clearTimeout); curtain = false; }
-	onDestroy(() => curtainTimers.forEach(clearTimeout));
+	onDestroy(() => { curtainTimers.forEach(clearTimeout); if (roundTimer) clearTimeout(roundTimer); });
 
 	// ── token / marker tray (heroes with the TOKENS trait) ────────────────────
 	const TOKENS = ['token_barrier', 'token_blast', 'token_dud', 'token_familiar', 'token_glitch', 'token_grenade', 'token_ice', 'token_illusion', 'token_magma', 'token_rock', 'token_smoke_bomb', 'token_totem', 'token_tree', 'token_zombie'];
@@ -265,7 +276,7 @@
 					<span class="mav" class:ult={cs.ultimate} style="--tint:{teamTint(ovPlayer)}"><img src={heroAvatar(oh)} alt="" /></span>
 					<div class="mtitle">
 						<div class="mnm">{ovPlayer.name} · {heroName(oh)}</div>
-						<div class="mtt">{heroTitle(oh)} · {teamName(ovPlayer)} · Lv {levelOf(cs)}</div>
+						<div class="mtt" style="color:{teamTint(ovPlayer)}">{heroTitle(oh)} · {teamName(ovPlayer)} · Lv {levelOf(cs)}</div>
 					</div>
 					{#if cs.ultimate && ultimateIndex(oh) >= 0}
 						<button class="ultchip" on:click={() => examineCard(oh, ultimateIndex(oh))} title="Ultimate — click to enlarge">
@@ -290,8 +301,11 @@
 					{#each [0, 1, 2, 3] as t}
 						<div class="tbox" class:current={t === turnIdx} style="--tint:{teamTint(ovPlayer)}">
 							<div class="tlabel">Turn {t + 1}</div>
-							<TurnSlot heroId={oh} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} examinable
-								on:click={() => { const i = cs.turns[t] ?? (t === turnIdx && revealed ? cs.pending : null); if (i != null && i !== PASS) examine = { hid: oh, idx: i }; }} />
+							<div class="tslot">
+								<span class="tbroman">{ROMAN[t]}</span>
+								<TurnSlot heroId={oh} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} examinable
+									on:click={() => { const i = cs.turns[t] ?? (t === turnIdx && revealed ? cs.pending : null); if (i != null && i !== PASS) examine = { hid: oh, idx: i }; }} />
+							</div>
 						</div>
 					{/each}
 				</div>
@@ -541,7 +555,13 @@
 					<span class="ds-count">{deckCards(mine).length}</span>
 				</button>
 				{#if revealed}
-					<button class="act primary sm" on:click={onAdvanceTurn}>Next turn →</button>
+					{#if !isFinalTurn}
+						<button class="act primary sm" on:click={onAdvanceTurn}>Next turn →</button>
+					{:else if !battlePhase}
+						<button class="act primary sm" on:click={startBattle}>Minion Battle</button>
+					{:else}
+						<button class="act primary sm" on:click={onAdvanceTurn}>Next round →</button>
+					{/if}
 				{:else if myReady}
 					<button class="act sm" on:click={takeBack}>Take back</button>
 				{/if}
@@ -581,6 +601,11 @@
 				</div>
 			</div>
 		</div>
+	{/if}
+
+	<!-- ───────── round-start banner ───────── -->
+	{#if roundBanner}
+		<div class="roundbanner"><span class="rb-sub">Round</span><span class="rb-num">{roundBanner}</span></div>
 	{/if}
 
 	<!-- ───────── dramatic simultaneous reveal ───────── -->
@@ -670,7 +695,7 @@
 	.mav img { width: 100%; height: 100%; object-fit: cover; }
 	.mav.ult { border-color: #b482f0; box-shadow: 0 0 11px rgba(160,110,235,.7); }
 	.mnm { font-family: 'Modesto Poster', serif; font-size: 1.25rem; color: #f6ead2; }
-	.mtt { font-size: .72rem; color: #b8a06a; }
+	.mtt { font-family: 'Modesto Poster', serif; font-size: .72rem; letter-spacing: .03em; color: #b8a06a; }
 	/* opponent overlay: compact ultimate chip next to the name (only once unlocked) */
 	.ultchip { display: flex; align-items: center; gap: 8px; padding: 4px 10px 4px 4px; border-radius: 10px; cursor: zoom-in;
 		background: linear-gradient(90deg, rgba(139,79,214,.34), rgba(139,79,214,.14)); border: 1px solid rgba(180,130,240,.55); }
@@ -696,6 +721,9 @@
 	.tbox { flex: 1; display: flex; flex-direction: column; gap: 7px; padding: 9px 8px 10px; border-radius: 16px; background: rgba(12,18,32,.46); border: 1px solid rgba(255,255,255,.12); border-bottom: 3px solid var(--tint); box-shadow: 0 12px 30px rgba(0,0,0,.4); }
 	.tbox.current { border-color: rgba(199,154,78,.5); border-bottom-color: #efb46a; box-shadow: 0 0 0 1px rgba(199,154,78,.3), 0 12px 34px rgba(199,154,78,.18); }
 	.tlabel { text-align: center; font-family: 'Modesto Poster', serif; font-size: .78rem; letter-spacing: .04em; color: #f6ead2; }
+	.tslot { position: relative; }
+	.tbroman { position: absolute; inset: 0; display: grid; place-items: center; font-family: 'Modesto Poster', serif; font-size: 3.4rem; line-height: 1; color: rgba(255,255,255,.07); pointer-events: none; z-index: 0; }
+	.tslot :global(.slot) { position: relative; z-index: 1; }
 	.piles { display: flex; gap: 22px; align-items: flex-start; }
 	.pile { display: flex; flex-direction: column; } .pile.grow { flex: 1; }
 	.pilerow { display: flex; flex-wrap: wrap; gap: 5px; }
@@ -762,6 +790,12 @@
 	.dksel { font-size: .74rem; font-weight: 700; color: #f0dcae; margin-right: auto; }
 
 	/* dramatic reveal curtain */
+	/* round-start banner */
+	.roundbanner { position: fixed; inset: 0; z-index: 58; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; pointer-events: none; animation: rbfade 3.2s ease forwards; }
+	.roundbanner .rb-sub { font-family: 'Modesto Poster', serif; font-size: 1.6rem; letter-spacing: .3em; text-transform: uppercase; color: #cbb488; text-shadow: 0 2px 10px rgba(0,0,0,.8); }
+	.roundbanner .rb-num { font-family: 'Modesto Poster', serif; font-size: 7rem; line-height: .9; color: #f6ead2; text-shadow: 0 4px 20px rgba(0,0,0,.85), 0 0 40px rgba(199,154,78,.5); }
+	@keyframes rbfade { 0% { opacity: 0; transform: scale(.8); } 12% { opacity: 1; transform: scale(1); } 82% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1.05); } }
+
 	.curtain { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; cursor: pointer;
 		background: radial-gradient(120% 90% at 50% 40%, rgba(20,14,6,.86), rgba(3,5,10,.96)); backdrop-filter: blur(6px); animation: curtainIn .35s ease; }
 	@keyframes curtainIn { from { opacity: 0; } to { opacity: 1; } }

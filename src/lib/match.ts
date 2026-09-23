@@ -60,7 +60,7 @@ export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 	if (req.kind === 'advance') {
 		const migrated: Record<string, PlayerCardState> = {}
 		for (const pid in cards) migrated[pid] = revealPlayer(cards[pid], turnIdx)
-		if (s.turn >= TURNS_PER_ROUND) return { cards: endRoundAll(migrated), round: s.round + 1, turn: 1 }
+		if (s.turn >= TURNS_PER_ROUND) return { cards: endRoundAll(migrated), round: s.round + 1, turn: 1, battlePhase: false }
 		return { cards: migrated, turn: s.turn + 1 }
 	}
 
@@ -201,6 +201,7 @@ export interface MatchState {
 	cards?: Record<string, PlayerCardState> // per-player card state, keyed by playerId
 	cardPhase?: 'planning' | 'resolving' // planning = commit/ready; resolving = act in initiative order
 	resolved?: string[] // playerIds who have confirmed their action done this turn
+	battlePhase?: boolean // turn 4 revealed → minion battle pending (before advancing the round)
 	seats: number // number of player seats the game is set up for (excl. spectators)
 	host: string // clientId of the host (the creator)
 	draftSystem: DraftSystem // how heroes are selected
@@ -316,13 +317,13 @@ export interface PlayerColorDef { id: string; label: string; hex: string }
 // colours) with neutrals last. Teal and brown were dropped — too close to the
 // blue and orange team colours to tell apart on the board.
 export const PLAYER_COLORS: PlayerColorDef[] = [
-	{ id: 'red', label: 'Red', hex: '#ef4444' },
 	{ id: 'yellow', label: 'Yellow', hex: '#eab308' },
 	{ id: 'lime', label: 'Lime', hex: '#84cc16' },
 	{ id: 'green', label: 'Green', hex: '#22c55e' },
+	{ id: 'teal', label: 'Teal', hex: '#14b8a6' },
+	{ id: 'cyan', label: 'Cyan', hex: '#22d3ee' },
 	{ id: 'purple', label: 'Purple', hex: '#a855f7' },
 	{ id: 'magenta', label: 'Magenta', hex: '#d946ef' },
-	{ id: 'pink', label: 'Pink', hex: '#ec4899' },
 	{ id: 'white', label: 'White', hex: '#f8fafc' },
 	{ id: 'slate', label: 'Slate', hex: '#94a3b8' },
 	{ id: 'black', label: 'Black', hex: '#0b0f17' }
