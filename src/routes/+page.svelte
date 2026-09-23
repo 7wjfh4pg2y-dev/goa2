@@ -810,7 +810,7 @@
 	.chips.two { display: grid; grid-template-columns: 1fr 1fr; }
 	.chip { border: 1px solid rgba(255, 255, 255, 0.16); background: rgba(255, 255, 255, 0.05); color: #e5e7eb; border-radius: 999px; padding: 0.35rem 0.8rem; font-size: 0.85rem; cursor: pointer; }
 	.chip.on { background: var(--hl); border-color: rgba(255, 255, 255, 0.3); color: white; }
-	.sw { width: 1.5rem; height: 1.5rem; border-radius: 50%; background: var(--sc); border: 2px solid rgba(255, 255, 255, 0.25); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35); cursor: pointer; padding: 0; }
+	.sw { width: 1.2rem; height: 1.2rem; flex: none; border-radius: 50%; background: var(--sc); border: 2px solid rgba(255, 255, 255, 0.25); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35); cursor: pointer; padding: 0; }
 	.sw.sel { outline: 2px solid #f59e0b; outline-offset: 2px; border-color: #fff; }
 	.sw:disabled { opacity: 0.28; cursor: not-allowed; }
 	.hint { font-size: 0.72rem; color: #94a3b8; margin: 2px 0 0; }
@@ -903,9 +903,9 @@
 	.hn.muted { color: #64748b; }
 	.tseat.isready .av { box-shadow: 0 0 0 2px #16a34a, 0 0 8px rgba(22, 163, 74, 0.6); }
 	.rok { position: absolute; bottom: -5px; right: -5px; width: 15px; height: 15px; border-radius: 50%; background: #16a34a; color: #fff; font-size: 10px; font-weight: 900; display: grid; place-items: center; border: 1.5px solid #0b0f17; }
-	.tokenrow { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-	.tokenrow .swatches { flex: 1; }
-	.chip.spec { flex: none; align-self: flex-start; }
+	.tokenrow { display: flex; align-items: center; gap: 10px; flex-wrap: nowrap; }
+	.tokenrow .swatches { flex: 1; gap: 6px; flex-wrap: nowrap; }
+	.chip.spec { flex: none; white-space: nowrap; }
 	.specs { font-size: 0.75rem; color: #94a3b8; margin: 8px 0 0; }
 	.kickx { border: none; background: transparent; color: #fca5a5; cursor: pointer; font-size: 0.7rem; padding: 0 2px; }
 
