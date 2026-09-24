@@ -156,7 +156,7 @@ export interface DraftAction {
 }
 
 /** How long each turn-based turn (and the all-pick phase) lasts before auto-resolve. */
-export const DRAFT_TURN_MS = 45_000
+export const DRAFT_TURN_MS = 80_000 // 1:20 to pick (a 10s red grace follows)
 
 export const TEAMS: Team[] = ['orange', 'blue']
 export const TURNS_PER_ROUND = 4
@@ -657,6 +657,9 @@ export function joinMatch(
 	const start: MatchState = opts.seed ?? { ...initialMatchState(), rev: -1 }
 	const state = writable<MatchState>(start)
 	const players = writable<Player[]>([])
+	let playerList: Player[] = []
+	players.subscribe((v) => (playerList = v))
+	const nameOf = (id: string) => playerList.find((p) => p.id === id)?.name ?? 'A player'
 	let local: MatchState = start
 	state.subscribe((v) => (local = v))
 
@@ -732,8 +735,7 @@ export function joinMatch(
 			.on('broadcast', { event: 'cardreq' }, ({ payload }) => {
 				// only the host is authoritative for the shared card map / resolved list
 				if (local.host !== clientId) return
-				const patch = applyCardReq(local, payload as CardReq)
-				if (Object.keys(patch).length) update(patch)
+				hostApplyReq(payload as CardReq)
 			})
 			.on('presence', { event: 'sync' }, () => {
 				const raw = ch.presenceState() as Record<string, Array<Partial<Player>>>
@@ -860,13 +862,25 @@ export function joinMatch(
 	// Per-player card action. The host applies directly (it IS the authority);
 	// everyone else broadcasts the instruction for the host to apply, so two
 	// players committing at once can't overwrite each other's card state.
+	// host applies a card instruction; a coins change is also written to the log,
+	// attributed to the player it belongs to (not the host who applied it)
+	const hostApplyReq = (req: CardReq) => {
+		const patch = applyCardReq(local, req)
+		if (!Object.keys(patch).length) return
+		if (req.kind === 'coins') {
+			const coins = patch.cards?.[req.pid]?.coins ?? 0
+			const entry: LogEntry = {
+				id: globalThis.crypto?.randomUUID?.() ?? `l_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+				by: nameOf(req.pid),
+				text: `money ${req.delta > 0 ? '+' : '−'}${Math.abs(req.delta)} → ${coins}`,
+				at: Date.now()
+			}
+			update({ ...patch, log: [...local.log, entry].slice(-LOG_CAP) })
+		} else update(patch)
+	}
 	const cardAction = (req: CardReq) => {
-		if (local.host === clientId) {
-			const patch = applyCardReq(local, req)
-			if (Object.keys(patch).length) update(patch)
-		} else {
-			try { channel.send({ type: 'broadcast', event: 'cardreq', payload: req }) } catch { /* ignore */ }
-		}
+		if (local.host === clientId) hostApplyReq(req)
+		else try { channel.send({ type: 'broadcast', event: 'cardreq', payload: req }) } catch { /* ignore */ }
 	}
 
 	// host asks a player to leave; the target client observes and leaves itself
