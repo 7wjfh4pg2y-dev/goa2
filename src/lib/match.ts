@@ -85,17 +85,18 @@ const newId = () =>
 	globalThis.crypto?.randomUUID?.() ?? `c_${Math.random().toString(36).slice(2)}`
 
 /**
- * A per-tab client identity that survives a page reload. Using sessionStorage
- * (not localStorage) means a refresh keeps your seat, but a second tab is a new
- * player — so two tabs never fight over one presence key.
+ * A stable client identity that survives a page reload AND a tab close/reopen
+ * (localStorage, not sessionStorage) so a player can rejoin their game as the
+ * same player even after closing the tab. The trade-off is that two tabs in the
+ * same browser share one identity — fine for a personal game with friends.
  */
 function stableClientId(): string {
 	try {
 		const k = 'goa2-client-id'
-		let id = sessionStorage.getItem(k)
+		let id = localStorage.getItem(k)
 		if (!id) {
 			id = newId()
-			sessionStorage.setItem(k, id)
+			localStorage.setItem(k, id)
 		}
 		return id
 	} catch {

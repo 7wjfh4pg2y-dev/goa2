@@ -83,15 +83,17 @@
 	let pendingSeat = -1;
 	let resumeSeed: MatchState | null = null;
 	interface ActiveInfo { room: string; name: string; color: string; seat: number; creator: boolean; seed: MatchState | null }
+	// Kept in localStorage (not sessionStorage) so a tab close/reopen — not just a
+	// same-tab refresh — can auto-rejoin the game the player was in.
 	function writeActive(patch: Partial<ActiveInfo>) {
 		try {
-			const cur: ActiveInfo = JSON.parse(sessionStorage.getItem(ACTIVE) || 'null') ?? { room, name, color, seat: mySeat, creator: false, seed: null };
-			sessionStorage.setItem(ACTIVE, JSON.stringify({ ...cur, ...patch }));
+			const cur: ActiveInfo = JSON.parse(localStorage.getItem(ACTIVE) || 'null') ?? { room, name, color, seat: mySeat, creator: false, seed: null };
+			localStorage.setItem(ACTIVE, JSON.stringify({ ...cur, ...patch }));
 		} catch {}
 	}
-	function clearActive() { try { sessionStorage.removeItem(ACTIVE); } catch {} }
+	function clearActive() { try { localStorage.removeItem(ACTIVE); } catch {} }
 	function readActive(): ActiveInfo | null {
-		try { return JSON.parse(sessionStorage.getItem(ACTIVE) || 'null'); } catch { return null; }
+		try { return JSON.parse(localStorage.getItem(ACTIVE) || 'null'); } catch { return null; }
 	}
 
 	// public room directory
@@ -298,11 +300,13 @@
 	// a join stays on the Join screen ("Joining…") until the room's real state
 	// arrives (→ lobby) or it's confirmed there's no such game (→ error)
 	$: if (joining && $state.rev >= 0) { joining = false; resumeSeed = null; mode = 'lobby'; }
-	// re-apply a remembered seat + colour once the room's state has arrived (reconnect)
-	$: if (mode === 'lobby' && pendingSeat >= 0 && $state.rev >= 0) {
+	// Re-apply a remembered seat + colour once the room's state has arrived, in ANY
+	// mode — a player rejoining a game already in draft/board must get their seat
+	// (and hero) back, not come back as a spectator.
+	$: if (pendingSeat >= 0 && $state.rev >= 0 && session) {
 		const st = pendingSeat; pendingSeat = -1;
 		const c = pendingColor || firstFreeColor(); pendingColor = '';
-		if (!takenSeats.has(st)) { color = c; session?.setSelf({ seat: st, color: c }); writeActive({ seat: st, color: c }); }
+		if (!takenSeats.has(st)) { color = c; session.setSelf({ seat: st, color: c }); writeActive({ seat: st, color: c }); }
 	}
 	// Spin the coin so it actually animates: mount at the current angle, then bump
 	// the rotation on the next frame so the CSS transition has something to run
