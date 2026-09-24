@@ -16,6 +16,9 @@
 	export let pieces: Array<{ id: string; hex: string; team: string; role?: string; label?: string; color?: string; token?: string; sym?: string }> = [];
 	export let onMovePiece: ((id: string, hex: string) => void) | null = null;
 	export let onSelect: (id: string | null) => void = () => {};
+	// tap on an empty hex (no piece under the cursor, nothing carried) — used by
+	// placement modes such as spawning a minion where you click.
+	export let onHex: ((hex: string) => void) | null = null;
 	// hexes that hold a team's throne (gear/star) — drawn on top of the base tile
 	export let thrones: Array<{ hex: string; team: string }> = [];
 
@@ -269,13 +272,20 @@
 		panning = false; pressId = null;
 	}
 	function handleTap(e: PointerEvent) {
-		if (!interactive || !onMovePiece) return;
-		if (pressId != null) { selected = selected === pressId ? null : pressId; return; } // pick up / put down
-		if (selected != null) { // tapped a hex with a token in hand → move it
+		if (!interactive) return;
+		if (pressId != null && onMovePiece) { selected = selected === pressId ? null : pressId; return; } // pick up / put down
+		if (selected != null && onMovePiece) { // tapped a hex with a token in hand → move it
 			const pt = toChild(e.clientX, e.clientY);
 			const hex = nearestHex(pt.x, pt.y);
 			if (hex) onMovePiece(selected, hex);
 			selected = null;
+			return;
+		}
+		// empty-hex tap → report which hex (placement modes)
+		if (onHex && pressId == null) {
+			const pt = toChild(e.clientX, e.clientY);
+			const hex = nearestHex(pt.x, pt.y);
+			if (hex) onHex(hex);
 		}
 	}
 

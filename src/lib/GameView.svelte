@@ -6,7 +6,7 @@
 	import { heroById, heroLogo } from '$lib/heroes';
 	import { zoneName } from '$lib/zones';
 	import {
-		colorHex, movePiece, prevTurn, teamForSeat, throneHex, spawnMinion,
+		colorHex, movePiece, prevTurn, teamForSeat, throneHex,
 		type MatchState, type Player, type MatchSession, type Team, type ConnStatus
 	} from '$lib/match';
 
@@ -104,11 +104,20 @@
 	// ── minion spawn (temporary manual controls) + piece delete ────────────────
 	let spawnTeam: Team | null = null; // which team's spawn menu is open
 	const MINION_ROLES: Array<'melee' | 'ranged' | 'heavy'> = ['melee', 'ranged', 'heavy'];
-	function spawn(team: Team | null, role: 'melee' | 'ranged' | 'heavy') {
+	// pick a role → arm placement; the next hex tap drops the minion there.
+	let pendingSpawn: { team: Team; role: 'melee' | 'ranged' | 'heavy' } | null = null;
+	function armSpawn(team: Team | null, role: 'melee' | 'ranged' | 'heavy') {
 		if (!team) return;
-		const m = spawnMinion($ms, team, role);
-		session.act(`spawned a ${team} ${role} minion`, { pieces: { ...$ms.pieces, [m.id]: m } });
+		pendingSpawn = { team, role };
 		spawnTeam = null;
+	}
+	// board hex tapped: if a spawn is armed, place the minion right there
+	function onBoardHex(hex: string) {
+		if (!pendingSpawn) return;
+		const { team, role } = pendingSpawn;
+		const id = `minion_${team}_${role}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 5)}`;
+		session.act(`spawned a ${team} ${role} minion`, { pieces: { ...$ms.pieces, [id]: { id, hex, team, kind: 'minion' as const, role } } });
+		pendingSpawn = null;
 	}
 
 	let selPieceId: string | null = null;
@@ -171,7 +180,7 @@
 
 <div class="gamewrap">
 	<div class="ocean"></div>
-	<BoardCanvas bind:this={board} map={$ms.map ?? {}} rotation={orientation} interactive={true} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} {thrones} />
+	<BoardCanvas bind:this={board} map={$ms.map ?? {}} rotation={orientation} interactive={true} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} />
 
 	<CardLayer {session} {ms} {players} {clientId} onAdvanceTurn={() => stepTurn(1)} bind:previewId />
 
@@ -339,8 +348,14 @@
 			{#if spawnTeam}
 				<div class="spmenu {spawnTeam}">
 					{#each MINION_ROLES as role}
-						<button class="sprole" on:click={() => spawn(spawnTeam, role)}>{role}</button>
+						<button class="sprole" on:click={() => armSpawn(spawnTeam, role)} title="Then click a hex to place">{role}</button>
 					{/each}
+				</div>
+			{/if}
+			{#if pendingSpawn}
+				<div class="spawnhint {pendingSpawn.team}">
+					<span>Tap a hex to place the {pendingSpawn.team} {pendingSpawn.role}</span>
+					<button class="spcancel" on:click={() => (pendingSpawn = null)}>Cancel</button>
 				</div>
 			{/if}
 		</div>
@@ -521,6 +536,14 @@
 	.sprole:hover { background: rgba(255, 255, 255, 0.18); }
 	.spmenu.orange .sprole:hover { background: rgba(239, 125, 34, 0.3); }
 	.spmenu.blue .sprole:hover { background: rgba(47, 127, 230, 0.3); }
+	.spawnhint { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 5px; padding: 5px 8px; border-radius: 8px;
+		font-size: 0.68rem; font-weight: 700; color: #f1f5f9; text-transform: capitalize; animation: hintpulse 1.4s ease-in-out infinite; }
+	.spawnhint.orange { background: rgba(239, 125, 34, 0.22); border: 1px solid rgba(239, 125, 34, 0.55); }
+	.spawnhint.blue { background: rgba(47, 127, 230, 0.22); border: 1px solid rgba(47, 127, 230, 0.55); }
+	.spcancel { flex: none; border-radius: 6px; padding: 2px 7px; font-size: 0.66rem; font-weight: 700; cursor: pointer; text-transform: none;
+		color: #e5e7eb; background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.22); }
+	.spcancel:hover { background: rgba(255, 255, 255, 0.2); }
+	@keyframes hintpulse { 0%, 100% { opacity: 0.85; } 50% { opacity: 1; } }
 
 	/* floating delete toolbar for a selected minion/token */
 	.pietool { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); z-index: 8; display: flex; align-items: center; gap: 10px;
