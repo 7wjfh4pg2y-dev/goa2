@@ -54,7 +54,21 @@
 	// no cards left to play this turn ⇒ automatically skipped (the one reveal exception)
 	const isSkipped = (cs: PlayerCardState) => cs.pending == null && cs.hand.length === 0;
 	$: readyCount = seatedWithCards.filter((p) => isReady(cards[p.id])).length;
-	$: revealed = seatedWithCards.length > 0 && readyCount === seatedWithCards.length;
+	// everyone in ⇒ the reveal is armed, but cards only flip face-up after a synced
+	// 3-2-1 countdown (host sets $ms.revealAt). Anyone can uncommit during it.
+	$: allCommitted = seatedWithCards.length > 0 && readyCount === seatedWithCards.length;
+	$: revealAt = $ms.revealAt ?? null;
+	$: countdownActive = allCommitted && revealAt != null && countNow < revealAt;
+	$: countdownSecs = countdownActive ? Math.max(1, Math.ceil((revealAt! - countNow) / 1000)) : 0;
+	$: revealed = allCommitted && revealAt != null && countNow >= revealAt;
+	// tick a local clock only while the countdown is live, to drive 3→2→1 and the flip
+	let countNow = Date.now();
+	let countTick: ReturnType<typeof setInterval> | null = null;
+	$: manageCountTick(allCommitted && revealAt != null && countNow < revealAt);
+	function manageCountTick(live: boolean) {
+		if (live && !countTick) { countNow = Date.now(); countTick = setInterval(() => (countNow = Date.now()), 100); }
+		else if (!live && countTick) { clearInterval(countTick); countTick = null; }
+	}
 	// end-of-round flow: turn 4 → Minion Battle (manual, no rules yet) → Next round
 	$: isFinalTurn = $ms.turn >= 4;
 	$: battlePhase = $ms.battlePhase ?? false;
@@ -185,7 +199,7 @@
 		];
 	}
 	function skipCurtain() { curtainTimers.forEach(clearTimeout); curtain = false; }
-	onDestroy(() => { curtainTimers.forEach(clearTimeout); if (roundTimer) clearTimeout(roundTimer); });
+	onDestroy(() => { curtainTimers.forEach(clearTimeout); if (roundTimer) clearTimeout(roundTimer); if (countTick) clearInterval(countTick); });
 
 	// ── token / marker tray (heroes with the TOKENS trait) ────────────────────
 	const TOKENS = ['token_barrier', 'token_blast', 'token_dud', 'token_familiar', 'token_glitch', 'token_grenade', 'token_ice', 'token_illusion', 'token_magma', 'token_rock', 'token_smoke_bomb', 'token_totem', 'token_tree', 'token_zombie'];
@@ -233,8 +247,8 @@
 	<div class="ppanel" class:dense>
 		<div class="pptitle">
 			Players
-			<span class="phasetag" class:resolve={revealed}>
-				{revealed ? `Revealed · Turn ${$ms.turn}` : `Planning · Turn ${$ms.turn} · ${readyCount}/${seatedWithCards.length} ready`}
+			<span class="phasetag" class:resolve={revealed} class:counting={countdownActive}>
+				{revealed ? `Revealed · Turn ${$ms.turn}` : countdownActive ? `Revealing in ${countdownSecs}…` : `Planning · Turn ${$ms.turn} · ${readyCount}/${seatedWithCards.length} ready`}
 			</span>
 		</div>
 		{#each others as p (p.id)}
@@ -638,6 +652,14 @@
 		</div>
 	{/if}
 
+	<!-- ───────── synced pre-reveal countdown (uncommit to cancel) ───────── -->
+	{#if countdownActive}
+		<div class="countdown">
+			{#key countdownSecs}<span class="cd-num">{countdownSecs}</span>{/key}
+			<span class="cd-sub">Revealing… take a card back to change your mind</span>
+		</div>
+	{/if}
+
 	<!-- ───────── round-start banner ───────── -->
 	{#if roundBanner}
 		<div class="roundbanner"><span class="rb-sub">Round</span><span class="rb-num">{roundBanner}</span></div>
@@ -825,6 +847,14 @@
 	.dkbar { position: sticky; bottom: 0; margin: 12px -18px -12px; padding: 10px 18px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
 		background: linear-gradient(0deg, rgba(11,16,26,.99), rgba(11,16,26,.9)); border-top: 1px solid rgba(199,154,78,.4); }
 	.dksel { font-size: .74rem; font-weight: 700; color: #f0dcae; margin-right: auto; }
+
+	/* synced pre-reveal countdown — big number, doesn't block the hand/take-back */
+	.countdown { position: fixed; inset: 0; z-index: 57; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; pointer-events: none; }
+	.cd-num { font-family: 'Modesto Poster', serif; font-size: 9rem; line-height: .9; color: #f6ead2;
+		text-shadow: 0 4px 24px rgba(0,0,0,.85), 0 0 46px rgba(239,180,106,.55); animation: cdpop .9s ease forwards; }
+	@keyframes cdpop { 0% { opacity: 0; transform: scale(1.5); } 22% { opacity: 1; transform: scale(1); } 100% { opacity: .5; transform: scale(.9); } }
+	.cd-sub { font-size: .8rem; letter-spacing: .1em; text-transform: uppercase; font-weight: 700; color: #cbb488; text-shadow: 0 2px 8px rgba(0,0,0,.8); }
+	.phasetag.counting { color: #ffcf9b; }
 
 	/* dramatic reveal curtain */
 	/* round-start banner */
