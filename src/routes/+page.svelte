@@ -317,6 +317,11 @@
 			setTimeout(() => (seatNotice = ''), 3000);
 		});
 		s.seatDenied.subscribe((t) => { if (t && session === s) { seatNotice = 'The host declined your seat request.'; setTimeout(() => (seatNotice = ''), 3000); } });
+		// another player flipped in → show the same coin animation for everyone
+		s.joinFlip.subscribe((f) => {
+			if (!f || session !== s || f.id === s.clientId) return;
+			playCoin(f.side, { caption: `${f.name} — ${f.side === 'orange' ? 'Orange!' : 'Blue!'}` });
+		});
 		if (enterLobby) mode = 'lobby';
 	}
 	// a join stays on the Join screen ("Joining…") until the room's real state
@@ -447,6 +452,7 @@
 		const seat = openSeatsOn(side)[0];
 		if (seat === undefined) return; // table full
 		flipping = true;
+		session?.flipJoin(side, name); // let everyone else see the flip too
 		playCoin(side, { after: () => {
 			flipping = false;
 			const c = pick || firstFreeColor();

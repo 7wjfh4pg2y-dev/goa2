@@ -618,6 +618,10 @@ export interface MatchSession {
 	cardAction: (req: CardReq) => void
 	/** Host: ask a player (by clientId) to leave the room. */
 	kick: (id: string) => void
+	/** Announce a team-join coin flip so every client plays the animation. */
+	flipJoin: (side: Team, name: string) => void
+	/** Emits when ANOTHER player flips to join a team (for the shared animation). */
+	joinFlip: Readable<{ id: string; name: string; side: Team; at: number } | null>
 	/** Spectator: ask the host to take over a (vacant) seat. */
 	requestSeat: (seat: number) => void
 	/** Host: approve or deny a pending seat-takeover request (by requester id). */
@@ -670,6 +674,8 @@ export function joinMatch(
 	const notFound = writable(false)
 	const seatGranted = writable<{ seat: number; color: string } | null>(null)
 	const seatDenied = writable(0)
+	// another player flipped to join a team — everyone plays the coin animation
+	const joinFlip = writable<{ id: string; name: string; side: Team; at: number } | null>(null)
 	const conn = writable<ConnStatus>('connecting')
 
 	// The channel is rebuilt on a hard reconnect, so it's a `let` that every
@@ -736,6 +742,9 @@ export function joinMatch(
 				// only the host is authoritative for the shared card map / resolved list
 				if (local.host !== clientId) return
 				hostApplyReq(payload as CardReq)
+			})
+			.on('broadcast', { event: 'joinflip' }, ({ payload }) => {
+				joinFlip.set(payload as { id: string; name: string; side: Team; at: number })
 			})
 			.on('presence', { event: 'sync' }, () => {
 				const raw = ch.presenceState() as Record<string, Array<Partial<Player>>>
@@ -888,6 +897,12 @@ export function joinMatch(
 		channel.send({ type: 'broadcast', event: 'kick', payload: { id } })
 	}
 
+	// announce a team-join coin flip so every client plays the animation, not just
+	// the flipper (broadcast self:false ⇒ the sender animates locally instead).
+	const flipJoin = (side: Team, name: string) => {
+		try { channel.send({ type: 'broadcast', event: 'joinflip', payload: { id: clientId, name, side, at: Date.now() } }) } catch { /* ignore */ }
+	}
+
 	// spectator → host: request to take over a seat (host approves in the menu)
 	const requestSeat = (seat: number) => {
 		if (local.host === clientId) return // host is seated; nothing to request
@@ -925,7 +940,7 @@ export function joinMatch(
 		}
 	}
 
-	return { state, players, update, act, setSelf, cardAction, kick, requestSeat, resolveSeat, seatGranted, seatDenied, kicked, notFound, status: conn, leave, clientId }
+	return { state, players, update, act, setSelf, cardAction, kick, flipJoin, joinFlip, requestSeat, resolveSeat, seatGranted, seatDenied, kicked, notFound, status: conn, leave, clientId }
 }
 
 // ---- Round/turn helpers (encode the rulebook's structure) -------------------
