@@ -160,6 +160,9 @@ export const DRAFT_TURN_MS = 80_000 // 1:20 to pick (a 10s red grace follows)
 
 export const TEAMS: Team[] = ['orange', 'blue']
 export const TURNS_PER_ROUND = 4
+// synced pre-reveal countdown: once everyone has committed, cards flip face-up
+// after this delay (players can still uncommit during it, which restarts it).
+export const REVEAL_COUNTDOWN_MS = 3000
 export const PHASES: Phase[] = ['planning', 'action', 'upgrade']
 export const PHASE_LABELS: Record<Phase, string> = {
 	planning: 'Planning',
@@ -203,6 +206,10 @@ export interface MatchState {
 	cardPhase?: 'planning' | 'resolving' // planning = commit/ready; resolving = act in initiative order
 	resolved?: string[] // playerIds who have confirmed their action done this turn
 	battlePhase?: boolean // turn 4 revealed → minion battle pending (before advancing the round)
+	// synced 3-2-1 pre-reveal countdown: epoch ms when cards flip face-up. Set by
+	// the host the moment every seated player has committed; cleared if anyone
+	// uncommits (so the count restarts from 3 when they all commit again).
+	revealAt?: number | null
 	// durable seat ownership: seat index (as string) → the clientId + name that
 	// owns that seat's hero. Set at game start; survives a player dropping from
 	// presence, so a vacated seat can be identified and taken over.
@@ -876,6 +883,21 @@ export function joinMatch(
 	const hostApplyReq = (req: CardReq) => {
 		const patch = applyCardReq(local, req)
 		if (!Object.keys(patch).length) return
+		// Maintain the synced 3-2-1 reveal countdown. When a card action leaves
+		// every seated player committed, anchor a reveal time (unless one is already
+		// running — don't restart while it holds); any non-committed state clears it,
+		// so the count starts fresh from 3 the next time they all commit. 'advance'
+		// starts a new turn, so it always clears the anchor.
+		if (patch.cards) {
+			const seats = patch.seats ?? local.seats
+			const withCards = playerList
+				.filter((p) => p.seat >= 0 && p.seat < seats)
+				.map((p) => patch.cards![p.id])
+				.filter(Boolean)
+			const allIn = withCards.length > 0 && withCards.every((cs) => cs.pending != null || cs.hand.length === 0)
+			const keep = req.kind !== 'advance' && allIn
+			patch.revealAt = keep ? (local.revealAt ?? Date.now() + REVEAL_COUNTDOWN_MS) : null
+		}
 		if (req.kind === 'coins') {
 			const coins = patch.cards?.[req.pid]?.coins ?? 0
 			const entry: LogEntry = {
