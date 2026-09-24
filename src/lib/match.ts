@@ -203,6 +203,12 @@ export interface MatchState {
 	cardPhase?: 'planning' | 'resolving' // planning = commit/ready; resolving = act in initiative order
 	resolved?: string[] // playerIds who have confirmed their action done this turn
 	battlePhase?: boolean // turn 4 revealed → minion battle pending (before advancing the round)
+	// durable seat ownership: seat index (as string) → the clientId + name that
+	// owns that seat's hero. Set at game start; survives a player dropping from
+	// presence, so a vacated seat can be identified and taken over.
+	seatMap?: Record<string, { id: string; name: string }>
+	// pending seat-takeover requests from spectators, awaiting host approval
+	seatRequests?: Array<{ id: string; name: string; seat: number; at: number }>
 	seats: number // number of player seats the game is set up for (excl. spectators)
 	host: string // clientId of the host (the creator)
 	draftSystem: DraftSystem // how heroes are selected
@@ -283,6 +289,40 @@ export function placeHeroes(state: MatchState, players: Player[]): Record<string
 		})
 	}
 	return pieces
+}
+
+/** Capture seat→owner at game start, so a dropped player's seat stays identified. */
+export function buildSeatMap(players: Player[], seats: number): Record<string, { id: string; name: string }> {
+	const m: Record<string, { id: string; name: string }> = {}
+	for (const p of players) if (p.seat >= 0 && p.seat < seats) m[String(p.seat)] = { id: p.id, name: p.name }
+	return m
+}
+
+/**
+ * Hand a seat's hero (board piece, card state, draft pick, ownership) from one
+ * clientId to another — used when a spectator takes over a dropped player. Pure;
+ * returns the state patch. Tokens owned by the old player transfer too.
+ */
+export function transferSeat(s: MatchState, from: string, to: string, toName: string, seat: number): Partial<MatchState> {
+	const cards = { ...(s.cards ?? {}) }
+	if (cards[from]) { cards[to] = { ...cards[from] }; delete cards[from] }
+	const pieces: Record<string, Piece> = {}
+	for (const id in s.pieces) {
+		const pc = s.pieces[id]
+		if (id === from) pieces[to] = { ...pc, id: to, owner: to } // the hero token
+		else if (pc.owner === from) pieces[id] = { ...pc, owner: to } // their placed tokens
+		else pieces[id] = pc
+	}
+	let draft = s.draft
+	if (draft && draft.picks[from]) {
+		const picks = { ...draft.picks }; picks[to] = picks[from]; delete picks[from]
+		draft = { ...draft, picks }
+	}
+	const seatMap = { ...(s.seatMap ?? {}) }; seatMap[String(seat)] = { id: to, name: toName }
+	const patch: Partial<MatchState> = { cards, pieces, seatMap }
+	if (draft) patch.draft = draft
+	if (s.host === from) patch.host = to // the departed player was host → hand it over too
+	return patch
 }
 
 /** Build a fresh minion piece for a team, placed on that team's throne hex. */
@@ -578,6 +618,14 @@ export interface MatchSession {
 	cardAction: (req: CardReq) => void
 	/** Host: ask a player (by clientId) to leave the room. */
 	kick: (id: string) => void
+	/** Spectator: ask the host to take over a (vacant) seat. */
+	requestSeat: (seat: number) => void
+	/** Host: approve or deny a pending seat-takeover request (by requester id). */
+	resolveSeat: (reqId: string, approve: boolean) => void
+	/** Emits { seat, colour } when THIS client is granted a seat takeover. */
+	seatGranted: Readable<{ seat: number; color: string } | null>
+	/** Bumps (timestamp) when THIS client's seat request is denied. */
+	seatDenied: Readable<number>
 	/** Becomes true when THIS client has been kicked. */
 	kicked: Readable<boolean>
 	/** Becomes true when JOINING a room code that has no host (no such game). */
@@ -617,6 +665,8 @@ export function joinMatch(
 	let graceTimer: ReturnType<typeof setTimeout> | null = null
 	const kicked = writable(false)
 	const notFound = writable(false)
+	const seatGranted = writable<{ seat: number; color: string } | null>(null)
+	const seatDenied = writable(0)
 	const conn = writable<ConnStatus>('connecting')
 
 	// The channel is rebuilt on a hard reconnect, so it's a `let` that every
@@ -664,6 +714,20 @@ export function joinMatch(
 			})
 			.on('broadcast', { event: 'kick' }, ({ payload }) => {
 				if ((payload as { id: string }).id === clientId) kicked.set(true)
+			})
+			.on('broadcast', { event: 'seatreq' }, ({ payload }) => {
+				if (local.host !== clientId) return // only the host tracks pending requests
+				const r = payload as { id: string; name: string; seat: number }
+				const reqs = (local.seatRequests ?? []).filter((x) => x.id !== r.id)
+				reqs.push({ id: r.id, name: r.name, seat: r.seat, at: Date.now() })
+				update({ seatRequests: reqs })
+			})
+			.on('broadcast', { event: 'seatgrant' }, ({ payload }) => {
+				const p = payload as { to: string; seat: number; color: string }
+				if (p.to === clientId) seatGranted.set({ seat: p.seat, color: p.color })
+			})
+			.on('broadcast', { event: 'seatdeny' }, ({ payload }) => {
+				if ((payload as { to: string }).to === clientId) seatDenied.set(Date.now())
 			})
 			.on('broadcast', { event: 'cardreq' }, ({ payload }) => {
 				// only the host is authoritative for the shared card map / resolved list
@@ -810,6 +874,30 @@ export function joinMatch(
 		channel.send({ type: 'broadcast', event: 'kick', payload: { id } })
 	}
 
+	// spectator → host: request to take over a seat (host approves in the menu)
+	const requestSeat = (seat: number) => {
+		if (local.host === clientId) return // host is seated; nothing to request
+		try { channel.send({ type: 'broadcast', event: 'seatreq', payload: { id: clientId, name: me.name, seat } }) } catch { /* ignore */ }
+	}
+	// host: approve (transfer the seat's hero to the requester) or deny a request
+	const resolveSeat = (reqId: string, approve: boolean) => {
+		if (local.host !== clientId) return
+		const req = (local.seatRequests ?? []).find((r) => r.id === reqId)
+		const reqs = (local.seatRequests ?? []).filter((r) => r.id !== reqId)
+		if (approve && req) {
+			const from = local.seatMap?.[String(req.seat)]?.id ?? ''
+			const color = (from && local.pieces?.[from]?.color) || 'spectator'
+			const patch = from
+				? transferSeat(local, from, reqId, req.name, req.seat)
+				: { seatMap: { ...(local.seatMap ?? {}), [String(req.seat)]: { id: reqId, name: req.name } } }
+			act(`${req.name} took over ${local.seatMap?.[String(req.seat)]?.name ?? 'a'} seat`, { ...patch, seatRequests: reqs })
+			try { channel.send({ type: 'broadcast', event: 'seatgrant', payload: { to: reqId, seat: req.seat, color } }) } catch { /* ignore */ }
+		} else {
+			update({ seatRequests: reqs })
+			if (req) try { channel.send({ type: 'broadcast', event: 'seatdeny', payload: { to: reqId, seat: req.seat } }) } catch { /* ignore */ }
+		}
+	}
+
 	const leave = () => {
 		if (graceTimer) clearTimeout(graceTimer)
 		if (trackTimer) clearTimeout(trackTimer)
@@ -823,7 +911,7 @@ export function joinMatch(
 		}
 	}
 
-	return { state, players, update, act, setSelf, cardAction, kick, kicked, notFound, status: conn, leave, clientId }
+	return { state, players, update, act, setSelf, cardAction, kick, requestSeat, resolveSeat, seatGranted, seatDenied, kicked, notFound, status: conn, leave, clientId }
 }
 
 // ---- Round/turn helpers (encode the rulebook's structure) -------------------
