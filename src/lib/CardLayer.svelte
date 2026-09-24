@@ -19,6 +19,7 @@
 	export let players: Readable<Player[]>;
 	export let clientId: string;
 	export let onAdvanceTurn: () => void = () => {};
+	export let previewId: string | null = null; // set by the board to open a player's overlay
 
 	const ORANGE = '#ef7d22';
 	const BLUE = '#2f7fe6';
@@ -79,6 +80,8 @@
 	let overlayId: string | null = null;
 	let examine: { hid: string; idx: number } | null = null;
 	$: ovPlayer = seated.find((p) => p.id === overlayId) ?? null;
+	// board hands us a player id to preview → open their overlay, then clear it
+	$: if (previewId) { overlayId = previewId; previewId = null; }
 
 	// local player
 	$: mine = cards[clientId] ?? null;
@@ -189,7 +192,12 @@
 	// shared circular markers any hero may need (e.g. Tigerclaw poison, Bain bounty, Snorri runes)
 	const MARKERS = ['marker_poison', 'marker_bounty', 'rune_anvil_marker', 'rune_axe_marker', 'rune_bird_marker', 'rune_horn_marker'];
 	let tokenDrawer = false;
-	$: heroEmblem = mine ? icon(`trait_tokens_${mine.hero}`) : undefined; // set ⇒ this hero uses tokens
+	$: heroEmblem = mine ? icon(`trait_tokens_${mine.hero}`) : undefined; // set ⇒ this hero has signature-token art
+	// heroes that deploy a named companion figure (signature summon)
+	const COMPANIONS: Record<string, string> = { widget: 'Pyro', trinkets: 'Turret' };
+	$: myCompanion = mine ? COMPANIONS[mine.hero] : undefined;
+	// companion art: dedicated trait art if it exists, else the hero's logo
+	$: companionArt = mine ? (icon(`trait_tokens_${mine.hero}`) ?? heroLogo(mine.hero)) : undefined;
 	$: mySeat = seated.find((p) => p.id === clientId)?.seat ?? -1;
 	$: myTeam = mySeat >= 0 ? teamForSeat(mySeat, $ms.seats) : 'orange';
 	$: myTokenCount = Object.values($ms.pieces ?? {}).filter((p) => p.kind === 'token' && p.owner === clientId).length;
@@ -198,6 +206,15 @@
 		if (!myHex) return;
 		const id = `tok_${clientId}_${Date.now().toString(36)}`;
 		session.act(`placed a token`, { pieces: { ...$ms.pieces, [id]: { id, hex: myHex, team: myTeam ?? 'neutral', kind: 'token' as const, token: name, owner: clientId } } });
+	}
+	function placeCompanion() {
+		const myHex = $ms.pieces?.[clientId]?.hex;
+		if (!myHex || !mine || !myCompanion) return;
+		const hasArt = !!icon(`trait_tokens_${mine.hero}`);
+		const id = `comp_${clientId}_${Date.now().toString(36)}`;
+		// dedicated art ⇒ use it as the token image; otherwise ride the hero logo
+		// via the piece's hero field (BoardCanvas falls back to sym when no art).
+		session.act(`deployed ${myCompanion}`, { pieces: { ...$ms.pieces, [id]: { id, hex: myHex, team: myTeam ?? 'neutral', kind: 'token' as const, token: hasArt ? `trait_tokens_${mine.hero}` : mine.hero, hero: mine.hero, owner: clientId, label: myCompanion } } });
 	}
 	function clearTokens() {
 		const next = { ...$ms.pieces };
@@ -233,6 +250,7 @@
 						<span class="pname">
 							{p.name}<em>Lv {cs ? levelOf(cs) : 1}</em>
 							{#if cs}<span class="coin" title="Coins">{cs.coins}</span>{/if}
+							{#if cs && cs.discard.length}<span class="dchip" title="Cards in discard pile">▾ {cs.discard.length}</span>{/if}
 						</span>
 						<span class="phero">{cs ? heroName(cs.hero) : ''}</span>
 					</span>
@@ -524,13 +542,21 @@
 				</button>
 				{#if tokenDrawer}
 					<div class="tokdrawer">
-						{#if heroEmblem}
-							<div class="toklbl">{heroName(mine.hero)} tokens</div>
+						{#if heroEmblem || myCompanion}
+							<div class="toklbl">{heroName(mine.hero)}{myCompanion ? ` · ${myCompanion}` : ' tokens'}</div>
 							<div class="tokgrid">
-								<button class="tok emblem" on:click={() => placeToken(`trait_tokens_${mine.hero}`)} title="Signature token"><img src={heroEmblem} alt="" /></button>
-								{#each TOKENS as tk}
-									<button class="tok" on:click={() => placeToken(tk)} title={tk.replace('token_', '').replace('_', ' ')}><img src={icon(tk)} alt="" /></button>
-								{/each}
+								{#if myCompanion}
+									<button class="tok emblem comp" on:click={placeCompanion} title="Deploy {myCompanion}">
+										<img src={companionArt} alt="" /><span class="toktag">{myCompanion}</span>
+									</button>
+								{:else if heroEmblem}
+									<button class="tok emblem" on:click={() => placeToken(`trait_tokens_${mine.hero}`)} title="Signature token"><img src={heroEmblem} alt="" /></button>
+								{/if}
+								{#if heroEmblem}
+									{#each TOKENS as tk}
+										<button class="tok" on:click={() => placeToken(tk)} title={tk.replace('token_', '').replace('_', ' ')}><img src={icon(tk)} alt="" /></button>
+									{/each}
+								{/if}
 							</div>
 						{/if}
 						<div class="toklbl">Markers</div>
@@ -555,6 +581,12 @@
 					<span class="ds-card ds1"><img src={heroLogo(mine.hero)} alt="" /></span>
 					<span class="ds-count">{deckCards(mine).length}</span>
 				</button>
+				{#if mine.ultimate && myUlt >= 0}
+					<button class="ultmini" on:click={() => (examine = { hid: mine.hero, idx: myUlt })} title="Your ultimate — click to enlarge">
+						<Card heroId={mine.hero} card={heroCards(mine.hero)[myUlt]} />
+						<span class="ultmini-tag">ULT</span>
+					</button>
+				{/if}
 				{#if revealed && iAmHost}
 					{#if !isFinalTurn}
 						<button class="act primary sm" on:click={onAdvanceTurn}>Next turn →</button>
@@ -663,6 +695,7 @@
 	.pmid { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; line-height: 1.05; }
 	.pname { font-family: 'Modesto Poster', serif; font-size: .84rem; color: #f3f6fb; display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
 	.pname em { font-style: normal; font-size: .56rem; font-weight: 700; color: #8b9bb0; }
+	.dchip { display: inline-flex; align-items: center; gap: 1px; font-size: .54rem; font-weight: 800; font-variant-numeric: tabular-nums; color: #9fb0c4; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.12); border-radius: 5px; padding: 0 4px; }
 	.phero { font-size: .58rem; color: #93a3b8; }
 	.dslot { width: 1.7rem; flex: none; }
 	/* gold coin chip */
@@ -869,11 +902,18 @@
 
 	/* hand floats above the dashboard, with a clear gap */
 	.tray { position: absolute; left: 224px; right: 260px; bottom: 118px; z-index: 10; display: flex; align-items: flex-end; justify-content: center; pointer-events: none; }
-	.hc { width: 96px; margin: 0 -12px; padding: 0; background: none; border: none; cursor: pointer; pointer-events: auto; transform-origin: bottom center; transform: translateY(var(--y)) rotate(var(--rot)); transition: transform .16s; }
+	.hc { width: 124px; margin: 0 -14px; padding: 0; background: none; border: none; cursor: pointer; pointer-events: auto; transform-origin: bottom center; transform: translateY(var(--y)) rotate(var(--rot)); transition: transform .16s; }
 	.hc :global(canvas) { display: block; width: 100%; border-radius: 6%; box-shadow: 0 8px 18px rgba(0,0,0,.55); }
-	.hc:hover { transform: translateY(calc(var(--y) - 22px)) rotate(var(--rot)) scale(1.08); z-index: 5; }
+	.hc:hover { transform: translateY(calc(var(--y) - 30px)) rotate(var(--rot)) scale(1.1); z-index: 5; }
 	.dstatus { flex: 1; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center; }
 	.waithost { font-size: .74rem; font-weight: 700; letter-spacing: .02em; color: #b8a06a; font-style: italic; }
+	/* persistent ultimate access on the dash (once unlocked) */
+	.ultmini { position: relative; width: 40px; padding: 0; background: none; border: none; cursor: zoom-in; border-radius: 5px; overflow: visible; flex: none;
+		box-shadow: 0 0 0 2px #b482f0, 0 0 12px rgba(165,110,230,.6), 0 3px 8px rgba(0,0,0,.55); transition: transform .12s; }
+	.ultmini :global(canvas) { display: block; width: 100%; border-radius: 5px; }
+	.ultmini:hover { transform: translateY(-3px); }
+	.ultmini-tag { position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%); font-size: .5rem; font-weight: 900; letter-spacing: .08em; color: #efe0ff;
+		background: linear-gradient(180deg, #7a49c4, #5a2f9c); border: 1px solid rgba(180,130,240,.7); border-radius: 5px; padding: 0 5px; }
 	/* face-down deck stack on the dash (opens the deck view) */
 	.deckstack { position: relative; width: 40px; height: 54px; background: none; border: none; padding: 0; cursor: pointer; flex: none; }
 	.deckstack:hover .ds1 { transform: translateY(-3px); }
@@ -913,6 +953,9 @@
 	.tok:hover { background: rgba(199,154,78,.2); border-color: rgba(199,154,78,.5); }
 	.tok img { width: 100%; aspect-ratio: 1; object-fit: contain; }
 	.tok.emblem { background: rgba(199,154,78,.16); border-color: rgba(199,154,78,.45); }
+	.tok.comp { position: relative; grid-column: span 2; display: flex; align-items: center; gap: 6px; padding: 5px 8px; }
+	.tok.comp img { width: 1.5rem; height: 1.5rem; aspect-ratio: auto; }
+	.tok.comp .toktag { font-size: .64rem; font-weight: 800; letter-spacing: .02em; color: #f0dcae; }
 	.tok.marker img { border-radius: 50%; }
 	.tokfoot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
 	.tokhint { font-size: .58rem; color: #8b9bb0; }

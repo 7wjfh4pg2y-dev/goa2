@@ -68,7 +68,7 @@ export const HEROES: Hero[] = [
 	{ id: 'swift', name: 'Swift', title: 'the Sharpshooter', stars: 3, pack: 'RENOWNED', traits: ['sniper', 'farming', 'tactician'], stats: [[5, 5], [2, 2], [4, 4], [3, 7]] },
 	{ id: 'tali', name: 'Tali', title: 'the Spiritcaller', stars: 3, pack: 'DEVOTED', traits: ['damager', 'pusher', 'healer', 'durable', 'tokens'], stats: [[4, 6], [4, 4], [5, 8], [5, 5]] },
 	{ id: 'trinkets', name: 'Trinkets', title: 'the Scavenger', stars: 3, pack: 'DEFIANT', traits: ['sniper', 'damager', 'pusher', 'tokens'], stats: [[3, 5], [2, 4], [6, 6], [7, 8]] },
-	{ id: 'widget', name: 'Widget', title: 'and Pyro', stars: 3, pack: 'WAYWARD', traits: ['tactician', 'pusher', 'damager'], stats: [[5, 5], [4, 4], [4, 4], [5, 6]] },
+	{ id: 'widget', name: 'Widget', title: 'and Pyro', stars: 3, pack: 'WAYWARD', traits: ['tactician', 'pusher', 'damager', 'tokens'], stats: [[5, 5], [4, 4], [4, 4], [5, 6]] },
 	{ id: 'wuk', name: 'Wuk', title: 'the Grove Keeper', stars: 3, pack: 'RENOWNED', traits: ['tokens', 'pusher', 'durable', 'sniper', 'tactician', 'healer'], stats: [[5, 5], [8, 8], [1, 1], [3, 4]] },
 	{ id: 'emmitt', name: 'Emmitt', title: 'the Traveller', stars: 4, pack: 'WAYWARD', traits: ['melee', 'tactician', 'durable', 'disabler', 'tokens'], stats: [[5, 8], [6, 6], [1, 1], [2, 4]] },
 	{ id: 'gydion', name: 'Gydion', title: 'the Archwizard', stars: 4, pack: 'ARCANE', traits: ['sniper', 'tactician', 'farming', 'damager', 'pusher', 'tokens'], stats: [[5, 6], [3, 5], [3, 3], [1, 4]] },

@@ -112,7 +112,14 @@
 	}
 
 	let selPieceId: string | null = null;
-	function onSelectPiece(id: string | null) { selPieceId = id; }
+	let previewId: string | null = null; // clicking a hero token opens that player's board
+	function onSelectPiece(id: string | null) {
+		const pc = id ? $ms.pieces[id] : null;
+		// a hero figure (no minion role, no token) → preview its owner's board;
+		// minions / tokens keep the delete toolbar path.
+		if (pc && pc.hero && !pc.role && !pc.token) { previewId = pc.id; selPieceId = null; }
+		else { selPieceId = id; }
+	}
 	$: selPiece = selPieceId ? $ms.pieces[selPieceId] : null;
 	let confirmDelete = false;
 	function doDelete() {
@@ -166,7 +173,7 @@
 	<div class="ocean"></div>
 	<BoardCanvas bind:this={board} map={$ms.map ?? {}} rotation={orientation} interactive={true} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} {thrones} />
 
-	<CardLayer {session} {ms} {players} {clientId} onAdvanceTurn={() => stepTurn(1)} />
+	<CardLayer {session} {ms} {players} {clientId} onAdvanceTurn={() => stepTurn(1)} bind:previewId />
 
 	<!-- selected minion/token: offer delete (heroes aren't deletable) -->
 	{#if selPiece && (selPiece.role || selPiece.token)}
