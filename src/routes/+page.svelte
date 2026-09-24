@@ -455,6 +455,17 @@
 			writeActive({ seat, color: c });
 		} });
 	}
+	// join a chosen side directly (skips the coin flip) — takes that side's first
+	// open seat. The flip stays available for anyone who wants the ceremony.
+	function joinTeam(side: Team) {
+		if (mySeat >= 0 || flipping) return;
+		const seat = openSeatsOn(side)[0];
+		if (seat === undefined) return; // that side is full
+		const c = pick || firstFreeColor();
+		color = c;
+		session?.setSelf({ seat, color: c });
+		writeActive({ seat, color: c });
+	}
 	// move to a different open seat (only after you're seated, and not while readied)
 	function sit(i: number) {
 		if (ready || mySeat < 0 || takenSeats.has(i) || i === mySeat) return;
@@ -699,7 +710,12 @@
 						<div class="teamstop">
 							<span>Teams {mySeat < 0 ? '· flip to join' : myTeam === 'orange' ? '· you’re Orange' : '· you’re Blue'}</span>
 							{#if mySeat < 0}
-								<button class="flipbtn hero" on:click={flipForTeam} disabled={flipping || seatedCount >= seatCount}>🪙 Flip for your team</button>
+								<div class="joinrow">
+									<button class="flipbtn hero" on:click={flipForTeam} disabled={flipping || seatedCount >= seatCount}>🪙 Flip for your team</button>
+									<span class="joinor">or join</span>
+									<button class="joinbtn orange" on:click={() => joinTeam('orange')} disabled={flipping || openSeatsOn('orange').length === 0} title="Join Orange directly">Orange</button>
+									<button class="joinbtn blue" on:click={() => joinTeam('blue')} disabled={flipping || openSeatsOn('blue').length === 0} title="Join Blue directly">Blue</button>
+								</div>
 							{:else if ready}
 								<span class="swaphint">🔒 locked in — unready to change</span>
 							{:else}
@@ -909,6 +925,15 @@
 	.flipbtn:disabled { opacity: 0.4; cursor: not-allowed; }
 	.flipbtn.hero { background: var(--hl); border-color: rgba(255, 255, 255, 0.35); padding: 0.42rem 1rem; font-size: 0.85rem; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3); }
 	.swaphint { font-size: 0.72rem; color: #94a3b8; }
+	.joinrow { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; justify-content: flex-end; }
+	.joinor { font-size: 0.7rem; color: #94a3b8; }
+	.joinbtn { border-radius: 999px; padding: 0.32rem 0.75rem; font-size: 0.78rem; font-weight: 700; cursor: pointer; color: #f1f5f9; border: 1px solid transparent; transition: background 0.15s, transform 0.12s; }
+	.joinbtn:hover:not(:disabled) { transform: translateY(-1px); }
+	.joinbtn:disabled { opacity: 0.4; cursor: not-allowed; }
+	.joinbtn.orange { background: rgba(239, 125, 34, 0.22); border-color: rgba(239, 125, 34, 0.55); }
+	.joinbtn.orange:hover:not(:disabled) { background: rgba(239, 125, 34, 0.36); }
+	.joinbtn.blue { background: rgba(47, 127, 230, 0.22); border-color: rgba(47, 127, 230, 0.55); }
+	.joinbtn.blue:hover:not(:disabled) { background: rgba(47, 127, 230, 0.36); }
 	.tseat.open:disabled { cursor: default; opacity: 0.7; }
 	.tseat.open.swap:hover { background: rgba(255, 255, 255, 0.12); border-color: rgba(255, 255, 255, 0.45); transform: translateY(-2px); }
 	.teams { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
