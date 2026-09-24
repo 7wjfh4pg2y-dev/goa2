@@ -95,6 +95,11 @@
 	function readActive(): ActiveInfo | null {
 		try { return JSON.parse(localStorage.getItem(ACTIVE) || 'null'); } catch { return null; }
 	}
+	// remember the last room the player was in so the Join screen can prefill the
+	// code (kept even after an intentional Leave, so getting back is one tap)
+	const LAST_ROOM = 'goa2-last-room';
+	function rememberRoom(r: string) { try { if (r) localStorage.setItem(LAST_ROOM, r); } catch {} }
+	function lastRoom(): string { try { return localStorage.getItem(LAST_ROOM) || ''; } catch { return ''; } }
 
 	// public room directory
 	let roomHandle: ReturnType<typeof announceRoom> | null = null;
@@ -135,6 +140,7 @@
 		ensureLoaded();
 		name = active.name || name;
 		room = active.room;
+		rememberRoom(room);
 		pendingColor = active.color && active.color !== 'spectator' ? active.color : '';
 		pendingSeat = typeof active.seat === 'number' ? active.seat : -1;
 		resumeSeed = active.creator ? active.seed : null; // fallback if room emptied out
@@ -230,14 +236,16 @@
 		if (cand === session.clientId && $state.host !== cand) session.update({ host: cand });
 	}
 
-	// whoever is host keeps the room in the public directory (covers handoff)
-	$: if (browser && session && iAmHost && !roomHandle && (mode === 'lobby' || mode === 'game')) {
+	// whoever is host keeps the room in the public directory (covers handoff),
+	// in every in-game phase so it stays discoverable/spectatable throughout
+	$: if (browser && session && iAmHost && !roomHandle && (mode === 'lobby' || mode === 'draft' || mode === 'game')) {
 		roomHandle = announceRoom({ room, host: name, seats: $state.seats, count: seatedCount, started: $state.started });
 	}
 
 	// browse open rooms only while on the Join screen
 	function manageBrowse(m: Mode) {
 		if (m === 'join') {
+			if (!room.trim()) room = lastRoom(); // prefill the last room so no retyping
 			if (!browseHandle) browseHandle = browseRooms((rs) => (openRooms = rs));
 		} else if (browseHandle) {
 			browseHandle.leave();
@@ -377,6 +385,7 @@
 			draftSystem,
 			draftStars
 		});
+		rememberRoom(room);
 		session = joinMatch(room, { name, color: 'spectator' }, { seed });
 		roomHandle = announceRoom({ room, host: name, seats: playerCount, count: 0, started: false });
 		writeActive({ room, name, color: 'spectator', seat: -1, creator: true, seed });
@@ -389,6 +398,7 @@
 		if (!room || joining) return;
 		joinError = '';
 		joining = true;
+		rememberRoom(room);
 		session = joinMatch(room, { name, color: 'spectator' }, {});
 		writeActive({ room, name, color: 'spectator', seat: -1, creator: false, seed: null });
 		bindSession(false);
