@@ -21,6 +21,7 @@
 		buildDraft,
 		placeHeroes,
 		placeMinions,
+		buildSeatMap,
 		draftPoolMin,
 		DRAFT_SYSTEMS,
 		DRAFT_LABELS,
@@ -62,6 +63,7 @@
 	let ready = false;
 	let joinError = '';
 	let joining = false;
+	let seatNotice = ''; // transient toast for seat-takeover grant/deny
 	let session: MatchSession | null = null;
 	let players: Readable<Player[]> = writable([]);
 	let state: Readable<MatchState> = writable(initialMatchState());
@@ -205,7 +207,8 @@
 		const s = get(state);
 		session.update({
 			pieces: { ...placeMinions(s), ...placeHeroes(s, get(players)) },
-			cards: initCards(s.draft?.picks ?? {})
+			cards: initCards(s.draft?.picks ?? {}),
+			seatMap: buildSeatMap(get(players), s.seats)
 		});
 	}
 
@@ -303,6 +306,17 @@
 		ready = false;
 		s.kicked.subscribe((v) => { if (v && session === s) bail('You were removed from the game.'); });
 		s.notFound.subscribe((v) => { if (v && session === s) failJoin(); });
+		// granted a seat takeover → take the seat + colour and remember it for rejoin
+		s.seatGranted.subscribe((g) => {
+			if (!g || session !== s) return;
+			const c = g.color && g.color !== 'spectator' ? g.color : firstFreeColor();
+			color = c;
+			s.setSelf({ seat: g.seat, color: c, ready: false });
+			writeActive({ seat: g.seat, color: c });
+			seatNotice = 'You took the seat!';
+			setTimeout(() => (seatNotice = ''), 3000);
+		});
+		s.seatDenied.subscribe((t) => { if (t && session === s) { seatNotice = 'The host declined your seat request.'; setTimeout(() => (seatNotice = ''), 3000); } });
 		if (enterLobby) mode = 'lobby';
 	}
 	// a join stays on the Join screen ("Joining…") until the room's real state
@@ -493,6 +507,7 @@
 	<HeroDraft {session} {state} {players} clientId={session.clientId} onLeave={leaveRoom} />
 {:else if mode === 'game' && session}
 	<GameView {session} ms={state} {players} clientId={session.clientId} {room} onLeave={leaveRoom} />
+	{#if seatNotice}<div class="seattoast">{seatNotice}</div>{/if}
 {:else}
 <main class="wrap" class:landing={mode === 'landing'}>
 	<button class="home-link" class:hero={mode === 'landing'} on:click={onLogo} aria-label={mode === 'landing' ? 'Enter' : 'Main menu'}>
@@ -920,6 +935,8 @@
 	.tokenrow { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; }
 	.tokenrow .swatches { flex: 1; min-width: 0; gap: 5px; flex-wrap: nowrap; }
 	.chip.spec { flex: none; white-space: nowrap; padding: 0.3rem 0.7rem; font-size: 0.8rem; }
+	.seattoast { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); z-index: 40; padding: 8px 16px; border-radius: 999px;
+		background: rgba(9, 13, 22, 0.92); border: 1px solid rgba(199, 154, 78, 0.5); color: #f6ead2; font-weight: 700; font-size: 0.85rem; box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5); }
 	.specs { font-size: 0.75rem; color: #94a3b8; margin: 8px 0 0; }
 	.kickx { border: none; background: transparent; color: #fca5a5; cursor: pointer; font-size: 0.7rem; padding: 0 2px; }
 

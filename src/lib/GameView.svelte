@@ -61,6 +61,24 @@
 	$: mySeat = $players.find((p) => p.id === clientId)?.seat ?? -1;
 	$: myTeam = teamForSeat(mySeat, $ms.seats);
 	$: orientation = myTeam === 'orange' ? 180 : 0;
+	$: iAmHost = $ms.host === clientId;
+
+	// ── in-game manage menu: seats, spectators, kick, seat-takeover approvals ──
+	let manageOpen = false;
+	$: presentIds = new Set($players.map((p) => p.id));
+	$: spectators = $players.filter((p) => p.seat < 0);
+	$: seatRequests = $ms.seatRequests ?? [];
+	$: myRequestSeat = seatRequests.find((r) => r.id === clientId)?.seat ?? -1;
+	$: seatRows = Array.from({ length: $ms.seats }, (_, seat) => {
+		const owner = $ms.seatMap?.[String(seat)] ?? $players.find((p) => p.seat === seat) ?? null;
+		const id = owner ? ('id' in owner ? owner.id : (owner as Player).id) : '';
+		const nm = owner ? ('name' in owner ? owner.name : (owner as Player).name) : '';
+		const hero = id ? ($ms.cards?.[id]?.hero ?? $ms.draft?.picks?.[id] ?? '') : '';
+		return { seat, id, name: nm, hero, team: teamForSeat(seat, $ms.seats), present: !!id && presentIds.has(id) };
+	});
+	function kickSeat(id: string) { if (iAmHost && id) session.kick(id); }
+	function requestSeat(seat: number) { session.requestSeat(seat); }
+	function resolveSeat(id: string, ok: boolean) { if (iAmHost) session.resolveSeat(id, ok); }
 
 	$: boardPieces = Object.values($ms.pieces).map((p) => ({
 		id: p.id, hex: p.hex, team: p.team, role: p.role, token: p.token,
@@ -190,9 +208,73 @@
 		<span class="conn {$status}"><span class="cdot"></span>{connLabel($status)}</span>
 	</div>
 
+	{#if manageOpen}
+		<div class="modal-scrim" on:click={() => (manageOpen = false)} on:keydown={(e) => e.key === 'Escape' && (manageOpen = false)} role="presentation">
+			<div class="managepanel" on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" tabindex="-1">
+				<div class="mphead"><h3>Players & seats</h3><button class="ix" on:click={() => (manageOpen = false)}>✕</button></div>
+
+				{#if iAmHost && seatRequests.length}
+					<div class="mpsec">
+						<div class="mplbl">Seat requests</div>
+						{#each seatRequests as r (r.id)}
+							<div class="mprow req">
+								<span class="mpname">{r.name}<em>wants seat {r.seat + 1}</em></span>
+								<span class="mpacts">
+									<button class="act primary sm" on:click={() => resolveSeat(r.id, true)}>Approve</button>
+									<button class="act ghost sm" on:click={() => resolveSeat(r.id, false)}>Deny</button>
+								</span>
+							</div>
+						{/each}
+					</div>
+				{/if}
+
+				<div class="mpsec">
+					<div class="mplbl">Seats</div>
+					{#each seatRows as s (s.seat)}
+						<div class="mprow" style="--tint:{s.team === 'orange' ? '#ef7d22' : '#2f7fe6'}">
+							<span class="mpseatno">{s.seat + 1}</span>
+							<span class="mpname">
+								{s.name || 'Open'}{#if s.id === clientId}<em>you</em>{:else if !s.present}<em class="away">away</em>{/if}
+								<span class="mphero">{s.hero ? heroById(s.hero)?.name ?? '' : '—'}</span>
+							</span>
+							<span class="mpacts">
+								{#if iAmHost && s.present && s.id !== clientId}
+									<button class="act danger sm" on:click={() => kickSeat(s.id)}>Kick</button>
+								{/if}
+								{#if mySeat < 0 && !s.present}
+									{#if myRequestSeat === s.seat}
+										<span class="reqpending">Requested…</span>
+									{:else}
+										<button class="act sm" on:click={() => requestSeat(s.seat)} disabled={myRequestSeat >= 0}>Take seat</button>
+									{/if}
+								{/if}
+							</span>
+						</div>
+					{/each}
+				</div>
+
+				<div class="mpsec">
+					<div class="mplbl">Spectators <span class="ct">{spectators.length}</span></div>
+					{#if spectators.length}
+						<div class="mpspecs">
+							{#each spectators as sp (sp.id)}
+								<span class="mpspec">{sp.name}{sp.id === clientId ? ' (you)' : ''}{#if iAmHost && sp.id !== clientId}<button class="specx" title="Remove" on:click={() => kickSeat(sp.id)}>✕</button>{/if}</span>
+							{/each}
+						</div>
+					{:else}<span class="empty-note">None</span>{/if}
+				</div>
+
+				{#if mySeat < 0}<p class="mphint">You're spectating. Request an open/away seat above — the host approves takeovers.</p>{/if}
+			</div>
+		</div>
+	{/if}
+
 	<!-- game HUD: right-side panel -->
 	<div class="hud">
 		<div class="mapname">{$ms.map?.name ?? 'Board'}</div>
+		<button class="managebtn" class:alert={iAmHost && seatRequests.length} on:click={() => (manageOpen = true)} title="Players & seats">
+			👥 Players &amp; seats{#if iAmHost && seatRequests.length}<span class="reqbadge">{seatRequests.length}</span>{/if}
+		</button>
 
 		<div class="hsec rt">
 			<div class="rline">
@@ -327,6 +409,39 @@
 	.mleave:hover { background: #ef4444; }
 
 	/* room / connection cluster, tucked in the top-left corner */
+	/* in-game manage menu */
+	.managebtn { width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 6px 10px; border-radius: 9px; cursor: pointer;
+		background: rgba(199, 154, 78, 0.12); border: 1px solid rgba(199, 154, 78, 0.4); color: #e8dcc0; font-weight: 700; font-size: 0.76rem; }
+	.managebtn:hover { background: rgba(199, 154, 78, 0.24); }
+	.managebtn.alert { border-color: rgba(239, 125, 34, 0.8); box-shadow: 0 0 12px rgba(239, 125, 34, 0.4); }
+	.reqbadge { min-width: 1.05rem; height: 1.05rem; padding: 0 4px; border-radius: 999px; background: #ef7d22; color: #1a0f06; font-size: 0.62rem; font-weight: 900; display: grid; place-items: center; }
+	.managepanel { width: min(460px, 94vw); max-height: 88vh; overflow-y: auto; color: #e5e7eb; background: rgba(11, 16, 26, 0.96); border: 1px solid rgba(199, 154, 78, 0.5); border-radius: 16px; padding: 16px 18px; box-shadow: 0 24px 70px rgba(0, 0, 0, 0.7); }
+	.mphead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+	.mphead h3 { font-family: 'Modesto Poster', serif; font-size: 1.3rem; margin: 0; }
+	.mphead .ix { background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.16); color: #cbd5e1; border-radius: 7px; width: 1.8rem; height: 1.8rem; cursor: pointer; }
+	.mpsec { margin-top: 12px; }
+	.mplbl { font-size: 0.62rem; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 800; color: #b8a06a; margin-bottom: 6px; display: flex; gap: 6px; align-items: center; }
+	.mplbl .ct { color: #f1f5f9; background: rgba(255, 255, 255, 0.08); border-radius: 5px; padding: 0 6px; }
+	.mprow { display: flex; align-items: center; gap: 10px; padding: 7px 9px; border-radius: 10px; background: rgba(12, 18, 32, 0.5); border: 1px solid rgba(255, 255, 255, 0.08); border-left: 3px solid var(--tint, rgba(255,255,255,.12)); margin-bottom: 5px; }
+	.mprow.req { border-left-color: #ef7d22; background: rgba(239, 125, 34, 0.1); }
+	.mpseatno { width: 1.4rem; height: 1.4rem; flex: none; display: grid; place-items: center; border-radius: 6px; background: rgba(255, 255, 255, 0.08); font-weight: 800; font-size: 0.78rem; color: #cbd5e1; }
+	.mpname { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.15; font-family: 'Modesto Poster', serif; font-size: 0.98rem; color: #f6ead2; }
+	.mpname em { font-style: normal; font-family: system-ui, sans-serif; font-size: 0.58rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #8b9bb0; }
+	.mpname em.away { color: #f0a35a; }
+	.mphero { font-family: system-ui, sans-serif; font-size: 0.66rem; color: #93a3b8; }
+	.mpacts { display: flex; gap: 6px; flex: none; }
+	.mpspecs { display: flex; flex-wrap: wrap; gap: 6px; }
+	.mpspec { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.12); font-size: 0.78rem; }
+	.specx { background: none; border: none; color: #fca5a5; cursor: pointer; padding: 0; font-size: 0.78rem; }
+	.reqpending { font-size: 0.72rem; font-weight: 700; color: #f0c98a; }
+	.mphint { font-size: 0.72rem; color: #93a3b8; margin: 12px 0 0; }
+	.empty-note { color: #64748b; font-size: 0.8rem; }
+	.managepanel .act { border: 1px solid rgba(255, 255, 255, 0.2); background: rgba(255, 255, 255, 0.08); color: #e5e7eb; border-radius: 8px; padding: 5px 12px; font-weight: 700; cursor: pointer; font-size: 0.8rem; }
+	.managepanel .act.sm { padding: 4px 10px; font-size: 0.76rem; }
+	.managepanel .act.primary { background: #ef7d22; color: #1a0f06; border-color: transparent; }
+	.managepanel .act.danger { background: rgba(220, 60, 60, 0.25); border-color: rgba(220, 60, 60, 0.5); color: #ffb4b4; }
+	.managepanel .act.ghost { background: transparent; }
+
 	.corner { position: absolute; top: 10px; right: 14px; z-index: 6; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.8); }
 	.rc { color: #94a3b8; font-size: 0.78rem; }
 	.mono { font-family: ui-monospace, monospace; letter-spacing: 0.08em; }
