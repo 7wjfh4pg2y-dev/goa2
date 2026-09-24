@@ -629,6 +629,10 @@ export interface MatchSession {
 	flipJoin: (side: Team, name: string) => void
 	/** Emits when ANOTHER player flips to join a team (for the shared animation). */
 	joinFlip: Readable<{ id: string; name: string; side: Team; at: number } | null>
+	/** Host: undo the most recent logged action (down to the turn's first entry). */
+	undo: () => void
+	/** True while the host has at least one action to undo this turn. */
+	canUndo: Readable<boolean>
 	/** Spectator: ask the host to take over a (vacant) seat. */
 	requestSeat: (seat: number) => void
 	/** Host: approve or deny a pending seat-takeover request (by requester id). */
@@ -683,6 +687,30 @@ export function joinMatch(
 	const seatDenied = writable(0)
 	// another player flipped to join a team — everyone plays the coin animation
 	const joinFlip = writable<{ id: string; name: string; side: Team; at: number } | null>(null)
+	// host-local undo: snapshots of state before each logged action THIS turn.
+	// Immutable nested updates mean a shallow reference is a safe snapshot. The
+	// stack resets whenever the round/turn changes, so undo floors at turn start.
+	const UNDO_CAP = 60
+	let undoStack: MatchState[] = []
+	const canUndo = writable(false)
+	let undoing = false
+	// Track undo history across a state transition (any origin). A new turn/round
+	// resets the stack; a transition that appended a log entry pushes the prior
+	// state so the host can step back entry-by-entry to the start of the turn.
+	// Defined ahead of buildChannel() so the initial subscribe's applyRemote (which
+	// calls it synchronously) never hits it in the temporal dead zone.
+	const recordHistory = (before: MatchState, after: MatchState) => {
+		if (undoing || !before || !after) return
+		if (after.round !== before.round || after.turn !== before.turn) {
+			if (undoStack.length) { undoStack = []; canUndo.set(false) }
+			return
+		}
+		if ((after.log?.length ?? 0) > (before.log?.length ?? 0)) {
+			undoStack.push(before)
+			if (undoStack.length > UNDO_CAP) undoStack.shift()
+			canUndo.set(true)
+		}
+	}
 	const conn = writable<ConnStatus>('connecting')
 
 	// The channel is rebuilt on a hard reconnect, so it's a `let` that every
@@ -698,6 +726,7 @@ export function joinMatch(
 			incoming.rev > local.rev ||
 			(incoming.rev === local.rev && incoming.updatedAt > local.updatedAt)
 		) {
+			recordHistory(local, incoming)
 			state.set(incoming)
 		}
 	}
@@ -830,15 +859,30 @@ export function joinMatch(
 	buildChannel()
 
 	const update = (patch: Partial<MatchState>) => {
-		local = {
+		const before = local
+		const after = {
 			...local,
 			...patch,
 			rev: local.rev + 1,
 			updatedBy: clientId,
 			updatedAt: Date.now()
 		}
+		recordHistory(before, after)
+		local = after
 		state.set(local)
 		broadcastState()
+	}
+
+	// host: revert the most recent logged action, snapping back one activity-log
+	// entry at a time (down to the first entry of the current turn).
+	const undo = () => {
+		if (local.host !== clientId) return
+		const snap = undoStack.pop()
+		canUndo.set(undoStack.length > 0)
+		if (!snap) return
+		undoing = true // don't let this restore re-enter the history
+		update({ ...snap })
+		undoing = false
 	}
 
 	const act = (text: string, patch: Partial<MatchState>) => {
@@ -962,7 +1006,7 @@ export function joinMatch(
 		}
 	}
 
-	return { state, players, update, act, setSelf, cardAction, kick, flipJoin, joinFlip, requestSeat, resolveSeat, seatGranted, seatDenied, kicked, notFound, status: conn, leave, clientId }
+	return { state, players, update, act, setSelf, cardAction, kick, flipJoin, joinFlip, undo, canUndo, requestSeat, resolveSeat, seatGranted, seatDenied, kicked, notFound, status: conn, leave, clientId }
 }
 
 // ---- Round/turn helpers (encode the rulebook's structure) -------------------

@@ -18,6 +18,7 @@
 	export let onLeave: () => void;
 
 	const status = session.status;
+	const canUndo = session.canUndo;
 	let logOpen = true;
 	$: lifeMax = $ms.lifeMax || ($ms.lifeTok?.orange?.length ?? 8);
 
@@ -367,9 +368,15 @@
 
 		<!-- activity log fills the space between the tie-breaker and the controls; retractable -->
 		<div class="logpanel" class:collapsed={!logOpen}>
-			<button class="loghead" on:click={() => (logOpen = !logOpen)} title={logOpen ? 'Hide activity' : 'Show activity'}>
-				<span>Activity</span><span class="chev">{logOpen ? '▾' : '▸'}</span>
-			</button>
+			<div class="loghdr">
+				<button class="loghead" on:click={() => (logOpen = !logOpen)} title={logOpen ? 'Hide activity' : 'Show activity'}>
+					<span>Activity</span><span class="chev">{logOpen ? '▾' : '▸'}</span>
+				</button>
+				{#if iAmHost}
+					<button class="undobtn" on:click={() => session.undo()} disabled={!$canUndo}
+						title={$canUndo ? `Undo: ${log[log.length - 1]?.text ?? ''}` : 'Nothing to undo this turn'}>↶ Undo</button>
+				{/if}
+			</div>
 			{#if logOpen}
 				<div class="logbody" bind:this={logEl}>
 					{#each log.slice(-40) as e (e.id)}
@@ -557,9 +564,14 @@
 	.logpanel { flex: 1; min-height: 56px; display: flex; flex-direction: column; overflow: hidden;
 		border-radius: 9px; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); }
 	.logpanel.collapsed { flex: none; min-height: 0; }
-	.loghead { display: flex; align-items: center; justify-content: space-between; width: 100%; border: none; cursor: pointer;
+	.loghdr { display: flex; align-items: stretch; }
+	.loghead { display: flex; align-items: center; justify-content: space-between; flex: 1; border: none; cursor: pointer;
 		padding: 5px 8px; background: rgba(255, 255, 255, 0.04); color: #93a3b8; font-weight: 700; font-size: 0.66rem; letter-spacing: 0.1em; text-transform: uppercase; }
 	.loghead:hover { background: rgba(255, 255, 255, 0.08); }
+	.undobtn { flex: none; border: none; border-left: 1px solid rgba(255, 255, 255, 0.08); cursor: pointer; padding: 5px 9px;
+		background: rgba(199, 154, 78, 0.16); color: #f0dcae; font-weight: 800; font-size: 0.66rem; letter-spacing: 0.04em; }
+	.undobtn:hover:not(:disabled) { background: rgba(199, 154, 78, 0.3); }
+	.undobtn:disabled { opacity: 0.35; cursor: not-allowed; color: #93a3b8; background: rgba(255, 255, 255, 0.03); }
 	.loghead .chev { letter-spacing: 0; }
 	.logbody { flex: 1; overflow-y: auto; padding: 5px 8px; display: flex; flex-direction: column; gap: 3px; }
 	.logline { font-size: 0.72rem; color: #cbd5e1; line-height: 1.3; }
