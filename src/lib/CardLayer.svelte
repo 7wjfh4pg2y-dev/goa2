@@ -43,6 +43,7 @@
 	$: teamName = (p: Player) => (teamForSeat(p.seat, $ms.seats) === 'orange' ? 'Orange' : 'Blue');
 	$: firstBlueId = others.find((p) => teamForSeat(p.seat, $ms.seats) === 'blue')?.id ?? '';
 
+	$: iAmHost = $ms.host === clientId;
 	$: turnIdx = $ms.turn - 1;
 	$: seatedWithCards = seated.filter((p) => cards[p.id]);
 	// DERIVED reveal: everyone ready ⇒ all cards face-up (same for every client).
@@ -347,7 +348,7 @@
 				<div class="mhead">
 					<span class="mav" style="--tint:{ORANGE}"><img src={heroLogo(dh)} alt="" /></span>
 					<div class="mtitle">
-						<div class="mnm">{heroName(dh)} · Deck</div>
+						<div class="mnm">{heroName(dh)} · Deck<em class="lvtag">Lv {levelOf(mine)}</em></div>
 						<div class="mtt">Select a card, then send it to your hand, upgrade area or removed pile</div>
 					</div>
 					<button class="ix" on:click={() => { deckOpen = false; deckSel = null; }}>✕</button>
@@ -554,7 +555,7 @@
 					<span class="ds-card ds1"><img src={heroLogo(mine.hero)} alt="" /></span>
 					<span class="ds-count">{deckCards(mine).length}</span>
 				</button>
-				{#if revealed}
+				{#if revealed && iAmHost}
 					{#if !isFinalTurn}
 						<button class="act primary sm" on:click={onAdvanceTurn}>Next turn →</button>
 					{:else if !battlePhase}
@@ -562,6 +563,8 @@
 					{:else}
 						<button class="act primary sm" on:click={onAdvanceTurn}>Next round →</button>
 					{/if}
+				{:else if revealed}
+					<span class="waithost">Waiting for host…</span>
 				{:else if myReady}
 					<button class="act sm" on:click={takeBack}>Take back</button>
 				{/if}
@@ -736,7 +739,8 @@
 	.empty-note { color: #55637a; font-size: .8rem; padding: 4px; }
 
 	/* deck view (manage cards across zones) */
-	.deckmodal { width: min(880px, 95vw); max-height: 92vh; overflow-y: auto; padding: 16px 18px 12px; color: #e5e7eb; background: rgba(11,16,26,.96); border: 1px solid rgba(199,154,78,.5); border-radius: 16px; box-shadow: 0 24px 70px rgba(0,0,0,.7); }
+	.deckmodal { width: min(880px, 95vw); max-height: 92vh; overflow-y: auto; scrollbar-gutter: stable; padding: 16px 18px 12px; color: #e5e7eb; background: rgba(11,16,26,.96); border: 1px solid rgba(199,154,78,.5); border-radius: 16px; box-shadow: 0 24px 70px rgba(0,0,0,.7); }
+	.deckmodal .lvtag { font-style: normal; font-family: system-ui, sans-serif; font-size: .62rem; font-weight: 800; letter-spacing: .04em; color: #f0dcae; background: rgba(199,154,78,.2); border: 1px solid rgba(199,154,78,.45); border-radius: 6px; padding: 1px 7px; margin-left: 9px; vertical-align: middle; }
 	.deckmodal .mav { overflow: visible; border-color: rgba(199,154,78,.6); display: grid; place-items: center; }
 	.deckmodal .mav img { width: 76%; height: 76%; object-fit: contain; border-radius: 0; }
 	.dklabel { font-size: .62rem; letter-spacing: .1em; text-transform: uppercase; font-weight: 700; color: #93a3b8; display: flex; align-items: center; gap: 6px; margin: 12px 0 7px; flex-wrap: wrap; }
@@ -869,6 +873,7 @@
 	.hc :global(canvas) { display: block; width: 100%; border-radius: 6%; box-shadow: 0 8px 18px rgba(0,0,0,.55); }
 	.hc:hover { transform: translateY(calc(var(--y) - 22px)) rotate(var(--rot)) scale(1.08); z-index: 5; }
 	.dstatus { flex: 1; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center; }
+	.waithost { font-size: .74rem; font-weight: 700; letter-spacing: .02em; color: #b8a06a; font-style: italic; }
 	/* face-down deck stack on the dash (opens the deck view) */
 	.deckstack { position: relative; width: 40px; height: 54px; background: none; border: none; padding: 0; cursor: pointer; flex: none; }
 	.deckstack:hover .ds1 { transform: translateY(-3px); }

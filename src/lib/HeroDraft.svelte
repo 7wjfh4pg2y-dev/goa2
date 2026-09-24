@@ -34,6 +34,8 @@
 
 	const nameOf = (id: string) => $players.find((p) => p.id === id)?.name ?? 'Player';
 
+	// hero grid order: by tier (stars) first, then alphabetical within a tier
+	const HEROES_TIER = [...HEROES_ALPHA].sort((a, b) => a.stars - b.stars || a.name.localeCompare(b.name));
 	$: inPool = d ? new Set(d.pool) : new Set<string>();
 	// a hero is unavailable if it's outside the complexity pool, picked, or banned
 	$: unavailable = (h: string) => !inPool.has(h) || blocked.has(h);
@@ -202,7 +204,7 @@
 	<div class="stage">
 		<img class="splash" src={heroSplash(sel)} alt={selHero.name} />
 		<div class="scrim"></div>
-		<div class="turn t-{bannerTeam ?? 'orange'}" class:overtime><span class="dot"></span><span class="btxt">{overtime ? 'Lock in!' : banner}</span>{#if countdown}<span class="sep">—</span><span class="clock" class:urgent={secsLeft != null && secsLeft <= 10}>{countdown}</span>{/if}{#if !complete && d.order.length}<span class="mode">· {DRAFT_LABELS[d.system]}</span>{/if}</div>
+		<div class="turn t-{bannerTeam ?? 'orange'}" class:overtime class:urgent={secsLeft != null && secsLeft <= 10 && !complete}><span class="dot"></span><span class="btxt">{overtime ? 'Lock in!' : banner}</span>{#if countdown}<span class="sep">—</span><span class="clock" class:urgent={secsLeft != null && secsLeft <= 10}>{countdown}</span>{/if}{#if !complete && d.order.length}<span class="mode">· {DRAFT_LABELS[d.system]}</span>{/if}</div>
 		{#if toastAction && toastHero}
 			<div class="toast t-{toastAction.team}" class:ban={toastAction.type === 'ban'}>
 				<div class="tav"><img src={heroAvatar(toastAction.hero)} alt="" />{#if toastAction.type === 'ban'}<span class="tban">✕</span>{/if}</div>
@@ -240,7 +242,7 @@
 
 		<div class="rightcol">
 			<div class="browse">
-				{#each HEROES_ALPHA as h (h.id)}
+				{#each HEROES_TIER as h (h.id)}
 					<button class="hero" class:on={sel === h.id} class:gone={unavailable(h.id)} class:locked={h.stars === 4}
 						class:dim={d.system === 'single-draft' && myTurn && inPool.has(h.id) && !d.offer.includes(h.id) && !blocked.has(h.id)}
 						disabled={!inPool.has(h.id) || h.stars === 4}
@@ -296,6 +298,8 @@
 	/* all-pick grace/overtime: the whole banner + timer go red and pulse */
 	.turn.overtime { border-color: rgba(239,68,68,0.7); background: rgba(60,10,12,0.6); box-shadow: 0 0 0 1px rgba(239,68,68,0.45), 0 0 22px rgba(239,68,68,0.5); animation: otpulse 1s ease-in-out infinite; }
 	.turn.overtime .btxt, .turn.overtime .sep, .turn.overtime .clock { color: #fca5a5; }
+	/* last 10s of the normal clock: redden the whole banner text, not just the timer */
+	.turn.urgent .btxt, .turn.urgent .sep { color: #fca5a5; }
 	.turn.overtime .dot { background: #ef4444; box-shadow: 0 0 10px #ef4444; }
 	@keyframes otpulse { 0%, 100% { box-shadow: 0 0 0 1px rgba(239,68,68,0.4), 0 0 14px rgba(239,68,68,0.35); } 50% { box-shadow: 0 0 0 1px rgba(239,68,68,0.6), 0 0 26px rgba(239,68,68,0.6); } }
 	.toast { position: absolute; top: 62px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; background: linear-gradient(180deg, rgba(16,22,38,0.82), rgba(9,13,22,0.82)); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.12); border-left-width: 4px; border-radius: 12px; padding: 8px 16px 8px 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); white-space: nowrap; animation: toastIn 0.3s cubic-bezier(0.2,0.9,0.2,1); }
