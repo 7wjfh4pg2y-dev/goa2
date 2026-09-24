@@ -44,6 +44,16 @@
 	$: teamName = (p: Player) => (teamForSeat(p.seat, $ms.seats) === 'orange' ? 'Orange' : 'Blue');
 	$: firstBlueId = others.find((p) => teamForSeat(p.seat, $ms.seats) === 'blue')?.id ?? '';
 
+	// ── HUD status markers (Tigerclaw poison, Bain bounty) ─────────────────────
+	$: statusMap = $ms.status ?? {};
+	const EMPTY_STATUS = { poison: 0, bounty: 0 };
+	function setStatus(pid: string, key: 'poison' | 'bounty', delta: number) {
+		const cur = ($ms.status ?? {})[pid] ?? EMPTY_STATUS;
+		const nextEntry = { ...cur, [key]: Math.max(0, (cur[key] ?? 0) + delta) };
+		const who = seated.find((p) => p.id === pid)?.name ?? 'A player';
+		session.act(`${who} ${delta > 0 ? 'gained' : 'lost'} a ${key} marker`, { status: { ...($ms.status ?? {}), [pid]: nextEntry } });
+	}
+
 	$: iAmHost = $ms.host === clientId;
 	$: turnIdx = $ms.turn - 1;
 	$: seatedWithCards = seated.filter((p) => cards[p.id]);
@@ -253,6 +263,7 @@
 		</div>
 		{#each others as p (p.id)}
 			{@const cs = cards[p.id]}
+			{@const st = statusMap[p.id] ?? EMPTY_STATUS}
 			{#if p.id === firstBlueId}<div class="ppdiv"></div>{/if}
 			<button class="prow" class:ultrow={cs?.ultimate} style="--tint:{teamTint(p)}" on:click={() => (overlayId = p.id)}>
 				<div class="prtop">
@@ -265,6 +276,8 @@
 							{p.name}<em>Lv {cs ? levelOf(cs) : 1}</em>
 							{#if cs}<span class="coin" title="Coins">{cs.coins}</span>{/if}
 							{#if cs && cs.discard.length}<span class="dchip" title="Cards in discard pile">▾ {cs.discard.length}</span>{/if}
+							{#if st.poison}<span class="statmk pois" title="Poison"><img src={icon('marker_poison')} alt="" />{#if st.poison > 1}{st.poison}{/if}</span>{/if}
+							{#if st.bounty}<span class="statmk bnty" title="Bounty"><img src={icon('marker_bounty')} alt="" />{#if st.bounty > 1}{st.bounty}{/if}</span>{/if}
 						</span>
 						<span class="phero">{cs ? heroName(cs.hero) : ''}</span>
 					</span>
@@ -303,6 +316,8 @@
 		{@const cs = cards[overlayId]}
 		{@const oh = cs.hero}
 		{@const od = heroCards(oh)}
+		{@const oid = ovPlayer.id}
+		{@const ost = statusMap[oid] ?? EMPTY_STATUS}
 		<div class="scrim" on:click={() => (overlayId = null)} on:keydown={(e) => e.key === 'Escape' && (overlayId = null)} role="presentation">
 			<div class="modal" on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" tabindex="-1">
 				<div class="mhead">
@@ -319,6 +334,19 @@
 					{/if}
 					<span class="coin lg" title="Coins">{cs.coins}</span>
 					<button class="ix" on:click={() => (overlayId = null)}>✕</button>
+				</div>
+				<div class="statusctl">
+					<span class="sclbl">Status</span>
+					<div class="scgrp pois">
+						<img src={icon('marker_poison')} alt="" /><span>Poison {ost.poison || ''}</span>
+						<button on:click={() => setStatus(oid, 'poison', -1)} disabled={!ost.poison} aria-label="Remove poison">−</button>
+						<button on:click={() => setStatus(oid, 'poison', 1)} aria-label="Add poison">+</button>
+					</div>
+					<div class="scgrp bnty">
+						<img src={icon('marker_bounty')} alt="" /><span>Bounty {ost.bounty || ''}</span>
+						<button on:click={() => setStatus(oid, 'bounty', -1)} disabled={!ost.bounty} aria-label="Remove bounty">−</button>
+						<button on:click={() => setStatus(oid, 'bounty', 1)} aria-label="Add bounty">+</button>
+					</div>
 				</div>
 				<div class="stats6">
 					{#each allStats(cs) as r}
@@ -519,6 +547,7 @@
 
 	<!-- ───────── bottom: hand floats ABOVE the dashboard ───────── -->
 	{#if mine}
+		{@const mst = statusMap[clientId] ?? EMPTY_STATUS}
 		<div class="tray">
 			{#each mine.hand as idx, k (idx)}
 				{@const f = fan(k, mine.hand.length)}
@@ -535,7 +564,10 @@
 					<img src={heroAvatar(mine.hero)} alt="" />{#if mine.ultimate}<span class="crown">♛</span>{/if}
 				</span>
 				<span class="dsmid">
-					<span class="dsname">{myName}<em>Lv {levelOf(mine)}</em></span>
+					<span class="dsname">{myName}<em>Lv {levelOf(mine)}</em>
+						{#if mst.poison}<span class="statmk pois" title="Poison"><img src={icon('marker_poison')} alt="" />{#if mst.poison > 1}{mst.poison}{/if}</span>{/if}
+						{#if mst.bounty}<span class="statmk bnty" title="Bounty"><img src={icon('marker_bounty')} alt="" />{#if mst.bounty > 1}{mst.bounty}{/if}</span>{/if}
+					</span>
 					<span class="dshero">{heroName(mine.hero)}</span>
 				</span>
 				<span class="dstats">
@@ -718,6 +750,20 @@
 	.pname { font-family: 'Modesto Poster', serif; font-size: .84rem; color: #f3f6fb; display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
 	.pname em { font-style: normal; font-size: .56rem; font-weight: 700; color: #8b9bb0; }
 	.dchip { display: inline-flex; align-items: center; gap: 1px; font-size: .54rem; font-weight: 800; font-variant-numeric: tabular-nums; color: #9fb0c4; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.12); border-radius: 5px; padding: 0 4px; }
+	/* compact HUD status markers (poison / bounty) */
+	.statmk { display: inline-flex; align-items: center; gap: 1px; font-size: .56rem; font-weight: 900; font-variant-numeric: tabular-nums; padding: 0 3px 0 2px; border-radius: 999px; line-height: 1; }
+	.statmk img { width: .82rem; height: .82rem; object-fit: contain; border-radius: 50%; }
+	.statmk.pois { color: #c8f5cf; background: rgba(65,174,89,.2); box-shadow: 0 0 0 1px rgba(65,174,89,.4); }
+	.statmk.bnty { color: #ffe6a6; background: rgba(232,182,74,.2); box-shadow: 0 0 0 1px rgba(232,182,74,.45); }
+	/* status controls in the board overlay */
+	.statusctl { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 10px; padding: 7px 10px; border-radius: 10px; background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.1); }
+	.statusctl .sclbl { font-size: .58rem; letter-spacing: .12em; text-transform: uppercase; font-weight: 800; color: #93a3b8; }
+	.scgrp { display: inline-flex; align-items: center; gap: 5px; font-size: .74rem; font-weight: 700; color: #e5e7eb; }
+	.scgrp img { width: 1.1rem; height: 1.1rem; object-fit: contain; border-radius: 50%; }
+	.scgrp.pois { color: #a6f5b6; } .scgrp.bnty { color: #ffe6a6; }
+	.scgrp button { width: 1.3rem; height: 1.3rem; border-radius: 6px; border: 1px solid rgba(255,255,255,.2); background: rgba(255,255,255,.08); color: #e5e7eb; font-weight: 900; cursor: pointer; line-height: 1; padding: 0; }
+	.scgrp button:hover:not(:disabled) { background: rgba(255,255,255,.18); }
+	.scgrp button:disabled { opacity: .35; cursor: not-allowed; }
 	.phero { font-size: .58rem; color: #93a3b8; }
 	.dslot { width: 1.7rem; flex: none; }
 	/* gold coin chip */

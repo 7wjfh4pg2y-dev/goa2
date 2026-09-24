@@ -210,6 +210,9 @@ export interface MatchState {
 	// the host the moment every seated player has committed; cleared if anyone
 	// uncommits (so the count restarts from 3 when they all commit again).
 	revealAt?: number | null
+	// per-player status markers shown on the HUD (Tigerclaw poison, Bain bounty),
+	// keyed by playerId. Counts so poison can stack; 0 = clear.
+	status?: Record<string, { poison: number; bounty: number }>
 	// durable seat ownership: seat index (as string) → the clientId + name that
 	// owns that seat's hero. Set at game start; survives a player dropping from
 	// presence, so a vacated seat can be identified and taken over.
