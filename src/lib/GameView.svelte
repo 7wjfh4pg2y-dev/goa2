@@ -133,6 +133,15 @@
 		spawnTeam = null;
 	}
 	// board hex tapped: if a spawn is armed, place the minion right there
+	// while a spawn is armed, the minion token rides under the pointer over the board
+	const minionTokenArt = import.meta.glob('./images/minion_tokens/*.png', { eager: true, import: 'default' }) as Record<string, string>;
+	let ghost: { x: number; y: number } | null = null;
+	function trackGhost(e: PointerEvent) {
+		if (!pendingSpawn) return;
+		const t = e.target as Element | null;
+		ghost = t?.closest?.('.board-wrap') ? { x: e.clientX, y: e.clientY } : null;
+	}
+	$: if (!pendingSpawn) ghost = null;
 	function onBoardHex(hex: string) {
 		if (!pendingSpawn) return;
 		const { team, role } = pendingSpawn;
@@ -195,9 +204,12 @@
 	});
 </script>
 
-<svelte:window on:keydown={(e) => e.key === 'Escape' && confirmLeave && (confirmLeave = false)} />
+<svelte:window on:keydown={(e) => { if (e.key !== 'Escape') return; if (confirmLeave) confirmLeave = false; else pendingSpawn = null; }} on:pointermove={trackGhost} on:pointerdown={trackGhost} />
 
-<div class="gamewrap">
+<div class="gamewrap" class:spawning={!!pendingSpawn}>
+	{#if pendingSpawn && ghost}
+		<img class="spawnghost" src={minionTokenArt[`./images/minion_tokens/${pendingSpawn.team}_${pendingSpawn.role}.png`]} alt="" style="left:{ghost.x}px; top:{ghost.y}px" />
+	{/if}
 	<div class="ocean"></div>
 	<BoardCanvas bind:this={board} map={$ms.map ?? {}} rotation={orientation} interactive={true} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} />
 
@@ -421,6 +433,11 @@
 <style>
 	/* clip (not just hidden): a tucked hand extends past the bottom edge, and
 	   overflow:hidden would still let focus/scrollIntoView scroll the whole view */
+	/* holding a minion to spawn: the token replaces the cursor over the board */
+	.gamewrap.spawning :global(.board-wrap), .gamewrap.spawning :global(.board-wrap *) { cursor: none !important; }
+	.spawnghost { position: fixed; z-index: 70; width: 46px; height: 46px; object-fit: contain; pointer-events: none; transform: translate(-50%, -50%) scale(1.05);
+		filter: drop-shadow(0 6px 10px rgba(0,0,0,.6)); animation: ghostbob 1.1s ease-in-out infinite alternate; }
+	@keyframes ghostbob { from { transform: translate(-50%, -50%) scale(1.05); } to { transform: translate(-50%, -56%) scale(1.1); } }
 	.gamewrap { position: fixed; inset: 0; color: #f1f5f9; overflow: hidden; overflow: clip; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 	/* ocean backdrop — deep water with layered swells + moving caustics so the hex island reads as floating on sea */
 	.ocean { position: absolute; inset: 0;
