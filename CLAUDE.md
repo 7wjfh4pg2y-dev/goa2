@@ -50,7 +50,7 @@ Deployed to GitHub Pages: **https://7wjfh4pg2y-dev.github.io/goa2/**
 - **`src/lib/HeroDraft.svelte`** — the live draft screen (cinematic full-splash layout). Strict turn ownership; host watchdog auto-picks on timeout / ~8s after the active player drops; all-pick self-heal for concurrent locks.
 - **`src/lib/lobby.ts`** — public room directory via a presence channel (open-games list).
 - **`src/lib/heroes.ts`** — 32 heroes (id, name, title, stars, pack, traits, stats) + art resolvers: `heroAvatar` (`images/avatars`), `heroSplash` (`images/avatars_full`), `heroLogo` (`images/logos`), `statIcon`/`traitIcon`/`starIcon` (`images/hero_icons`). `tokens` trait has no icon (falls back to a ◈ glyph).
-- **`src/lib/maps.ts`** — map registry (editor working map + saved + bundled, de-duped).
+- **`src/lib/maps.ts`** — map registry. **Bundled maps come first and are the default** (every host plays the same board); an editor/saved copy with the same name only appears if it differs, as "(edited)". `src/lib/maps/forgotten_island.json` is the official board (battleZone = 4 melee/1 ranged/1 heavy per team).
 - **`src/lib/transitions.ts`** — `reveal` (fade+translate+scale+blur) used between steps.
 - **`OLD/`** — the archived previous build; **not compiled/served**. Mine it for assets/logic (e.g. `states.ts` heroes, `BoardCanvas.svelte`, draft algorithms).
 

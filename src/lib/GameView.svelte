@@ -219,16 +219,11 @@
 		</div>
 	{/if}
 
-	<!-- room / connection (top-left corner) -->
-	<div class="corner">
-		<span class="rc mono">{room}</span>
-		<span class="conn {$status}"><span class="cdot"></span>{connLabel($status)}</span>
-	</div>
 
 	{#if manageOpen}
 		<div class="modal-scrim" on:click={() => (manageOpen = false)} on:keydown={(e) => e.key === 'Escape' && (manageOpen = false)} role="presentation">
 			<div class="managepanel" on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" tabindex="-1">
-				<div class="mphead"><h3>Players & seats</h3><button class="ix" on:click={() => (manageOpen = false)}>✕</button></div>
+				<div class="mphead"><h3>Game Lobby</h3><button class="ix" on:click={() => (manageOpen = false)}>✕</button></div>
 
 				{#if iAmHost && seatRequests.length}
 					<div class="mpsec">
@@ -289,8 +284,13 @@
 	<!-- game HUD: right-side panel -->
 	<div class="hud">
 		<div class="mapname">{$ms.map?.name ?? 'Board'}</div>
-		<button class="managebtn" class:alert={iAmHost && seatRequests.length} on:click={() => (manageOpen = true)} title="Players & seats">
-			👥 Players &amp; seats{#if iAmHost && seatRequests.length}<span class="reqbadge">{seatRequests.length}</span>{/if}
+		<!-- room code + connection, right under the map name -->
+		<div class="roomline">
+			<span class="rc">Room <b>{room}</b></span>
+			<span class="conn {$status}"><span class="cdot"></span>{connLabel($status)}</span>
+		</div>
+		<button class="managebtn" class:alert={iAmHost && seatRequests.length} on:click={() => (manageOpen = true)} title="Game Lobby — players, seats and requests">
+			👥 Game Lobby{#if iAmHost && seatRequests.length}<span class="reqbadge">{seatRequests.length}</span>{/if}
 		</button>
 
 		<div class="hsec rt">
@@ -473,9 +473,9 @@
 	.managepanel .act.danger { background: rgba(220, 60, 60, 0.25); border-color: rgba(220, 60, 60, 0.5); color: #ffb4b4; }
 	.managepanel .act.ghost { background: transparent; }
 
-	.corner { position: absolute; top: 10px; right: 14px; z-index: 6; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.8); }
-	.rc { color: #94a3b8; font-size: 0.78rem; }
-	.mono { font-family: ui-monospace, monospace; letter-spacing: 0.08em; }
+	.roomline { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: -2px 2px 0; }
+	.rc { color: #94a3b8; font-size: 0.72rem; letter-spacing: 0.04em; }
+	.rc b { color: #e2e8f0; font-family: 'Modesto Poster', serif; font-weight: normal; letter-spacing: 0.1em; font-size: 0.86rem; }
 	.conn { display: inline-flex; align-items: center; gap: 5px; font-size: 0.7rem; font-weight: 600; color: #94a3b8; }
 	.conn .cdot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: #64748b; }
 	.conn.connected { color: #6ee7b7; } .conn.connected .cdot { background: #22c55e; box-shadow: 0 0 7px rgba(34, 197, 94, 0.7); }
