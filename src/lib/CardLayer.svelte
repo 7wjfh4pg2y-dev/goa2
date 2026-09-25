@@ -510,10 +510,11 @@
 					{/each}
 					<div class="tbox disc" style="--tint:{teamTint(ovPlayer)}">
 						<div class="tlabel">Discard{#if cs.discard.length}<span class="ct">{cs.discard.length}</span>{/if}</div>
-						<div class="tslot discwrap" role="group" aria-label="Discard pile" on:pointerenter={(e) => discEnter(e, oid)} on:pointerleave={discLeave}>
+						<div class="tslot discwrap" role="group" aria-label="Discard pile" on:pointerenter={(e) => cs.discard.length > 1 && discEnter(e, oid)} on:pointerleave={discLeave}>
 							<span class="tbroman trash">{@html TRASH}</span>
 							{#if cs.discard.length}
-								<button class="dstack" on:click={() => discTap(oid)} title="Show the discard pile">
+								<!-- one card: open it straight away; several: fan them out to choose -->
+								<button class="dstack" on:click={() => (cs.discard.length === 1 ? openDiscard(oh, cs.discard[0], own) : discTap(oid))} title={cs.discard.length === 1 ? 'Preview' : 'Show the discard pile'}>
 									{#each cs.discard.slice(-3) as i, di (i)}
 										<span class="dsk" style="--i:{di}; --n:{Math.min(3, cs.discard.length)}"><Card heroId={oh} card={od[i]} /></span>
 									{/each}
@@ -793,10 +794,10 @@
 							{/if}
 						</div>
 					{/each}
-					<div class="dm-slot disc discwrap" role="group" aria-label="Discard pile" on:pointerenter={(e) => discEnter(e, 'dash')} on:pointerleave={discLeave}>
+					<div class="dm-slot disc discwrap" role="group" aria-label="Discard pile" on:pointerenter={(e) => mine.discard.length > 1 && discEnter(e, 'dash')} on:pointerleave={discLeave}>
 						<span class="roman trash">{@html TRASH}</span>
 						{#if mine.discard.length}
-							<button class="discstack" on:click={() => discTap('dash')} title="Discard — show all">
+							<button class="discstack" on:click={() => (mine.discard.length === 1 ? openDiscard(mine.hero, mine.discard[0], true) : discTap('dash'))} title={mine.discard.length === 1 ? 'Preview (you can recover it to your hand)' : 'Discard — show all'}>
 								{#each mine.discard.slice(-3) as i, di (i)}
 									<span class="disc-card" style="--i:{di}"><Card heroId={mine.hero} card={heroCards(mine.hero)[i]} /></span>
 								{/each}
