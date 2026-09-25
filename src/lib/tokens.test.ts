@@ -57,3 +57,10 @@ describe('tokens', () => {
 		expect(patch.round).toBe(2)
 	})
 })
+
+describe('radius overlays', () => {
+	it('clear when the turn advances', () => {
+		const s = { turn: 2, round: 1, pieces: {}, cards: {}, radii: { a: 3 } } as unknown as MatchState
+		expect(applyCardReq(s, { kind: 'advance', pid: 'a' }).radii).toEqual({})
+	})
+})

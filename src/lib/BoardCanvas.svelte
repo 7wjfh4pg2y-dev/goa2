@@ -19,6 +19,8 @@
 	// holding something to place (minion / token): every tap reports its hex, pieces
 	// aren't picked up, and a hex with a hero on it is still a valid target
 	export let placing = false;
+	// temporary area-effect radii: every hex within r of a hero, in that player's colour
+	export let areas: Array<{ hex: string; r: number; color: string }> = [];
 	export let onMovePiece: ((id: string, hex: string) => void) | null = null;
 	export let onSelect: (id: string | null) => void = () => {};
 	// tap on an empty hex (no piece under the cursor, nothing carried) — used by
@@ -329,6 +331,25 @@
 	// markers riding on a hero: small badges round its upper-right rim
 	$: attached = pieces.filter((p) => p.attachTo);
 	$: badgeIdx = (() => { const n: Record<string, number> = {}; const out: Record<string, number> = {}; for (const p of attached) { out[p.id] = n[p.attachTo!] = (n[p.attachTo!] ?? -1) + 1; } return out; })();
+	// ── area radius overlay: hex distance on the odd-row offset grid ("c_r") ──
+	const toCube = (id: string) => { const [c, r] = id.split('_').map(Number); const x = c - (r - (r & 1)) / 2; return { x, z: r, y: -x - r }; };
+	const hexDist = (a: string, b: string) => { const p = toCube(a), q = toCube(b); return Math.max(Math.abs(p.x - q.x), Math.abs(p.y - q.y), Math.abs(p.z - q.z)); };
+	// neighbour offsets (axial dq, dr) by the screen angle their shared edge faces
+	const DIRS: Array<[number, number, number]> = [[1, 0, 0], [0, 1, 60], [-1, 1, 120], [-1, 0, 180], [0, -1, 240], [1, -1, 300]];
+	const axialId = (q: number, r: number) => `${q + (r - (r & 1)) / 2}_${r}`;
+	$: areaShapes = areas.map((a) => {
+		const inside = new Set(hexes.filter((h) => hexDist(h.id, a.hex) <= a.r).map((h) => h.id));
+		const edges: string[] = [];
+		for (const id of inside) {
+			const { x: q, z: r } = toCube(id); const c = centerOf(id);
+			for (const [dq, dr, ang] of DIRS) {
+				if (inside.has(axialId(q + dq, r + dr))) continue;
+				const a1 = ((ang - 30) * Math.PI) / 180, a2 = ((ang + 30) * Math.PI) / 180;
+				edges.push(`M${(c.x + size * Math.cos(a1)).toFixed(1)} ${(c.y + size * Math.sin(a1)).toFixed(1)}L${(c.x + size * Math.cos(a2)).toFixed(1)} ${(c.y + size * Math.sin(a2)).toFixed(1)}`);
+			}
+		}
+		return { color: a.color, cells: [...inside].map((id) => centerOf(id)), outline: edges.join('') };
+	});
 	const pieceColor = (t: string) => (t === 'orange' ? '#ea6a1e' : t === 'blue' ? '#2f79e6' : '#9aa4b2');
 </script>
 
@@ -379,6 +400,14 @@
 					{/if}
 				{/if}
 				<polygon points={poly(h.x, h.y, size)} fill="none" stroke="rgba(6,10,18,.7)" stroke-width="4" stroke-linejoin="round" />
+			{/each}
+
+			<!-- area radii (under the pieces): translucent fill + a solid outer edge -->
+			{#each areaShapes as a}
+				<g pointer-events="none">
+					{#each a.cells as c}<polygon points={poly(c.x, c.y, size)} fill={a.color} fill-opacity=".2" />{/each}
+					<path d={a.outline} fill="none" stroke={a.color} stroke-width={size * 0.07} stroke-linecap="round" stroke-opacity=".95" />
+				</g>
 			{/each}
 
 			{#each pieces.filter((q) => !q.attachTo) as p (p.id)}

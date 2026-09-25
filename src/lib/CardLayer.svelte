@@ -301,6 +301,17 @@
 	// the shelf stays open while you place (so you can drop several, one at a time);
 	// clicking anywhere else closes it
 	function armToken(it: ShelfItem) { onArmToken(it.arm); }
+
+	// ── area radius: a temporary, translucent area around your hero (1–8 hexes),
+	// in your colour, seen by everyone; it clears when the turn advances
+	$: myRadius = $ms.radii?.[clientId] ?? 0;
+	let radiusOpen = false;
+	function setRadius(n: number) {
+		const next = { ...($ms.radii ?? {}) };
+		if (n > 0) next[clientId] = n; else delete next[clientId];
+		session.act(n > 0 ? `shows a radius ${n} area` : 'cleared their radius', { radii: next });
+		radiusOpen = false;
+	}
 	function clearTokens() {
 		const next = { ...$ms.pieces };
 		for (const id in next) if (next[id].kind === 'token' && next[id].owner === clientId) delete next[id];
@@ -361,6 +372,7 @@
 		if (handUp && !t?.closest?.('.tray')) handUp = false;
 		if (discOpen && !t?.closest?.('.discwrap')) discOpen = null;
 		// token shelf: close on any outside click — except the click that drops a held token
+		if (radiusOpen && !t?.closest?.('.radwrap')) radiusOpen = false;
 		if (tokenDrawer && !t?.closest?.('.tokwrap') && !(holdingToken && t?.closest?.('.board-wrap, .placehint'))) tokenDrawer = false;
 	}
 	$: retracted = autoRetract && !handUp;
@@ -707,19 +719,43 @@
 		<div class="dash" class:ultdash={mine.ultimate} style="{teamVars(myTeam)}; {dashVars}">
 			<!-- LEFT: you · tokens · deck -->
 			<div class="dleft">
-				<button class="dself" on:click={() => (overlayId = clientId)} title="Open your board">
-					<PlayerIcon hero={mine.hero} team={myTeam ?? 'orange'} color={colorHex(myColor)} size="2.4rem" ult={mine.ultimate}>
-						{#if mine.ultimate}<span class="crown">♛</span>{/if}
-					</PlayerIcon>
+				<div class="dself">
+					<button class="dsopen" on:click={() => (overlayId = clientId)} title="Open your board">
+						<PlayerIcon hero={mine.hero} team={myTeam ?? 'orange'} color={colorHex(myColor)} size="2.4rem" ult={mine.ultimate}>
+							{#if mine.ultimate}<span class="crown">♛</span>{/if}
+						</PlayerIcon>
+					</button>
 					<span class="dsmid">
-						<span class="dsname"><span class="dsnm">{myName}</span><em>Lv {levelOf(mine)}</em>
-							<!-- status markers on you: just left of the initiative (the name gives way, nothing else moves) -->
+						<!-- name · level · initiative · radius (fixed slots) … status markers pinned right -->
+						<span class="dsname">
+							<button class="dsopen dsnmbtn" on:click={() => (overlayId = clientId)} title="Open your board"><span class="dsnm">{myName}</span><em>Lv {levelOf(mine)}</em></button>
+							<span class="initb" class:off={myInit == null} title="Your initiative this turn (card + upgrades)"><img src={icon('item_initiative')} alt="" /><b>{myInit ?? '–'}</b></span>
+							<span class="radwrap">
+								<button class="radbtn" class:on={myRadius > 0} on:click={() => (radiusOpen = !radiusOpen)} title={myRadius ? `Radius ${myRadius} showing — click to change or clear` : 'Show an area radius around your hero'} aria-label="Area radius">
+									<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke-dasharray="3 2.4" /><circle cx="12" cy="12" r="4.2" /><circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none" /></svg>
+									<b>{myRadius || ''}</b>
+								</button>
+								{#if radiusOpen}
+									<div class="radpop">
+										<div class="toklbl">Area radius</div>
+										<div class="radgrid">
+											{#each [1, 2, 3, 4, 5, 6, 7, 8] as n}
+												<button class="radn" class:on={myRadius === n} on:click={() => setRadius(n)}>{n}</button>
+											{/each}
+										</div>
+										<div class="tokfoot">
+											<span class="tokhint">Clears at end of turn</span>
+											<button class="tokclear" disabled={!myRadius} on:click={() => setRadius(0)}>Clear</button>
+										</div>
+									</div>
+								{/if}
+							</span>
 							<span class="dsmk">
 								{#if mst.poison}<img class="pois" src={icon('marker_poison')} alt="Poison" title="Poisoned" />{/if}
 								{#if mst.bounty}<img class="bnty" src={icon('marker_bounty')} alt="Bounty" title="Bounty on you" />{/if}
 							</span>
-							<span class="initb" class:off={myInit == null} title="Your initiative this turn (card + upgrades)"><img src={icon('item_initiative')} alt="" /><b>{myInit ?? '–'}</b></span>
 						</span>
+						<button class="dsopen dsbody" on:click={() => (overlayId = clientId)} title="Open your board">
 						<span class="dshero">{heroName(mine.hero)}</span>
 					<span class="dstats">
 						{#each allStats(mine) as r}
@@ -729,8 +765,9 @@
 							</span>
 						{/each}
 					</span>
+						</button>
 					</span>
-				</button>
+				</div>
 
 				<!-- tokens and markers: one shelf; the button shows its first item -->
 				<div class="tokwrap">
@@ -1091,7 +1128,7 @@
 	.dkcard.sel { outline: 3px solid #efb46a; box-shadow: 0 0 0 3px rgba(239,180,106,.4), 0 6px 16px rgba(0,0,0,.6); }
 	.dkcard.empty { cursor: default; box-shadow: none; aspect-ratio: 1192 / 1664; border: 1px dashed rgba(255,255,255,.1); background: rgba(255,255,255,.02); }
 	.dkcard.empty:hover { transform: none; }
-	.dkcard.basic { cursor: default; }
+	.dkcard.basic { cursor: zoom-in; }
 	.dkcard.basic:hover { transform: none; }
 	.dklock { position: absolute; top: 3px; right: 4px; font-size: .7rem; filter: drop-shadow(0 1px 2px #000); }
 	.dkpart { width: 1px; align-self: stretch; margin: 2px 4px; background: linear-gradient(180deg, transparent, rgba(199,154,78,.6), transparent); }
@@ -1206,10 +1243,13 @@
 	.dash.ultdash { border-color: rgba(165,110,230,.6); box-shadow: 0 12px 34px rgba(0,0,0,.5), 0 0 22px rgba(165,110,230,.28); animation: ultpulse 3.4s ease-in-out infinite; }
 	@keyframes ultpulse { 0%, 100% { box-shadow: 0 12px 34px rgba(0,0,0,.5), 0 0 18px rgba(165,110,230,.22); } 50% { box-shadow: 0 12px 34px rgba(0,0,0,.5), 0 0 30px rgba(165,110,230,.42); } }
 	/* single-row profile: avatar · name/hero · stats (to cut dashboard height) */
-	.dself { display: flex; align-items: center; gap: 10px; padding: 0; background: none; border: none; cursor: pointer; color: inherit; text-align: left; flex: none; }
-	.dself:hover .dsname { color: #fff; }
+	.dself { display: flex; align-items: center; gap: 10px; flex: none; }
+	.dsopen { padding: 0; background: none; border: none; cursor: pointer; color: inherit; text-align: left; font: inherit; }
+	.dsnmbtn { flex: none; min-width: 0; max-width: 84px; display: flex; align-items: baseline; gap: 5px; }
+	.dsnmbtn:hover .dsnm { color: #fff; }
+	.dsbody { display: flex; flex-direction: column; gap: 1px; }
 	/* your hero token: team disc + hero symbol + your colour as the ring (matches the board piece) */
-	.dsmid { width: 162px; display: flex; flex-direction: column; gap: 1px; line-height: 1.02; }
+	.dsmid { width: 210px; display: flex; flex-direction: column; gap: 1px; line-height: 1.02; }
 	.dsname { font-family: 'Modesto Poster', serif; font-size: .92rem; color: #f6ead2; display: flex; align-items: baseline; gap: 5px; min-width: 0; }
 	.dsnm { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 	.dsname em { flex: none; min-width: 2.3em; font-variant-numeric: tabular-nums; font-style: normal; font-size: .56rem; font-weight: 700; color: #9aa8bc; }
@@ -1223,7 +1263,23 @@
 	.dsmk img { width: 15px; height: 15px; object-fit: contain; border-radius: 50%; }
 	.dsmk img.pois { box-shadow: 0 0 0 1.5px rgba(65,174,89,.85); }
 	.dsmk img.bnty { box-shadow: 0 0 0 1.5px rgba(232,182,74,.9); }
-	.dsname .initb { margin-left: 0; }
+	/* initiative + radius: gold, like the hand buttons, so they read apart from the stats */
+	.dsname .initb { margin-left: 0; width: 44px; box-sizing: border-box; justify-content: center; background: rgba(199,154,78,.2); border-color: rgba(214,170,92,.6); color: #f6e3b4; }
+	.dsname .initb img { filter: brightness(0) invert(.86) sepia(.7) saturate(2.2) hue-rotate(-8deg); }
+	.dsname .initb.off { opacity: .5; background: rgba(199,154,78,.08); border-color: rgba(199,154,78,.3); }
+	.radwrap { position: relative; flex: none; align-self: center; display: flex; }
+	.radbtn { width: 34px; height: 20px; display: inline-flex; align-items: center; justify-content: center; gap: 2px; padding: 0 4px; border-radius: 8px; cursor: pointer;
+		color: #d8bf8a; background: rgba(199,154,78,.1); border: 1px solid rgba(199,154,78,.4); }
+	.radbtn svg { width: 14px; height: 14px; flex: none; }
+	.radbtn b { min-width: .6em; font-size: .76rem; line-height: 1; font-variant-numeric: tabular-nums; }
+	.radbtn:hover { background: rgba(199,154,78,.24); color: #f6e3b4; }
+	.radbtn.on { background: rgba(199,154,78,.3); border-color: rgba(230,190,110,.8); color: #fff3d6; }
+	.radpop { position: absolute; left: 0; bottom: calc(100% + 10px); z-index: 14; width: 196px; padding: 9px; border-radius: 12px;
+		background: rgba(11,16,26,.96); border: 1px solid rgba(199,154,78,.5); box-shadow: 0 16px 40px rgba(0,0,0,.6); }
+	.radgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
+	.radn { padding: 5px 0; border-radius: 8px; cursor: pointer; font-size: .9rem; color: #f0dcae; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.14); }
+	.radn:hover { background: rgba(199,154,78,.2); border-color: rgba(199,154,78,.5); }
+	.radn.on { background: rgba(199,154,78,.36); border-color: rgba(230,190,110,.85); color: #fff; }
 	.tokbtn:disabled { cursor: not-allowed; opacity: .45; }
 	.tokglyph { width: 1.4rem; height: 1.4rem; display: grid; place-items: center; font-size: 1.1rem; line-height: 1; color: #d8b56a; }
 	.dstats { display: grid; grid-template-columns: repeat(6, 1fr); gap: 3px; margin-top: 3px; }

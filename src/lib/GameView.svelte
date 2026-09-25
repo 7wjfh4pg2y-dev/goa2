@@ -115,6 +115,11 @@
 	}));
 
 	let board: BoardCanvas;
+	// area radii (set from each player's dash): centred on that player's hero, in their colour
+	$: areas = Object.entries($ms.radii ?? {}).flatMap(([pid, r]) => {
+		const hero = $ms.pieces?.[pid];
+		return hero && r > 0 ? [{ hex: hero.hex, r, color: colorHex(hero.color ?? '') }] : [];
+	});
 
 	// gear/star throne hexes, so the board can draw them and heroes/minions spawn there
 	$: thrones = [
@@ -277,7 +282,7 @@
 		</div>
 	{/if}
 	<div class="ocean"></div>
-	<BoardCanvas bind:this={board} map={$ms.map ?? {}} rotation={orientation} interactive={true} {placing} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} />
+	<BoardCanvas bind:this={board} map={$ms.map ?? {}} rotation={orientation} interactive={true} {placing} {areas} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} />
 
 	<CardLayer {session} {ms} {players} {clientId} onAdvanceTurn={() => stepTurn(1)} onArmToken={armToken} holdingToken={!!pendingToken} bind:previewId />
 
