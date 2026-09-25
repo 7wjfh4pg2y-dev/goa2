@@ -53,15 +53,19 @@ export function availableMaps(): MapChoice[] {
 	const used = new Set<string>()
 	const official = new Map<string, string>() // name key -> serialized bundled board
 	const keyOf = (label: string) => label.trim().toLowerCase()
-	const board = (m: GameMap) => JSON.stringify([m.cells, m.meta ?? {}, m.battleZone ?? []])
+	// canonical board fingerprint: key order / defaults don't make a copy "different"
+	const sorted = <T>(o: Record<string, T> | undefined) => Object.keys(o ?? {}).sort().map((k) => [k, o![k]])
+	const board = (m: GameMap) => JSON.stringify([
+		sorted(m.cells),
+		sorted(m.meta).map(([k, v]) => { const x = v as { m: string; dir?: number; start?: boolean }; return [k, x.m, x.dir ?? 0, !!x.start] }),
+		(m.battleZone ?? []).map((b) => `${b.hex}|${b.team}|${b.kind}`).sort()
+	])
 	const add = (id: string, label: string, data: GameMap) => {
 		let key = keyOf(label)
 		if (!key) return
-		if (official.has(key)) {
-			if (official.get(key) === board(data)) return // identical to the bundled map
-			label = `${label.trim()} (edited)`
-			key = keyOf(label)
-		}
+		// one map per name in the setup: the bundled (official) board wins, so every
+		// host plays the same one. A local editor copy stays in the editor.
+		if (official.has(key)) return
 		if (used.has(key)) return
 		used.add(key)
 		list.push({ id, label: label.trim(), data })
