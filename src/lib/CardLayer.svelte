@@ -23,6 +23,7 @@
 	export let onAdvanceTurn: () => void = () => {};
 	export let previewId: string | null = null; // set by the board to open a player's overlay
 	export let onArmToken: (t: ArmToken) => void = () => {}; // pick a token off the shelf → place it on a hex
+	export let holdingToken = false; // a shelf token is in hand, waiting for its hex
 
 	const ORANGE = '#ef7d22';
 	const BLUE = '#2f7fe6';
@@ -297,7 +298,9 @@
 			arm: { token: tk, img: icon(tk), color: myColor, team: myTeam ?? 'neutral', owner: clientId } };
 	});
 	$: myTokenCount = Object.values($ms.pieces ?? {}).filter((p) => p.kind === 'token' && p.owner === clientId).length;
-	function armToken(it: ShelfItem) { tokenDrawer = false; onArmToken(it.arm); }
+	// the shelf stays open while you place (so you can drop several, one at a time);
+	// clicking anywhere else closes it
+	function armToken(it: ShelfItem) { onArmToken(it.arm); }
 	function clearTokens() {
 		const next = { ...$ms.pieces };
 		for (const id in next) if (next[id].kind === 'token' && next[id].owner === clientId) delete next[id];
@@ -357,6 +360,8 @@
 		const t = e.target as Element | null;
 		if (handUp && !t?.closest?.('.tray')) handUp = false;
 		if (discOpen && !t?.closest?.('.discwrap')) discOpen = null;
+		// token shelf: close on any outside click — except the click that drops a held token
+		if (tokenDrawer && !t?.closest?.('.tokwrap') && !(holdingToken && t?.closest?.('.board-wrap, .placehint'))) tokenDrawer = false;
 	}
 	$: retracted = autoRetract && !handUp;
 </script>
@@ -744,8 +749,8 @@
 								{/each}
 							</div>
 							<div class="tokfoot">
-								<span class="tokhint">Pick one, then tap a hex to place it.</span>
-								{#if myTokenCount}<button class="act ghost sm" on:click={clearTokens}>Clear mine</button>{/if}
+								<span class="tokhint">Pick one · tap a hex to place</span>
+								<button class="tokclear" disabled={!myTokenCount} on:click={clearTokens} title="Remove every token and marker you've placed">Clear</button>
 							</div>
 						</div>
 					{/if}
@@ -1311,7 +1316,11 @@
 	.tok.comp .toktag { font-size: .64rem; font-weight: 800; letter-spacing: .02em; color: #f0dcae; }
 	.tok.marker img { border-radius: 50%; }
 	.tokfoot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
-	.tokhint { font-size: .58rem; color: #8b9bb0; }
+	.tokclear { flex: none; padding: 2px 9px; border-radius: 6px; font-size: .62rem; letter-spacing: .04em; cursor: pointer; color: #ffc9c2;
+		background: rgba(220,60,60,.18); border: 1px solid rgba(239,68,68,.45); }
+	.tokclear:hover:not(:disabled) { background: rgba(220,60,60,.32); }
+	.tokclear:disabled { cursor: default; opacity: .35; color: #9aa4b2; background: rgba(255,255,255,.04); border-color: rgba(255,255,255,.12); }
+	.tokhint { min-width: 0; font-size: .58rem; color: #8b9bb0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 	.dmine { display: flex; align-items: center; justify-content: center; }
 	.dm-slot { cursor: pointer; }
