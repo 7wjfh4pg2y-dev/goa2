@@ -226,6 +226,24 @@
 		s === 'connected' ? 'Connected' : s === 'reconnecting' ? 'Reconnecting…' : s === 'closed' ? 'Disconnected' : 'Connecting…';
 
 	let confirmLeave = false;
+
+	// ── saved views: 3 slots of rotation + zoom + pan, kept in this browser ─────
+	// (they carry over to new games, so a player's preferred angle is one tap away)
+	type SavedView = { spin: number; scale: number; panX: number; panY: number };
+	const VIEWS_KEY = 'goa2-views-v1';
+	let views: (SavedView | null)[] = [null, null, null];
+	try { const v = JSON.parse(localStorage.getItem(VIEWS_KEY) ?? 'null'); if (Array.isArray(v)) views = [0, 1, 2].map((i) => v[i] ?? null); } catch {}
+	let viewsOpen = false;
+	function saveView(i: number) {
+		if (!board) return;
+		views = views.map((v, k) => (k === i ? board.getView() : v));
+		try { localStorage.setItem(VIEWS_KEY, JSON.stringify(views)); } catch {}
+	}
+	function goView(i: number) { const v = views[i]; if (v && board) board.setView(v); }
+	const viewLabel = (v: SavedView) => `${Math.round(v.spin)}° · ${v.scale.toFixed(1)}×`;
+	function viewsOutside(e: PointerEvent) {
+		if (viewsOpen && !(e.target as Element | null)?.closest?.('.viewswrap')) viewsOpen = false;
+	}
 	$: log = $ms.log ?? [];
 	const hhmm = (t: number) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
@@ -240,7 +258,7 @@
 	});
 </script>
 
-<svelte:window on:keydown={(e) => { if (e.key !== 'Escape') return; if (confirmLeave) confirmLeave = false; else { pendingSpawn = null; pendingToken = null; } }} on:pointermove={trackGhost} on:pointerdown={trackGhost} />
+<svelte:window on:keydown={(e) => { if (e.key !== 'Escape') return; if (confirmLeave) confirmLeave = false; else { pendingSpawn = null; pendingToken = null; } }} on:pointermove={trackGhost} on:pointerdown={(e) => { trackGhost(e); viewsOutside(e); }} />
 
 <div class="gamewrap" class:spawning={placing}>
 	{#if pendingSpawn && ghost}
@@ -364,7 +382,10 @@
 
 	<!-- game HUD: right-side panel -->
 	<div class="hud">
-		<div class="mapname">{$ms.map?.name ?? 'Board'}</div>
+		<div class="mapline">
+			<button class="exitbtn" on:click={() => (confirmLeave = true)} title="Leave game" aria-label="Leave game">⎋</button>
+			<div class="mapname" title={$ms.map?.name ?? 'Board'}>{$ms.map?.name ?? 'Board'}</div>
+		</div>
 		<!-- room code + connection, right under the map name -->
 		<div class="roomline">
 			<span class="rc">Room <b>{room}</b></span>
@@ -471,12 +492,31 @@
 
 		<!-- view controls, docked at the bottom of the HUD -->
 		<div class="viewctl">
-			<button class="vbtn leave" on:click={() => (confirmLeave = true)} title="Leave game">⎋</button>
-			<button class="vbtn" on:click={() => board?.reset()} title="Recenter & reset view">⌖</button>
-			<button class="vbtn" on:click={() => board?.rotateBy(-60)} title="Rotate counter-clockwise">⟲</button>
-			<button class="vbtn" on:click={() => board?.rotateBy(60)} title="Rotate clockwise">⟳</button>
+			<button class="vbtn recenter" on:click={() => board?.reset()} title="Recenter & reset view">⌖</button>
+			<button class="vbtn" on:click={() => board?.rotateBy(-45)} title="Rotate counter-clockwise (45°)">⟲</button>
+			<button class="vbtn" on:click={() => board?.rotateBy(45)} title="Rotate clockwise (45°)">⟳</button>
 			<button class="vbtn" on:click={() => board?.zoomBtn(1.2)} title="Zoom in">＋</button>
 			<button class="vbtn" on:click={() => board?.zoomBtn(1 / 1.2)} title="Zoom out">−</button>
+			<!-- saved views: jump to (or overwrite) one of three remembered angles -->
+			<div class="viewswrap">
+				<button class="vbtn views" class:on={viewsOpen} on:click={() => (viewsOpen = !viewsOpen)} title="Saved views" aria-label="Saved views">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M3 8.5a2 2 0 0 1 2-2h2.2l1.4-2h6.8l1.4 2H19a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><circle cx="12" cy="13" r="3.6" /></svg>
+				</button>
+				{#if viewsOpen}
+					<div class="viewspop">
+						<div class="vplbl">Saved views</div>
+						{#each views as v, i}
+							<div class="vslot">
+								<button class="vgo" disabled={!v} on:click={() => goView(i)} title={v ? 'Jump to this view' : 'Empty — save a view here first'}>
+									<b>{i + 1}</b><span>{v ? viewLabel(v) : 'Empty'}</span>
+								</button>
+								<button class="vsave" on:click={() => saveView(i)} title={v ? 'Overwrite with the current view' : 'Save the current view here'}>{v ? 'Overwrite' : 'Save'}</button>
+							</div>
+						{/each}
+						<div class="vphint">Saves rotation, zoom &amp; position in this browser.</div>
+					</div>
+				{/if}
+			</div>
 		</div>
 	</div>
 </div>
@@ -511,8 +551,32 @@
 	.viewctl { display: flex; gap: 5px; margin-top: auto; padding-top: 4px; }
 	.vbtn { flex: 1; height: 2rem; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.18); background: rgba(255, 255, 255, 0.05); color: #e5e7eb; cursor: pointer; font-size: 1rem; line-height: 1; }
 	.vbtn:hover { background: rgba(255, 255, 255, 0.16); }
-	.vbtn.leave { border-color: rgba(239, 68, 68, 0.4); color: #fca5a5; }
-	.vbtn.leave:hover { background: rgba(80, 20, 24, 0.7); }
+	/* recenter: brass accent so it's easy to find */
+	.vbtn.recenter { background: rgba(199, 154, 78, 0.22); border-color: rgba(214, 170, 92, 0.65); color: #f6e3b4; }
+	.vbtn.recenter:hover { background: rgba(199, 154, 78, 0.36); }
+	.viewswrap { position: relative; flex: 1; display: flex; }
+	.vbtn.views { display: grid; place-items: center; }
+	.vbtn.views svg { width: 1.05rem; height: 1.05rem; }
+	.vbtn.views.on { background: rgba(255, 255, 255, 0.16); }
+	.viewspop { position: absolute; right: 0; bottom: calc(100% + 8px); z-index: 12; width: 196px; padding: 9px; border-radius: 12px;
+		background: rgba(11, 16, 26, 0.96); border: 1px solid rgba(199, 154, 78, 0.5); box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6); }
+	.vplbl { font-size: 0.56rem; letter-spacing: 0.1em; text-transform: uppercase; color: #b8a06a; margin: 1px 2px 6px; }
+	.vslot { display: flex; gap: 5px; margin-bottom: 5px; }
+	.vgo { flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px; padding: 5px 8px; border-radius: 8px; cursor: pointer; color: #e5e7eb; font-size: 0.72rem;
+		background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.14); text-align: left; }
+	.vgo b { color: #f0dcae; }
+	.vgo span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.vgo:hover:not(:disabled) { background: rgba(199, 154, 78, 0.2); border-color: rgba(199, 154, 78, 0.5); }
+	.vgo:disabled { cursor: default; color: #7b8697; }
+	.vsave { flex: none; padding: 0 8px; border-radius: 8px; cursor: pointer; font-size: 0.62rem; color: #f6e3b4; background: rgba(199, 154, 78, 0.16); border: 1px solid rgba(199, 154, 78, 0.45); }
+	.vsave:hover { background: rgba(199, 154, 78, 0.3); }
+	.vphint { font-size: 0.56rem; color: #8b9bb0; margin: 2px 2px 0; }
+	/* exit sits left of the map name */
+	.mapline { display: flex; align-items: center; gap: 6px; }
+	.hud .mapline .mapname { flex: 1; min-width: 0; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.exitbtn { flex: none; width: 1.6rem; height: 1.6rem; }
+	.exitbtn { border-radius: 7px; cursor: pointer; font-size: 0.9rem; line-height: 1; padding: 0; color: #fca5a5; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.4); }
+	.exitbtn:hover { background: rgba(80, 20, 24, 0.7); }
 
 	.modal-scrim { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; background: rgba(3, 8, 14, 0.6); backdrop-filter: blur(3px); }
 	.modal { width: min(360px, 90vw); background: rgba(12, 18, 32, 0.92); border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 16px; padding: 20px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6); }

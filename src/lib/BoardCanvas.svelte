@@ -182,6 +182,10 @@
 	}
 	export function rotateBy(deg: number) { spin += deg; }
 	export function reset() { scale = 1; panX = 0; panY = 0; spin = 0; }
+	// saved views: rotation (relative to your team's orientation), zoom and pan
+	type BoardView = { spin: number; scale: number; panX: number; panY: number };
+	export function getView(): BoardView { return { spin: ((spin % 360) + 360) % 360, scale, panX, panY }; }
+	export function setView(v: BoardView) { spin = v.spin; scale = clamp(v.scale, 0.4, 8); panX = v.panX; panY = v.panY; clampPan(); }
 
 	function onWheel(e: WheelEvent) {
 		if (!interactive) return;
