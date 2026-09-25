@@ -3,7 +3,8 @@
 	import type { Readable } from 'svelte/store';
 	import {
 		HEROES_ALPHA, heroAvatar, heroSplash, heroLogo, heroById,
-		statIcon, traitIcon, starIcon, STAT_LABELS, STAT_PIPS, TRAIT_LABELS, PACK_LABELS
+		statIcon, traitIcon, starIcon, STAT_LABELS, STAT_PIPS, TRAIT_LABELS, PACK_LABELS,
+		type Hero, type Trait
 	} from '$lib/heroes';
 	import {
 		teamRosters, teamForSeat, draftTurn, draftActor, draftBlocked, draftComplete,
@@ -34,8 +35,16 @@
 
 	const nameOf = (id: string) => $players.find((p) => p.id === id)?.name ?? 'Player';
 
-	// hero grid order: by tier (stars) first, then alphabetical within a tier
-	const HEROES_TIER = [...HEROES_ALPHA].sort((a, b) => a.stars - b.stars || a.name.localeCompare(b.name));
+	// hero grid: always alphabetical. A filter tab (complexity tier or role) keeps
+	// the matching heroes lit and greys out / disables the rest.
+	// filter: 'all' | 's<stars>' | 't:<trait>'
+	let filter = 'all';
+	const ROLES = (Object.keys(TRAIT_LABELS) as Trait[]).sort((a, b) => TRAIT_LABELS[a].localeCompare(TRAIT_LABELS[b]));
+	const matches = (h: Hero, f: string) =>
+		f === 'all' || (f[0] === 's' ? h.stars === Number(f.slice(1)) : h.traits.includes(f.slice(2) as Trait));
+	const setFilter = (f: string) => (filter = filter === f ? 'all' : f); // tap the active tab again → All
+	$: filterLabel = filter === 'all' ? 'All heroes' : filter[0] === 's' ? `Complexity ${filter.slice(1)}` : TRAIT_LABELS[filter.slice(2) as Trait];
+	$: filterCount = HEROES_ALPHA.filter((h) => matches(h, filter)).length;
 	$: inPool = d ? new Set(d.pool) : new Set<string>();
 	// a hero is unavailable if it's outside the complexity pool, picked, or banned
 	$: unavailable = (h: string) => !inPool.has(h) || blocked.has(h);
@@ -53,6 +62,9 @@
 			? (d.offer[0] ?? sel)
 			: (HEROES_ALPHA.find((h) => inPool.has(h.id) && !blocked.has(h.id))?.id ?? sel);
 	}
+	// once you've locked in (and aren't acting), you can only view your own hero
+	$: lockedIn = !!myPick && !myTurn;
+	$: if (lockedIn && myPick && sel !== myPick) sel = myPick;
 	$: selHero = heroById(sel);
 	const pip = (stat: [number, number], i: number) => (i < stat[0] ? 2 : i < stat[1] ? 1 : 0);
 
@@ -241,11 +253,31 @@
 		</div>
 
 		<div class="rightcol">
+			<!-- filter tabs: a see-through strip hugging the left edge of the hero panel -->
+			<div class="filters" class:off={lockedIn} aria-label="Filter heroes">
+				<button class="ftab all" class:on={filter === 'all'} on:click={() => (filter = 'all')} title="All heroes">All</button>
+				<span class="fsep" title="Complexity"></span>
+				{#each [1, 2, 3, 4] as n (n)}
+					<button class="ftab" class:on={filter === `s${n}`} on:click={() => setFilter(`s${n}`)} title="Complexity {n}">
+						<img src={starIcon()} alt="" /><b>{n}</b>
+					</button>
+				{/each}
+				<span class="fsep" title="Roles"></span>
+				{#each ROLES as t (t)}
+					<button class="ftab" class:on={filter === `t:${t}`} on:click={() => setFilter(`t:${t}`)} title={TRAIT_LABELS[t]}>
+						{#if traitIcon(t)}<img src={traitIcon(t)} alt={TRAIT_LABELS[t]} />{:else}<span class="fdot">◈</span>{/if}
+					</button>
+				{/each}
+			</div>
 			<div class="browse">
-				{#each HEROES_TIER as h (h.id)}
-					<button class="hero" class:on={sel === h.id} class:gone={unavailable(h.id)} class:locked={h.stars === 4}
+				<div class="fcap">{lockedIn ? 'Locked in' : filterLabel}<span>{lockedIn ? '' : filter === 'all' ? '' : `${filterCount} heroes`}</span></div>
+				{#each HEROES_ALPHA as h (h.id)}
+					{@const off = !matches(h, filter)}
+					{@const viewLocked = lockedIn && h.id !== myPick}
+					<button class="hero" class:on={sel === h.id} class:gone={unavailable(h.id) && h.id !== myPick} class:locked={h.stars === 4}
 						class:dim={d.system === 'single-draft' && myTurn && inPool.has(h.id) && !d.offer.includes(h.id) && !blocked.has(h.id)}
-						disabled={!inPool.has(h.id) || h.stars === 4}
+						class:filtered={off} class:viewlock={viewLocked}
+						disabled={!inPool.has(h.id) || h.stars === 4 || off || viewLocked}
 						title={h.stars === 4 ? `${h.name} — 4★ heroes coming soon` : h.name}
 						on:click={() => (sel = h.id)}>
 						<img src={heroAvatar(h.id)} alt={h.name} />
@@ -280,7 +312,7 @@
 {/if}
 
 <style>
-	.draft { min-height: 100vh; display: flex; flex-direction: column; color: #f1f5f9; }
+	.draft { height: 100%; min-height: 560px; display: flex; flex-direction: column; color: #f1f5f9; }
 	.leave { position: absolute; top: 16px; left: 18px; z-index: 6; display: inline-flex; align-items: center; gap: 7px;
 		padding: 8px 15px; border-radius: 999px; border: 1px solid rgba(239,68,68,0.5); background: rgba(40,12,14,0.6); backdrop-filter: blur(6px);
 		color: #fca5a5; cursor: pointer; font-weight: 700; font-size: 0.86rem; letter-spacing: 0.02em; box-shadow: 0 6px 18px rgba(0,0,0,0.45); }
@@ -294,7 +326,7 @@
 	.turn .sep { color: #cbb488; font-family: 'Modesto Poster', serif; font-size: 1.2rem; }
 	.turn .mode { color: #94a3b8; font-weight: 600; font-size: 0.85rem; }
 	.turn .clock { font-family: 'Modesto Poster', serif; font-variant-numeric: tabular-nums; letter-spacing: 0.04em; font-size: 1.3rem; padding: 0 4px; }
-	.turn .clock.urgent { color: #fca5a5; box-shadow: 0 0 0 1px rgba(239,68,68,0.5); }
+	.turn .clock.urgent { color: #fca5a5; }
 	/* all-pick grace/overtime: the whole banner + timer go red and pulse */
 	.turn.overtime { border-color: rgba(239,68,68,0.7); background: rgba(60,10,12,0.6); box-shadow: 0 0 0 1px rgba(239,68,68,0.45), 0 0 22px rgba(239,68,68,0.5); animation: otpulse 1s ease-in-out infinite; }
 	.turn.overtime .btxt, .turn.overtime .sep, .turn.overtime .clock { color: #fca5a5; }
@@ -357,6 +389,26 @@
 	.hero.locked { filter: grayscale(1) brightness(0.42); pointer-events: none; }
 	.hero.locked img { opacity: 0.9; }
 	.hero .soon { position: absolute; left: 0; right: 0; bottom: 0; font-size: 0.5rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; text-align: center; color: #f1f5f9; background: rgba(0,0,0,0.72); padding: 1px 0; }
+	/* filter tab strip — sits just outside the panel's left edge, see-through until used */
+	.filters { position: absolute; top: 0; right: calc(100% + 6px); display: flex; flex-direction: column; align-items: center; gap: 4px;
+		padding: 5px 4px; border-radius: 12px; background: rgba(9,13,22,0.22); border: 1px solid rgba(255,255,255,0.08); opacity: 0.72; transition: opacity 0.15s; }
+	.filters:hover { opacity: 1; }
+	.filters.off { opacity: 0.3; pointer-events: none; }
+	.ftab { position: relative; width: 34px; height: 30px; display: grid; place-items: center; padding: 0; border-radius: 8px; cursor: pointer; color: #e5e7eb;
+		background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); transition: background 0.12s, border-color 0.12s; }
+	.ftab:hover { background: rgba(255,255,255,0.14); }
+	.ftab.on { background: rgba(245,158,11,0.26); border-color: rgba(245,158,11,0.8); box-shadow: 0 0 10px rgba(245,158,11,0.35); }
+	.ftab img { width: 20px; height: 20px; object-fit: contain; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.7)); }
+	.ftab b { position: absolute; right: 2px; bottom: 0; font-size: 0.62rem; font-weight: 900; color: #fff; text-shadow: 0 1px 2px #000; }
+	.ftab.all { font-size: 0.64rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; }
+	.fdot { font-size: 0.95rem; color: #fbbf24; }
+	.fsep { width: 20px; height: 1px; margin: 2px 0; background: rgba(255,255,255,0.2); }
+	.fcap { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: baseline; margin: -2px 2px 0;
+		font-family: 'Modesto Poster', serif; font-size: 0.82rem; letter-spacing: 0.04em; color: #f0dcae; }
+	.fcap span { font-family: inherit; font-size: 0.66rem; color: #94a3b8; }
+	/* filtered out by a tab, or browsing locked after lock-in */
+	.hero.filtered { filter: grayscale(1) brightness(0.36); opacity: 0.6; pointer-events: none; }
+	.hero.viewlock { filter: brightness(0.45) saturate(0.5); pointer-events: none; }
 	.lockin { width: 100%; border: 1px solid rgba(255,255,255,0.32); color: #fff; border-radius: 12px; padding: 0.85rem 1rem; font-weight: 700; font-size: 1.05rem; cursor: pointer; box-shadow: 0 8px 24px rgba(0,0,0,0.45); }
 	.lockin:disabled { opacity: 0.45; cursor: not-allowed; }
 
