@@ -10,6 +10,7 @@
 	import { role, tryAdmin, enterAsPlayer, signOut } from '$lib/role';
 	import { availableMaps, type MapChoice } from '$lib/maps';
 	import { announceRoom, browseRooms, type RoomInfo } from '$lib/lobby';
+	import { claimIdentity, tabClientId, writeTicket, clearTicket, type ResumeTicket } from '$lib/identity';
 	import {
 		joinMatch,
 		initialMatchState,
@@ -85,26 +86,19 @@
 	let coinCaption = '';
 	let coinPending = 'Flipping…'; // caption while the coin spins
 
-	// reconnect/resume: remember the active room so a page refresh rejoins it as
-	// the same player (stable clientId lives in match.ts). resumeSeed lets a lone
-	// creator whose room emptied out while away recreate it instead of erroring.
-	const ACTIVE = 'goa2-active';
+	// reconnect/resume: each tab keeps an expiring "resume ticket" for the room
+	// it's in (identity.ts), so a refresh — or reopening a closed tab — rejoins
+	// as the same player, while other tabs stay separate players. resumeSeed lets
+	// a lone creator whose room emptied out while away recreate it.
+	let myId = ''; // this tab's player id (claimed on mount)
 	let pendingColor = '';
 	let pendingSeat = -1;
 	let resumeSeed: MatchState | null = null;
-	interface ActiveInfo { room: string; name: string; color: string; seat: number; creator: boolean; seed: MatchState | null }
-	// Kept in localStorage (not sessionStorage) so a tab close/reopen — not just a
-	// same-tab refresh — can auto-rejoin the game the player was in.
-	function writeActive(patch: Partial<ActiveInfo>) {
-		try {
-			const cur: ActiveInfo = JSON.parse(localStorage.getItem(ACTIVE) || 'null') ?? { room, name, color, seat: mySeat, creator: false, seed: null };
-			localStorage.setItem(ACTIVE, JSON.stringify({ ...cur, ...patch }));
-		} catch {}
+	function writeActive(patch: Partial<ResumeTicket>) {
+		if (!myId) myId = tabClientId();
+		writeTicket(myId, patch, { room, name, color, seat: mySeat, creator: false, seed: null });
 	}
-	function clearActive() { try { localStorage.removeItem(ACTIVE); } catch {} }
-	function readActive(): ActiveInfo | null {
-		try { return JSON.parse(localStorage.getItem(ACTIVE) || 'null'); } catch { return null; }
-	}
+	function clearActive() { clearTicket(myId || tabClientId()); }
 	// remember the last room the player was in so the Join screen can prefill the
 	// code (kept even after an intentional Leave, so getting back is one tap)
 	const LAST_ROOM = 'goa2-last-room';
@@ -134,18 +128,22 @@
 			ensureLoaded();
 			room = q.toUpperCase();
 			mode = 'join';
-			return;
 		}
-		// otherwise, if we were in a room and the page reloaded, rejoin it.
-		// "TABLE" was the old buggy fallback code shared across all games — never
-		// auto-resume into it; clear it so it can't drag anyone into a stale game.
-		const active = readActive();
-		if (active?.room && active.room !== 'TABLE') resume(active);
-		else if (active?.room === 'TABLE') clearActive();
+		// work out who this tab is; if it was in a room (refresh, or reopening a
+		// closed tab within the ticket's lifetime), rejoin it as the same player
+		let alive = true;
+		void claimIdentity().then(({ id, ticket }) => {
+			if (!alive) return;
+			myId = id;
+			if (ticket && !q && !session) resume(ticket);
+		});
+		// keep this tab's resume ticket fresh while it's in a room
+		const beat = setInterval(() => { if (session) writeActive({}); }, 60_000);
+		return () => { alive = false; clearInterval(beat); };
 	});
 
-	// rejoin a room after a refresh, as the same player (stable clientId)
-	function resume(active: ActiveInfo) {
+	// rejoin a room after a refresh / tab reopen, as the same player
+	function resume(active: ResumeTicket) {
 		enterAsPlayer();
 		ensureLoaded();
 		name = active.name || name;
@@ -153,7 +151,7 @@
 		rememberRoom(room);
 		pendingColor = active.color && active.color !== 'spectator' ? active.color : '';
 		pendingSeat = typeof active.seat === 'number' ? active.seat : -1;
-		resumeSeed = active.creator ? active.seed : null; // fallback if room emptied out
+		resumeSeed = active.creator ? (active.seed as MatchState | null) : null; // fallback if room emptied out
 		joinError = '';
 		joining = true;
 		session = joinMatch(room, { name, color: 'spectator' }, {});
