@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import type { Readable } from 'svelte/store';
+	import MatchupSplash from '$lib/MatchupSplash.svelte';
 	import {
 		HEROES_ALPHA, heroAvatar, heroSplash, heroLogo, heroById,
 		statIcon, traitIcon, starIcon, STAT_LABELS, STAT_PIPS, TRAIT_LABELS, PACK_LABELS,
@@ -363,12 +364,17 @@
 			{/if}
 		{/each}
 	</footer>
+
+	<!-- every hero locked: Team vs Team war banners; the host begins from here -->
+	{#if complete}
+		<MatchupSplash orange={rosters.orange} blue={rosters.blue} picks={d.picks} {nameOf} {clientId} {iAmHost} onStart={startGame} />
+	{/if}
 </div>
 {/if}
 
 <style>
-	.draft { height: 100%; min-height: 560px; display: flex; flex-direction: column; color: #f1f5f9; }
-	.leave { position: absolute; top: 16px; left: 18px; z-index: 6; display: inline-flex; align-items: center; gap: 7px;
+	.draft { position: relative; height: 100%; min-height: 560px; display: flex; flex-direction: column; color: #f1f5f9; }
+	.leave { position: absolute; top: 16px; left: 18px; z-index: 30; display: inline-flex; align-items: center; gap: 7px;
 		padding: 8px 15px; border-radius: 999px; border: 1px solid rgba(239,68,68,0.5); background: rgba(40,12,14,0.6); backdrop-filter: blur(6px);
 		color: #fca5a5; cursor: pointer; font-weight: 700; font-size: 0.86rem; letter-spacing: 0.02em; box-shadow: 0 6px 18px rgba(0,0,0,0.45); }
 	.leave:hover { background: rgba(120,28,32,0.72); color: #fecaca; border-color: rgba(239,68,68,0.75); }
