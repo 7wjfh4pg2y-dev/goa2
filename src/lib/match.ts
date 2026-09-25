@@ -66,9 +66,9 @@ export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 			// round over: hands refresh, and the board is swept of tokens and markers
 			const pieces: Record<string, Piece> = {}
 			for (const id in s.pieces ?? {}) if (keepsThroughRound(s.pieces[id])) pieces[id] = s.pieces[id]
-			return { cards: endRoundAll(migrated), round: s.round + 1, turn: 1, battlePhase: false, pieces, status: {} }
+			return { cards: endRoundAll(migrated), round: s.round + 1, turn: 1, battlePhase: false, pieces, status: {}, radii: {} }
 		}
-		return { cards: migrated, turn: s.turn + 1 }
+		return { cards: migrated, turn: s.turn + 1, radii: {} }
 	}
 
 	const cs = cards[req.pid]
@@ -201,6 +201,9 @@ export interface MatchState {
 	// per-player status markers shown on the HUD (Tigerclaw poison, Bain bounty),
 	// keyed by playerId. Counts so poison can stack; 0 = clear.
 	status?: Record<string, { poison: number; bounty: number }>
+	// temporary area-effect radius shown around a player's hero (1–8 hexes);
+	// cleared whenever the turn advances
+	radii?: Record<string, number>
 	// durable seat ownership: seat index (as string) → the clientId + name that
 	// owns that seat's hero. Set at game start; survives a player dropping from
 	// presence, so a vacated seat can be identified and taken over.
