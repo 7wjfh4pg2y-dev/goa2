@@ -310,19 +310,24 @@
 					{/each}
 				</div>
 			</div>
-			{#if confirming}
-				<!-- picks are final: a short oath before it's sworn -->
-				<div class="oath">
-					<div class="oath-t">{isBanTurn ? `Ban ${selHero.name}?` : `Choose ${selHero.name}?`}</div>
-					<div class="oath-s">{isBanTurn ? 'Bans are final.' : 'Oaths are binding — no changing heroes after.'}</div>
-					<div class="oath-b">
-						<button class="lockin" style="background:{actionBg}" on:click={onAction}>{isBanTurn ? 'Ban Hero' : 'Select Hero'}</button>
-						<button class="oath-no" on:click={() => (confirmHero = '')}>Pick Another</button>
+			<!-- fixed-height action slot: the confirm swaps in place, so the hero grid never moves -->
+			<div class="actslot">
+				{#if confirming}
+					<!-- picks are final: a short oath before it's sworn -->
+					<div class="oath">
+						<div class="oath-txt">
+							<span class="oath-t">{isBanTurn ? `Ban ${selHero.name}?` : `Choose ${selHero.name}?`}</span>
+							<span class="oath-s">{isBanTurn ? 'Bans are final.' : 'Oaths are binding.'}</span>
+						</div>
+						<div class="oath-b">
+							<button class="lockin" style="background:{actionBg}" on:click={onAction}>{isBanTurn ? 'Ban Hero' : 'Select Hero'}</button>
+							<button class="oath-no" on:click={() => (confirmHero = '')}>Pick Another</button>
+						</div>
 					</div>
-				</div>
-			{:else}
-				<button class="lockin" style="background:{actionBg}" disabled={!actionEnabled} on:click={onAction}>{actionLabel}</button>
-			{/if}
+				{:else}
+					<button class="lockin" style="background:{actionBg}" disabled={!actionEnabled} on:click={onAction}>{actionLabel}</button>
+				{/if}
+			</div>
 		</div>
 	</div>
 
@@ -477,13 +482,16 @@
 	.hero.filtered { filter: grayscale(1) brightness(0.36); opacity: 0.6; pointer-events: none; }
 	.hero.viewlock { filter: brightness(0.45) saturate(0.5); pointer-events: none; }
 	.lockin { width: 100%; border: 1px solid rgba(255,255,255,0.32); color: #fff; border-radius: 12px; padding: 0.85rem 1rem; font-weight: 700; font-size: 1.05rem; cursor: pointer; box-shadow: 0 8px 24px rgba(0,0,0,0.45); }
-	.oath { padding: 12px 12px 10px; border-radius: 14px; background: linear-gradient(180deg, rgba(40,28,10,0.82), rgba(12,14,22,0.9)); border: 1px solid rgba(240,200,120,0.5);
+	.actslot { flex: none; height: 3.3rem; display: flex; }
+	.actslot > .lockin { height: 100%; padding-top: 0; padding-bottom: 0; }
+	.oath { flex: 1; min-width: 0; height: 100%; box-sizing: border-box; display: flex; align-items: center; gap: 6px; padding: 5px 5px 5px 12px; border-radius: 12px; background: linear-gradient(180deg, rgba(40,28,10,0.82), rgba(12,14,22,0.9)); border: 1px solid rgba(240,200,120,0.5);
 		box-shadow: 0 10px 30px rgba(0,0,0,0.5), 0 0 18px rgba(240,190,90,0.18); animation: oathIn 0.22s ease; }
-	.oath-t { font-family: 'Modesto Poster', serif; font-size: 1.35rem; color: #f6ead2; text-align: center; }
-	.oath-s { font-size: 0.78rem; color: #cbb488; text-align: center; margin: 2px 0 10px; font-style: italic; }
-	.oath-b { display: flex; gap: 8px; }
-	.oath-b .lockin { flex: 1; padding: 0.7rem 1rem; }
-	.oath-no { flex: none; padding: 0 16px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.25); background: rgba(255,255,255,0.06); color: #e5e7eb; font-weight: 700; cursor: pointer; }
+	.oath-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.1; }
+	.oath-t { font-size: 1.08rem; color: #f6ead2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.oath-s { font-size: 0.66rem; color: #cbb488; white-space: nowrap; }
+	.oath-b { flex: none; width: 118px; height: 100%; display: flex; flex-direction: column; gap: 3px; }
+	.oath .lockin { flex: 1; min-height: 0; padding: 0 0.6rem; font-size: 0.86rem; box-shadow: none; border-radius: 7px; }
+	.oath-no { flex: 1; min-height: 0; padding: 0 8px; font-size: 0.72rem; border-radius: 7px; border: 1px solid rgba(255,255,255,0.25); background: rgba(255,255,255,0.06); color: #e5e7eb; font-weight: 700; cursor: pointer; }
 	.oath-no:hover { background: rgba(255,255,255,0.14); }
 	@keyframes oathIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 	.lockin:disabled { opacity: 0.45; cursor: not-allowed; }

@@ -179,8 +179,8 @@
 
 	.foot { position: relative; height: 92px; display: grid; place-items: center; }
 	.begin { opacity: 0; transform: translateY(10px); transition: opacity 0.4s, transform 0.4s; padding: 0.9rem 2.4rem; border-radius: 14px; cursor: pointer;
-		font-family: 'Modesto Poster', serif; font-size: 1.35rem; letter-spacing: 0.06em; color: #1c1206;
-		background: linear-gradient(180deg, #f6dd98, #d4a64a 55%, #a87a2a); border: 1px solid #fbe7b0; box-shadow: 0 10px 30px rgba(0,0,0,0.55), 0 0 26px rgba(216,181,106,0.4); }
+		font-family: 'Modesto Poster', serif; font-size: 1.35rem; letter-spacing: 0.06em; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.45);
+		background: linear-gradient(120deg, #ef7d22, #2f7fe6); border: 1px solid rgba(255,255,255,0.35); box-shadow: 0 10px 30px rgba(0,0,0,0.55), 0 0 26px rgba(120,120,200,0.35); }
 	.begin.show { opacity: 1; transform: none; }
 	.begin:hover:not(:disabled) { filter: brightness(1.07); }
 	.wait { opacity: 0; transition: opacity 0.4s; font-family: 'Modesto Poster', serif; font-size: 1.05rem; letter-spacing: 0.08em; color: #cbb488; }
