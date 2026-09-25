@@ -46,7 +46,7 @@
 					{#each side.ids as id, i (id)}
 						{@const h = picks[id] ? heroById(picks[id]) : undefined}
 						<div class="banner" style="--d:{delay(side.team === 'orange' ? 'orange' : 'blue', i, side.ids.length)}s">
-							<div class="sway" style="--sd:{(i * 0.7).toFixed(2)}s">
+							<div class="hang">
 								<div class="rod"></div>
 								<div class="cloth {side.team}">
 									<div class="cloth-in">
@@ -100,8 +100,8 @@
 <style>
 	.splash { position: absolute; inset: 0; z-index: 20; display: flex; flex-direction: column; align-items: center; overflow: hidden; color: #f6ead2;
 		background: radial-gradient(120% 90% at 50% 45%, rgba(18,16,26,0.9), rgba(4,5,10,0.97)); animation: fade 0.45s ease both;
-		--bw: 232px; --bh: 590px; }
-	.splash.dense { --bw: 184px; --bh: 580px; }
+		--bw: 272px; --bh: 680px; }
+	.splash.dense { --bw: 196px; --bh: 640px; }
 	@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 	.wash { position: absolute; top: 0; bottom: 0; width: 55%; pointer-events: none; opacity: 0; animation: fade 1.2s 0.3s ease forwards; }
 	.wash.orange { left: 0; background: radial-gradient(70% 60% at 20% 45%, rgba(239,125,34,0.3), transparent 70%); }
@@ -126,7 +126,7 @@
 	.crest span { font-family: 'Modesto Poster', serif; font-size: 2.8rem; color: #f6ead2; letter-spacing: 0.04em; text-shadow: 0 0 18px rgba(246,234,210,0.45); }
 	@keyframes crestIn { from { opacity: 0; transform: scale(0.4) rotate(-20deg); } to { opacity: 1; transform: none; } }
 
-	/* a banner drops in from above and swings to rest, then sways gently */
+	/* a banner drops in from above and swings to rest */
 	.banner { width: var(--bw); transform-origin: top center; animation: drop 1s var(--d) cubic-bezier(0.25,0.9,0.3,1) both; }
 	@keyframes drop {
 		0% { transform: translateY(-115%) rotate(0); opacity: 0; }
@@ -135,14 +135,9 @@
 		80% { transform: translateY(-1%) rotate(-1.4deg); }
 		100% { transform: translateY(0) rotate(0); opacity: 1; }
 	}
-	.sway { transform-origin: top center; animation: sway 6s calc(var(--d, 0s) + 1.2s + var(--sd)) ease-in-out infinite; }
-	@keyframes sway { 0%, 100% { transform: rotate(0); } 30% { transform: rotate(0.7deg); } 70% { transform: rotate(-0.7deg); } }
 
-	.rod { position: relative; z-index: 2; height: 11px; margin: 0 -10px -3px; border-radius: 6px;
+	.rod { position: relative; z-index: 2; height: 11px; margin: 0 -6px -3px; border-radius: 6px;
 		background: linear-gradient(180deg, #8a6431, #4a3218 60%, #2e1f0e); box-shadow: 0 4px 10px rgba(0,0,0,0.6); }
-	.rod::before, .rod::after { content: ''; position: absolute; top: -4px; width: 19px; height: 19px; border-radius: 50%;
-		background: radial-gradient(circle at 35% 30%, #fbe3a0, #c79a44 55%, #7a5a22); box-shadow: 0 2px 5px rgba(0,0,0,0.6); }
-	.rod::before { left: -7px; } .rod::after { right: -7px; }
 
 	/* cloth: a gold trim (outer) around the team-coloured cloth (inner), swallowtail hem */
 	.cloth { position: relative; height: var(--bh); clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 91%, 0 100%);
@@ -157,28 +152,30 @@
 	.art img { width: 100%; height: 100%; object-fit: cover; object-position: center 24%; display: block; }
 	.art::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,0) 55%, rgba(0,0,0,0.55) 100%); }
 	.art.empty { display: grid; place-items: center; background: rgba(0,0,0,0.25); font-family: 'Modesto Poster', serif; font-size: 3rem; color: rgba(255,255,255,0.3); }
-	.sigil { position: relative; z-index: 1; width: 60px; height: 60px; object-fit: contain; margin-top: -32px; filter: drop-shadow(0 3px 7px rgba(0,0,0,0.8)); }
-	.hname { margin-top: 2px; font-family: 'Modesto Poster', serif; font-size: 1.55rem; line-height: 1; text-align: center; padding: 0 8px; text-shadow: 0 2px 8px rgba(0,0,0,0.7); }
-	.dense .hname { font-size: 1.35rem; }
-	.htitle { margin-top: 2px; font-family: 'Modesto Poster', serif; font-size: 0.78rem; color: #f0dcae; opacity: 0.9; text-align: center; padding: 0 8px; }
-	.who { margin-top: 7px; padding: 2px 10px; border-radius: 999px; font-size: 0.66rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase;
+	.sigil { position: relative; z-index: 1; width: 72px; height: 72px; object-fit: contain; margin-top: -38px; filter: drop-shadow(0 3px 7px rgba(0,0,0,0.8)); }
+	.hname { margin-top: 2px; font-family: 'Modesto Poster', serif; font-size: 1.85rem; line-height: 1; text-align: center; padding: 0 8px; text-shadow: 0 2px 8px rgba(0,0,0,0.7); }
+	.dense .hname { font-size: 1.4rem; }
+	.dense .sigil { width: 60px; height: 60px; margin-top: -32px; }
+	.htitle { margin-top: 3px; font-family: 'Modesto Poster', serif; font-size: 0.92rem; color: #f0dcae; opacity: 0.9; text-align: center; padding: 0 8px; }
+	.who { margin-top: 9px; padding: 3px 12px; border-radius: 999px; font-size: 0.74rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase;
 		color: #fff; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.18); max-width: calc(100% - 20px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 	.who.me { border-color: rgba(246,234,210,0.7); box-shadow: 0 0 10px rgba(246,234,210,0.3); }
 	.cx { display: flex; gap: 2px; margin-top: 7px; }
-	.cx img { width: 14px; height: 14px; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.6)); }
-	.stats { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+	.cx img { width: 17px; height: 17px; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.6)); }
+	.stats { display: flex; flex-direction: column; gap: 5px; margin-top: 11px; }
 	.srow { display: flex; align-items: center; gap: 6px; }
-	.srow img { width: 16px; height: 13px; object-fit: contain; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.7)); }
+	.srow img { width: 19px; height: 15px; object-fit: contain; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.7)); }
 	.pips { display: flex; gap: 2px; }
-	.pips i { width: 9px; height: 9px; border-radius: 2px; background: rgba(0,0,0,0.35); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08); }
-	.dense .pips i { width: 8px; height: 8px; }
+	.pips i { width: 12px; height: 12px; border-radius: 2px; background: rgba(0,0,0,0.35); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08); }
+	.dense .pips i { width: 9px; height: 9px; }
 	.pips i.p2 { background: #f6ead2; box-shadow: 0 0 5px rgba(246,234,210,0.5); }
 	.pips i.p1 { background: rgba(246,234,210,0.35); }
-	.roles { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 6px; margin-top: 10px; padding: 0 8px; }
-	.role { display: flex; flex-direction: column; align-items: center; gap: 2px; width: 44px; }
-	.role img { width: 22px; height: 22px; object-fit: contain; filter: drop-shadow(0 1px 3px rgba(0,0,0,0.8)); }
-	.rdot { width: 22px; height: 22px; display: grid; place-items: center; color: #fbbf24; font-size: 0.9rem; }
-	.role span { font-family: 'Modesto Poster', serif; font-size: 0.5rem; letter-spacing: 0.02em; text-transform: uppercase; white-space: nowrap; }
+	.roles { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 8px; margin-top: 13px; padding: 0 8px; }
+	.role { display: flex; flex-direction: column; align-items: center; gap: 3px; width: 54px; }
+	.dense .role { width: 44px; }
+	.role img { width: 28px; height: 28px; object-fit: contain; filter: drop-shadow(0 1px 3px rgba(0,0,0,0.8)); }
+	.rdot { width: 28px; height: 28px; display: grid; place-items: center; color: #fbbf24; font-size: 0.9rem; }
+	.role span { font-family: 'Modesto Poster', serif; font-size: 0.6rem; letter-spacing: 0.02em; text-transform: uppercase; white-space: nowrap; }
 
 	.foot { position: relative; height: 92px; display: grid; place-items: center; }
 	.begin { opacity: 0; transform: translateY(10px); transition: opacity 0.4s, transform 0.4s; padding: 0.9rem 2.4rem; border-radius: 14px; cursor: pointer;

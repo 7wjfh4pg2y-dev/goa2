@@ -313,11 +313,11 @@
 			{#if confirming}
 				<!-- picks are final: a short oath before it's sworn -->
 				<div class="oath">
-					<div class="oath-t">{isBanTurn ? `Banish ${selHero.name}?` : `Swear to ${selHero.name}?`}</div>
-					<div class="oath-s">{isBanTurn ? 'A banishment cannot be undone.' : 'Oaths are binding — no changing heroes after.'}</div>
+					<div class="oath-t">{isBanTurn ? `Ban ${selHero.name}?` : `Choose ${selHero.name}?`}</div>
+					<div class="oath-s">{isBanTurn ? 'Bans are final.' : 'Oaths are binding — no changing heroes after.'}</div>
 					<div class="oath-b">
-						<button class="lockin" style="background:{actionBg}" on:click={onAction}>{isBanTurn ? 'Banish' : 'Swear it'}</button>
-						<button class="oath-no" on:click={() => (confirmHero = '')}>Not yet</button>
+						<button class="lockin" style="background:{actionBg}" on:click={onAction}>{isBanTurn ? 'Ban Hero' : 'Select Hero'}</button>
+						<button class="oath-no" on:click={() => (confirmHero = '')}>Pick Another</button>
 					</div>
 				</div>
 			{:else}
