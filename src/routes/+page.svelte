@@ -702,7 +702,7 @@
 			</div>
 		{:else if mode === 'lobby'}
 			<div class="step" transition:reveal bind:clientHeight={h['lobby']}>
-				<div class="card form lobby" style="width: min(96 * var(--vw), {$state.seats * 96 + 56}px)">
+				<div class="card form lobby" style="width: min(96 * var(--vw), {Math.max(500, $state.seats * 96 + 56)}px)">
 					<div class="lobbyhead">
 						<div>
 							<span class="lbl">Room code</span>
@@ -832,7 +832,7 @@
 		--vw: calc(1vw / var(--ui)); --vh: calc(1vh / var(--ui));
 		transform: scale(var(--ui)); transform-origin: 0 0; overflow-x: hidden; overflow-y: auto; }
 	.wrap { --hl: linear-gradient(120deg, #ef7d22, #2f7fe6); min-height: 100%; display: flex; flex-direction: column; align-items: center; padding: calc(5 * var(--vh)) 20px 32px; gap: 22px; color: #f1f5f9;
-		font-family: 'Modesto Poster', serif; letter-spacing: 0.02em; } /* whole menu + setup in the Guards display font */
+		font-family: 'Modesto Poster', serif; letter-spacing: 0.02em; font-synthesis: none; } /* whole menu + setup in the Guards display font; it has one weight, so never fake a bold */
 	.home-link { background: none; border: none; padding: 0; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 18px; transition: transform 0.6s cubic-bezier(0.2, 0.85, 0.2, 1); transform: translateY(0); }
 	.logo { width: min(224px, 54 * var(--vw)); filter: drop-shadow(0 12px 32px rgba(0, 0, 0, 0.55)); transition: width 0.6s cubic-bezier(0.2, 0.85, 0.2, 1), filter 0.6s ease; }
 	/* landing splash: crest large & centred, morphs up-and-shrink into the menu */
@@ -938,6 +938,9 @@
 
 	/* teams */
 	.teamstop { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+	/* heading + flip button stay on one row */
+	.teamstop > span { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.teamstop .flipbtn { flex: none; white-space: nowrap; }
 	.flipbtn { border: 1px solid rgba(255, 255, 255, 0.2); background: rgba(255, 255, 255, 0.06); color: #f1f5f9; border-radius: 999px; padding: 0.32rem 0.8rem; font-size: 0.78rem; font-weight: 600; cursor: pointer; transition: background 0.15s, transform 0.12s; }
 	.flipbtn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.13); transform: translateY(-1px); }
 	.flipbtn:disabled { opacity: 0.4; cursor: not-allowed; }
@@ -980,7 +983,7 @@
 	.coin { width: 150px; height: 150px; position: relative; transform-style: preserve-3d; transition: transform 1.55s cubic-bezier(0.2, 0.75, 0.2, 1); }
 	.coin .face { position: absolute; inset: 0; width: 100%; height: 100%; backface-visibility: hidden; border-radius: 50%; filter: drop-shadow(0 14px 30px rgba(0, 0, 0, 0.55)); }
 	.coin .back { transform: rotateY(180deg); }
-	.coincap { font-family: 'Modesto Poster', serif; letter-spacing: 0.04em; margin: 0; font-size: 1.05rem; font-weight: 700; letter-spacing: 0.02em; color: #e2e8f0; }
+	.coincap { font-synthesis: none; font-family: 'Modesto Poster', serif; letter-spacing: 0.04em; margin: 0; font-size: 1.05rem; font-weight: 700; letter-spacing: 0.02em; color: #e2e8f0; }
 	.coincap.done { color: #6ee7b7; }
 	@keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
 
