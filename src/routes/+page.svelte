@@ -75,7 +75,15 @@
 	let coinShown = false;
 	let coinRot = 0; // accumulated rotation (deg); lands on orange (mult of 360) or blue (+180)
 	let coinDone = false;
+	// Menus, lobby and hero select are laid out on a virtual ~1440×900 canvas and
+	// scaled to fit the window, so a big laptop, a MacBook and an iPad all see the
+	// same proportions (only the spare width changes with the aspect ratio). The
+	// board (GameView) is already fluid and isn't scaled.
+	let ui = 1;
+	const fitUi = () => { if (browser) ui = Math.min(1.5, Math.max(0.7, Math.min(innerWidth / 1440, innerHeight / 900))); };
+	fitUi();
 	let coinCaption = '';
+	let coinPending = 'Flipping…'; // caption while the coin spins
 
 	// reconnect/resume: remember the active room so a page refresh rejoins it as
 	// the same player (stable clientId lives in match.ts). resumeSeed lets a lone
@@ -320,7 +328,7 @@
 		// another player flipped in → show the same coin animation for everyone
 		s.joinFlip.subscribe((f) => {
 			if (!f || session !== s || f.id === s.clientId) return;
-			playCoin(f.side, { caption: `${f.name} — ${f.side === 'orange' ? 'Orange!' : 'Blue!'}` });
+			playCoin(f.side, flipCaps(f.name, f.side));
 		});
 		if (enterLobby) mode = 'lobby';
 	}
@@ -338,9 +346,10 @@
 	// Spin the coin so it actually animates: mount at the current angle, then bump
 	// the rotation on the next frame so the CSS transition has something to run
 	// from (otherwise it appears already at the final face — the "only blue" bug).
-	function playCoin(side: Team, opts: { caption?: string; after?: () => void } = {}) {
+	function playCoin(side: Team, opts: { caption?: string; pending?: string; after?: () => void } = {}) {
 		coinShown = true; coinDone = false;
 		coinCaption = opts.caption ?? (side === 'orange' ? 'You’re Orange!' : 'You’re Blue!');
+		coinPending = opts.pending ?? 'Flipping…';
 		const start = coinRot;
 		requestAnimationFrame(() => requestAnimationFrame(() => {
 			coinRot = Math.ceil((start + 1440) / 360) * 360 + (side === 'blue' ? 180 : 0);
@@ -441,9 +450,10 @@
 	function openSeatsOn(team: Team): number[] {
 		return (team === 'orange' ? orangeSeats : blueSeats).filter((i) => !takenSeats.has(i) && i !== mySeat);
 	}
-	// MANDATORY on join: flip a coin for your team, then take an open seat on that
-	// side. Balanced — if the coin's side is full, you land on the other. Each
-	// player flips their own; the host does not assign anyone.
+	// team-join flip captions, shown to everyone: "X is flipping…" → "X is Orange!"
+	const flipCaps = (who: string, side: Team) => ({ pending: `${who} is flipping…`, caption: `${who} is ${side === 'orange' ? 'Orange' : 'Blue'}!` });
+	// Flip a coin for your team, then take an open seat on that side. Balanced —
+	// if the coin's side is full, you land on the other. (Or just tap a seat.)
 	let flipping = false;
 	function flipForTeam() {
 		if (mySeat >= 0 || flipping) return;
@@ -453,7 +463,7 @@
 		if (seat === undefined) return; // table full
 		flipping = true;
 		session?.flipJoin(side, name); // let everyone else see the flip too
-		playCoin(side, { after: () => {
+		playCoin(side, { ...flipCaps(name, side), after: () => {
 			flipping = false;
 			const c = pick || firstFreeColor();
 			color = c;
@@ -461,20 +471,17 @@
 			writeActive({ seat, color: c });
 		} });
 	}
-	// join a chosen side directly (skips the coin flip) — takes that side's first
-	// open seat. The flip stays available for anyone who wants the ceremony.
-	function joinTeam(side: Team) {
-		if (mySeat >= 0 || flipping) return;
-		const seat = openSeatsOn(side)[0];
-		if (seat === undefined) return; // that side is full
-		const c = pick || firstFreeColor();
-		color = c;
-		session?.setSelf({ seat, color: c });
-		writeActive({ seat, color: c });
-	}
-	// move to a different open seat (only after you're seated, and not while readied)
+	// tap any open seat: take it if you're unseated, or move there if you're
+	// already sitting (not while readied or mid-flip)
 	function sit(i: number) {
-		if (ready || mySeat < 0 || takenSeats.has(i) || i === mySeat) return;
+		if (ready || flipping || takenSeats.has(i) || i === mySeat) return;
+		if (mySeat < 0) {
+			const c = pick || firstFreeColor();
+			color = c;
+			session?.setSelf({ seat: i, color: c });
+			writeActive({ seat: i, color: c });
+			return;
+		}
 		session?.setSelf({ seat: i });
 		writeActive({ seat: i });
 	}
@@ -520,12 +527,17 @@
 
 <svelte:head><title>Guards of Atlantis II</title></svelte:head>
 
+<svelte:window on:resize={fitUi} />
+
 {#if mode === 'draft' && session}
-	<HeroDraft {session} {state} {players} clientId={session.clientId} onLeave={leaveRoom} />
+	<div class="uiscale" style="--ui:{ui}">
+		<HeroDraft {session} {state} {players} clientId={session.clientId} onLeave={leaveRoom} />
+	</div>
 {:else if mode === 'game' && session}
 	<GameView {session} ms={state} {players} clientId={session.clientId} {room} onLeave={leaveRoom} />
 	{#if seatNotice}<div class="seattoast">{seatNotice}</div>{/if}
 {:else}
+<div class="uiscale" style="--ui:{ui}">
 <main class="wrap" class:landing={mode === 'landing'}>
 	<button class="home-link" class:hero={mode === 'landing'} on:click={onLogo} aria-label={mode === 'landing' ? 'Enter' : 'Main menu'}>
 		<img class="logo" src={logoImage} alt="Guards of Atlantis II" />
@@ -692,7 +704,7 @@
 			</div>
 		{:else if mode === 'lobby'}
 			<div class="step" transition:reveal bind:clientHeight={h['lobby']}>
-				<div class="card form lobby" style="width: min(96vw, {$state.seats * 96 + 56}px)">
+				<div class="card form lobby" style="width: min(96 * var(--vw), {$state.seats * 96 + 56}px)">
 					<div class="lobbyhead">
 						<div>
 							<span class="lbl">Room code</span>
@@ -714,14 +726,9 @@
 
 					<div class="fld">
 						<div class="teamstop">
-							<span>Teams {mySeat < 0 ? '· flip to join' : myTeam === 'orange' ? '· you’re Orange' : '· you’re Blue'}</span>
+							<span>Teams {mySeat < 0 ? '· flip, or tap an open seat' : myTeam === 'orange' ? '· you’re Orange' : '· you’re Blue'}</span>
 							{#if mySeat < 0}
-								<div class="joinrow">
-									<button class="flipbtn hero" on:click={flipForTeam} disabled={flipping || seatedCount >= seatCount}>🪙 Flip for your team</button>
-									<span class="joinor">or join</span>
-									<button class="joinbtn orange" on:click={() => joinTeam('orange')} disabled={flipping || openSeatsOn('orange').length === 0} title="Join Orange directly">Orange</button>
-									<button class="joinbtn blue" on:click={() => joinTeam('blue')} disabled={flipping || openSeatsOn('blue').length === 0} title="Join Blue directly">Blue</button>
-								</div>
+								<button class="flipbtn hero" on:click={flipForTeam} disabled={flipping || seatedCount >= seatCount}>🪙 Flip for your team</button>
 							{:else if ready}
 								<span class="swaphint">🔒 locked in — unready to change</span>
 							{:else}
@@ -744,7 +751,7 @@
 												<div class="hn">{p.name}{p.id === session?.clientId ? ' (you)' : ''}</div>
 											</div>
 										{:else}
-											<button class="tseat open" class:swap={mySeat >= 0 && !ready} on:click={() => sit(i)} disabled={mySeat < 0 || ready}><div class="av av-empty"></div><div class="hn muted">open</div></button>
+											<button class="tseat open" class:swap={!ready && !flipping} on:click={() => sit(i)} disabled={ready || flipping}><div class="av av-empty"></div><div class="hn muted">open</div></button>
 										{/if}
 									{/each}
 								</div>
@@ -764,7 +771,7 @@
 												<div class="hn">{p.name}{p.id === session?.clientId ? ' (you)' : ''}</div>
 											</div>
 										{:else}
-											<button class="tseat open" class:swap={mySeat >= 0 && !ready} on:click={() => sit(i)} disabled={mySeat < 0 || ready}><div class="av av-empty"></div><div class="hn muted">open</div></button>
+											<button class="tseat open" class:swap={!ready && !flipping} on:click={() => sit(i)} disabled={ready || flipping}><div class="av av-empty"></div><div class="hn muted">open</div></button>
 										{/if}
 									{/each}
 								</div>
@@ -805,6 +812,7 @@
 		{/if}
 	</div>
 </main>
+</div>
 {/if}
 
 {#if coinShown}
@@ -814,18 +822,23 @@
 				<img class="face front" src={coinOrange} alt="Orange" />
 				<img class="face back" src={coinBlue} alt="Blue" />
 			</div>
-			<p class="coincap" class:done={coinDone}>{coinDone ? coinCaption : 'Flipping…'}</p>
+			<p class="coincap" class:done={coinDone}>{coinDone ? coinCaption : coinPending}</p>
 		</div>
 	</div>
 {/if}
 
 <style>
-	.wrap { --hl: linear-gradient(120deg, #ef7d22, #2f7fe6); min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 5vh 20px 32px; gap: 22px; color: #f1f5f9; }
+	/* the scaled canvas: sized to the window ÷ scale, then scaled back up/down.
+	   --vw/--vh are 1% of the VIRTUAL viewport, for use inside it. */
+	.uiscale { position: fixed; top: 0; left: 0; width: calc(100vw / var(--ui)); height: calc(100vh / var(--ui)); height: calc(100dvh / var(--ui));
+		--vw: calc(1vw / var(--ui)); --vh: calc(1vh / var(--ui));
+		transform: scale(var(--ui)); transform-origin: 0 0; overflow-x: hidden; overflow-y: auto; }
+	.wrap { --hl: linear-gradient(120deg, #ef7d22, #2f7fe6); min-height: 100%; display: flex; flex-direction: column; align-items: center; padding: calc(5 * var(--vh)) 20px 32px; gap: 22px; color: #f1f5f9; }
 	.home-link { background: none; border: none; padding: 0; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 18px; transition: transform 0.6s cubic-bezier(0.2, 0.85, 0.2, 1); transform: translateY(0); }
-	.logo { width: min(224px, 54vw); filter: drop-shadow(0 12px 32px rgba(0, 0, 0, 0.55)); transition: width 0.6s cubic-bezier(0.2, 0.85, 0.2, 1), filter 0.6s ease; }
+	.logo { width: min(224px, 54 * var(--vw)); filter: drop-shadow(0 12px 32px rgba(0, 0, 0, 0.55)); transition: width 0.6s cubic-bezier(0.2, 0.85, 0.2, 1), filter 0.6s ease; }
 	/* landing splash: crest large & centred, morphs up-and-shrink into the menu */
-	.home-link.hero { transform: translateY(18vh); }
-	.home-link.hero .logo { width: min(400px, 80vw); filter: drop-shadow(0 20px 60px rgba(0, 0, 0, 0.6)) drop-shadow(0 0 40px rgba(245, 158, 11, 0.28)); animation: crestBreathe 3.6s ease-in-out infinite; }
+	.home-link.hero { transform: translateY(calc(18 * var(--vh))); }
+	.home-link.hero .logo { width: min(400px, 80 * var(--vw)); filter: drop-shadow(0 20px 60px rgba(0, 0, 0, 0.6)) drop-shadow(0 0 40px rgba(245, 158, 11, 0.28)); animation: crestBreathe 3.6s ease-in-out infinite; }
 	@keyframes crestBreathe { 0%, 100% { filter: drop-shadow(0 20px 60px rgba(0, 0, 0, 0.6)) drop-shadow(0 0 34px rgba(245, 158, 11, 0.22)); } 50% { filter: drop-shadow(0 20px 60px rgba(0, 0, 0, 0.6)) drop-shadow(0 0 52px rgba(245, 158, 11, 0.4)); } }
 	.entrhint { font-family: 'Modesto Poster', serif; font-size: 1.1rem; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(255, 255, 255, 0.82); text-shadow: 0 2px 10px rgba(0, 0, 0, 0.6); animation: hintPulse 2.2s ease-in-out infinite; }
 	@keyframes hintPulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
@@ -848,8 +861,8 @@
 	.s { font-size: 0.78rem; color: #cbd5e1; }
 
 	.card.form { padding: 18px 20px; display: flex; flex-direction: column; gap: 11px; width: 100%; }
-	.form.narrow { width: min(380px, 92vw); }
-	.form.wide { width: min(560px, 94vw); }
+	.form.narrow { width: min(380px, 92 * var(--vw)); }
+	.form.wide { width: min(560px, 94 * var(--vw)); }
 	.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
 	.col { display: flex; flex-direction: column; gap: 16px; }
 	.fld { display: flex; flex-direction: column; gap: 7px; }
@@ -931,15 +944,6 @@
 	.flipbtn:disabled { opacity: 0.4; cursor: not-allowed; }
 	.flipbtn.hero { background: var(--hl); border-color: rgba(255, 255, 255, 0.35); padding: 0.42rem 1rem; font-size: 0.85rem; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3); }
 	.swaphint { font-size: 0.72rem; color: #94a3b8; }
-	.joinrow { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; justify-content: flex-end; }
-	.joinor { font-size: 0.7rem; color: #94a3b8; }
-	.joinbtn { border-radius: 999px; padding: 0.32rem 0.75rem; font-size: 0.78rem; font-weight: 700; cursor: pointer; color: #f1f5f9; border: 1px solid transparent; transition: background 0.15s, transform 0.12s; }
-	.joinbtn:hover:not(:disabled) { transform: translateY(-1px); }
-	.joinbtn:disabled { opacity: 0.4; cursor: not-allowed; }
-	.joinbtn.orange { background: rgba(239, 125, 34, 0.22); border-color: rgba(239, 125, 34, 0.55); }
-	.joinbtn.orange:hover:not(:disabled) { background: rgba(239, 125, 34, 0.36); }
-	.joinbtn.blue { background: rgba(47, 127, 230, 0.22); border-color: rgba(47, 127, 230, 0.55); }
-	.joinbtn.blue:hover:not(:disabled) { background: rgba(47, 127, 230, 0.36); }
 	.tseat.open:disabled { cursor: default; opacity: 0.7; }
 	.tseat.open.swap:hover { background: rgba(255, 255, 255, 0.12); border-color: rgba(255, 255, 255, 0.45); transform: translateY(-2px); }
 	.teams { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
