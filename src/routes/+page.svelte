@@ -831,7 +831,8 @@
 	.uiscale { position: fixed; top: 0; left: 0; width: calc(100vw / var(--ui)); height: calc(100vh / var(--ui)); height: calc(100dvh / var(--ui));
 		--vw: calc(1vw / var(--ui)); --vh: calc(1vh / var(--ui));
 		transform: scale(var(--ui)); transform-origin: 0 0; overflow-x: hidden; overflow-y: auto; }
-	.wrap { --hl: linear-gradient(120deg, #ef7d22, #2f7fe6); min-height: 100%; display: flex; flex-direction: column; align-items: center; padding: calc(5 * var(--vh)) 20px 32px; gap: 22px; color: #f1f5f9; }
+	.wrap { --hl: linear-gradient(120deg, #ef7d22, #2f7fe6); min-height: 100%; display: flex; flex-direction: column; align-items: center; padding: calc(5 * var(--vh)) 20px 32px; gap: 22px; color: #f1f5f9;
+		font-family: 'Modesto Poster', serif; letter-spacing: 0.02em; } /* whole menu + setup in the Guards display font */
 	.home-link { background: none; border: none; padding: 0; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 18px; transition: transform 0.6s cubic-bezier(0.2, 0.85, 0.2, 1); transform: translateY(0); }
 	.logo { width: min(224px, 54 * var(--vw)); filter: drop-shadow(0 12px 32px rgba(0, 0, 0, 0.55)); transition: width 0.6s cubic-bezier(0.2, 0.85, 0.2, 1), filter 0.6s ease; }
 	/* landing splash: crest large & centred, morphs up-and-shrink into the menu */
@@ -919,7 +920,7 @@
 	@keyframes pop { 0% { transform: scale(0.3); opacity: 0; } 55% { transform: scale(1.3); } 100% { transform: scale(1); opacity: 1; } }
 	.roomline { margin: 0; font-size: 1.1rem; }
 	.admincol { color: #fdba74; }
-	.mono { font-family: ui-monospace, monospace; letter-spacing: 0.08em; }
+	.mono { font-family: 'Modesto Poster', serif; letter-spacing: 0.12em; font-variant-numeric: tabular-nums; }
 
 	.lobbyhead { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 	.headright { display: flex; align-items: center; gap: 12px; }
@@ -979,7 +980,7 @@
 	.coin { width: 150px; height: 150px; position: relative; transform-style: preserve-3d; transition: transform 1.55s cubic-bezier(0.2, 0.75, 0.2, 1); }
 	.coin .face { position: absolute; inset: 0; width: 100%; height: 100%; backface-visibility: hidden; border-radius: 50%; filter: drop-shadow(0 14px 30px rgba(0, 0, 0, 0.55)); }
 	.coin .back { transform: rotateY(180deg); }
-	.coincap { margin: 0; font-size: 1.05rem; font-weight: 700; letter-spacing: 0.02em; color: #e2e8f0; }
+	.coincap { font-family: 'Modesto Poster', serif; letter-spacing: 0.04em; margin: 0; font-size: 1.05rem; font-weight: 700; letter-spacing: 0.02em; color: #e2e8f0; }
 	.coincap.done { color: #6ee7b7; }
 	@keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
 
