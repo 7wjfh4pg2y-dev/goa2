@@ -10,6 +10,8 @@
 	font-display: swap;
 }
 /* the whole app speaks in the Guards font; it has a single weight, so never fake a bold */
+/* fixed root size: layouts look the same whatever the browser's default text size */
+html { font-size: 16px; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 body { font-family: 'Modesto Poster', serif; font-synthesis: none; }
 @font-face {
 	font-family: 'Atlantis';

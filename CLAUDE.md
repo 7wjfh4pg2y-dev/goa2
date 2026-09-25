@@ -62,6 +62,7 @@ Deployed to GitHub Pages: **https://7wjfh4pg2y-dev.github.io/goa2/**
 
 ## Gotchas
 - Svelte 5 legacy: `$:` only tracks vars referenced **directly** — not vars read inside a called function. Avoid reactive cycles (compute-on-demand functions instead of reactive vars when a value both reads and writes another).
+- **Dash = one fixed layout** (`DASH_W`×`DASH_H` css px in CardLayer) scaled as a whole via `--ds` to fit; no per-width media variants, and every element has a reserved slot (ult, dock well, init badge) so nothing shifts. Tray/preview/panel offsets use `--dh`. Root font-size is pinned to 16px.
 - adapter-static: the game placeholder was once a catch-all `{:else}` and leaked onto other modes — scope each mode explicitly.
 - Screenshot harness pattern (only when needed): build, serve `build/` with a tiny node http server that strips the `/goa2` base and falls back to `<route>.html`, launch Chromium at `executablePath:'/opt/pw-browsers/chromium'`, import playwright by absolute path from `node_modules`. Delete any `preview-*` route after.
 
