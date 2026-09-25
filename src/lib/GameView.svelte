@@ -7,7 +7,7 @@
 	import { zoneName } from '$lib/zones';
 	import { placeToken, moveToken, effectiveHex, MINES, tokenName, type ArmToken } from '$lib/tokens';
 	import {
-		colorHex, movePiece, prevTurn, teamForSeat, throneHex,
+		colorHex, movePiece, teamForSeat, throneHex,
 		type MatchState, type Player, type MatchSession, type Team, type ConnStatus
 	} from '$lib/match';
 
@@ -210,17 +210,10 @@
 		: selPiece.token === 'companion' ? (selPiece.label ?? 'companion')
 		: selPiece.token && MINES.has(selPiece.token) ? (selPiece.faceDown ? 'mine (face down)' : tokenName(selPiece.token))
 		: selPiece.token ? tokenName(selPiece.token) : 'token';
-	function stepTurn(dir: 1 | -1) {
-		// forward = the real card-flow advance (host-routed: locks played cards into
-		// their slots, refreshes hands after turn 4); backward = a manual correction
-		if (dir === 1) { session.cardAction({ kind: 'advance', pid: clientId }); return; }
-		const patch = prevTurn($ms);
-		session.act(`Round ${patch.round ?? $ms.round} · Turn ${patch.turn ?? $ms.turn}`, patch);
-	}
-	function stepRound(dir: 1 | -1) {
-		const round = Math.max(1, $ms.round + dir);
-		if (round !== $ms.round) session.act(`Round → ${round}`, { round });
-	}
+	// the ONLY way the round / turn moves: the real card-flow advance (host-routed:
+	// locks played cards into their slots, refreshes hands after turn 4). No manual
+	// stepping back or forth — that was for testing and desyncs a real game.
+	function advanceTurn() { session.cardAction({ kind: 'advance', pid: clientId }); }
 	let tieFlip = false;
 	function flipTie() {
 		const next: Team = $ms.tieBreaker === 'orange' ? 'blue' : 'orange';
@@ -284,7 +277,7 @@
 	<div class="ocean"></div>
 	<BoardCanvas bind:this={board} map={$ms.map ?? {}} rotation={orientation} interactive={true} {placing} {areas} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} />
 
-	<CardLayer {session} {ms} {players} {clientId} onAdvanceTurn={() => stepTurn(1)} onArmToken={armToken} holdingToken={!!pendingToken} bind:previewId />
+	<CardLayer {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} onArmToken={armToken} holdingToken={!!pendingToken} bind:previewId />
 
 	<!-- selected minion/token: offer delete (heroes aren't deletable) -->
 	{#if selPiece && (selPiece.role || selPiece.token)}
@@ -401,16 +394,9 @@
 		</button>
 
 		<div class="hsec rt">
-			<div class="rline">
-				<button class="mini" on:click={() => stepRound(-1)} title="Previous round">◀</button>
-				<span class="rv">Round {$ms.round}</span>
-				<button class="mini" on:click={() => stepRound(1)} title="Next round">▶</button>
-			</div>
-			<div class="rline">
-				<button class="mini" on:click={() => stepTurn(-1)} title="Previous turn">◀</button>
-				<span class="rv">Turn {$ms.turn}</span>
-				<button class="mini" on:click={() => stepTurn(1)} title="Next turn">▶</button>
-			</div>
+			<!-- read-only: rounds/turns only advance through play (host's Next turn) -->
+			<div class="rline"><span class="rv">Round {$ms.round}</span></div>
+			<div class="rline"><span class="rv">Turn {$ms.turn}</span></div>
 		</div>
 
 		<div class="hsec">
@@ -647,7 +633,7 @@
 	.hsec { display: flex; flex-direction: column; gap: 4px; padding: 6px 8px; border-radius: 9px;
 		background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); }
 	.hsec.rt { gap: 4px; }
-	.rline { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
+	.rline { display: flex; align-items: center; justify-content: center; gap: 4px; }
 	.rline .rv { font-weight: 700; font-size: 0.82rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
 	.hsec.life.orange { border-left: 3px solid #ef7d22; } .hsec.life.blue { border-left: 3px solid #2f7fe6; }
 
@@ -684,8 +670,6 @@
 	@keyframes coinflip { 0% { transform: rotateY(0); } 100% { transform: rotateY(360deg); } }
 	.tiebtn.orange { box-shadow: inset 0 0 14px rgba(239, 125, 34, 0.3); border-color: rgba(239, 125, 34, 0.4); }
 	.tiebtn.blue { box-shadow: inset 0 0 14px rgba(47, 127, 230, 0.3); border-color: rgba(47, 127, 230, 0.4); }
-	.mini { width: 1.35rem; height: 1.35rem; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.2); background: rgba(255, 255, 255, 0.06); color: #e5e7eb; cursor: pointer; font-weight: 700; line-height: 1; font-size: 0.75rem; flex: none; }
-	.mini:hover { background: rgba(255, 255, 255, 0.16); }
 
 	/* minion spawn controls */
 	.spawnrow { display: flex; gap: 5px; }
