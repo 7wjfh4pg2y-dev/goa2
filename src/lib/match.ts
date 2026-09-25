@@ -29,6 +29,7 @@ import {
 	endRoundAll,
 	addCoins,
 	moveCard,
+	levelOf,
 	type CardZone
 } from './cards/cardstate'
 
@@ -144,7 +145,7 @@ export const TEAMS: Team[] = ['orange', 'blue']
 export const TURNS_PER_ROUND = 4
 // synced pre-reveal countdown: once everyone has committed, cards flip face-up
 // after this delay (players can still uncommit during it, which restarts it).
-export const REVEAL_COUNTDOWN_MS = 3000
+export const REVEAL_COUNTDOWN_MS = 4500 // a slow 3… 2… 1… Reveal!
 export const PHASES: Phase[] = ['planning', 'action', 'upgrade']
 export const PHASE_LABELS: Record<Phase, string> = {
 	planning: 'Planning',
@@ -927,16 +928,23 @@ export function joinMatch(
 			const keep = req.kind !== 'advance' && allIn
 			patch.revealAt = keep ? (local.revealAt ?? Date.now() + REVEAL_COUNTDOWN_MS) : null
 		}
+		// log entries the host writes on a player's behalf: money changes and
+		// level-ups (a card upgraded / the ultimate unlocked), attributed to them
+		const entries: LogEntry[] = []
+		const note = (pid: string, text: string) => entries.push({
+			id: globalThis.crypto?.randomUUID?.() ?? `l_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+			by: nameOf(pid), text, at: Date.now()
+		})
 		if (req.kind === 'coins') {
 			const coins = patch.cards?.[req.pid]?.coins ?? 0
-			const entry: LogEntry = {
-				id: globalThis.crypto?.randomUUID?.() ?? `l_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-				by: nameOf(req.pid),
-				text: `money ${req.delta > 0 ? '+' : '−'}${Math.abs(req.delta)} → ${coins}`,
-				at: Date.now()
-			}
-			update({ ...patch, log: [...local.log, entry].slice(-LOG_CAP) })
-		} else update(patch)
+			note(req.pid, `money ${req.delta > 0 ? '+' : '−'}${Math.abs(req.delta)} → ${coins}`)
+		}
+		for (const pid in patch.cards ?? {}) {
+			const before = local.cards?.[pid], after = patch.cards![pid]
+			if (before && after && levelOf(after) > levelOf(before)) note(pid, `reached Level ${levelOf(after)} ⬆`)
+		}
+		if (entries.length) update({ ...patch, log: [...local.log, ...entries].slice(-LOG_CAP) })
+		else update(patch)
 	}
 	const cardAction = (req: CardReq) => {
 		if (local.host === clientId) hostApplyReq(req)
