@@ -114,15 +114,15 @@ export const HEROES_ALPHA: Hero[] = [...HEROES].sort((a, b) => a.name.localeComp
 // shows armour. Each entry is where the face sits, as fractions of the art's
 // width/height; portraits zoom in on that point.
 const HERO_FACE: Record<string, [number, number]> = {
-	arien: [0.64, 0.25], bain: [0.55, 0.25], brogan: [0.53, 0.25], brynn: [0.52, 0.36], cutter: [0.6, 0.28],
-	dodger: [0.6, 0.27], emmitt: [0.45, 0.42], garrus: [0.62, 0.32], gydion: [0.6, 0.42], hanu: [0.66, 0.42],
-	ignatia: [0.52, 0.5], min: [0.63, 0.45], misa: [0.65, 0.4], mortimer: [0.6, 0.3], mrak: [0.48, 0.32],
-	nebkher: [0.73, 0.3], razzle: [0.63, 0.3], rowenna: [0.62, 0.32], sabina: [0.57, 0.27], silverarrow: [0.53, 0.3],
-	snorri: [0.52, 0.35], swift: [0.53, 0.35], takahide: [0.6, 0.35], tali: [0.57, 0.35], tigerclaw: [0.57, 0.3],
-	trinkets: [0.38, 0.3], ursafar: [0.5, 0.4], wasp: [0.62, 0.3], whisper: [0.5, 0.3], widget: [0.26, 0.4],
-	wuk: [0.6, 0.38], xargatha: [0.53, 0.35]
+	arien: [0.65, 0.3], bain: [0.52, 0.11], brogan: [0.49, 0.3], brynn: [0.48, 0.23], cutter: [0.66, 0.29],
+	dodger: [0.66, 0.4], emmitt: [0.31, 0.42], garrus: [0.48, 0.33], gydion: [0.66, 0.36], hanu: [0.73, 0.4],
+	ignatia: [0.51, 0.46], min: [0.42, 0.22], misa: [0.7, 0.19], mortimer: [0.58, 0.19], mrak: [0.41, 0.33],
+	nebkher: [0.44, 0.3], razzle: [0.6, 0.33], rowenna: [0.72, 0.37], sabina: [0.64, 0.28], silverarrow: [0.52, 0.24],
+	snorri: [0.56, 0.29], swift: [0.58, 0.33], takahide: [0.53, 0.24], tali: [0.44, 0.26], tigerclaw: [0.72, 0.24],
+	trinkets: [0.39, 0.26], ursafar: [0.45, 0.33], wasp: [0.6, 0.17], whisper: [0.49, 0.29], widget: [0.33, 0.45],
+	wuk: [0.53, 0.16], xargatha: [0.5, 0.27]
 };
-const FACE_ZOOM = 1.7;
+const FACE_ZOOM = 2.3; // tuned per hero against a rendered contact sheet of every token crop
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
 /** Inline CSS for a round portrait (a square element): the avatar art zoomed

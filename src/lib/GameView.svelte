@@ -261,7 +261,7 @@
 	<div class="ocean"></div>
 	<BoardCanvas bind:this={board} map={$ms.map ?? {}} rotation={orientation} interactive={true} {placing} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} />
 
-	<CardLayer {session} {ms} {players} {clientId} onAdvanceTurn={() => stepTurn(1)} onArmToken={armToken} bind:previewId />
+	<CardLayer {session} {ms} {players} {clientId} onAdvanceTurn={() => stepTurn(1)} onArmToken={armToken} holdingToken={!!pendingToken} bind:previewId />
 
 	<!-- selected minion/token: offer delete (heroes aren't deletable) -->
 	{#if selPiece && (selPiece.role || selPiece.token)}
