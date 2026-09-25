@@ -292,7 +292,7 @@
 
 {#if $ms.cards}
 	<!-- ───────── right side: the OTHER players ───────── -->
-	<div class="ppanel" class:dense>
+	<div class="ppanel" class:dense class:withdash={!!mine}>
 		<div class="pptitle">
 			Players
 			<span class="phasetag" class:resolve={revealed} class:counting={countdownActive}>
@@ -603,7 +603,7 @@
 					<img src={heroAvatar(mine.hero)} alt="" />{#if mine.ultimate}<span class="crown">♛</span>{/if}
 				</span>
 				<span class="dsmid">
-					<span class="dsname">{myName}<em>Lv {levelOf(mine)}</em>
+					<span class="dsname"><span class="dsnm">{myName}</span><em>Lv {levelOf(mine)}</em>
 						{#if mst.poison}<span class="statmk pois" title="Poison"><img src={icon('marker_poison')} alt="" />{#if mst.poison > 1}{mst.poison}{/if}</span>{/if}
 						{#if mst.bounty}<span class="statmk bnty" title="Bounty"><img src={icon('marker_bounty')} alt="" />{#if mst.bounty > 1}{mst.bounty}{/if}</span>{/if}
 					</span>
@@ -1035,7 +1035,8 @@
 	.dav.ult { border-color: #b482f0; box-shadow: 0 0 10px rgba(160,110,235,.7); }
 	.dav .crown { position: absolute; top: -8px; right: -6px; font-size: .9rem; color: #d9b6ff; text-shadow: 0 1px 3px #000; }
 	.dsmid { display: flex; flex-direction: column; gap: 1px; line-height: 1.02; }
-	.dsname { font-family: 'Modesto Poster', serif; font-size: .92rem; color: #f6ead2; display: flex; align-items: baseline; gap: 5px; }
+	.dsname { font-family: 'Modesto Poster', serif; font-size: .92rem; color: #f6ead2; display: flex; align-items: baseline; gap: 5px; min-width: 0; }
+	.dsnm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 	.dsname em { font-style: normal; font-size: .56rem; font-weight: 700; color: #9aa8bc; }
 	.dshero { font-size: .58rem; color: #93a3b8; }
 	.dstats { display: grid; grid-template-columns: repeat(6, 1.7rem); gap: 3px; }
@@ -1064,8 +1065,8 @@
 	.hopt svg { width: 1.15rem; height: 1.15rem; }
 	.hopt:hover { background: rgba(199,154,78,.18); color: #f0dcae; }
 	.hopt.on { background: rgba(199,154,78,.26); border-color: rgba(199,154,78,.6); color: #f6ead2; }
-	.dstatus { flex: 1; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center; }
-	.waithost { font-size: .74rem; font-weight: 700; letter-spacing: .02em; color: #b8a06a; font-style: italic; }
+	.dstatus { flex: 1 0 auto; display: flex; align-items: center; gap: 10px; flex-wrap: nowrap; justify-content: center; }
+	.waithost { max-width: 5.6rem; font-size: .72rem; line-height: 1.15; text-align: center; font-weight: 700; letter-spacing: .02em; color: #b8a06a; font-style: italic; }
 	/* persistent ultimate access on the dash (once unlocked) */
 	.ultmini { position: relative; width: 40px; padding: 0; background: none; border: none; cursor: zoom-in; border-radius: 5px; overflow: visible; flex: none;
 		box-shadow: 0 0 0 2px #b482f0, 0 0 12px rgba(165,110,230,.6), 0 3px 8px rgba(0,0,0,.55); transition: transform .12s; }
@@ -1133,4 +1134,32 @@
 	.disc-card { position: absolute; left: 50%; top: 0; width: 38px; margin-left: -19px; border-radius: 4px; overflow: hidden;
 		box-shadow: 0 2px 5px rgba(0,0,0,.6); transform: translate(calc(var(--i) * 2.5px), calc(var(--i) * 2.5px)); z-index: var(--i); }
 	.disc-card :global(canvas) { display: block; width: 100%; border-radius: 4px; }
+
+	/* ── responsive dash ─────────────────────────────────────────────────────
+	   The full dash needs ~1080px. Below a 1584px viewport (dash < 1100px) it
+	   goes compact: stats tuck under your name, Tokens goes icon-only, turn slots
+	   shrink. At tablet widths (≤1320px) it also runs under a shortened player
+	   panel so it has room. Height stays one row (~70px) — the hand's auto-hide
+	   depth assumes it. */
+	@media (max-width: 1584px) {
+		.dash { gap: 8px; padding: 6px 10px; }
+		.dself { display: grid; grid-template-columns: auto auto; column-gap: 8px; row-gap: 3px; align-items: center; }
+		.dself .dav { grid-row: 1 / 3; }
+		.dsmid { max-width: 9.6rem; }
+		.dshero { display: none; }
+		.dstats { grid-column: 2; grid-template-columns: repeat(6, 1.45rem); }
+		.tokbtn { padding: 5px 7px; }
+		.tokbtn span { display: none; }
+		.dstatus { gap: 8px; }
+		.dm-turns { gap: 3px; }
+		.dm-slot { width: 32px; height: 46px; }
+		.dm-slot .roman { font-size: 1.2rem; }
+		.dm-slot.disc { width: 40px; margin-left: 3px; padding-left: 6px; }
+		.discstack { width: 30px; height: 42px; }
+		.disc-card { width: 30px; margin-left: -15px; }
+	}
+	@media (max-width: 1320px) {
+		.dash { right: 12px; }
+		.ppanel.withdash { bottom: 94px; }
+	}
 </style>
