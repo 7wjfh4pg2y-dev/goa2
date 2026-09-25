@@ -57,10 +57,13 @@
 		return { orange: dom(acc.orange), blue: dom(acc.blue) } as Record<string, number>;
 	})();
 	// board-space rotation for a minion so it matches its team's spawn tiles.
-	// (rotEff undoes the piece group's counter-rotation, keeping it map-relative.)
-	function minionRot(p: { team: string; role?: string }, cx: number, cy: number): string | undefined {
+	// (rotEff undoes the piece group's counter-rotation, keeping it map-relative,
+	// so minions TURN WITH THE MAP.) rot/dirs are passed in from the template so
+	// Svelte re-renders when the view rotates — reading them inside the function
+	// isn't tracked, which left minions frozen on screen while the board turned.
+	function minionRot(p: { team: string; role?: string }, cx: number, cy: number, rot: number, dirs: Record<string, number>): string | undefined {
 		if (!p.role) return undefined;
-		const deg = rotEff + (teamSpawnDir[p.team] ?? 0) * 60;
+		const deg = rot + (dirs[p.team] ?? 0) * 60;
 		return deg ? `rotate(${deg} ${cx} ${cy})` : undefined;
 	}
 
@@ -418,7 +421,7 @@
 						{/if}
 					{:else if p.role}
 						<image href={minionToken(p.team, p.role)} x={c.x - size * 0.7} y={c.y - size * 0.7} width={size * 1.4} height={size * 1.4} preserveAspectRatio="xMidYMid meet" pointer-events="none"
-							transform={minionRot(p, c.x, c.y)} />
+							transform={minionRot(p, c.x, c.y, rotEff, teamSpawnDir)} />
 						<circle cx={c.x} cy={c.y} r={size * 0.66} fill="transparent" stroke={sel ? '#fde047' : pieceColor(p.team)} stroke-width={size * 0.14} />
 					{:else}
 						<!-- hero piece = the player icon: face portrait, team ring, player-colour outer ring -->
