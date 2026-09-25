@@ -55,6 +55,9 @@
 	const teamVars = (t: string | null | undefined) => TEAM_VARS[t === 'blue' ? 'blue' : 'orange'];
 	$: pTeam = (p: Player) => (teamForSeat(p.seat, $ms.seats) === 'blue' ? 'blue' : 'orange');
 	// trash-can glyph for discard piles (drawn faint, like the turn numerals)
+	// this turn's CARD initiative (card + upgrades) uses a stopwatch, so it reads apart
+	// from the initiative STAT, which keeps the game's own initiative icon
+	const CLOCK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="13.5" r="7.5"/><path d="M12 9.5v4l2.6 1.8"/><path d="M10 2.8h4"/><path d="M12 2.8V6"/><path d="M18.4 6.6l1.3-1.3"/></svg>';
 	const TRASH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M9 7V4.5h6V7"/><path d="M6 7l1 13h10l1-13"/><path d="M10 11v6M14 11v6"/></svg>';
 
 	// ── HUD status markers (Tigerclaw poison, Bain bounty) ─────────────────────
@@ -421,7 +424,7 @@
 					{#if cs}
 						{@const ini = initOf(cs, revealed)}
 						<span class="initb" class:off={ini == null} title="Initiative this turn">
-							<img src={icon('item_initiative')} alt="" /><b>{ini ?? '–'}</b>
+							<i class="inicon">{@html CLOCK}</i><b>{ini ?? '–'}</b>
 						</span>
 					{/if}
 				</div>
@@ -729,7 +732,7 @@
 						<!-- name · level · initiative · radius (fixed slots) … status markers pinned right -->
 						<span class="dsname">
 							<button class="dsopen dsnmbtn" on:click={() => (overlayId = clientId)} title="Open your board"><span class="dsnm">{myName}</span><em>Lv {levelOf(mine)}</em></button>
-							<span class="initb" class:off={myInit == null} title="Your initiative this turn (card + upgrades)"><img src={icon('item_initiative')} alt="" /><b>{myInit ?? '–'}</b></span>
+							<span class="initb" class:off={myInit == null} title="Your initiative this turn (card + upgrades)"><i class="inicon">{@html CLOCK}</i><b>{myInit ?? '–'}</b></span>
 							<span class="radwrap">
 								<button class="radbtn" class:on={myRadius > 0} on:click={() => (radiusOpen = !radiusOpen)} title={myRadius ? `Radius ${myRadius} showing — click to change or clear` : 'Show an area radius around your hero'} aria-label="Area radius">
 									<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke-dasharray="3 2.4" /><circle cx="12" cy="12" r="4.2" /><circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none" /></svg>
@@ -1031,7 +1034,9 @@
 	/* initiative this turn (card + upgrades) */
 	.initb { flex: none; margin-left: auto; display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px 2px 5px; border-radius: 8px;
 		background: rgb(var(--tcr, 239 125 34) / .2); border: 1px solid rgb(var(--tcl, 255 196 140) / .55); color: #fff; }
-	.initb img { width: .85rem; height: .85rem; object-fit: contain; filter: brightness(0) invert(1); }
+	.initb .inicon { display: grid; place-items: center; width: .9rem; height: .9rem; flex: none; }
+	.initb .inicon :global(svg) { width: 100%; height: 100%; }
+	.initb { width: 46px; box-sizing: border-box; justify-content: center; } /* fixed: '–' and '12' take the same room */
 	.initb b { font-family: 'Modesto Poster', serif; font-size: .95rem; line-height: 1; font-variant-numeric: tabular-nums; }
 	.initb.off { opacity: .35; background: rgba(255,255,255,.04); border-color: rgba(255,255,255,.12); }
 	/* the ♛ badge on a level-8 player's icon */
@@ -1264,11 +1269,11 @@
 	.dsmk img.pois { box-shadow: 0 0 0 1.5px rgba(65,174,89,.85); }
 	.dsmk img.bnty { box-shadow: 0 0 0 1.5px rgba(232,182,74,.9); }
 	/* initiative + radius: gold, like the hand buttons, so they read apart from the stats */
-	.dsname .initb { margin-left: 0; width: 44px; box-sizing: border-box; justify-content: center; background: rgba(199,154,78,.2); border-color: rgba(214,170,92,.6); color: #f6e3b4; }
-	.dsname .initb img { filter: brightness(0) invert(.86) sepia(.7) saturate(2.2) hue-rotate(-8deg); }
+	.dsname .initb, .radbtn { width: 46px; height: 20px; box-sizing: border-box; flex: none; }
+	.dsname .initb { margin-left: 0; justify-content: center; background: rgba(199,154,78,.2); border-color: rgba(214,170,92,.6); color: #f6e3b4; }
 	.dsname .initb.off { opacity: .5; background: rgba(199,154,78,.08); border-color: rgba(199,154,78,.3); }
 	.radwrap { position: relative; flex: none; align-self: center; display: flex; }
-	.radbtn { width: 34px; height: 20px; display: inline-flex; align-items: center; justify-content: center; gap: 2px; padding: 0 4px; border-radius: 8px; cursor: pointer;
+	.radbtn { display: inline-flex; align-items: center; justify-content: center; gap: 2px; padding: 0 4px; border-radius: 8px; cursor: pointer;
 		color: #d8bf8a; background: rgba(199,154,78,.1); border: 1px solid rgba(199,154,78,.4); }
 	.radbtn svg { width: 14px; height: 14px; flex: none; }
 	.radbtn b { min-width: .6em; font-size: .76rem; line-height: 1; font-variant-numeric: tabular-nums; }
