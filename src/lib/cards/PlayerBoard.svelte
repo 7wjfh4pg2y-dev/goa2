@@ -125,7 +125,6 @@
 			inset 0 0 60px rgba(0,0,0,0.6);
 		display: flex; flex-direction: column; gap: 0.6%;
 		overflow: hidden;
-		font-family: 'Inter', system-ui, sans-serif;
 	}
 	.mat::before { /* brass inner border line */
 		content: ''; position: absolute; inset: 8px; border: 2px solid rgba(199,154,78,0.5);

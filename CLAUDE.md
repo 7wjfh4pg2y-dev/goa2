@@ -58,7 +58,7 @@ Deployed to GitHub Pages: **https://7wjfh4pg2y-dev.github.io/goa2/**
 - Global battlefield background (orange top-left → blue bottom-right, subtle green corners) in `+layout.svelte`. Constant logo. `reveal` transitions.
 - Glass cards `rgba(12,18,32,.46)` + blur + soft border. Highlight gradient token `--hl: linear-gradient(120deg,#ef7d22,#2f7fe6)`.
 - Team colours: **orange `#ef7d22`**, **blue `#2f7fe6`**. Ready = green `#16a34a`, danger/ban = red. Team-coloured Lock In in the draft.
-- Display fonts (in `app.postcss`): **Modesto Poster** (hero names/headings), Atlantis.
+- Font: **Modesto Poster** (the Guards font) is set on `body` in `app.postcss` for the whole app (`font-synthesis: none` — one weight, no faux bold). Don't add other font-families; card faces (card_painter canvas) keep their own print fonts. Atlantis also available.
 
 ## Gotchas
 - Svelte 5 legacy: `$:` only tracks vars referenced **directly** — not vars read inside a called function. Avoid reactive cycles (compute-on-demand functions instead of reactive vars when a value both reads and writes another).

@@ -475,9 +475,9 @@
 	.mprow.req { border-left-color: #ef7d22; background: rgba(239, 125, 34, 0.1); }
 	.mpseatno { width: 1.4rem; height: 1.4rem; flex: none; display: grid; place-items: center; border-radius: 6px; background: rgba(255, 255, 255, 0.08); font-weight: 800; font-size: 0.78rem; color: #cbd5e1; }
 	.mpname { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.15; font-family: 'Modesto Poster', serif; font-size: 0.98rem; color: #f6ead2; }
-	.mpname em { font-style: normal; font-family: system-ui, sans-serif; font-size: 0.58rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #8b9bb0; }
+	.mpname em { font-style: normal; font-size: 0.58rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #8b9bb0; }
 	.mpname em.away { color: #f0a35a; }
-	.mphero { font-family: system-ui, sans-serif; font-size: 0.66rem; color: #93a3b8; }
+	.mphero { font-size: 0.66rem; color: #93a3b8; }
 	.mpacts { display: flex; gap: 6px; flex: none; }
 	.mpspecs { display: flex; flex-wrap: wrap; gap: 6px; }
 	.mpspec { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.12); font-size: 0.78rem; }
