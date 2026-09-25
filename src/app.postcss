@@ -9,6 +9,8 @@
 	src: url('./lib/fonts/modesto_poster.woff') format('woff');
 	font-display: swap;
 }
+/* the whole app speaks in the Guards font; it has a single weight, so never fake a bold */
+body { font-family: 'Modesto Poster', serif; font-synthesis: none; }
 @font-face {
 	font-family: 'Atlantis';
 	src: url('./lib/fonts/atlantis_regular.woff') format('woff');

@@ -1037,7 +1037,7 @@
 	.tbroman.trash { padding: 22%; color: rgba(255,255,255,.08); }
 	.tbroman.trash :global(svg) { width: 100%; height: 100%; }
 	.tslot :global(.slot) { position: relative; z-index: 1; }
-	.tbox.disc .tlabel .ct { margin-left: 5px; font-family: system-ui, sans-serif; font-size: .62rem; font-weight: 800; color: #f1f5f9; background: rgba(255,255,255,.1); border-radius: 5px; padding: 0 5px; }
+	.tbox.disc .tlabel .ct { margin-left: 5px; font-size: .62rem; font-weight: 800; color: #f1f5f9; background: rgba(255,255,255,.1); border-radius: 5px; padding: 0 5px; }
 	/* discard: the same footprint as a turn slot; a slightly fanned stack */
 	.discwrap { position: relative; }
 	.tbox.disc .discwrap { aspect-ratio: 3 / 4; }
@@ -1065,7 +1065,7 @@
 
 	/* deck view (manage cards across zones) */
 	.deckmodal { width: min(880px, 95vw); max-height: 92vh; overflow-y: auto; scrollbar-gutter: stable; padding: 16px 18px 12px; color: #e5e7eb; background: rgba(11,16,26,.96); border: 1px solid rgba(199,154,78,.5); border-radius: 16px; box-shadow: 0 24px 70px rgba(0,0,0,.7); }
-	.deckmodal .lvtag { font-style: normal; font-family: system-ui, sans-serif; font-size: .62rem; font-weight: 800; letter-spacing: .04em; color: #f0dcae; background: rgba(199,154,78,.2); border: 1px solid rgba(199,154,78,.45); border-radius: 6px; padding: 1px 7px; margin-left: 9px; vertical-align: middle; }
+	.deckmodal .lvtag { font-style: normal; font-size: .62rem; font-weight: 800; letter-spacing: .04em; color: #f0dcae; background: rgba(199,154,78,.2); border: 1px solid rgba(199,154,78,.45); border-radius: 6px; padding: 1px 7px; margin-left: 9px; vertical-align: middle; }
 	.deckmodal .mav { overflow: visible; border-color: rgba(199,154,78,.6); display: grid; place-items: center; }
 	.deckmodal .mav img { width: 76%; height: 76%; object-fit: contain; border-radius: 0; }
 	.dklabel { font-size: .62rem; letter-spacing: .1em; text-transform: uppercase; font-weight: 700; color: #93a3b8; display: flex; align-items: center; gap: 6px; margin: 12px 0 7px; flex-wrap: wrap; }
@@ -1296,7 +1296,7 @@
 		background: #0b101a; border: 1px solid rgba(199,154,78,.7); color: #f0dcae; font-size: .55rem; font-weight: 900; }
 	/* companion (Turret / Pyro): your colour, its letter, team ring — like the board piece */
 	.ltrdisc { width: 1.4rem; height: 1.4rem; border-radius: 50%; display: grid; place-items: center; background: var(--pc); border: 2px solid var(--tc, #ef7d22);
-		color: #0b1220; font-family: system-ui, sans-serif; font-size: .78rem; font-weight: 900; line-height: 1; }
+		color: #0b1220; font-size: .78rem; font-weight: 900; line-height: 1; }
 	.tokdrawer { position: absolute; left: 0; bottom: calc(100% + 8px); z-index: 14; width: 232px; padding: 9px; border-radius: 12px;
 		background: rgba(11,16,26,.96); border: 1px solid rgba(199,154,78,.5); box-shadow: 0 16px 40px rgba(0,0,0,.6); }
 	.toklbl { font-size: .56rem; letter-spacing: .1em; text-transform: uppercase; font-weight: 800; color: #b8a06a; margin: 2px 2px 5px; }
