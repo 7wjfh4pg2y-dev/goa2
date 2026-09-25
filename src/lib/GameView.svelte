@@ -46,7 +46,6 @@
 		const arr = [...($ms.lifeTok?.[team] ?? [])];
 		arr[i] = !arr[i];
 		const count = arr.filter(Boolean).length;
-		flip(`l${team}${i}`);
 		session.act(`${team === 'orange' ? 'Orange' : 'Blue'} Life ${$ms.life[team]} → ${count}`,
 			{ lifeTok: { ...$ms.lifeTok, [team]: arr }, life: { ...$ms.life, [team]: count } });
 	}
@@ -54,8 +53,26 @@
 		const arr = [...($ms.waveTok ?? [])];
 		arr[i] = !arr[i];
 		const count = arr.filter(Boolean).length;
-		flip(`w${i}`);
 		session.act(`Waves ${$ms.waves} → ${count}`, { waveTok: arr, waves: count });
+	}
+
+	// Flip animations are driven by the SHARED state: whenever a life/wave token or
+	// the tie-breaker changes — whoever clicked it — every client plays the flip.
+	function playTieFlip() {
+		tieFlip = false; // restart the flip even on rapid re-clicks
+		requestAnimationFrame(() => { tieFlip = true; setTimeout(() => (tieFlip = false), 450); });
+	}
+	let prevTok: { orange: boolean[]; blue: boolean[]; wave: boolean[]; tie: Team } | null = null;
+	$: watchFlips($ms.lifeTok, $ms.waveTok, $ms.tieBreaker);
+	function watchFlips(lifeTok: MatchState['lifeTok'] | undefined, waveTok: boolean[] | undefined, tie: Team) {
+		const cur = { orange: [...(lifeTok?.orange ?? [])], blue: [...(lifeTok?.blue ?? [])], wave: [...(waveTok ?? [])], tie };
+		if (prevTok) {
+			const was = prevTok;
+			(['orange', 'blue'] as Team[]).forEach((t) => cur[t].forEach((v, i) => { if (was[t][i] !== undefined && was[t][i] !== v) flip(`l${t}${i}`); }));
+			cur.wave.forEach((v, i) => { if (was.wave[i] !== undefined && was.wave[i] !== v) flip(`w${i}`); });
+			if (was.tie !== tie) playTieFlip();
+		}
+		prevTok = cur;
 	}
 
 	// orient the board so the local player's base sits at the bottom
@@ -82,7 +99,10 @@
 	function resolveSeat(id: string, ok: boolean) { if (iAmHost) session.resolveSeat(id, ok); }
 
 	$: boardPieces = Object.values($ms.pieces).map((p) => ({
-		id: p.id, hex: p.hex, team: p.team, role: p.role, token: p.token,
+		id: p.id, hex: p.hex, team: p.team, role: p.role, token: p.token === 'companion' ? undefined : p.token,
+		// hero pieces draw the player icon (portrait); companions are letter discs
+		hero: p.hero && !p.token ? p.hero : undefined,
+		letter: p.token === 'companion' ? (p.label?.[0] ?? '?').toUpperCase() : undefined,
 		sym: p.hero ? heroLogo(p.hero) : undefined,
 		label: p.hero ? (heroById(p.hero)?.name?.[0]?.toUpperCase() ?? '?') : (p.label ?? ''),
 		color: p.color ? colorHex(p.color) : undefined
@@ -154,8 +174,6 @@
 	let tieFlip = false;
 	function flipTie() {
 		const next: Team = $ms.tieBreaker === 'orange' ? 'blue' : 'orange';
-		tieFlip = false; // restart the flip even on rapid re-clicks
-		requestAnimationFrame(() => { tieFlip = true; setTimeout(() => (tieFlip = false), 450); });
 		session.act(`Tie-breaker → ${next === 'orange' ? 'Orange' : 'Blue'}`, { tieBreaker: next });
 	}
 
