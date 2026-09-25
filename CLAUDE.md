@@ -39,7 +39,7 @@ Deployed to GitHub Pages: **https://7wjfh4pg2y-dev.github.io/goa2/**
   `landing → choose → admin/adminhub → menu → create/join → lobby → draft → game`.
   - `landing`: big crest splash, morphs (width+translateY) into `choose`. No SFX (removed).
   - Role gate: `src/lib/role.ts` (admin password `qwerty123`, SHA-256 soft gate).
-  - Reconnect/resume: stable `clientId` in **sessionStorage**; active room + seat/colour in `sessionStorage['goa2-active']`; auto-rejoins on load.
+  - Identity/resume (`src/lib/identity.ts`): `clientId` is **per tab** (sessionStorage) so two tabs = two players. Each tab keeps an expiring (30 min) resume ticket `localStorage['goa2-active:<id>']` and holds a Web Lock `goa2-id-<id>`; a reopened tab adopts a ticket's id only if no open tab holds its lock. `claimIdentity()` runs on mount, then auto-rejoins. Don't go back to a shared localStorage id — it merged tabs into one player and resurrected stale games.
   - Begin flow: **tie-breaker coin flip → host `buildDraft()` → everyone enters draft → host "Start game" → board (placeholder)**.
 - **`src/lib/match.ts`** — shared match state engine over one Supabase channel per room.
   - Sync model: **full-snapshot last-write-wins by `rev`** (ties by `updatedAt`). `update()` bumps rev + broadcasts (throttled/coalesced ~140ms). Presence `track()` also throttled (~320ms) — Supabase rate-limits per channel; flooding wedges the socket.

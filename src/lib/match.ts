@@ -15,6 +15,7 @@
 
 import { writable, type Readable } from 'svelte/store'
 import { supabase } from './supabase'
+import { tabClientId } from './identity'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import type { GameMap } from './maps'
 import type { PlayerCardState } from './cards/cardstate'
@@ -81,28 +82,9 @@ export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 /** Realtime connection state, surfaced so the UI can show a status indicator. */
 export type ConnStatus = 'connecting' | 'connected' | 'reconnecting' | 'closed'
 
-const newId = () =>
-	globalThis.crypto?.randomUUID?.() ?? `c_${Math.random().toString(36).slice(2)}`
-
-/**
- * A stable client identity that survives a page reload AND a tab close/reopen
- * (localStorage, not sessionStorage) so a player can rejoin their game as the
- * same player even after closing the tab. The trade-off is that two tabs in the
- * same browser share one identity — fine for a personal game with friends.
- */
-function stableClientId(): string {
-	try {
-		const k = 'goa2-client-id'
-		let id = localStorage.getItem(k)
-		if (!id) {
-			id = newId()
-			localStorage.setItem(k, id)
-		}
-		return id
-	} catch {
-		return newId()
-	}
-}
+/** This tab's player id — per tab, stable across refreshes; a closed tab's id
+ * can be re-adopted on reopen (see identity.ts). */
+const stableClientId = () => tabClientId()
 
 export type Team = 'orange' | 'blue'
 export type Phase = 'planning' | 'action' | 'upgrade'
