@@ -10,6 +10,7 @@
 	import { teamForSeat, colorHex } from '$lib/match';
 	import Card from '$lib/cards/Card.svelte';
 	import TurnSlot from '$lib/cards/TurnSlot.svelte';
+	import PlayerIcon from '$lib/PlayerIcon.svelte';
 	import { heroCards, heroName, heroTitle, heroStat } from '$lib/cards/deck';
 	import { heroAvatar, heroLogo, heroSplash } from '$lib/heroes';
 	import { PASS, statDeltas, levelOf, ultimateIndex, type PlayerCardState, type StatKey, type CardZone } from '$lib/cards/cardstate';
@@ -56,11 +57,16 @@
 	// ── HUD status markers (Tigerclaw poison, Bain bounty) ─────────────────────
 	$: statusMap = $ms.status ?? {};
 	const EMPTY_STATUS = { poison: 0, bounty: 0 };
-	function setStatus(pid: string, key: 'poison' | 'bounty', delta: number) {
-		const cur = ($ms.status ?? {})[pid] ?? EMPTY_STATUS;
-		const nextEntry = { ...cur, [key]: Math.max(0, (cur[key] ?? 0) + delta) };
+	// there is ONE poison and ONE bounty marker: applying it to a player moves it
+	// off whoever had it; clicking it again removes it
+	function toggleStatus(pid: string, key: 'poison' | 'bounty') {
+		const cur = $ms.status ?? {};
+		const on = !cur[pid]?.[key];
+		const next: Record<string, { poison: number; bounty: number }> = {};
+		for (const id in cur) next[id] = { ...cur[id], [key]: 0 };
+		next[pid] = { ...(next[pid] ?? EMPTY_STATUS), [key]: on ? 1 : 0 };
 		const who = seated.find((p) => p.id === pid)?.name ?? 'A player';
-		session.act(`${who} ${delta > 0 ? 'gained' : 'lost'} a ${key} marker`, { status: { ...($ms.status ?? {}), [pid]: nextEntry } });
+		session.act(on ? `${who} is marked with ${key}` : `${who}'s ${key} marker removed`, { status: next });
 	}
 
 	$: iAmHost = $ms.host === clientId;
@@ -78,7 +84,11 @@
 	$: allCommitted = seatedWithCards.length > 0 && readyCount === seatedWithCards.length;
 	$: revealAt = $ms.revealAt ?? null;
 	$: countdownActive = allCommitted && revealAt != null && countNow < revealAt;
-	$: countdownSecs = countdownActive ? Math.max(1, Math.ceil((revealAt! - countNow) / 1000)) : 0;
+	// four beats over the countdown: 3 · 2 · 1 · Reveal!
+	$: countdownLabel = !countdownActive ? '' : (() => {
+		const left = revealAt! - countNow;
+		return left > 3300 ? '3' : left > 2100 ? '2' : left > 900 ? '1' : 'Reveal!';
+	})();
 	$: revealed = allCommitted && revealAt != null && countNow >= revealAt;
 	// tick a local clock only while the countdown is live, to drive 3→2→1 and the flip
 	let countNow = Date.now();
@@ -125,10 +135,21 @@
 	let committing = false; // preview flip animation on commit
 	$: myName = seated.find((p) => p.id === clientId)?.name ?? 'You';
 	$: myColor = seated.find((p) => p.id === clientId)?.color ?? 'spectator';
+	$: myInit = mine ? initOf(mine, true) : null;
 	// your hand, always in colour order: Silver, Gold, Red, Blue, Green (then the rest)
 	const COLOR_ORDER: Record<string, number> = { SILVER: 0, GOLD: 1, RED: 2, BLUE: 3, GREEN: 4 };
 	const colorRank = (hero: string, idx: number) => COLOR_ORDER[heroCards(hero)[idx]?.color] ?? 9;
 	$: handOrdered = mine ? [...mine.hand].sort((a, b) => colorRank(mine!.hero, a) - colorRank(mine!.hero, b) || a - b) : [];
+
+	// initiative of the card a player has in play this turn = the card's printed
+	// initiative + their initiative upgrades (NOT the hero's base stat).
+	// Opponents' is shown only once revealed.
+	function initOf(cs: PlayerCardState, show: boolean): number | null {
+		const idx = cs.pending;
+		if (!show || idx == null || idx === PASS) return null;
+		const v = heroCards(cs.hero)[idx]?.initiative;
+		return v == null ? null : v + (statDeltas(cs).init ?? 0);
+	}
 
 	// click a turn slot: a face-up card previews; anything else falls through to
 	// the container (a player row / your dash opens the full board)
@@ -262,14 +283,12 @@
 	// heroes that deploy a named companion figure (signature summon)
 	const COMPANIONS: Record<string, string> = { widget: 'Pyro', trinkets: 'Turret' };
 	$: myCompanion = mine ? COMPANIONS[mine.hero] : undefined;
-	// companion art: dedicated trait art if it exists, else the hero's logo
-	$: companionArt = mine ? (icon(`trait_tokens_${mine.hero}`) ?? heroLogo(mine.hero)) : undefined;
 	// everything placeable, in one shelf: companion / signature token first, then
 	// the hero's tokens (tokens heroes), then the shared markers
-	type ShelfItem = { key: string; img: string | undefined; title: string; cls: string; label: string; place: () => void };
+	type ShelfItem = { key: string; img: string | undefined; letter?: string; title: string; cls: string; label: string; place: () => void };
 	$: shelf = [
 		...(myCompanion
-			? [{ key: 'comp', img: companionArt, title: `Deploy ${myCompanion}`, cls: 'emblem comp', label: myCompanion, place: placeCompanion }]
+			? [{ key: 'comp', img: undefined, letter: myCompanion[0], title: `Deploy ${myCompanion}`, cls: 'emblem comp', label: myCompanion, place: placeCompanion }]
 			: heroEmblem && mine
 				? [{ key: 'sig', img: heroEmblem, title: 'Signature token', cls: 'emblem', label: '', place: () => placeToken(`trait_tokens_${mine!.hero}`) }]
 				: []),
@@ -288,11 +307,9 @@
 	function placeCompanion() {
 		const myHex = $ms.pieces?.[clientId]?.hex;
 		if (!myHex || !mine || !myCompanion) return;
-		const hasArt = !!icon(`trait_tokens_${mine.hero}`);
 		const id = `comp_${clientId}_${Date.now().toString(36)}`;
-		// dedicated art ⇒ use it as the token image; otherwise ride the hero logo
-		// via the piece's hero field (BoardCanvas falls back to sym when no art).
-		session.act(`deployed ${myCompanion}`, { pieces: { ...$ms.pieces, [id]: { id, hex: myHex, team: myTeam ?? 'neutral', kind: 'token' as const, token: hasArt ? `trait_tokens_${mine.hero}` : mine.hero, hero: mine.hero, owner: clientId, label: myCompanion } } });
+		// drawn on the board as a lettered disc: your colour, its initial, team ring
+		session.act(`deployed ${myCompanion}`, { pieces: { ...$ms.pieces, [id]: { id, hex: myHex, team: myTeam ?? 'neutral', kind: 'token' as const, token: 'companion', owner: clientId, label: myCompanion, color: myColor } } });
 	}
 	function clearTokens() {
 		const next = { ...$ms.pieces };
@@ -355,7 +372,7 @@
 		<div class="pptitle">
 			Players
 			<span class="phasetag" class:resolve={revealed} class:counting={countdownActive}>
-				{revealed ? `Revealed · Turn ${$ms.turn}` : countdownActive ? `Revealing in ${countdownSecs}…` : `Planning · Turn ${$ms.turn} · ${readyCount}/${seatedWithCards.length} ready`}
+				{revealed ? `Revealed · Turn ${$ms.turn}` : countdownActive ? `Revealing… ${countdownLabel}` : `Planning · Turn ${$ms.turn} · ${readyCount}/${seatedWithCards.length} ready`}
 			</span>
 		</div>
 		{#each others as p (p.id)}
@@ -366,19 +383,18 @@
 			<div class="prow" class:ultrow={cs?.ultimate} style="--tint:{teamTint(p)}; {teamVars(pTeam(p))}" role="button" tabindex="0"
 				on:click={() => (overlayId = p.id)} on:keydown={(e) => (e.key === 'Enter' || e.key === ' ') && (overlayId = p.id)}>
 				<div class="prtop">
-					<span class="pav" class:ult={cs?.ultimate}>
-						<img src={heroAvatar(cs?.hero ?? '')} alt="" />
+					<PlayerIcon hero={cs?.hero ?? ''} team={pTeam(p)} color={colorHex(p.color)} size="2rem" ring={2} ult={!!cs?.ultimate}>
 						{#if cs?.ultimate}<span class="crown">♛</span>{/if}
-					</span>
+					</PlayerIcon>
 					<span class="pmid">
 						<span class="pname">
 							{p.name}<em>Lv {cs ? levelOf(cs) : 1}</em>
 							{#if cs}<span class="coin" title="Coins">{cs.coins}</span>{/if}
 							{#if cs && cs.discard.length}<span class="dchip" title="Cards in discard pile"><i class="trashi">{@html TRASH}</i>{cs.discard.length}</span>{/if}
-							{#if st.poison}<span class="statmk pois" title="Poison"><img src={icon('marker_poison')} alt="" />{#if st.poison > 1}{st.poison}{/if}</span>{/if}
-							{#if st.bounty}<span class="statmk bnty" title="Bounty"><img src={icon('marker_bounty')} alt="" />{#if st.bounty > 1}{st.bounty}{/if}</span>{/if}
+							{#if st.poison}<span class="statmk pois" title="Poison"><img src={icon('marker_poison')} alt="" /></span>{/if}
+							{#if st.bounty}<span class="statmk bnty" title="Bounty"><img src={icon('marker_bounty')} alt="" /></span>{/if}
 						</span>
-						<span class="phero">{cs ? heroName(cs.hero) : ''}</span>
+						<span class="phero">{cs ? `${heroName(cs.hero)} ${heroTitle(cs.hero)}` : ''}</span>
 					</span>
 					{#if cs && dense}
 						<span class="dslot">
@@ -387,6 +403,13 @@
 					{/if}
 					{#if cs && isSkipped(cs)}<span class="skiptag" title="No cards left — skipped this turn">skip</span>
 					{:else if cs && !revealed}<span class="rdot" class:on={isReady(cs)} title={isReady(cs) ? 'Ready' : 'Not ready'}></span>{/if}
+					<!-- this turn's initiative (card + upgrades), once revealed — sits above the radius stat -->
+					{#if cs}
+						{@const ini = initOf(cs, revealed)}
+						<span class="initb" class:off={ini == null} title="Initiative this turn">
+							<img src={icon('item_initiative')} alt="" /><b>{ini ?? '–'}</b>
+						</span>
+					{/if}
 				</div>
 				{#if cs}
 					<div class="pstats">
@@ -403,6 +426,14 @@
 							{#each [0, 1, 2, 3] as t}
 								<TurnSlot heroId={cs.hero} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} label={ROMAN[t]} examinable on:click={(e) => peekSlot(e, cs, t)} />
 							{/each}
+							<!-- discard: the most recent card, count below (like your dash) -->
+							<span class="pdisc" title="Discard pile">
+								<span class="trashw">{@html TRASH}</span>
+								{#if cs.discard.length}
+									<span class="pdcard"><Card heroId={cs.hero} card={heroCards(cs.hero)[cs.discard[cs.discard.length - 1]]} /></span>
+									<span class="pdct">{cs.discard.length}</span>
+								{/if}
+							</span>
 						</div>
 					{/if}
 				{/if}
@@ -422,7 +453,7 @@
 			<!-- the hero's art sits faintly behind the board -->
 			<div class="modal board" style="{teamVars(pTeam(ovPlayer))} --bgimg:url('{heroSplash(oh)}')" on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" tabindex="-1">
 				<div class="mhead">
-					<span class="mav" class:ult={cs.ultimate} style="--tint:{teamTint(ovPlayer)}"><img src={heroAvatar(oh)} alt="" /></span>
+					<PlayerIcon hero={oh} team={pTeam(ovPlayer)} color={colorHex(ovPlayer.color)} size="3rem" ult={cs.ultimate} />
 					<div class="mtitle">
 						<div class="mnm">{ovPlayer.name} · {heroName(oh)}</div>
 						<div class="mtt" style="color:{teamTint(ovPlayer)}">{heroTitle(oh)} · {teamName(ovPlayer)} · Lv {levelOf(cs)}</div>
@@ -438,16 +469,13 @@
 				</div>
 				<div class="statusctl">
 					<span class="sclbl">Status</span>
-					<div class="scgrp pois">
-						<img src={icon('marker_poison')} alt="" /><span>Poison {ost.poison || ''}</span>
-						<button on:click={() => setStatus(oid, 'poison', -1)} disabled={!ost.poison} aria-label="Remove poison">−</button>
-						<button on:click={() => setStatus(oid, 'poison', 1)} aria-label="Add poison">+</button>
-					</div>
-					<div class="scgrp bnty">
-						<img src={icon('marker_bounty')} alt="" /><span>Bounty {ost.bounty || ''}</span>
-						<button on:click={() => setStatus(oid, 'bounty', -1)} disabled={!ost.bounty} aria-label="Remove bounty">−</button>
-						<button on:click={() => setStatus(oid, 'bounty', 1)} aria-label="Add bounty">+</button>
-					</div>
+					<!-- one of each marker exists: tap to put it on this player (it leaves anyone else), tap again to remove -->
+					<button class="sctog pois" class:on={!!ost.poison} aria-pressed={!!ost.poison} on:click={() => toggleStatus(oid, 'poison')}>
+						<img src={icon('marker_poison')} alt="" /><span>Poison</span>
+					</button>
+					<button class="sctog bnty" class:on={!!ost.bounty} aria-pressed={!!ost.bounty} on:click={() => toggleStatus(oid, 'bounty')}>
+						<img src={icon('marker_bounty')} alt="" /><span>Bounty</span>
+					</button>
 				</div>
 				<div class="stats6">
 					{#each allStats(cs) as r}
@@ -677,14 +705,13 @@
 			<!-- LEFT: you · tokens · deck -->
 			<div class="dleft">
 				<button class="dself" on:click={() => (overlayId = clientId)} title="Open your board">
-					<!-- your hero token: team disc, hero symbol, your colour as the ring -->
-					<span class="dtok" class:ult={mine.ultimate} style="--pc:{colorHex(myColor)}">
-						<img src={heroLogo(mine.hero)} alt="" />{#if mine.ultimate}<span class="crown">♛</span>{/if}
-					</span>
+					<PlayerIcon hero={mine.hero} team={myTeam ?? 'orange'} color={colorHex(myColor)} size="2.4rem" ult={mine.ultimate}>
+						{#if mine.ultimate}<span class="crown">♛</span>{/if}
+					</PlayerIcon>
 					<span class="dsmid">
 						<span class="dsname"><span class="dsnm">{myName}</span><em>Lv {levelOf(mine)}</em>
-							{#if mst.poison}<span class="statmk pois" title="Poison"><img src={icon('marker_poison')} alt="" />{#if mst.poison > 1}{mst.poison}{/if}</span>{/if}
-							{#if mst.bounty}<span class="statmk bnty" title="Bounty"><img src={icon('marker_bounty')} alt="" />{#if mst.bounty > 1}{mst.bounty}{/if}</span>{/if}
+							{#if mst.poison}<span class="statmk pois" title="Poison"><img src={icon('marker_poison')} alt="" /></span>{/if}
+							{#if mst.bounty}<span class="statmk bnty" title="Bounty"><img src={icon('marker_bounty')} alt="" /></span>{/if}
 						</span>
 						<span class="dshero">{heroName(mine.hero)}</span>
 					</span>
@@ -701,7 +728,8 @@
 				<!-- tokens and markers: one shelf; the button shows its first item -->
 				<div class="tokwrap">
 					<button class="tokbtn" class:on={tokenDrawer} on:click={() => (tokenDrawer = !tokenDrawer)} title="Tokens and Markers">
-						<img src={shelf[0]?.img} alt="" /><span>Tokens{#if myTokenCount} · {myTokenCount}{/if}</span>
+						{#if shelf[0]?.letter}<span class="ltrdisc" style="--pc:{colorHex(myColor)}">{shelf[0].letter}</span>{:else}<img src={shelf[0]?.img} alt="" />{/if}
+						{#if myTokenCount}<span class="tokct">{myTokenCount}</span>{/if}
 					</button>
 					{#if tokenDrawer}
 						<div class="tokdrawer">
@@ -709,7 +737,7 @@
 							<div class="tokgrid">
 								{#each shelf as it (it.key)}
 									<button class="tok {it.cls}" on:click={it.place} title={it.title}>
-										<img src={it.img} alt="" />{#if it.label}<span class="toktag">{it.label}</span>{/if}
+										{#if it.letter}<span class="ltrdisc" style="--pc:{colorHex(myColor)}">{it.letter}</span>{:else}<img src={it.img} alt="" />{/if}{#if it.label}<span class="toktag">{it.label}</span>{/if}
 									</button>
 								{/each}
 							</div>
@@ -773,7 +801,14 @@
 
 			<!-- RIGHT: turn actions · coins · hand display options · docked hand -->
 			<div class="dright">
+				<!-- fixed-width slot (nothing shifts when a button appears): your card's
+				     initiative, with the turn button beneath it when there is one -->
 				<div class="dact">
+					{#if myInit != null}
+						<span class="initb big" class:small={(revealed && iAmHost) || (myReady && !revealed)} title="Your initiative this turn (card + upgrades)">
+							<img src={icon('item_initiative')} alt="" /><b>{myInit}</b>
+						</span>
+					{/if}
 					{#if revealed && iAmHost}
 						{#if !isFinalTurn}
 							<button class="act primary" on:click={onAdvanceTurn}>Next turn →</button>
@@ -783,7 +818,7 @@
 							<button class="act primary" on:click={onAdvanceTurn}>Next round →</button>
 						{/if}
 					{:else if revealed}
-						<span class="waithost">Waiting for host…</span>
+						{#if myInit == null}<span class="waithost">Waiting for host…</span>{/if}
 					{:else if myReady}
 						<button class="act takeback" on:click={takeBack}>↩ Take back</button>
 					{/if}
@@ -846,9 +881,8 @@
 	<!-- ───────── synced pre-reveal countdown (take back your card to cancel) ───────── -->
 	{#if countdownActive}
 		<div class="countdown">
-			{#key countdownSecs}<span class="cd-num">{countdownSecs}</span>{/key}
+			{#key countdownLabel}<span class="cd-num" class:go={countdownLabel === 'Reveal!'}>{countdownLabel}</span>{/key}
 			<span class="cd-sub">Revealing…</span>
-			{#if myReady}<button class="cd-back" on:click={takeBack}>↩ Take back my card</button>{/if}
 		</div>
 	{/if}
 
@@ -875,7 +909,7 @@
 							{:else}
 								<div class="cc-flip skip">—</div>
 							{/if}
-							<div class="cc-name"><img src={heroAvatar(cs.hero)} alt="" />{p.name}</div>
+							<div class="cc-name"><PlayerIcon hero={cs.hero} team={pTeam(p)} color={colorHex(p.color)} size="1.8rem" ring={2} />{p.name}</div>
 						</div>
 					{/each}
 				</div>
@@ -903,10 +937,6 @@
 	.prow.ultrow::after { content: '★'; position: absolute; top: 5px; right: 8px; font-size: .7rem; color: #d9b6ff; text-shadow: 0 0 6px rgba(165,110,230,.9); }
 	.prow { position: relative; }
 	.prtop { display: flex; align-items: center; gap: 8px; }
-	.pav { position: relative; width: 2.1rem; height: 2.1rem; border-radius: 50%; overflow: visible; border: 2px solid var(--tint); flex: none; }
-	.pav img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
-	.pav.ult { border-color: #b482f0; box-shadow: 0 0 9px rgba(160,110,235,.65); }
-	.pav .crown { position: absolute; top: -8px; right: -6px; font-size: .82rem; color: #d9b6ff; text-shadow: 0 1px 3px #000; }
 	.pmid { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; line-height: 1.05; }
 	.pname { font-family: 'Modesto Poster', serif; font-size: .84rem; color: #f3f6fb; display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
 	.pname em { font-style: normal; font-size: .56rem; font-weight: 700; color: #8b9bb0; }
@@ -920,14 +950,15 @@
 	.statmk.bnty { color: #ffe6a6; background: rgba(232,182,74,.2); box-shadow: 0 0 0 1px rgba(232,182,74,.45); }
 	/* status controls in the board overlay */
 	.statusctl { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 10px; padding: 7px 10px; border-radius: 10px; background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.1); }
+	.sctog { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px 4px 5px; border-radius: 999px; cursor: pointer; font-size: .76rem; font-weight: 700;
+		color: #94a3b8; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.14); transition: background .12s, color .12s, box-shadow .12s; }
+	.sctog img { width: 1.25rem; height: 1.25rem; object-fit: contain; border-radius: 50%; filter: grayscale(1) opacity(.6); }
+	.sctog:hover { background: rgba(255,255,255,.1); color: #e5e7eb; }
+	.sctog.on img { filter: none; }
+	.sctog.pois.on { color: #c8f5cf; background: rgba(65,174,89,.24); border-color: rgba(65,174,89,.6); box-shadow: 0 0 10px rgba(65,174,89,.35); }
+	.sctog.bnty.on { color: #ffe6a6; background: rgba(232,182,74,.22); border-color: rgba(232,182,74,.6); box-shadow: 0 0 10px rgba(232,182,74,.35); }
 	.statusctl .sclbl { font-size: .58rem; letter-spacing: .12em; text-transform: uppercase; font-weight: 800; color: #93a3b8; }
-	.scgrp { display: inline-flex; align-items: center; gap: 5px; font-size: .74rem; font-weight: 700; color: #e5e7eb; }
-	.scgrp img { width: 1.1rem; height: 1.1rem; object-fit: contain; border-radius: 50%; }
-	.scgrp.pois { color: #a6f5b6; } .scgrp.bnty { color: #ffe6a6; }
-	.scgrp button { width: 1.3rem; height: 1.3rem; border-radius: 6px; border: 1px solid rgba(255,255,255,.2); background: rgba(255,255,255,.08); color: #e5e7eb; font-weight: 900; cursor: pointer; line-height: 1; padding: 0; }
-	.scgrp button:hover:not(:disabled) { background: rgba(255,255,255,.18); }
-	.scgrp button:disabled { opacity: .35; cursor: not-allowed; }
-	.phero { font-size: .58rem; color: #93a3b8; }
+	.phero { font-family: 'Modesto Poster', serif; font-size: .64rem; letter-spacing: .02em; color: #cbd5e1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 	.dslot { width: 1.7rem; flex: none; }
 	/* gold coin chip */
 	.coin { display: inline-flex; align-items: center; justify-content: center; min-width: 1.05rem; height: 1.05rem; padding: 0 4px; border-radius: 999px;
@@ -946,9 +977,29 @@
 	.pstat .stripe { width: 4px; height: 2px; transform: skewX(-24deg); background: rgb(var(--tcl, 255 183 116)); border-radius: 1px; }
 	.pstat.up { background: rgb(var(--tcr, 239 125 34) / .18); border-color: rgb(var(--tcr, 239 125 34) / .5); padding-top: 5px; }
 	.pstat.up img { opacity: 1; } .pstat.up b { color: rgb(var(--tcl, 255 207 163)); }
-	.pturns { display: grid; grid-template-columns: repeat(4, 40px); gap: 4px; justify-content: center; }
+	.pturns { display: grid; grid-template-columns: repeat(5, 36px); gap: 4px; justify-content: center; }
+	.pdisc { position: relative; display: block; aspect-ratio: 3 / 4; border-left: 1px solid rgba(255,255,255,.1); margin-left: 2px; padding-left: 3px; }
+	.trashw { position: absolute; inset: 18% 14% 18% 22%; color: rgba(255,255,255,.08); pointer-events: none; }
+	.trashw :global(svg) { width: 100%; height: 100%; }
+	.pdcard { position: relative; display: block; border-radius: 6%; overflow: hidden; box-shadow: 2px 2px 0 rgba(255,255,255,.18), 0 3px 8px rgba(0,0,0,.5); }
+	.pdcard :global(canvas) { display: block; width: 100%; }
+	.pdct { position: absolute; left: 50%; bottom: -7px; transform: translateX(-50%); min-width: 1rem; height: .95rem; padding: 0 4px; border-radius: 999px; display: grid; place-items: center;
+		background: linear-gradient(#2b3444, #171d27); border: 1px solid rgba(199,154,78,.6); color: #f0dcae; font-size: .55rem; font-weight: 900; font-variant-numeric: tabular-nums; }
+	/* initiative this turn (card + upgrades) */
+	.initb { flex: none; margin-left: auto; display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px 2px 5px; border-radius: 8px;
+		background: rgb(var(--tcr, 239 125 34) / .2); border: 1px solid rgb(var(--tcl, 255 196 140) / .55); color: #fff; }
+	.initb img { width: .85rem; height: .85rem; object-fit: contain; filter: brightness(0) invert(1); }
+	.initb b { font-family: 'Modesto Poster', serif; font-size: .95rem; line-height: 1; font-variant-numeric: tabular-nums; }
+	.initb.off { opacity: .35; background: rgba(255,255,255,.04); border-color: rgba(255,255,255,.12); }
+	.initb.big { margin: 0; padding: 4px 12px 4px 9px; border-radius: 10px; }
+	.initb.big img { width: 1.1rem; height: 1.1rem; }
+	.initb.big b { font-size: 1.35rem; }
+	.initb.big.small { padding: 1px 8px 1px 6px; }
+	.initb.big.small img { width: .8rem; height: .8rem; }
+	.initb.big.small b { font-size: .9rem; }
+	/* the ♛ badge on a level-8 player's icon */
+	.crown { position: absolute; z-index: 2; top: -10px; right: -8px; font-size: .9rem; color: #d9b6ff; text-shadow: 0 1px 3px #000; }
 	.ppanel.dense .prow { gap: 4px; padding: 5px 6px; }
-	.ppanel.dense .pav { width: 1.9rem; height: 1.9rem; }
 	.ppanel.dense .pname { font-size: .78rem; }
 	.ppanel.dense .phero { font-size: .56rem; }
 	.ppanel.dense .pstat b { font-size: .62rem; }
@@ -961,7 +1012,6 @@
 	.mhead { display: flex; align-items: center; gap: 11px; margin-bottom: 12px; }
 	.mav { position: relative; width: 3rem; height: 3rem; border-radius: 50%; overflow: hidden; border: 2px solid var(--tint); flex: none; }
 	.mav img { width: 100%; height: 100%; object-fit: cover; }
-	.mav.ult { border-color: #b482f0; box-shadow: 0 0 11px rgba(160,110,235,.7); }
 	.mnm { font-family: 'Modesto Poster', serif; font-size: 1.25rem; color: #f6ead2; }
 	.mtt { font-family: 'Modesto Poster', serif; font-size: .72rem; letter-spacing: .03em; color: #b8a06a; }
 	/* opponent overlay: compact ultimate chip next to the name (only once unlocked) */
@@ -1080,11 +1130,9 @@
 	.cd-num { font-family: 'Modesto Poster', serif; font-size: 9rem; line-height: .9; color: #f6ead2;
 		text-shadow: 0 4px 24px rgba(0,0,0,.85), 0 0 46px rgba(239,180,106,.55); animation: cdpop .9s ease forwards; }
 	@keyframes cdpop { 0% { opacity: 0; transform: scale(1.5); } 22% { opacity: 1; transform: scale(1); } 100% { opacity: .5; transform: scale(.9); } }
-	.cd-back { pointer-events: auto; margin-top: 14px; padding: 12px 26px; border-radius: 14px; cursor: pointer; font-family: 'Modesto Poster', serif; font-size: 1.25rem; letter-spacing: .04em; color: #fff;
-		background: linear-gradient(180deg, rgba(220,70,60,.9), rgba(150,30,30,.92)); border: 1px solid rgba(255,170,160,.7); box-shadow: 0 10px 28px rgba(0,0,0,.55), 0 0 22px rgba(239,68,68,.45); }
-	.cd-back:hover { filter: brightness(1.1); }
 	.countdown::before { content: ''; position: absolute; left: 50%; top: 50%; width: 560px; height: 420px; transform: translate(-50%, -50%); z-index: -1;
 		background: radial-gradient(closest-side, rgba(4,6,12,.62), rgba(4,6,12,0)); pointer-events: none; }
+	.cd-num.go { font-size: 5.5rem; color: #ffe2a8; text-shadow: 0 4px 24px rgba(0,0,0,.85), 0 0 50px rgba(255,190,90,.7); }
 	.cd-sub { font-size: .85rem; letter-spacing: .14em; text-transform: uppercase; font-weight: 700; color: #f0dcae; padding: 4px 14px; border-radius: 999px; background: rgba(6,9,16,.72); text-shadow: 0 2px 8px rgba(0,0,0,.8); }
 	.phasetag.counting { color: #ffcf9b; }
 
@@ -1150,9 +1198,10 @@
 	.dleft { display: flex; align-items: center; gap: 12px; }
 	.dleft .tokwrap { margin-left: auto; }
 	.dright { display: flex; align-items: center; gap: 12px; }
-	.dact:empty { display: none; }
-	.act.takeback { padding: 7px 16px; font-size: .86rem; background: rgb(var(--tcr) / .3); border-color: rgb(var(--tcl) / .6); color: #fff; box-shadow: 0 0 12px rgb(var(--tcr) / .35); }
-	.act.takeback:hover { background: rgb(var(--tcr) / .45); }
+	.dact { flex: none; width: 118px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
+	.dact .act { white-space: nowrap; }
+	.act.takeback { padding: 7px 14px; font-size: .86rem; color: #fff; background: linear-gradient(180deg, #e0463c, #a82620); border-color: rgba(255,170,160,.7); box-shadow: 0 3px 0 #6e1812, 0 0 12px rgba(239,68,68,.45); }
+	.act.takeback:hover { filter: brightness(1.1); }
 	/* level-8 aura on your own dash — present but not blinding */
 	.dash.ultdash { border-color: rgba(165,110,230,.6); box-shadow: 0 12px 34px rgba(0,0,0,.5), 0 0 22px rgba(165,110,230,.28); animation: ultpulse 3.4s ease-in-out infinite; }
 	@keyframes ultpulse { 0%, 100% { box-shadow: 0 12px 34px rgba(0,0,0,.5), 0 0 18px rgba(165,110,230,.22); } 50% { box-shadow: 0 12px 34px rgba(0,0,0,.5), 0 0 30px rgba(165,110,230,.42); } }
@@ -1160,10 +1209,6 @@
 	.dself { display: flex; align-items: center; gap: 9px; background: none; border: none; cursor: pointer; color: inherit; text-align: left; flex: none; }
 	.dself:hover .dsname { color: #fff; }
 	/* your hero token: team disc + hero symbol + your colour as the ring (matches the board piece) */
-	.dtok { position: relative; flex: none; width: 2.5rem; height: 2.5rem; border-radius: 50%; display: grid; place-items: center; background: var(--tc); border: 3px solid var(--pc, #94a3b8); box-shadow: 0 2px 8px rgba(0,0,0,.5); }
-	.dtok img { width: 74%; height: 74%; object-fit: contain; filter: drop-shadow(0 1px 2px rgba(0,0,0,.6)); }
-	.dtok.ult { box-shadow: 0 0 0 2px #b482f0, 0 0 12px rgba(160,110,235,.75); }
-	.dtok .crown { position: absolute; top: -9px; right: -7px; font-size: .9rem; color: #d9b6ff; text-shadow: 0 1px 3px #000; }
 	.dsmid { display: flex; flex-direction: column; gap: 1px; line-height: 1.02; }
 	.dsname { font-family: 'Modesto Poster', serif; font-size: .92rem; color: #f6ead2; display: flex; align-items: baseline; gap: 5px; min-width: 0; }
 	.dsnm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1235,7 +1280,13 @@
 	.tokbtn { display: flex; align-items: center; gap: 5px; padding: 5px 9px; border-radius: 9px; cursor: pointer; color: #e8dcc0; font-size: .74rem; font-weight: 700;
 		background: rgba(199,154,78,.14); border: 1px solid rgba(199,154,78,.4); }
 	.tokbtn.on { background: rgba(199,154,78,.28); }
-	.tokbtn img { width: 1.3rem; height: 1.3rem; object-fit: contain; }
+	.tokbtn { position: relative; }
+	.tokbtn img { width: 1.4rem; height: 1.4rem; object-fit: contain; }
+	.tokct { position: absolute; top: -6px; right: -6px; min-width: .95rem; height: .95rem; padding: 0 3px; border-radius: 999px; display: grid; place-items: center;
+		background: #0b101a; border: 1px solid rgba(199,154,78,.7); color: #f0dcae; font-size: .55rem; font-weight: 900; }
+	/* companion (Turret / Pyro): your colour, its letter, team ring — like the board piece */
+	.ltrdisc { width: 1.4rem; height: 1.4rem; border-radius: 50%; display: grid; place-items: center; background: var(--pc); border: 2px solid var(--tc, #ef7d22);
+		color: #0b1220; font-family: system-ui, sans-serif; font-size: .78rem; font-weight: 900; line-height: 1; }
 	.tokdrawer { position: absolute; left: 0; bottom: calc(100% + 8px); z-index: 14; width: 232px; padding: 9px; border-radius: 12px;
 		background: rgba(11,16,26,.96); border: 1px solid rgba(199,154,78,.5); box-shadow: 0 16px 40px rgba(0,0,0,.6); }
 	.toklbl { font-size: .56rem; letter-spacing: .1em; text-transform: uppercase; font-weight: 800; color: #b8a06a; margin: 2px 2px 5px; }
@@ -1246,7 +1297,7 @@
 	.tok img { width: 100%; aspect-ratio: 1; object-fit: contain; }
 	.tok.emblem { background: rgba(199,154,78,.16); border-color: rgba(199,154,78,.45); }
 	.tok.comp { position: relative; grid-column: span 2; display: flex; align-items: center; gap: 6px; padding: 5px 8px; }
-	.tok.comp img { width: 1.5rem; height: 1.5rem; aspect-ratio: auto; }
+	.tok.comp img, .tok.comp .ltrdisc { width: 1.5rem; height: 1.5rem; aspect-ratio: auto; }
 	.tok.comp .toktag { font-size: .64rem; font-weight: 800; letter-spacing: .02em; color: #f0dcae; }
 	.tok.marker img { border-radius: 50%; }
 	.tokfoot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
@@ -1285,12 +1336,11 @@
 		.dash { gap: 10px; padding: 6px 10px; }
 		.dleft, .dright { gap: 8px; }
 		.dself { display: grid; grid-template-columns: auto auto; column-gap: 8px; row-gap: 3px; align-items: center; }
-		.dself .dtok { grid-row: 1 / 3; }
+		.dself :global(.picon) { grid-row: 1 / 3; }
 		.dsmid { max-width: 9.6rem; }
 		.dshero { display: none; }
 		.dstats { grid-column: 2; grid-template-columns: repeat(6, 1.45rem); }
 		.tokbtn { padding: 5px 7px; }
-		.tokbtn span { display: none; }
 		.dm-turns { gap: 3px; }
 		.dm-slot { width: 32px; height: 46px; }
 		.dm-slot .roman { font-size: 1.2rem; }
@@ -1304,7 +1354,8 @@
 		.dash { padding: 6px 8px; gap: 8px; }
 		.dleft, .dright { gap: 6px; }
 		.dsmid { max-width: 8.2rem; }
-		.act.takeback { padding: 6px 10px; font-size: .78rem; }
+		.act.takeback { padding: 5px 9px; font-size: .78rem; }
+		.dact { width: 96px; }
 		.hopt { width: 1.75rem; }
 		.dkh { flex-basis: 28px; min-width: 18px; }
 		.coinctl { padding: 2px 3px; gap: 2px; }
