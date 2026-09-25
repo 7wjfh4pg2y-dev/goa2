@@ -394,7 +394,7 @@
 							{#if st.poison}<span class="statmk pois" title="Poison"><img src={icon('marker_poison')} alt="" /></span>{/if}
 							{#if st.bounty}<span class="statmk bnty" title="Bounty"><img src={icon('marker_bounty')} alt="" /></span>{/if}
 						</span>
-						<span class="phero">{cs ? `${heroName(cs.hero)} ${heroTitle(cs.hero)}` : ''}</span>
+						<span class="phero">{cs ? heroName(cs.hero) : ''}</span>
 					</span>
 					{#if cs && dense}
 						<span class="dslot">
@@ -712,6 +712,7 @@
 						<span class="dsname"><span class="dsnm">{myName}</span><em>Lv {levelOf(mine)}</em>
 							{#if mst.poison}<span class="statmk pois" title="Poison"><img src={icon('marker_poison')} alt="" /></span>{/if}
 							{#if mst.bounty}<span class="statmk bnty" title="Bounty"><img src={icon('marker_bounty')} alt="" /></span>{/if}
+							<span class="initb" class:off={myInit == null} title="Your initiative this turn (card + upgrades)"><img src={icon('item_initiative')} alt="" /><b>{myInit ?? '–'}</b></span>
 						</span>
 						<span class="dshero">{heroName(mine.hero)}</span>
 					</span>
@@ -801,14 +802,8 @@
 
 			<!-- RIGHT: turn actions · coins · hand display options · docked hand -->
 			<div class="dright">
-				<!-- fixed-width slot (nothing shifts when a button appears): your card's
-				     initiative, with the turn button beneath it when there is one -->
+				<!-- fixed-width slot for the turn buttons, so nothing shifts when one appears -->
 				<div class="dact">
-					{#if myInit != null}
-						<span class="initb big" class:small={(revealed && iAmHost) || (myReady && !revealed)} title="Your initiative this turn (card + upgrades)">
-							<img src={icon('item_initiative')} alt="" /><b>{myInit}</b>
-						</span>
-					{/if}
 					{#if revealed && iAmHost}
 						{#if !isFinalTurn}
 							<button class="act primary" on:click={onAdvanceTurn}>Next turn →</button>
@@ -818,7 +813,7 @@
 							<button class="act primary" on:click={onAdvanceTurn}>Next round →</button>
 						{/if}
 					{:else if revealed}
-						{#if myInit == null}<span class="waithost">Waiting for host…</span>{/if}
+						<span class="waithost">Waiting for host…</span>
 					{:else if myReady}
 						<button class="act takeback" on:click={takeBack}>↩ Take back</button>
 					{/if}
@@ -991,12 +986,6 @@
 	.initb img { width: .85rem; height: .85rem; object-fit: contain; filter: brightness(0) invert(1); }
 	.initb b { font-family: 'Modesto Poster', serif; font-size: .95rem; line-height: 1; font-variant-numeric: tabular-nums; }
 	.initb.off { opacity: .35; background: rgba(255,255,255,.04); border-color: rgba(255,255,255,.12); }
-	.initb.big { margin: 0; padding: 4px 12px 4px 9px; border-radius: 10px; }
-	.initb.big img { width: 1.1rem; height: 1.1rem; }
-	.initb.big b { font-size: 1.35rem; }
-	.initb.big.small { padding: 1px 8px 1px 6px; }
-	.initb.big.small img { width: .8rem; height: .8rem; }
-	.initb.big.small b { font-size: .9rem; }
 	/* the ♛ badge on a level-8 player's icon */
 	.crown { position: absolute; z-index: 2; top: -10px; right: -8px; font-size: .9rem; color: #d9b6ff; text-shadow: 0 1px 3px #000; }
 	.ppanel.dense .prow { gap: 4px; padding: 5px 6px; }
@@ -1049,8 +1038,8 @@
 	.discwrap { position: relative; }
 	.tbox.disc .discwrap { aspect-ratio: 3 / 4; }
 	.dstack { position: absolute; inset: 0; z-index: 1; padding: 0; background: none; border: none; cursor: pointer; }
-	.dsk { position: absolute; top: 0; left: 0; width: 86%; border-radius: 6%; overflow: hidden; box-shadow: 0 3px 8px rgba(0,0,0,.55);
-		transform: translateX(calc(var(--i) * 5%)) rotate(calc((var(--i) - var(--n) + 1) * 3deg)); transform-origin: bottom left; z-index: var(--i); }
+	.dsk { position: absolute; top: 0; left: 0; width: 100%; border-radius: 6%; overflow: hidden; box-shadow: 0 3px 8px rgba(0,0,0,.55);
+		transform: translateX(calc((var(--i) - var(--n) + 1) * 6%)) rotate(calc((var(--i) - var(--n) + 1) * 3deg)); transform-origin: bottom left; z-index: var(--i); }
 	.dsk :global(canvas) { display: block; width: 100%; }
 	.dstack:hover .dsk { filter: brightness(1.08); }
 	/* fanned-out discard (hover / tap) — click a card to preview it */
@@ -1212,6 +1201,8 @@
 	.dsmid { display: flex; flex-direction: column; gap: 1px; line-height: 1.02; }
 	.dsname { font-family: 'Modesto Poster', serif; font-size: .92rem; color: #f6ead2; display: flex; align-items: baseline; gap: 5px; min-width: 0; }
 	.dsnm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.dsname .initb { align-self: center; padding: 1px 6px 1px 4px; }
+	.dsname .initb b { font-size: .82rem; }
 	.dsname em { font-style: normal; font-size: .56rem; font-weight: 700; color: #9aa8bc; }
 	.dshero { font-size: .58rem; color: #93a3b8; }
 	.dstats { display: grid; grid-template-columns: repeat(6, 1.7rem); gap: 3px; }
