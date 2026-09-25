@@ -214,7 +214,8 @@
 		session.update({
 			pieces: { ...placeMinions(s), ...placeHeroes(s, get(players)) },
 			cards: initCards(s.draft?.picks ?? {}),
-			seatMap: buildSeatMap(get(players), s.seats)
+			// keep owners recorded at draft start (someone may be mid-reconnect)
+			seatMap: { ...(s.seatMap ?? {}), ...buildSeatMap(get(players), s.seats) }
 		});
 	}
 
@@ -332,7 +333,14 @@
 	}
 	// a join stays on the Join screen ("Joining…") until the room's real state
 	// arrives (→ lobby) or it's confirmed there's no such game (→ error)
-	$: if (joining && $state.rev >= 0) { joining = false; resumeSeed = null; mode = 'lobby'; }
+	// Land straight in whatever stage the room is at. (Going via 'lobby' and
+	// relying on the lobby→draft/game rules above doesn't work: those ran earlier
+	// in this same update, so a rejoiner sat in the ready-up screen until the
+	// next state change — forever, if everyone else had already picked.)
+	$: if (joining && $state.rev >= 0) {
+		joining = false; resumeSeed = null;
+		mode = $state.started ? 'game' : $state.draft ? 'draft' : 'lobby';
+	}
 	// Re-apply a remembered seat + colour once the room's state has arrived, in ANY
 	// mode — a player rejoining a game already in draft/board must get their seat
 	// (and hero) back, not come back as a spectator.
@@ -340,6 +348,21 @@
 		const st = pendingSeat; pendingSeat = -1;
 		const c = pendingColor || firstFreeColor(); pendingColor = '';
 		if (!takenSeats.has(st)) { color = c; session.setSelf({ seat: st, color: c }); writeActive({ seat: st, color: c }); }
+	}
+	// Once the draft has started the room records who owns each seat (seatMap).
+	// If one is yours and it's free, sit back down — covers rejoining by room code
+	// (after a kick, or from a fresh tab), not just an auto-resume.
+	let reclaimFor: unknown = null;
+	$: if (session && reclaimFor !== session && $state.rev >= 0 && pendingSeat < 0 && mySeat < 0 && $state.seatMap) {
+		const owned = Object.entries($state.seatMap).find(([, o]) => o.id === session?.clientId);
+		if (owned) {
+			reclaimFor = session;
+			const st = Number(owned[0]);
+			if (!takenSeats.has(st)) {
+				const c = color !== 'spectator' ? color : firstFreeColor();
+				color = c; session.setSelf({ seat: st, color: c }); writeActive({ seat: st, color: c });
+			}
+		}
 	}
 	// Spin the coin so it actually animates: mount at the current angle, then bump
 	// the rotation on the next frame so the CSS transition has something to run
@@ -369,7 +392,7 @@
 	function startDraft(startingTeam: Team) {
 		const pool = HEROES.filter((hr) => $state.draftStars.includes(hr.stars)).map((hr) => hr.id);
 		const d = buildDraft($state.draftSystem, pool, $players, $state.seats, startingTeam);
-		session?.update({ draft: d, startFlip: null });
+		session?.update({ draft: d, startFlip: null, seatMap: buildSeatMap($players, $state.seats) });
 	}
 	// join reached a room code with no host → don't create one
 	function failJoin() {
