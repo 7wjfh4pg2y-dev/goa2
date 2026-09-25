@@ -62,7 +62,12 @@ export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 	if (req.kind === 'advance') {
 		const migrated: Record<string, PlayerCardState> = {}
 		for (const pid in cards) migrated[pid] = revealPlayer(cards[pid], turnIdx)
-		if (s.turn >= TURNS_PER_ROUND) return { cards: endRoundAll(migrated), round: s.round + 1, turn: 1, battlePhase: false }
+		if (s.turn >= TURNS_PER_ROUND) {
+			// round over: hands refresh, and the board is swept of tokens and markers
+			const pieces: Record<string, Piece> = {}
+			for (const id in s.pieces ?? {}) if (keepsThroughRound(s.pieces[id])) pieces[id] = s.pieces[id]
+			return { cards: endRoundAll(migrated), round: s.round + 1, turn: 1, battlePhase: false, pieces, status: {} }
+		}
 		return { cards: migrated, turn: s.turn + 1 }
 	}
 
@@ -231,6 +236,15 @@ export interface Piece {
 	hero?: string // heroId, for hero pieces
 	token?: string // token image name (e.g. "token_tree"), for token markers
 	owner?: string // clientId of the player who placed this token
+	attachedTo?: string // a marker riding on a hero piece (by piece id) — moves with it
+	faceDown?: boolean // double-sided tokens (Min's Blast/Dud mines) placed hidden
+}
+
+/** Tokens/markers that survive the end of a round (Wuk's trees, Trinkets' turret,
+ *  Widget's Pyro, Snorri's runes). Everything else token-like is wiped. */
+export function keepsThroughRound(p: Piece): boolean {
+	if (p.kind !== 'token') return true // heroes and minions are units, not tokens
+	return p.token === 'companion' || p.token === 'token_tree' || !!p.token?.startsWith('rune_')
 }
 
 /** Hex id "c_r" → pixel-ish centre (size factored out; only used for centroids). */
@@ -303,8 +317,8 @@ export function transferSeat(s: MatchState, from: string, to: string, toName: st
 	for (const id in s.pieces) {
 		const pc = s.pieces[id]
 		if (id === from) pieces[to] = { ...pc, id: to, owner: to } // the hero token
-		else if (pc.owner === from) pieces[id] = { ...pc, owner: to } // their placed tokens
-		else pieces[id] = pc
+		else if (pc.owner === from) pieces[id] = { ...pc, owner: to, ...(pc.attachedTo === from ? { attachedTo: to } : {}) } // their placed tokens
+		else pieces[id] = pc.attachedTo === from ? { ...pc, attachedTo: to } : pc
 	}
 	let draft = s.draft
 	if (draft && draft.picks[from]) {

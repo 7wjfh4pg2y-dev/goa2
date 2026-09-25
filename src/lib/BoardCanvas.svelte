@@ -14,7 +14,11 @@
 	export let interactive = true;
 	export let rotation = 0; // base orientation in degrees (e.g. 180 so your base sits at the bottom)
 
-	export let pieces: Array<{ id: string; hex: string; team: string; role?: string; label?: string; color?: string; token?: string; sym?: string; hero?: string; letter?: string }> = [];
+	export let pieces: Array<{ id: string; hex: string; team: string; role?: string; label?: string; color?: string; token?: string; sym?: string; hero?: string; letter?: string;
+		attachTo?: string; mine?: 'down' | 'up'; peek?: string }> = [];
+	// holding something to place (minion / token): every tap reports its hex, pieces
+	// aren't picked up, and a hex with a hero on it is still a valid target
+	export let placing = false;
 	export let onMovePiece: ((id: string, hex: string) => void) | null = null;
 	export let onSelect: (id: string | null) => void = () => {};
 	// tap on an empty hex (no piece under the cursor, nothing carried) — used by
@@ -63,7 +67,7 @@
 	// fan out pieces that share a hex so each stays individually grabbable
 	$: pieceOffset = (() => {
 		const groups: Record<string, string[]> = {};
-		for (const p of pieces) (groups[p.hex] ??= []).push(p.id);
+		for (const p of pieces) if (!p.attachTo) (groups[p.hex] ??= []).push(p.id);
 		const off: Record<string, { x: number; y: number }> = {};
 		for (const hex in groups) {
 			const ids = groups[hex], n = ids.length;
@@ -226,7 +230,7 @@
 		}
 		// derive the pressed token fresh from the hit target — never a stale id
 		const el = (e.target as Element)?.closest?.('[data-piece]');
-		pressId = onMovePiece && el ? el.getAttribute('data-piece') : null;
+		pressId = onMovePiece && el && !placing ? el.getAttribute('data-piece') : null;
 		panning = true; moved = false; dragId = null;
 		p0 = toUser(e.clientX, e.clientY); pan0 = { x: panX, y: panY };
 		downC = { x: e.clientX, y: e.clientY };
@@ -272,8 +276,15 @@
 		}
 		panning = false; pressId = null;
 	}
+	$: if (placing) selected = null;
 	function handleTap(e: PointerEvent) {
 		if (!interactive) return;
+		if (placing) { // drop whatever is held on the nearest hex
+			const pt = toChild(e.clientX, e.clientY);
+			const hex = nearestHex(pt.x, pt.y);
+			if (hex && onHex) onHex(hex);
+			return;
+		}
 		if (pressId != null && onMovePiece) { selected = selected === pressId ? null : pressId; return; } // pick up / put down
 		if (selected != null && onMovePiece) { // tapped a hex with a token in hand → move it
 			const pt = toChild(e.clientX, e.clientY);
@@ -302,6 +313,15 @@
 		for (const h of hexes) { const d = (h.x - x) ** 2 + (h.y - y) ** 2; if (d < bd) { bd = d; best = h.id; } }
 		return best;
 	}
+	// where a piece is drawn right now (follows the pointer while carried)
+	$: posOf = (id: string, hex: string) => {
+		if (dragId === id) return dragPt;
+		const b = centerOf(hex), o = pieceOffset[id] ?? { x: 0, y: 0 };
+		return { x: b.x + o.x, y: b.y + o.y };
+	};
+	// markers riding on a hero: small badges round its upper-right rim
+	$: attached = pieces.filter((p) => p.attachTo);
+	$: badgeIdx = (() => { const n: Record<string, number> = {}; const out: Record<string, number> = {}; for (const p of attached) { out[p.id] = n[p.attachTo!] = (n[p.attachTo!] ?? -1) + 1; } return out; })();
 	const pieceColor = (t: string) => (t === 'orange' ? '#ea6a1e' : t === 'blue' ? '#2f79e6' : '#9aa4b2');
 </script>
 
@@ -336,7 +356,7 @@
 				<polygon points={poly(h.x, h.y, size)} fill="none" stroke="rgba(6,10,18,.7)" stroke-width="4" stroke-linejoin="round" />
 			{/each}
 
-			{#each pieces as p (p.id)}
+			{#each pieces.filter((q) => !q.attachTo) as p (p.id)}
 				{@const carry = dragId === p.id}
 				{@const base = centerOf(p.hex)}
 				{@const off = pieceOffset[p.id] ?? { x: 0, y: 0 }}
@@ -354,6 +374,31 @@
 						<!-- companion (Turret / Pyro): player-colour disc, its letter, team ring -->
 						<circle cx={c.x} cy={c.y} r={size * 0.6} fill={p.color ?? pieceColor(p.team)} stroke={sel ? '#fde047' : pieceColor(p.team)} stroke-width={size * 0.16} />
 						<text x={c.x} y={c.y} text-anchor="middle" dominant-baseline="central" font-size={size * 0.7} font-weight="900" fill="#0b1220" pointer-events="none">{p.letter}</text>
+					{:else if p.mine === 'down'}
+						<!-- a mine, face down: the owner's colour with a skull & crossbones -->
+						{@const u = size * 0.5}
+						<circle cx={c.x} cy={c.y} r={size * 0.6} fill={p.color ?? pieceColor(p.team)} stroke={sel ? '#fde047' : '#141a26'} stroke-width={size * 0.1} />
+						<g pointer-events="none" stroke="#141a26" stroke-width={u * 0.05}>
+							<line x1={c.x - u * 0.62} y1={c.y - u * 0.18} x2={c.x + u * 0.62} y2={c.y + u * 0.62} stroke-width={u * 0.26} stroke-linecap="round" />
+							<line x1={c.x + u * 0.62} y1={c.y - u * 0.18} x2={c.x - u * 0.62} y2={c.y + u * 0.62} stroke-width={u * 0.26} stroke-linecap="round" />
+							<line x1={c.x - u * 0.62} y1={c.y - u * 0.18} x2={c.x + u * 0.62} y2={c.y + u * 0.62} stroke="#f4ecd8" stroke-width={u * 0.16} stroke-linecap="round" />
+							<line x1={c.x + u * 0.62} y1={c.y - u * 0.18} x2={c.x - u * 0.62} y2={c.y + u * 0.62} stroke="#f4ecd8" stroke-width={u * 0.16} stroke-linecap="round" />
+							{#each [[-1, -1], [1, -1], [-1, 1], [1, 1]] as [sx, sy]}
+								<circle cx={c.x + sx * u * 0.66} cy={c.y + (sy < 0 ? -u * 0.2 : u * 0.64)} r={u * 0.11} fill="#f4ecd8" />
+							{/each}
+							<circle cx={c.x} cy={c.y - u * 0.16} r={u * 0.42} fill="#f4ecd8" />
+							<rect x={c.x - u * 0.24} y={c.y + u * 0.1} width={u * 0.48} height={u * 0.3} rx={u * 0.07} fill="#f4ecd8" />
+							<circle cx={c.x - u * 0.16} cy={c.y - u * 0.14} r={u * 0.12} fill="#141a26" stroke="none" />
+							<circle cx={c.x + u * 0.16} cy={c.y - u * 0.14} r={u * 0.12} fill="#141a26" stroke="none" />
+							<path d="M {c.x} {c.y + u * 0.02} l {-u * 0.06} {u * 0.1} h {u * 0.12} z" fill="#141a26" stroke="none" />
+							<line x1={c.x - u * 0.08} y1={c.y + u * 0.26} x2={c.x - u * 0.08} y2={c.y + u * 0.4} stroke-width={u * 0.04} />
+							<line x1={c.x + u * 0.08} y1={c.y + u * 0.26} x2={c.x + u * 0.08} y2={c.y + u * 0.4} stroke-width={u * 0.04} />
+						</g>
+						{#if p.peek}
+							<!-- only its owner sees which mine this is -->
+							<circle cx={c.x + size * 0.46} cy={c.y + size * 0.42} r={size * 0.2} fill="#0b1220" stroke="#f4ecd8" stroke-width={size * 0.04} pointer-events="none" />
+							<text x={c.x + size * 0.46} y={c.y + size * 0.43} text-anchor="middle" dominant-baseline="central" font-size={size * 0.24} fill="#f4ecd8" pointer-events="none">{p.peek}</text>
+						{/if}
 					{:else if p.token}
 						<circle cx={c.x} cy={c.y} r={size * 0.6} fill="rgba(9,13,22,.82)" stroke={sel ? '#fde047' : pieceColor(p.team)} stroke-width={size * 0.12} />
 						{#if tokenImg(p.token) ?? p.sym}
@@ -381,6 +426,24 @@
 						{/if}
 					{/if}
 				</g>
+			{/each}
+
+			{#each attached as p (p.id)}
+				{@const host = pieces.find((q) => q.id === p.attachTo)}
+				{#if host}
+					{@const hc = posOf(host.id, host.hex)}
+					{@const ang = ((-45 - rotEff) * Math.PI) / 180 + (badgeIdx[p.id] ?? 0) * 0.62} <!-- upper-right on screen, whatever the board's rotation -->
+					{@const c = dragId === p.id ? dragPt : { x: hc.x + Math.cos(ang) * size * 0.66, y: hc.y + Math.sin(ang) * size * 0.66 }}
+					{@const sel = selected === p.id || dragId === p.id}
+					<!-- a marker riding on a hero (poison / bounty): a small badge that moves with them -->
+					<g class="piece" class:selectable={!!onMovePiece} class:selected={sel} role="button" tabindex="-1" data-piece={p.id} aria-label="{p.token ?? 'marker'} on a hero"
+						transform={rotEff ? `rotate(${-rotEff} ${c.x} ${c.y})` : undefined}>
+						<circle cx={c.x} cy={c.y} r={size * 0.3} fill="rgba(9,13,22,.9)" stroke={sel ? '#fde047' : '#f4ecd8'} stroke-width={size * 0.06} />
+						{#if tokenImg(p.token)}
+							<image href={tokenImg(p.token)} x={c.x - size * 0.27} y={c.y - size * 0.27} width={size * 0.54} height={size * 0.54} preserveAspectRatio="xMidYMid meet" pointer-events="none" />
+						{/if}
+					</g>
+				{/if}
 			{/each}
 		</g>
 	</svg>
