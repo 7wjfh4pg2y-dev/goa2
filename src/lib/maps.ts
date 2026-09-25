@@ -42,18 +42,38 @@ const nonEmpty = (m?: GameMap) => !!(m?.cells && Object.keys(m.cells).length)
 
 /**
  * Maps a player can choose from, labelled by the name given in the editor.
- * Order: the live working map, then named saved maps, then bundled maps —
- * with names de-duplicated so an editor map hides a bundled one of the same
- * name (bundled maps are just a fallback for a browser with no editor map).
+ * Bundled maps come FIRST and are the default, so every machine hosts the same
+ * official board. A Map Editor copy (working or saved) with the same name as a
+ * bundled map only appears if it actually differs, labelled "(edited)" —
+ * otherwise a stale local copy used to silently replace the bundled map, giving
+ * different minions/rotations depending on whose browser hosted.
  */
 export function availableMaps(): MapChoice[] {
 	const list: MapChoice[] = []
 	const used = new Set<string>()
+	const official = new Map<string, string>() // name key -> serialized bundled board
+	const keyOf = (label: string) => label.trim().toLowerCase()
+	const board = (m: GameMap) => JSON.stringify([m.cells, m.meta ?? {}, m.battleZone ?? []])
 	const add = (id: string, label: string, data: GameMap) => {
-		const key = label.trim().toLowerCase()
-		if (!key || used.has(key)) return
+		let key = keyOf(label)
+		if (!key) return
+		if (official.has(key)) {
+			if (official.get(key) === board(data)) return // identical to the bundled map
+			label = `${label.trim()} (edited)`
+			key = keyOf(label)
+		}
+		if (used.has(key)) return
 		used.add(key)
 		list.push({ id, label: label.trim(), data })
+	}
+
+	// bundled maps first — the shared, official boards
+	for (const path in bundled) {
+		const data = bundled[path].default
+		const id = fileKey(path)
+		const label = data?.name ?? titleCase(id)
+		add(id, label, data)
+		if (nonEmpty(data)) official.set(keyOf(label), board(data))
 	}
 
 	// live working map (autosaved in this browser)
@@ -79,13 +99,6 @@ export function availableMaps(): MapChoice[] {
 		}
 	} catch {
 		/* ignore */
-	}
-
-	// bundled maps — only those not already covered by an editor map name
-	for (const path in bundled) {
-		const data = bundled[path].default
-		const id = fileKey(path)
-		add(id, data?.name ?? titleCase(id), data)
 	}
 
 	return list
