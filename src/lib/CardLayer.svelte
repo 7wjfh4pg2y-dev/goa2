@@ -13,6 +13,7 @@
 	import PlayerIcon from '$lib/PlayerIcon.svelte';
 	import { heroCards, heroName, heroTitle, heroStat } from '$lib/cards/deck';
 	import { heroAvatar, heroLogo, heroSplash } from '$lib/heroes';
+	import { HERO_KIT, COMPANIONS, MINES, statusFrom, toggleStatusMarker, tokenName, type ArmToken } from '$lib/tokens';
 	import { PASS, statDeltas, levelOf, ultimateIndex, type PlayerCardState, type StatKey, type CardZone } from '$lib/cards/cardstate';
 
 	export let session: MatchSession;
@@ -21,6 +22,7 @@
 	export let clientId: string;
 	export let onAdvanceTurn: () => void = () => {};
 	export let previewId: string | null = null; // set by the board to open a player's overlay
+	export let onArmToken: (t: ArmToken) => void = () => {}; // pick a token off the shelf → place it on a hex
 
 	const ORANGE = '#ef7d22';
 	const BLUE = '#2f7fe6';
@@ -55,18 +57,21 @@
 	const TRASH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M9 7V4.5h6V7"/><path d="M6 7l1 13h10l1-13"/><path d="M10 11v6M14 11v6"/></svg>';
 
 	// ── HUD status markers (Tigerclaw poison, Bain bounty) ─────────────────────
-	$: statusMap = $ms.status ?? {};
+	// DERIVED from the board: a poison / bounty marker attached to a hero = that
+	// player has the status. Moving the marker off, deleting it or the round ending
+	// clears it. There is ONE of each marker.
+	$: statusMap = statusFrom($ms.pieces ?? {});
 	const EMPTY_STATUS = { poison: 0, bounty: 0 };
-	// there is ONE poison and ONE bounty marker: applying it to a player moves it
-	// off whoever had it; clicking it again removes it
+	// toggled from a player board: attach the marker to that hero (or take it off)
 	function toggleStatus(pid: string, key: 'poison' | 'bounty') {
-		const cur = $ms.status ?? {};
-		const on = !cur[pid]?.[key];
-		const next: Record<string, { poison: number; bounty: number }> = {};
-		for (const id in cur) next[id] = { ...cur[id], [key]: 0 };
-		next[pid] = { ...(next[pid] ?? EMPTY_STATUS), [key]: on ? 1 : 0 };
+		const on = !statusMap[pid]?.[key];
+		// the marker belongs to whoever plays Tigerclaw (poison) / Bain (bounty), if anyone
+		const ownerHero = key === 'poison' ? 'tigerclaw' : 'bain';
+		const owner = Object.keys(cards).find((id) => cards[id].hero === ownerHero) ?? clientId;
+		const ownerP = seated.find((p) => p.id === owner);
+		const team = (ownerP ? teamForSeat(ownerP.seat, $ms.seats) : null) ?? 'neutral';
 		const who = seated.find((p) => p.id === pid)?.name ?? 'A player';
-		session.act(on ? `${who} is marked with ${key}` : `${who}'s ${key} marker removed`, { status: next });
+		session.act(on ? `${who} is marked with ${key}` : `${who}'s ${key} marker removed`, { pieces: toggleStatusMarker($ms.pieces ?? {}, key, pid, owner, team) });
 	}
 
 	$: iAmHost = $ms.host === clientId;
@@ -274,43 +279,25 @@
 	function skipCurtain() { curtainTimers.forEach(clearTimeout); curtain = false; }
 	onDestroy(() => { curtainTimers.forEach(clearTimeout); if (roundTimer) clearTimeout(roundTimer); if (countTick) clearInterval(countTick); if (lowerTimer) clearTimeout(lowerTimer); if (discTimer) clearTimeout(discTimer); });
 
-	// ── token / marker tray (heroes with the TOKENS trait) ────────────────────
-	const TOKENS = ['token_barrier', 'token_blast', 'token_dud', 'token_familiar', 'token_glitch', 'token_grenade', 'token_ice', 'token_illusion', 'token_magma', 'token_rock', 'token_smoke_bomb', 'token_totem', 'token_tree', 'token_zombie'];
-	// shared circular markers any hero may need (e.g. Tigerclaw poison, Bain bounty, Snorri runes)
-	const MARKERS = ['marker_poison', 'marker_bounty', 'rune_anvil_marker', 'rune_axe_marker', 'rune_bird_marker', 'rune_horn_marker'];
+	// ── token / marker shelf: each hero's own kit (see tokens.ts) ──────────────
+	// Pick one → it rides under the cursor → tap a hex to place it (GameView).
 	let tokenDrawer = false;
-	$: heroEmblem = mine ? icon(`trait_tokens_${mine.hero}`) : undefined; // set ⇒ this hero has signature-token art
-	// heroes that deploy a named companion figure (signature summon)
-	const COMPANIONS: Record<string, string> = { widget: 'Pyro', trinkets: 'Turret' };
-	$: myCompanion = mine ? COMPANIONS[mine.hero] : undefined;
-	// everything placeable, in one shelf: companion / signature token first, then
-	// the hero's tokens (tokens heroes), then the shared markers
-	type ShelfItem = { key: string; img: string | undefined; letter?: string; title: string; cls: string; label: string; place: () => void };
-	$: shelf = [
-		...(myCompanion
-			? [{ key: 'comp', img: undefined, letter: myCompanion[0], title: `Deploy ${myCompanion}`, cls: 'emblem comp', label: myCompanion, place: placeCompanion }]
-			: heroEmblem && mine
-				? [{ key: 'sig', img: heroEmblem, title: 'Signature token', cls: 'emblem', label: '', place: () => placeToken(`trait_tokens_${mine!.hero}`) }]
-				: []),
-		...(heroEmblem ? TOKENS.map((tk) => ({ key: tk, img: icon(tk), title: tk.replace('token_', '').replace('_', ' '), cls: '', label: '', place: () => placeToken(tk) })) : []),
-		...MARKERS.map((mk) => ({ key: mk, img: icon(mk), title: mk.replace('marker_', '').replace('rune_', 'rune ').replace('_marker', '').replace('_', ' '), cls: 'marker', label: '', place: () => placeToken(mk) }))
-	] as ShelfItem[];
+	$: myKit = mine ? HERO_KIT[mine.hero] ?? [] : [];
+	type ShelfItem = { key: string; img: string | undefined; letter?: string; title: string; cls: string; label: string; arm: ArmToken };
 	$: mySeat = seated.find((p) => p.id === clientId)?.seat ?? -1;
 	$: myTeam = mySeat >= 0 ? teamForSeat(mySeat, $ms.seats) : 'orange';
+	$: shelf = myKit.map((tk): ShelfItem => {
+		if (tk === 'companion') {
+			const name = COMPANIONS[mine!.hero] ?? 'Companion';
+			return { key: tk, img: undefined, letter: name[0], title: `Deploy ${name}`, cls: 'emblem comp', label: name,
+				arm: { token: 'companion', letter: name[0], label: name, color: myColor, team: myTeam ?? 'neutral', owner: clientId } };
+		}
+		const nm = tokenName(tk);
+		return { key: tk, img: icon(tk), title: MINES.has(tk) ? `${nm} (placed face down)` : nm, cls: tk.startsWith('token_') ? '' : 'marker', label: '',
+			arm: { token: tk, img: icon(tk), color: myColor, team: myTeam ?? 'neutral', owner: clientId } };
+	});
 	$: myTokenCount = Object.values($ms.pieces ?? {}).filter((p) => p.kind === 'token' && p.owner === clientId).length;
-	function placeToken(name: string) {
-		const myHex = $ms.pieces?.[clientId]?.hex;
-		if (!myHex) return;
-		const id = `tok_${clientId}_${Date.now().toString(36)}`;
-		session.act(`placed a token`, { pieces: { ...$ms.pieces, [id]: { id, hex: myHex, team: myTeam ?? 'neutral', kind: 'token' as const, token: name, owner: clientId } } });
-	}
-	function placeCompanion() {
-		const myHex = $ms.pieces?.[clientId]?.hex;
-		if (!myHex || !mine || !myCompanion) return;
-		const id = `comp_${clientId}_${Date.now().toString(36)}`;
-		// drawn on the board as a lettered disc: your colour, its initial, team ring
-		session.act(`deployed ${myCompanion}`, { pieces: { ...$ms.pieces, [id]: { id, hex: myHex, team: myTeam ?? 'neutral', kind: 'token' as const, token: 'companion', owner: clientId, label: myCompanion, color: myColor } } });
-	}
+	function armToken(it: ShelfItem) { tokenDrawer = false; onArmToken(it.arm); }
 	function clearTokens() {
 		const next = { ...$ms.pieces };
 		for (const id in next) if (next[id].kind === 'token' && next[id].owner === clientId) delete next[id];
@@ -718,12 +705,14 @@
 				<button class="dself" on:click={() => (overlayId = clientId)} title="Open your board">
 					<PlayerIcon hero={mine.hero} team={myTeam ?? 'orange'} color={colorHex(myColor)} size="2.4rem" ult={mine.ultimate}>
 						{#if mine.ultimate}<span class="crown">♛</span>{/if}
-						<!-- status markers ride on the portrait, so they take no room in the row -->
-						{#if mst.poison}<span class="icmk pois" title="Poison"><img src={icon('marker_poison')} alt="" /></span>{/if}
-						{#if mst.bounty}<span class="icmk bnty" title="Bounty"><img src={icon('marker_bounty')} alt="" /></span>{/if}
 					</PlayerIcon>
 					<span class="dsmid">
 						<span class="dsname"><span class="dsnm">{myName}</span><em>Lv {levelOf(mine)}</em>
+							<!-- status markers on you: just left of the initiative (the name gives way, nothing else moves) -->
+							<span class="dsmk">
+								{#if mst.poison}<img class="pois" src={icon('marker_poison')} alt="Poison" title="Poisoned" />{/if}
+								{#if mst.bounty}<img class="bnty" src={icon('marker_bounty')} alt="Bounty" title="Bounty on you" />{/if}
+							</span>
 							<span class="initb" class:off={myInit == null} title="Your initiative this turn (card + upgrades)"><img src={icon('item_initiative')} alt="" /><b>{myInit ?? '–'}</b></span>
 						</span>
 						<span class="dshero">{heroName(mine.hero)}</span>
@@ -740,8 +729,8 @@
 
 				<!-- tokens and markers: one shelf; the button shows its first item -->
 				<div class="tokwrap">
-					<button class="tokbtn" class:on={tokenDrawer} on:click={() => (tokenDrawer = !tokenDrawer)} title="Tokens and Markers">
-						{#if shelf[0]?.letter}<span class="ltrdisc" style="--pc:{colorHex(myColor)}">{shelf[0].letter}</span>{:else}<img src={shelf[0]?.img} alt="" />{/if}
+					<button class="tokbtn" class:on={tokenDrawer} disabled={!shelf.length} on:click={() => (tokenDrawer = !tokenDrawer)} title={shelf.length ? 'Tokens and Markers' : 'Your hero has no tokens or markers'}>
+						{#if !shelf.length}<span class="tokglyph">◈</span>{:else if shelf[0].letter}<span class="ltrdisc" style="--pc:{colorHex(myColor)}">{shelf[0].letter}</span>{:else}<img src={shelf[0].img} alt="" />{/if}
 						{#if myTokenCount}<span class="tokct">{myTokenCount}</span>{/if}
 					</button>
 					{#if tokenDrawer}
@@ -749,13 +738,13 @@
 							<div class="toklbl">Tokens and Markers</div>
 							<div class="tokgrid">
 								{#each shelf as it (it.key)}
-									<button class="tok {it.cls}" on:click={it.place} title={it.title}>
+									<button class="tok {it.cls}" on:click={() => armToken(it)} title={it.title}>
 										{#if it.letter}<span class="ltrdisc" style="--pc:{colorHex(myColor)}">{it.letter}</span>{:else}<img src={it.img} alt="" />{/if}{#if it.label}<span class="toktag">{it.label}</span>{/if}
 									</button>
 								{/each}
 							</div>
 							<div class="tokfoot">
-								<span class="tokhint">Places on your hero — drag it where you need.</span>
+								<span class="tokhint">Pick one, then tap a hex to place it.</span>
 								{#if myTokenCount}<button class="act ghost sm" on:click={clearTokens}>Clear mine</button>{/if}
 							</div>
 						</div>
@@ -1224,10 +1213,14 @@
 	.dsname .initb b { font-size: .82rem; min-width: 1.15em; text-align: center; }
 	.dshero { font-size: .58rem; color: #93a3b8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 	/* poison / bounty badges on the portrait's lower corners */
-	.icmk { position: absolute; z-index: 2; bottom: -5px; width: .95rem; height: .95rem; border-radius: 50%; display: grid; place-items: center; background: #0b101a; }
-	.icmk img { width: 100%; height: 100%; object-fit: contain; border-radius: 50%; }
-	.icmk.pois { left: -5px; box-shadow: 0 0 0 1.5px rgba(65,174,89,.85); }
-	.icmk.bnty { right: -5px; box-shadow: 0 0 0 1.5px rgba(232,182,74,.9); }
+	/* status markers on the name line, pinned just left of the initiative */
+	.dsmk { flex: none; margin-left: auto; align-self: center; display: flex; gap: 2px; }
+	.dsmk img { width: 15px; height: 15px; object-fit: contain; border-radius: 50%; }
+	.dsmk img.pois { box-shadow: 0 0 0 1.5px rgba(65,174,89,.85); }
+	.dsmk img.bnty { box-shadow: 0 0 0 1.5px rgba(232,182,74,.9); }
+	.dsname .initb { margin-left: 0; }
+	.tokbtn:disabled { cursor: not-allowed; opacity: .45; }
+	.tokglyph { width: 1.4rem; height: 1.4rem; display: grid; place-items: center; font-size: 1.1rem; line-height: 1; color: #d8b56a; }
 	.dstats { display: grid; grid-template-columns: repeat(6, 1fr); gap: 3px; margin-top: 3px; }
 
 	/* hand floats above the dashboard, with a clear gap */

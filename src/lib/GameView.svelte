@@ -5,6 +5,7 @@
 	import CardLayer from '$lib/CardLayer.svelte';
 	import { heroById, heroLogo } from '$lib/heroes';
 	import { zoneName } from '$lib/zones';
+	import { placeToken, moveToken, effectiveHex, MINES, tokenName, type ArmToken } from '$lib/tokens';
 	import {
 		colorHex, movePiece, prevTurn, teamForSeat, throneHex,
 		type MatchState, type Player, type MatchSession, type Team, type ConnStatus
@@ -99,7 +100,12 @@
 	function resolveSeat(id: string, ok: boolean) { if (iAmHost) session.resolveSeat(id, ok); }
 
 	$: boardPieces = Object.values($ms.pieces).map((p) => ({
-		id: p.id, hex: p.hex, team: p.team, role: p.role, token: p.token === 'companion' ? undefined : p.token,
+		id: p.id, hex: effectiveHex($ms.pieces, p), team: p.team, role: p.role, token: p.token === 'companion' ? undefined : p.token,
+		// a marker riding on a hero is drawn as a small badge on that hero
+		attachTo: p.attachedTo && $ms.pieces[p.attachedTo] ? p.attachedTo : undefined,
+		// Min's mines: skull side up until flipped; the owner gets a tiny reminder of which is which
+		mine: p.token && MINES.has(p.token) ? (p.faceDown ? 'down' : 'up') as 'down' | 'up' : undefined,
+		peek: p.faceDown && p.owner === clientId ? (p.token === 'token_blast' ? 'B' : 'D') : undefined,
 		// hero pieces draw the player icon (portrait); companions are letter discs
 		hero: p.hero && !p.token ? p.hero : undefined,
 		letter: p.token === 'companion' ? (p.label?.[0] ?? '?').toUpperCase() : undefined,
@@ -119,6 +125,10 @@
 	function move(id: string, hex: string) {
 		const p = $ms.pieces[id];
 		const label = p?.hero ? heroById(p.hero)?.name ?? 'a piece' : 'a piece';
+		if (p?.kind === 'token') {
+			session.act(`moved ${p.token ? tokenName(p.token) : 'a token'} → ${zoneName($ms.map, hex)}`, { pieces: moveToken($ms.pieces, id, hex) });
+			return;
+		}
 		session.act(`moved ${label} → ${zoneName($ms.map, hex)}`, movePiece($ms, id, hex));
 	}
 
@@ -132,17 +142,32 @@
 		pendingSpawn = { team, role };
 		spawnTeam = null;
 	}
-	// board hex tapped: if a spawn is armed, place the minion right there
-	// while a spawn is armed, the minion token rides under the pointer over the board
+	// a token / marker picked off the dash shelf, waiting for its hex
+	let pendingToken: ArmToken | null = null;
+	function armToken(t: ArmToken) { pendingSpawn = null; pendingToken = t; selPieceId = null; }
+	$: if (pendingSpawn) pendingToken = null;
+	$: placing = !!pendingSpawn || !!pendingToken;
+	// while something is held, it rides under the pointer over the board (the cursor)
 	const minionTokenArt = import.meta.glob('./images/minion_tokens/*.png', { eager: true, import: 'default' }) as Record<string, string>;
 	let ghost: { x: number; y: number } | null = null;
 	function trackGhost(e: PointerEvent) {
-		if (!pendingSpawn) return;
+		if (!placing) return;
 		const t = e.target as Element | null;
 		ghost = t?.closest?.('.board-wrap') ? { x: e.clientX, y: e.clientY } : null;
 	}
-	$: if (!pendingSpawn) ghost = null;
+	$: if (!placing) ghost = null;
+	// board hex tapped while holding something: drop it right there
 	function onBoardHex(hex: string) {
+		if (pendingToken) {
+			const t = pendingToken;
+			const id = `tok_${t.owner}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 5)}`;
+			const pieces = placeToken($ms.pieces, { id, hex, team: t.team, token: t.token, owner: t.owner, label: t.label, color: t.color });
+			const what = t.token === 'companion' ? `deployed ${t.label}` : MINES.has(t.token) ? 'laid a mine' : `placed ${tokenName(t.token)}`;
+			const on = pieces[id].attachedTo ? ` on ${heroById($ms.pieces[pieces[id].attachedTo!]?.hero ?? '')?.name ?? 'a hero'}` : ` → ${zoneName($ms.map, hex)}`;
+			session.act(what + on, { pieces });
+			pendingToken = null;
+			return;
+		}
 		if (!pendingSpawn) return;
 		const { team, role } = pendingSpawn;
 		const id = `minion_${team}_${role}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 5)}`;
@@ -156,6 +181,7 @@
 		const pc = id ? $ms.pieces[id] : null;
 		// a hero figure (no minion role, no token) → preview its owner's board;
 		// minions / tokens keep the delete toolbar path.
+		if (placing) return;
 		if (pc && pc.hero && !pc.role && !pc.token) { previewId = pc.id; selPieceId = null; }
 		else { selPieceId = id; }
 	}
@@ -165,10 +191,20 @@
 		if (!selPiece) return;
 		const next = { ...$ms.pieces };
 		delete next[selPiece.id];
-		const what = selPiece.role ? `${selPiece.team} ${selPiece.role} minion` : (selPiece.token ? 'a token' : 'a piece');
+		const what = selPiece.role ? `${selPiece.team} ${selPiece.role} minion` : (selPiece.token ? (selPiece.faceDown ? 'a mine' : tokenName(selPiece.token)) : 'a piece');
 		session.act(`removed ${what}`, { pieces: next });
 		confirmDelete = false; selPieceId = null;
 	}
+	// Min's mines: flip to reveal Blast / Dud (or back face down)
+	function flipMine() {
+		if (!selPiece) return;
+		const up = !!selPiece.faceDown;
+		session.act(up ? `flipped a mine — ${selPiece.token === 'token_blast' ? 'Blast!' : 'Dud'}` : 'turned a mine face down', { pieces: { ...$ms.pieces, [selPiece.id]: { ...selPiece, faceDown: !up } } });
+	}
+	$: selLabel = !selPiece ? '' : selPiece.role ? `${selPiece.team} ${selPiece.role} minion`
+		: selPiece.token === 'companion' ? (selPiece.label ?? 'companion')
+		: selPiece.token && MINES.has(selPiece.token) ? (selPiece.faceDown ? 'mine (face down)' : tokenName(selPiece.token))
+		: selPiece.token ? tokenName(selPiece.token) : 'token';
 	function stepTurn(dir: 1 | -1) {
 		// forward = the real card-flow advance (host-routed: locks played cards into
 		// their slots, refreshes hands after turn 4); backward = a manual correction
@@ -204,21 +240,36 @@
 	});
 </script>
 
-<svelte:window on:keydown={(e) => { if (e.key !== 'Escape') return; if (confirmLeave) confirmLeave = false; else pendingSpawn = null; }} on:pointermove={trackGhost} on:pointerdown={trackGhost} />
+<svelte:window on:keydown={(e) => { if (e.key !== 'Escape') return; if (confirmLeave) confirmLeave = false; else { pendingSpawn = null; pendingToken = null; } }} on:pointermove={trackGhost} on:pointerdown={trackGhost} />
 
-<div class="gamewrap" class:spawning={!!pendingSpawn}>
+<div class="gamewrap" class:spawning={placing}>
 	{#if pendingSpawn && ghost}
 		<img class="spawnghost" src={minionTokenArt[`./images/minion_tokens/${pendingSpawn.team}_${pendingSpawn.role}.png`]} alt="" style="left:{ghost.x}px; top:{ghost.y}px" />
+	{:else if pendingToken && ghost}
+		{#if pendingToken.letter}
+			<span class="spawnghost ltr" style="left:{ghost.x}px; top:{ghost.y}px; --pc:{colorHex(pendingToken.color ?? 'white')}; --tc:{pendingToken.team === 'blue' ? '#2f7fe6' : '#ef7d22'}">{pendingToken.letter}</span>
+		{:else}
+			<img class="spawnghost tok" src={pendingToken.img} alt="" style="left:{ghost.x}px; top:{ghost.y}px" />
+		{/if}
+	{/if}
+	{#if pendingToken}
+		<div class="placehint">
+			<span>Tap a hex to place {pendingToken.token === 'companion' ? pendingToken.label : tokenName(pendingToken.token)}{MINES.has(pendingToken.token) ? ' (face down)' : ''}</span>
+			<button class="spcancel" on:click={() => (pendingToken = null)}>Cancel</button>
+		</div>
 	{/if}
 	<div class="ocean"></div>
-	<BoardCanvas bind:this={board} map={$ms.map ?? {}} rotation={orientation} interactive={true} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} />
+	<BoardCanvas bind:this={board} map={$ms.map ?? {}} rotation={orientation} interactive={true} {placing} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} />
 
-	<CardLayer {session} {ms} {players} {clientId} onAdvanceTurn={() => stepTurn(1)} bind:previewId />
+	<CardLayer {session} {ms} {players} {clientId} onAdvanceTurn={() => stepTurn(1)} onArmToken={armToken} bind:previewId />
 
 	<!-- selected minion/token: offer delete (heroes aren't deletable) -->
 	{#if selPiece && (selPiece.role || selPiece.token)}
 		<div class="pietool">
-			<span class="pietxt">{selPiece.role ? `${selPiece.team} ${selPiece.role} minion` : 'token'}</span>
+			<span class="pietxt">{selLabel}</span>
+			{#if selPiece.token && MINES.has(selPiece.token)}
+				<button class="pieflip" on:click={flipMine}>{selPiece.faceDown ? 'Flip — reveal' : 'Flip face down'}</button>
+			{/if}
 			<button class="piedel" on:click={() => (confirmDelete = true)}>Delete</button>
 		</div>
 	{/if}
@@ -227,7 +278,7 @@
 		<div class="modal-scrim" on:click={() => (confirmDelete = false)} on:keydown={() => {}} role="presentation">
 			<div class="modal" on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" tabindex="-1">
 				<h3>Delete this {selPiece.role ? 'minion' : 'token'}?</h3>
-				<p>This removes the {selPiece.role ? `${selPiece.team} ${selPiece.role} minion` : 'token'} from the board. This can't be undone.</p>
+				<p>This removes the {selLabel} from the board.</p>
 				<div class="mrow">
 					<button class="mcancel" on:click={() => (confirmDelete = false)}>Cancel</button>
 					<button class="mleave" on:click={doDelete}>Delete</button>
@@ -593,6 +644,12 @@
 	.pietool { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); z-index: 8; display: flex; align-items: center; gap: 10px;
 		padding: 6px 8px 6px 12px; border-radius: 999px; background: rgba(9, 13, 22, 0.9); backdrop-filter: blur(8px);
 		border: 1px solid rgba(255, 255, 255, 0.18); box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5); }
+	.pieflip { border: 1px solid rgba(240, 200, 120, 0.55); background: rgba(199, 154, 78, 0.24); color: #f6e3b4; border-radius: 999px; padding: 4px 12px; font-weight: 700; cursor: pointer; font-size: 0.76rem; }
+	.pieflip:hover { background: rgba(199, 154, 78, 0.4); }
+	.spawnghost.tok { width: 40px; height: 40px; border-radius: 50%; background: rgba(9,13,22,.85); box-shadow: 0 0 0 3px rgba(240,200,120,.7), 0 6px 12px rgba(0,0,0,.6); padding: 3px; box-sizing: border-box; }
+	.spawnghost.ltr { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: var(--pc); border: 3px solid var(--tc); color: #0b1220; font-weight: 900; font-size: 18px; box-sizing: border-box; }
+	.placehint { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); z-index: 9; display: flex; align-items: center; gap: 10px; padding: 6px 8px 6px 14px; border-radius: 999px;
+		background: rgba(11, 16, 26, 0.9); border: 1px solid rgba(240, 200, 120, 0.5); color: #f0dcae; font-size: 0.8rem; box-shadow: 0 8px 24px rgba(0,0,0,.5); }
 	.pietxt { font-size: 0.78rem; font-weight: 700; color: #e5e7eb; text-transform: capitalize; }
 	.piedel { border: 1px solid rgba(239, 68, 68, 0.5); background: rgba(220, 60, 60, 0.28); color: #ffb4b4; border-radius: 999px; padding: 4px 12px; font-weight: 700; cursor: pointer; font-size: 0.76rem; }
 	.piedel:hover { background: rgba(220, 60, 60, 0.45); }
