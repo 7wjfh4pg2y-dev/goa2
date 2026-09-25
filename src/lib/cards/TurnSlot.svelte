@@ -21,11 +21,13 @@
 </script>
 
 {#if played != null}
-	<button class="slot static" class:btn={examinable} on:click on:keydown disabled={!examinable}>
+	<!-- not examinable ⇒ clicks pass through to the container (a disabled button
+	     would swallow them, so e.g. a player row couldn't open their board) -->
+	<button class="slot static" class:btn={examinable} class:thru={!examinable} tabindex={examinable ? 0 : -1} on:click on:keydown>
 		<Card {heroId} card={heroCards(heroId)[played]} />
 	</button>
 {:else if showFlip}
-	<button class="slot" class:btn={examinable && revealed} on:click on:keydown disabled={!(examinable && revealed)}>
+	<button class="slot" class:btn={examinable && revealed} class:thru={!(examinable && revealed)} tabindex={examinable && revealed ? 0 : -1} on:click on:keydown>
 		<div class="flip" class:up={revealed}>
 			<div class="face back">
 				<span class="band top"></span>
@@ -44,6 +46,7 @@
 <style>
 	.slot { width: 100%; aspect-ratio: 3 / 4; border: none; padding: 0; background: none; display: block; perspective: 700px; }
 	.slot.btn { cursor: zoom-in; }
+	.slot.thru { pointer-events: none; }
 	.static :global(canvas) { display: block; width: 100%; border-radius: 6%; box-shadow: 0 3px 8px rgba(0, 0, 0, 0.5); }
 	.slot.blank { display: grid; place-items: center; border: 1px dashed rgba(255, 255, 255, 0.14); border-radius: 5px;
 		background: rgba(255, 255, 255, 0.02); color: #3d4a5e; font-size: 0.62rem; font-weight: 700; }
