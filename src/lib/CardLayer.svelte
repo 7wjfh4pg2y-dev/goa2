@@ -209,7 +209,7 @@
 		];
 	}
 	function skipCurtain() { curtainTimers.forEach(clearTimeout); curtain = false; }
-	onDestroy(() => { curtainTimers.forEach(clearTimeout); if (roundTimer) clearTimeout(roundTimer); if (countTick) clearInterval(countTick); });
+	onDestroy(() => { curtainTimers.forEach(clearTimeout); if (roundTimer) clearTimeout(roundTimer); if (countTick) clearInterval(countTick); if (lowerTimer) clearTimeout(lowerTimer); });
 
 	// ── token / marker tray (heroes with the TOKENS trait) ────────────────────
 	const TOKENS = ['token_barrier', 'token_blast', 'token_dud', 'token_familiar', 'token_glitch', 'token_grenade', 'token_ice', 'token_illusion', 'token_magma', 'token_rock', 'token_smoke_bomb', 'token_totem', 'token_tree', 'token_zombie'];
@@ -250,7 +250,45 @@
 		const t = n === 1 ? 0 : k / (n - 1) - 0.5;
 		return { rot: t * 11, y: Math.abs(t) * Math.abs(t) * 34 };
 	};
+
+	// ── hand display prefs (per viewer, remembered in this browser) ────────────
+	// autoRetract: the hand tucks behind the dash leaving the card tips; hovering
+	// (mouse) or a first tap (touch) raises it. spreadHand: lay cards side by side
+	// with no overlap instead of fanning them.
+	const PREF_RETRACT = 'goa2-hand-retract';
+	const PREF_SPREAD = 'goa2-hand-spread';
+	const readPref = (k: string, dflt: boolean) => { try { const v = localStorage.getItem(k); return v == null ? dflt : v === '1'; } catch { return dflt; } };
+	const writePref = (k: string, v: boolean) => { try { localStorage.setItem(k, v ? '1' : '0'); } catch { /* ignore */ } };
+	let autoRetract = readPref(PREF_RETRACT, true);
+	let spreadHand = readPref(PREF_SPREAD, false);
+	function toggleRetract() { autoRetract = !autoRetract; writePref(PREF_RETRACT, autoRetract); handUp = false; }
+	function toggleSpread() { spreadHand = !spreadHand; writePref(PREF_SPREAD, spreadHand); }
+	let handUp = false;
+	let lowerTimer: ReturnType<typeof setTimeout> | null = null;
+	function raiseHand(e: PointerEvent) {
+		if (e.pointerType !== 'mouse') return;
+		if (lowerTimer) { clearTimeout(lowerTimer); lowerTimer = null; }
+		handUp = true;
+	}
+	// small delay so sliding between overlapping cards doesn't drop the hand
+	function lowerHandSoon(e: PointerEvent) {
+		if (e.pointerType !== 'mouse') return;
+		if (lowerTimer) clearTimeout(lowerTimer);
+		lowerTimer = setTimeout(() => { handUp = false; lowerTimer = null; }, 350);
+	}
+	// touch: the first tap on a tucked hand raises it; the next tap previews
+	function handCardClick(idx: number) {
+		if (autoRetract && !handUp) { handUp = true; return; }
+		preview(idx);
+	}
+	// tapping anywhere outside the hand tucks it away again
+	function onWindowDown(e: PointerEvent) {
+		if (handUp && !(e.target as Element | null)?.closest?.('.tray')) handUp = false;
+	}
+	$: retracted = autoRetract && !handUp;
 </script>
+
+<svelte:window on:pointerdown={onWindowDown} />
 
 {#if $ms.cards}
 	<!-- ───────── right side: the OTHER players ───────── -->
@@ -548,10 +586,11 @@
 	<!-- ───────── bottom: hand floats ABOVE the dashboard ───────── -->
 	{#if mine}
 		{@const mst = statusMap[clientId] ?? EMPTY_STATUS}
-		<div class="tray">
+		<div class="tray" class:retracted class:spread={spreadHand}>
 			{#each mine.hand as idx, k (idx)}
 				{@const f = fan(k, mine.hand.length)}
-				<button class="hc" style="--rot:{f.rot}deg; --y:{f.y}px" on:click={() => preview(idx)}>
+				<button class="hc" style="--rot:{spreadHand ? 0 : f.rot}deg; --y:{spreadHand ? 0 : f.y}px"
+					on:click={() => handCardClick(idx)} on:pointerenter={raiseHand} on:pointerleave={lowerHandSoon}>
 					<Card heroId={mine.hero} card={heroCards(mine.hero)[idx]} />
 				</button>
 			{/each}
@@ -617,6 +656,31 @@
 						</div>
 					</div>
 				{/if}
+			</div>
+
+			<!-- hand display toggles: auto-hide (tuck behind the dash) + fan / spread -->
+			<div class="handopts">
+				<button class="hopt" class:on={autoRetract} on:click={toggleRetract} aria-pressed={autoRetract} aria-label="Auto-hide hand"
+					title={autoRetract ? 'Auto-hide hand: ON — hover or tap the card tips to raise it' : 'Auto-hide hand: OFF — cards stay up'}>
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true">
+						<rect x="4.5" y="2.5" width="8" height="11" rx="1.4" fill="rgba(9,13,22,.9)" transform="rotate(-9 8.5 8)" />
+						<rect x="11.5" y="2.5" width="8" height="11" rx="1.4" fill="rgba(9,13,22,.9)" transform="rotate(9 15.5 8)" />
+						<path d="M2.5 15.5h19" />
+						{#if autoRetract}<path d="M9 18.5l3 3 3-3" />{:else}<path d="M9 21.5l3-3 3 3" />{/if}
+					</svg>
+				</button>
+				<button class="hopt" class:on={spreadHand} on:click={toggleSpread} aria-pressed={spreadHand} aria-label="Hand layout"
+					title={spreadHand ? 'Hand layout: spread out — click to fan' : 'Hand layout: fanned — click to spread out'}>
+					<svg viewBox="0 0 24 24" fill="rgba(9,13,22,.9)" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true">
+						{#if spreadHand}
+							<rect x="1.5" y="6" width="6.2" height="10" rx="1.2" /><rect x="8.9" y="6" width="6.2" height="10" rx="1.2" /><rect x="16.3" y="6" width="6.2" height="10" rx="1.2" />
+						{:else}
+							<rect x="8.5" y="4" width="7" height="11" rx="1.3" transform="rotate(-22 12 21)" />
+							<rect x="8.5" y="4" width="7" height="11" rx="1.3" transform="rotate(22 12 21)" />
+							<rect x="8.5" y="4" width="7" height="11" rx="1.3" />
+						{/if}
+					</svg>
+				</button>
 			</div>
 
 			<!-- centre: your deck (face-down stack) + contextual buttons -->
@@ -977,10 +1041,29 @@
 	.dstats { display: grid; grid-template-columns: repeat(6, 1.7rem); gap: 3px; }
 
 	/* hand floats above the dashboard, with a clear gap */
-	.tray { position: absolute; left: 224px; right: 260px; bottom: 118px; z-index: 10; display: flex; align-items: flex-end; justify-content: center; pointer-events: none; }
-	.hc { width: 124px; margin: 0 -14px; padding: 0; background: none; border: none; cursor: pointer; pointer-events: auto; transform-origin: bottom center; transform: translateY(var(--y)) rotate(var(--rot)); transition: transform .16s; }
+	/* --cw = hand card width; scales with the viewport so the fan still fits on a tablet */
+	.tray { --cw: clamp(104px, 10.5vw, 150px); position: absolute; left: 224px; right: 260px; bottom: 118px; z-index: 10; display: flex; align-items: flex-end; justify-content: center; pointer-events: none;
+		clip-path: inset(-800px -800px -60px -800px);
+		transition: transform .3s cubic-bezier(.3,.7,.2,1), clip-path .3s cubic-bezier(.3,.7,.2,1); }
+	/* auto-hide: sink the hand behind the dash (z 11) so only ~30px of card tips peek
+	   out; the clip keeps the sunk part from showing in the gap under the dash */
+	.tray.retracted { transform: translateY(calc(var(--cw) * 1.396 + 6px)); clip-path: inset(-800px -800px calc(var(--cw) * 1.396 - 100px) -800px); }
+	.hc { width: var(--cw); margin: 0 calc(var(--cw) * -0.11); padding: 0; background: none; border: none; cursor: pointer; pointer-events: auto; transform-origin: bottom center; transform: translateY(var(--y)) rotate(var(--rot)); transition: transform .16s; }
 	.hc :global(canvas) { display: block; width: 100%; border-radius: 6%; box-shadow: 0 8px 18px rgba(0,0,0,.55); }
-	.hc:hover { transform: translateY(calc(var(--y) - 30px)) rotate(var(--rot)) scale(1.1); z-index: 5; }
+	/* hovered / tapped card straightens and magnifies so its text is readable */
+	.hc:hover { transform: translateY(calc(var(--y) - 36px)) rotate(0deg) scale(1.45); z-index: 5; }
+	.hc:hover :global(canvas) { box-shadow: 0 14px 34px rgba(0,0,0,.7); }
+	.tray.retracted .hc:hover { transform: translateY(var(--y)) rotate(var(--rot)); } /* the whole hand rises first */
+	/* spread layout: side by side, no overlap; shrink evenly if the hand is wide */
+	.tray.spread .hc { flex: 0 1 var(--cw); width: auto; min-width: 0; margin: 0 4px; }
+
+	/* hand display toggles on the dash */
+	.handopts { flex: none; display: flex; flex-direction: column; gap: 4px; }
+	.hopt { width: 1.95rem; height: 1.6rem; display: grid; place-items: center; padding: 0; border-radius: 7px; cursor: pointer; color: #b9a67c;
+		background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.14); transition: background .12s, color .12s; }
+	.hopt svg { width: 1.15rem; height: 1.15rem; }
+	.hopt:hover { background: rgba(199,154,78,.18); color: #f0dcae; }
+	.hopt.on { background: rgba(199,154,78,.26); border-color: rgba(199,154,78,.6); color: #f6ead2; }
 	.dstatus { flex: 1; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center; }
 	.waithost { font-size: .74rem; font-weight: 700; letter-spacing: .02em; color: #b8a06a; font-style: italic; }
 	/* persistent ultimate access on the dash (once unlocked) */

@@ -401,7 +401,9 @@
 </div>
 
 <style>
-	.gamewrap { position: fixed; inset: 0; color: #f1f5f9; overflow: hidden; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+	/* clip (not just hidden): a tucked hand extends past the bottom edge, and
+	   overflow:hidden would still let focus/scrollIntoView scroll the whole view */
+	.gamewrap { position: fixed; inset: 0; color: #f1f5f9; overflow: hidden; overflow: clip; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 	/* ocean backdrop — deep water with layered swells + moving caustics so the hex island reads as floating on sea */
 	.ocean { position: absolute; inset: 0;
 		background:
