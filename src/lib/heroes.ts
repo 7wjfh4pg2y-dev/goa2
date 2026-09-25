@@ -108,3 +108,39 @@ export const STAT_PIPS = 8;
 
 /** Heroes sorted alphabetically by name (for the draft grid). */
 export const HEROES_ALPHA: Hero[] = [...HEROES].sort((a, b) => a.name.localeCompare(b.name));
+
+// ── round portraits: frame each hero's FACE, not the middle of the painting ──
+// Avatar art is 2:1 landscape; a centred circle crop often cuts the face off or
+// shows armour. Each entry is where the face sits, as fractions of the art's
+// width/height; portraits zoom in on that point.
+const HERO_FACE: Record<string, [number, number]> = {
+	arien: [0.64, 0.25], bain: [0.55, 0.25], brogan: [0.53, 0.25], brynn: [0.52, 0.36], cutter: [0.6, 0.28],
+	dodger: [0.6, 0.27], emmitt: [0.45, 0.42], garrus: [0.62, 0.32], gydion: [0.6, 0.42], hanu: [0.66, 0.42],
+	ignatia: [0.52, 0.5], min: [0.63, 0.45], misa: [0.65, 0.4], mortimer: [0.6, 0.3], mrak: [0.48, 0.32],
+	nebkher: [0.73, 0.3], razzle: [0.63, 0.3], rowenna: [0.62, 0.32], sabina: [0.57, 0.27], silverarrow: [0.53, 0.3],
+	snorri: [0.52, 0.35], swift: [0.53, 0.35], takahide: [0.6, 0.35], tali: [0.57, 0.35], tigerclaw: [0.57, 0.3],
+	trinkets: [0.38, 0.3], ursafar: [0.5, 0.4], wasp: [0.62, 0.3], whisper: [0.5, 0.3], widget: [0.26, 0.4],
+	wuk: [0.6, 0.38], xargatha: [0.53, 0.35]
+};
+const FACE_ZOOM = 1.7;
+const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
+
+/** Inline CSS for a round portrait (a square element): the avatar art zoomed
+ * and positioned so the hero's face sits in the middle. */
+export function portraitCss(id: string): string {
+	const [fx, fy] = HERO_FACE[id] ?? [0.55, 0.32];
+	const z = FACE_ZOOM;
+	const px = clamp01((0.5 - 2 * z * fx) / (1 - 2 * z)) * 100;
+	const py = clamp01((0.5 - z * fy) / (1 - z)) * 100;
+	return `background-image:url('${heroAvatar(id)}');background-size:${200 * z}% ${100 * z}%;background-position:${px.toFixed(1)}% ${py.toFixed(1)}%;`;
+}
+
+/** SVG equivalent: where to draw the avatar image so the face is centred in a
+ * circle of diameter `d` centred on (cx, cy). Clip the image to that circle. */
+export function portraitRect(id: string, cx: number, cy: number, d: number) {
+	const [fx, fy] = HERO_FACE[id] ?? [0.55, 0.32];
+	const w = 2 * d * FACE_ZOOM, h = d * FACE_ZOOM;
+	const x = Math.min(cx - d / 2, Math.max(cx + d / 2 - w, cx - fx * w));
+	const y = Math.min(cy - d / 2, Math.max(cy + d / 2 - h, cy - fy * h));
+	return { href: heroAvatar(id), x, y, w, h };
+}

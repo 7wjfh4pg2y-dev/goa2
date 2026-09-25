@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { portraitRect } from '$lib/heroes';
 	import { onMount, onDestroy } from 'svelte';
 
 	// A reusable renderer for a painted hex map (the "3D" board). Supports
@@ -13,7 +14,7 @@
 	export let interactive = true;
 	export let rotation = 0; // base orientation in degrees (e.g. 180 so your base sits at the bottom)
 
-	export let pieces: Array<{ id: string; hex: string; team: string; role?: string; label?: string; color?: string; token?: string; sym?: string }> = [];
+	export let pieces: Array<{ id: string; hex: string; team: string; role?: string; label?: string; color?: string; token?: string; sym?: string; hero?: string; letter?: string }> = [];
 	export let onMovePiece: ((id: string, hex: string) => void) | null = null;
 	export let onSelect: (id: string | null) => void = () => {};
 	// tap on an empty hex (no piece under the cursor, nothing carried) — used by
@@ -349,7 +350,11 @@
 					{#if sel}
 						<circle class="selring" cx={c.x} cy={c.y} r={size * 0.82} fill="none" stroke="#fde047" stroke-width={size * 0.1} stroke-dasharray="{size * 0.32} {size * 0.22}" pointer-events="none" />
 					{/if}
-					{#if p.token}
+					{#if p.letter}
+						<!-- companion (Turret / Pyro): player-colour disc, its letter, team ring -->
+						<circle cx={c.x} cy={c.y} r={size * 0.6} fill={p.color ?? pieceColor(p.team)} stroke={sel ? '#fde047' : pieceColor(p.team)} stroke-width={size * 0.16} />
+						<text x={c.x} y={c.y} text-anchor="middle" dominant-baseline="central" font-size={size * 0.7} font-weight="900" fill="#0b1220" pointer-events="none">{p.letter}</text>
+					{:else if p.token}
 						<circle cx={c.x} cy={c.y} r={size * 0.6} fill="rgba(9,13,22,.82)" stroke={sel ? '#fde047' : pieceColor(p.team)} stroke-width={size * 0.12} />
 						{#if tokenImg(p.token) ?? p.sym}
 							<image href={tokenImg(p.token) ?? p.sym} x={c.x - size * 0.5} y={c.y - size * 0.5} width={size} height={size} preserveAspectRatio="xMidYMid meet" pointer-events="none" />
@@ -361,9 +366,15 @@
 							transform={minionRot(p, c.x, c.y)} />
 						<circle cx={c.x} cy={c.y} r={size * 0.66} fill="transparent" stroke={sel ? '#fde047' : pieceColor(p.team)} stroke-width={size * 0.14} />
 					{:else}
-						<!-- hero token: team-colour disc, hero symbol, player-colour outline -->
-						<circle cx={c.x} cy={c.y} r={size * 0.62} fill={pieceColor(p.team)} stroke={sel ? '#fde047' : (p.color ?? pieceColor(p.team))} stroke-width={size * 0.16} />
-						{#if p.sym}
+						<!-- hero piece = the player icon: face portrait, team ring, player-colour outer ring -->
+						{@const R = size * 0.68}
+						<circle cx={c.x} cy={c.y} r={R} fill={p.color ?? pieceColor(p.team)} />
+						<circle cx={c.x} cy={c.y} r={R * 0.84} fill={pieceColor(p.team)} />
+						{#if p.hero}
+							{@const pr = portraitRect(p.hero, c.x, c.y, R * 1.36)}
+							<clipPath id="pc-{p.id}"><circle cx={c.x} cy={c.y} r={R * 0.68} /></clipPath>
+							<image href={pr.href} x={pr.x} y={pr.y} width={pr.w} height={pr.h} clip-path="url(#pc-{p.id})" preserveAspectRatio="none" pointer-events="none" />
+						{:else if p.sym}
 							<image href={p.sym} x={c.x - size * 0.46} y={c.y - size * 0.46} width={size * 0.92} height={size * 0.92} preserveAspectRatio="xMidYMid meet" pointer-events="none" style="filter:drop-shadow(0 1px 2px rgba(0,0,0,.6))" />
 						{:else if p.label}
 							<text x={c.x} y={c.y} text-anchor="middle" dominant-baseline="central" font-size={size * 0.72} font-weight="800" fill="#0b1220" stroke="rgba(255,255,255,.6)" stroke-width={size * 0.02} pointer-events="none">{p.label}</text>
