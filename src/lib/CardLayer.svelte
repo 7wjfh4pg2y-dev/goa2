@@ -701,17 +701,18 @@
 			</div>
 		{/if}
 
-		<div class="dash" class:ultdash={mine.ultimate} style={teamVars(myTeam)}>
+		<div class="dash" class:ultdash={mine.ultimate} class:docked={dockHand} style={teamVars(myTeam)}>
 			<!-- LEFT: you · tokens · deck -->
 			<div class="dleft">
 				<button class="dself" on:click={() => (overlayId = clientId)} title="Open your board">
 					<PlayerIcon hero={mine.hero} team={myTeam ?? 'orange'} color={colorHex(myColor)} size="2.4rem" ult={mine.ultimate}>
 						{#if mine.ultimate}<span class="crown">♛</span>{/if}
+						<!-- status markers ride on the portrait, so they take no room in the row -->
+						{#if mst.poison}<span class="icmk pois" title="Poison"><img src={icon('marker_poison')} alt="" /></span>{/if}
+						{#if mst.bounty}<span class="icmk bnty" title="Bounty"><img src={icon('marker_bounty')} alt="" /></span>{/if}
 					</PlayerIcon>
 					<span class="dsmid">
 						<span class="dsname"><span class="dsnm">{myName}</span><em>Lv {levelOf(mine)}</em>
-							{#if mst.poison}<span class="statmk pois" title="Poison"><img src={icon('marker_poison')} alt="" /></span>{/if}
-							{#if mst.bounty}<span class="statmk bnty" title="Bounty"><img src={icon('marker_bounty')} alt="" /></span>{/if}
 							<span class="initb" class:off={myInit == null} title="Your initiative this turn (card + upgrades)"><img src={icon('item_initiative')} alt="" /><b>{myInit ?? '–'}</b></span>
 						</span>
 						<span class="dshero">{heroName(mine.hero)}</span>
@@ -757,11 +758,14 @@
 					<span class="ds-card ds1"><img src={heroLogo(mine.hero)} alt="" /></span>
 					<span class="ds-count">{deckCards(mine).length}</span>
 				</button>
+				<!-- the ultimate's slot is always reserved, so unlocking it shifts nothing -->
 				{#if mine.ultimate && myUlt >= 0}
 					<button class="ultmini" on:click={() => (examine = { hid: mine.hero, idx: myUlt })} title="Your ultimate — click to enlarge">
 						<Card heroId={mine.hero} card={heroCards(mine.hero)[myUlt]} />
 						<span class="ultmini-tag">ULT</span>
 					</button>
+				{:else}
+					<span class="ultmini locked" title="Ultimate — unlocks at level 8">ULT</span>
 				{/if}
 			</div>
 
@@ -959,7 +963,7 @@
 	.coin { display: inline-flex; align-items: center; justify-content: center; min-width: 1.05rem; height: 1.05rem; padding: 0 4px; border-radius: 999px;
 		background: linear-gradient(#f2d072, #c99a3e); color: #3a2a10; font-size: .58rem; font-weight: 900; font-variant-numeric: tabular-nums;
 		border: 1px solid rgba(0,0,0,.3); box-shadow: inset 0 1px 0 rgba(255,255,255,.45); }
-	.coin.lg { min-width: 1.5rem; height: 1.5rem; font-size: .82rem; }
+	.coin.lg { min-width: 1.8rem; font-variant-numeric: tabular-nums; height: 1.5rem; font-size: .82rem; }
 	/* ready light — red until committed, then green (right-aligned, tiny) */
 	.rdot { flex: none; width: .7rem; height: .7rem; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #ff8a8a, #d13a3a); box-shadow: 0 0 5px rgba(209,58,58,.7); }
 	.rdot.on { background: radial-gradient(circle at 35% 30%, #a6f5b6, #35c257); box-shadow: 0 0 6px rgba(53,194,87,.8); }
@@ -1185,10 +1189,12 @@
 	.dash { position: absolute; left: 224px; right: 260px; bottom: 12px; z-index: 11; display: grid; grid-template-columns: minmax(max-content, 1fr) auto minmax(max-content, 1fr); align-items: center; gap: 14px; padding: 6px 14px; border-radius: 13px; color: #e5e7eb; backdrop-filter: blur(9px);
 		background: linear-gradient(90deg, rgb(var(--tcr) / .2), rgba(9,13,22,.84) 26%, rgba(9,13,22,.84) 74%, rgb(var(--tcr) / .16)); border: 1px solid rgb(var(--tcr) / .55); box-shadow: 0 12px 34px rgba(0,0,0,.5), inset 0 1px 0 rgb(var(--tcl) / .14); }
 	.dleft { display: flex; align-items: center; gap: 12px; }
+	/* docked hand: the centre slides left once, and the hand gets all the room on the right */
+	.dash.docked { grid-template-columns: max-content auto minmax(max-content, 1fr); }
 	.dleft .tokwrap { margin-left: auto; }
 	.dright { display: flex; align-items: center; gap: 12px; }
-	.dact { flex: none; width: 118px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
-	.dact .act { white-space: nowrap; }
+	.dact { flex: none; width: 132px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
+	.dact .act { white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; padding-left: 10px; padding-right: 10px; }
 	.act.takeback { padding: 7px 14px; font-size: .86rem; color: #fff; background: linear-gradient(180deg, #e0463c, #a82620); border-color: rgba(255,170,160,.7); box-shadow: 0 3px 0 #6e1812, 0 0 12px rgba(239,68,68,.45); }
 	.act.takeback:hover { filter: brightness(1.1); }
 	/* level-8 aura on your own dash — present but not blinding */
@@ -1198,13 +1204,19 @@
 	.dself { display: flex; align-items: center; gap: 9px; background: none; border: none; cursor: pointer; color: inherit; text-align: left; flex: none; }
 	.dself:hover .dsname { color: #fff; }
 	/* your hero token: team disc + hero symbol + your colour as the ring (matches the board piece) */
-	.dsmid { display: flex; flex-direction: column; gap: 1px; line-height: 1.02; }
+	.dsmid { width: 10rem; display: flex; flex-direction: column; gap: 1px; line-height: 1.02; }
 	.dsname { font-family: 'Modesto Poster', serif; font-size: .92rem; color: #f6ead2; display: flex; align-items: baseline; gap: 5px; min-width: 0; }
-	.dsnm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-	.dsname .initb { align-self: center; padding: 1px 6px 1px 4px; }
-	.dsname .initb b { font-size: .82rem; }
-	.dsname em { font-style: normal; font-size: .56rem; font-weight: 700; color: #9aa8bc; }
-	.dshero { font-size: .58rem; color: #93a3b8; }
+	.dsnm { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.dsname em { flex: none; min-width: 2.3em; font-variant-numeric: tabular-nums; font-style: normal; font-size: .56rem; font-weight: 700; color: #9aa8bc; }
+	/* initiative: pinned to the right edge at a fixed width ('–' and '12' take the same room) */
+	.dsname .initb { align-self: center; padding: 1px 5px 1px 4px; }
+	.dsname .initb b { font-size: .82rem; min-width: 1.15em; text-align: center; }
+	.dshero { font-size: .58rem; color: #93a3b8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	/* poison / bounty badges on the portrait's lower corners */
+	.icmk { position: absolute; z-index: 2; bottom: -5px; width: .95rem; height: .95rem; border-radius: 50%; display: grid; place-items: center; background: #0b101a; }
+	.icmk img { width: 100%; height: 100%; object-fit: contain; border-radius: 50%; }
+	.icmk.pois { left: -5px; box-shadow: 0 0 0 1.5px rgba(65,174,89,.85); }
+	.icmk.bnty { right: -5px; box-shadow: 0 0 0 1.5px rgba(232,182,74,.9); }
 	.dstats { display: grid; grid-template-columns: repeat(6, 1.7rem); gap: 3px; }
 
 	/* hand floats above the dashboard, with a clear gap */
@@ -1229,6 +1241,10 @@
 	.hopt.dock { grid-column: 2; grid-row: 1 / 3; height: auto; }
 	.hopt.dock svg { width: 1.3rem; height: 1.3rem; }
 	.hopt:disabled { opacity: .35; cursor: not-allowed; }
+	/* docked: the two float-only options step aside to give the docked hand room */
+	.dash.docked .hopt:not(.dock) { display: none; }
+	.dash.docked .handopts { grid-template-columns: auto; }
+	.dash.docked .hopt.dock { grid-column: 1; }
 	.hopt { width: 1.95rem; height: 1.6rem; display: grid; place-items: center; padding: 0; border-radius: 7px; cursor: pointer; color: #b9a67c;
 		background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.14); transition: background .12s, color .12s; }
 	.hopt svg { width: 1.15rem; height: 1.15rem; }
@@ -1240,6 +1256,9 @@
 		box-shadow: 0 0 0 2px #b482f0, 0 0 12px rgba(165,110,230,.6), 0 3px 8px rgba(0,0,0,.55); transition: transform .12s; }
 	.ultmini :global(canvas) { display: block; width: 100%; border-radius: 5px; }
 	.ultmini:hover { transform: translateY(-3px); }
+	.ultmini.locked { aspect-ratio: 1192 / 1664; display: grid; place-items: center; cursor: default; box-shadow: none; border: 1px dashed rgba(180,130,240,.28);
+		font-size: .5rem; font-weight: 900; letter-spacing: .08em; color: rgba(200,170,240,.3); }
+	.ultmini.locked:hover { transform: none; }
 	.ultmini-tag { position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%); font-size: .5rem; font-weight: 900; letter-spacing: .08em; color: #efe0ff;
 		background: linear-gradient(180deg, #7a49c4, #5a2f9c); border: 1px solid rgba(180,130,240,.7); border-radius: 5px; padding: 0 5px; }
 	/* face-down deck stack on the dash (opens the deck view) */
@@ -1300,8 +1319,8 @@
 	.dm-slot .roman.trash { padding: 9px 7px 9px 11px; }
 	.dm-slot .roman.trash :global(svg) { width: 100%; height: 100%; }
 	/* docked hand: small separate cards inside the dash, at the far right */
-	.dockhand { margin-left: auto; display: flex; gap: 4px; min-width: 0; }
-	.dkh { flex: 0 1 34px; min-width: 20px; padding: 0; background: none; border: none; cursor: pointer; border-radius: 4px; overflow: hidden; box-shadow: 0 2px 6px rgba(0,0,0,.55); transition: transform .12s; }
+	.dockhand { flex: 1 1 0; width: 0; display: flex; justify-content: flex-end; gap: 4px; overflow: hidden; padding-top: 4px; }
+	.dkh { flex: 0 1 34px; min-width: 0; padding: 0; background: none; border: none; cursor: pointer; border-radius: 4px; overflow: hidden; box-shadow: 0 2px 6px rgba(0,0,0,.55); transition: transform .12s; }
 	.dkh :global(canvas) { display: block; width: 100%; }
 	.dkh:hover { transform: translateY(-3px); }
 	.dm-turns { display: flex; gap: 5px; align-items: center; }
@@ -1328,7 +1347,7 @@
 		.dleft, .dright { gap: 8px; }
 		.dself { display: grid; grid-template-columns: auto auto; column-gap: 8px; row-gap: 3px; align-items: center; }
 		.dself :global(.picon) { grid-row: 1 / 3; }
-		.dsmid { max-width: 9.6rem; }
+		.dsmid { width: 0; min-width: 100%; }
 		.dshero { display: none; }
 		.dstats { grid-column: 2; grid-template-columns: repeat(6, 1.45rem); }
 		.tokbtn { padding: 5px 7px; }
@@ -1344,9 +1363,11 @@
 		.ppanel.withdash { bottom: 94px; }
 		.dash { padding: 6px 8px; gap: 8px; }
 		.dleft, .dright { gap: 6px; }
-		.dsmid { max-width: 8.2rem; }
-		.act.takeback { padding: 5px 9px; font-size: .78rem; }
-		.dact { width: 96px; }
+		.dact { width: 104px; }
+		.act.takeback { padding: 5px 8px; font-size: .76rem; }
+		.dstats { grid-template-columns: repeat(6, 1.3rem); }
+		.deckstack, .ultmini { width: 34px; }
+		.deckstack { height: 47px; }
 		.hopt { width: 1.75rem; }
 		.dkh { flex-basis: 28px; min-width: 18px; }
 		.coinctl { padding: 2px 3px; gap: 2px; }
