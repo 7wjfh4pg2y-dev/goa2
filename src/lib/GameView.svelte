@@ -184,11 +184,11 @@
 	let previewId: string | null = null; // clicking a hero token opens that player's board
 	function onSelectPiece(id: string | null) {
 		const pc = id ? $ms.pieces[id] : null;
-		// a hero figure (no minion role, no token) → preview its owner's board;
-		// minions / tokens keep the delete toolbar path.
+		// tapping any piece (heroes included) just picks it up to move it — a
+		// player's board opens from the right-hand HUD instead. Minions / tokens
+		// also get the delete toolbar (heroes don't).
 		if (placing) return;
-		if (pc && pc.hero && !pc.role && !pc.token) { previewId = pc.id; selPieceId = null; }
-		else { selPieceId = id; }
+		selPieceId = pc ? id : null;
 	}
 	$: selPiece = selPieceId ? $ms.pieces[selPieceId] : null;
 	let confirmDelete = false;
