@@ -94,7 +94,7 @@ export const heroSplash = (id: string): string => splashUrls[`./images/avatars_f
 const logoUrls = import.meta.glob('./images/logos/*.png', { eager: true, import: 'default' }) as Record<string, string>;
 export const heroLogo = (id: string): string => logoUrls[`./images/logos/${id}.png`] ?? '';
 
-// Stat/trait/star icons (from the original Stats-of-Atlantis art).
+// Stat/trait/star icons.
 const iconUrls = import.meta.glob('./images/hero_icons/*.png', { eager: true, import: 'default' }) as Record<string, string>;
 const STAT_ICON_FILES = ['attack_white', 'defense_white', 'initiative_white', 'movement_white'];
 /** White stat icon by stat index (0=Attack … 3=Movement). */
