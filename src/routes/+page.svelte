@@ -749,13 +749,14 @@
 
 					<div class="fld">
 						<div class="teamstop">
-							<span>Teams {mySeat < 0 ? '· flip, or tap an open seat' : myTeam === 'orange' ? '· you’re Orange' : '· you’re Blue'}</span>
+							<span>Teams {mySeat < 0 ? '· flip, or tap an open seat' : (myTeam === 'orange' ? '· you’re Orange' : '· you’re Blue') + (ready ? '' : ' · tap an open seat to switch')}</span>
+							<!-- one slot: flip in while spectating, step out to spectate while seated -->
 							{#if mySeat < 0}
 								<button class="flipbtn hero" on:click={flipForTeam} disabled={flipping || seatedCount >= seatCount}>🪙 Flip for your team</button>
 							{:else if ready}
 								<span class="swaphint">🔒 locked in — unready to change</span>
 							{:else}
-								<span class="swaphint">tap an open seat to switch sides</span>
+								<button class="flipbtn" on:click={spectate}>👁 Spectate</button>
 							{/if}
 						</div>
 						<div class="teams">
@@ -804,30 +805,26 @@
 
 					<div class="fld">
 						<span>Your token {mySeat < 0 ? '· pick a colour, then flip in' : ready ? '· 🔒 locked in' : ''}</span>
-						<div class="tokenrow">
-							<div class="swatches">
-								{#each PLAYER_COLORS as c (c.id)}
-									<button title={c.label} aria-label={c.label} class="sw" class:sel={(mySeat < 0 ? pick : color) === c.id} disabled={takenColors.has(c.id) || (mySeat >= 0 && ready)} style="--sc:{c.hex}" on:click={() => pickColor(c.id)}></button>
-								{/each}
-							</div>
-							{#if mySeat >= 0 && !ready}<button class="chip spec" on:click={spectate}>Spectate</button>{/if}
+						<div class="swatches">
+							{#each PLAYER_COLORS as c (c.id)}
+								<button title={c.label} aria-label={c.label} class="sw" class:sel={(mySeat < 0 ? pick : color) === c.id} disabled={takenColors.has(c.id) || (mySeat >= 0 && ready)} style="--sc:{c.hex}" on:click={() => pickColor(c.id)}></button>
+							{/each}
 						</div>
 						{#if spectators.length}
 							<p class="specs">Spectating: {#each spectators as sp, i (sp.id)}{sp.name}{sp.id === session?.clientId ? ' (you)' : ''}{#if iAmHost && sp.id !== session?.clientId}<button class="kickx" title="Kick" on:click={() => kick(sp.id)}>✕</button>{/if}{i < spectators.length - 1 ? ', ' : ''}{/each}</p>
 						{/if}
 					</div>
 
-					<div class="row wraprow">
-						<button class="ghost" on:click={leaveRoom}>Leave</button>
-						<div class="rightbtns">
-							{#if iAmHost}
-								<button class="ghost danger" on:click={closeGame}>Close</button>
-								<button class="primary" disabled={!allReady} on:click={beginGame}>Begin</button>
-							{/if}
-							{#if mySeat >= 0}
-								<button class="primary" class:isready={ready} on:click={toggleReady}>{ready ? '✓ Ready' : 'Ready up'}</button>
-							{/if}
-						</div>
+					<!-- one flat row: every button is its own flex item, so they share the width and never overlap -->
+					<div class="lobbybtns">
+						<button class="ghost leave" on:click={leaveRoom}>Leave</button>
+						{#if iAmHost}
+							<button class="ghost danger" on:click={closeGame}>Close</button>
+							<button class="primary" disabled={!allReady} on:click={beginGame}>Begin</button>
+						{/if}
+						{#if mySeat >= 0}
+							<button class="primary" class:isready={ready} on:click={toggleReady}>{ready ? '✓ Ready' : 'Ready up'}</button>
+						{/if}
 					</div>
 					{#if iAmHost && !allReady}<p class="hint">Everyone seated must ready up before you can begin.</p>{/if}
 				</div>
@@ -930,8 +927,9 @@
 	.garrow { font-size: 0.75rem; font-weight: 600; color: #fdba74; opacity: 0.75; white-space: nowrap; transition: opacity 0.14s, transform 0.14s; }
 	.err { color: #fca5a5; font-size: 0.82rem; margin: 0; }
 	.row { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
-	.row.wraprow { flex-wrap: wrap; }
-	.rightbtns { display: flex; gap: 8px; flex-wrap: wrap; }
+	.lobbybtns { display: flex; gap: 8px; align-items: stretch; }
+	.lobbybtns > button { flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.lobbybtns > .leave { margin-right: auto; }
 	.primary { border: 1px solid rgba(255, 255, 255, 0.3); background: var(--hl); color: white; border-radius: 10px; padding: 0.55rem 1.2rem; cursor: pointer; font-weight: 600; }
 	.primary:disabled { opacity: 0.5; cursor: not-allowed; }
 	.primary.isready { background: #16a34a; border-color: #22c55e; }
@@ -994,9 +992,6 @@
 	.hn.muted { color: #64748b; }
 	.tseat.isready .av { box-shadow: 0 0 0 2px #16a34a, 0 0 8px rgba(22, 163, 74, 0.6); }
 	.rok { position: absolute; bottom: -5px; right: -5px; width: 15px; height: 15px; border-radius: 50%; background: #16a34a; color: #fff; font-size: 10px; font-weight: 900; display: grid; place-items: center; border: 1.5px solid #0b0f17; }
-	.tokenrow { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; }
-	.tokenrow .swatches { flex: 1; min-width: 0; gap: 5px; flex-wrap: nowrap; }
-	.chip.spec { flex: none; white-space: nowrap; padding: 0.3rem 0.7rem; font-size: 0.8rem; }
 	.seattoast { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); z-index: 40; padding: 8px 16px; border-radius: 999px;
 		background: rgba(9, 13, 22, 0.92); border: 1px solid rgba(199, 154, 78, 0.5); color: #f6ead2; font-weight: 700; font-size: 0.85rem; box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5); }
 	.specs { font-size: 0.75rem; color: #94a3b8; margin: 8px 0 0; }
@@ -1035,10 +1030,10 @@
 		.teampanel { padding: 8px 6px; }
 		.tseats { gap: 6px; }
 		.tseat { flex: 1 1 64px; min-width: 60px; padding: 7px 3px; }
-		.tokenrow { flex-wrap: wrap; }
-		.tokenrow .swatches { flex: 1 1 100%; gap: 7px; }
+		.swatches { flex-wrap: nowrap; gap: 7px; }
 		.sw { flex: 1 1 0; width: auto; height: auto; max-width: 1.6rem; aspect-ratio: 1; }
-		.row.wraprow { row-gap: 8px; }
-		.rightbtns { margin-left: auto; }
+		/* buttons split the row evenly and shrink their text rather than collide */
+		.lobbybtns { gap: 6px; }
+		.lobbybtns > button { flex: 1 1 0; margin: 0; padding: 0.65rem 0.3rem; font-size: clamp(0.72rem, 3.6vw, 0.95rem); text-align: center; }
 	}
 </style>
