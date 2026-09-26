@@ -88,6 +88,28 @@
 	$: iAmHost = $ms.host === clientId;
 	$: turnIdx = $ms.turn - 1;
 	$: seatedWithCards = seated.filter((p) => cards[p.id]);
+	// reveal layout: 1–2 players share one row; more split by team — your team on
+	// top (orange when spectating), the other team underneath
+	$: curtainRows = revealRows(seatedWithCards, pTeam, (mySeat >= 0 && teamForSeat(mySeat, $ms.seats)) || 'orange');
+	// each team's row may wrap (e.g. 3 + 2 on a portrait phone): pick the column
+	// count that gives the biggest cards for this screen
+	let vhPx = 800;
+	$: curtainFit = fitReveal(curtainRows.map((r) => r.length), vw, vhPx);
+	$: curtainCols = curtainFit.cols;
+	function fitReveal(counts: number[], w: number, h: number) {
+		const most = Math.max(1, ...counts), gap = Math.min(22, Math.max(8, w * 0.016));
+		let best = { cols: most, rows: counts.length, cw: 0 };
+		for (let c = 1; c <= most; c++) {
+			const rows = counts.reduce((n, k) => n + Math.ceil(k / c), 0);
+			const cw = Math.min(320, (w - 32 - (c - 1) * gap) / c, ((h - 120) / rows - 44) * 1192 / 1664);
+			if (cw > best.cw + 0.5) best = { cols: c, rows, cw };
+		}
+		return best;
+	}
+	function revealRows(ps: Player[], teamOf: (p: Player) => string, first: string): Player[][] {
+		const a = ps.filter((p) => teamOf(p) === first), b = ps.filter((p) => teamOf(p) !== first);
+		return ps.length <= 2 ? [[...a, ...b]] : [a, b].filter((r) => r.length);
+	}
 	// DERIVED reveal: everyone ready ⇒ all cards face-up (same for every client).
 	// A player is ready when they've committed, or when they simply have no cards
 	// left to play (there is no "pass" in GoA2 — you play a card unless you can't).
@@ -184,7 +206,6 @@
 	$: effects = $ms.effects ?? [];
 	$: fxFor = (pid: string | undefined, idx: number | null) => (pid && idx != null ? effects.find((e) => e.pid === pid && e.idx === idx) : undefined);
 	$: fxLabel = (e: Effect) => effectLabel(e, $ms.round, $ms.turn);
-	const FX_SHORT: Record<string, string> = { 'This turn': 'Turn', 'Next turn': 'Next', 'This round': 'Round' };
 	$: colorOf = (pid: string) => colorHex(seated.find((p) => p.id === pid)?.color ?? '');
 	let fxPick: EffectDur = 'turn';
 	$: examineFx = examine?.pid ? fxFor(examine.pid, examine.idx) : undefined;
@@ -197,7 +218,6 @@
 		session.act(`${name} — ${DUR_LABEL[dur].toLowerCase()} effect active`, { effects: [...effects.filter((x) => !(x.pid === pid && x.idx === idx)), e] });
 	}
 	// the corner flame marking a card whose effect is live (glow + flame; no badge under it)
-	const FLAME = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2c1 4 5 5.5 5 11a5 5 0 0 1-10 0c0-2.5 1.2-4 2.4-5.2.3 1.6 1 2.6 2 3.2C11 8.5 11.3 5 12 2z" fill="#ffb347"/></svg>';
 	// After the reveal, if YOUR card this turn names a lingering effect, the dash
 	// action asks "Activate effect?" — No: carry on; Yes: pick how long (✕ = back).
 	let fxDecided = new Set<string>();
@@ -444,7 +464,7 @@
 	$: retracted = autoRetract && !handUp;
 </script>
 
-<svelte:window on:pointerdown={onWindowDown} bind:innerWidth={vw} />
+<svelte:window on:pointerdown={onWindowDown} bind:innerWidth={vw} bind:innerHeight={vhPx} />
 
 <!-- controls shared by the desktop dash and the phone dash -->
 {#snippet radiusCtl()}
@@ -533,7 +553,7 @@
 						<span class="mpic"><PlayerIcon hero={cs.hero} team={pTeam(p)} color={colorHex(p.color)} size="28px" ring={2} ult={cs.ultimate} /></span>
 						<span class="mpn"><b>{p.name}</b><small>{heroName(cs.hero)}</small></span>
 						<span class="mlv"><em>Lv {levelOf(cs)}</em><i class="mini" class:off={ini == null}>{@html CLOCK}<b>{ini ?? '–'}</b></i></span>
-						<span class="mcard fxwrap" class:fx={!!cfx} style="--fxc:{colorOf(p.id)}"><TurnSlot heroId={cs.hero} played={cs.turns[turnIdx]} pending={cs.pending} isCurrent {revealed} examinable on:click={(e) => peekSlot(e, cs, turnIdx)} />{#if cfx}<span class="fxflame">{@html FLAME}</span>{/if}</span>
+						<span class="mcard fxwrap" class:fx={!!cfx} style="--fxc:{colorOf(p.id)}"><TurnSlot heroId={cs.hero} played={cs.turns[turnIdx]} pending={cs.pending} isCurrent {revealed} examinable on:click={(e) => peekSlot(e, cs, turnIdx)} /></span>
 						<span class="msx">{#each allStats(cs) as r}<span class:up={r.delta > 0}>{#if r.delta > 0}<span class="pp">{#each Array(r.delta) as _}<i></i>{/each}</span>{/if}<img src={statImg(r.key)} alt={r.label} /></span>{/each}</span>
 					</div>
 				{/if}
@@ -571,7 +591,7 @@
 						</span>
 						{#if cs && dense}
 							<span class="dslot">
-								<span class="fxwrap" class:fx={!!fxFor(p.id, slotIdx(cs, turnIdx))} style="--fxc:{colorOf(p.id)}"><TurnSlot heroId={cs.hero} played={cs.turns[turnIdx]} pending={cs.pending} isCurrent {revealed} examinable on:click={(e) => peekSlot(e, cs, turnIdx)} />{#if fxFor(p.id, slotIdx(cs, turnIdx))}<span class="fxflame" title={fxLabel(fxFor(p.id, slotIdx(cs, turnIdx))!)}>{@html FLAME}</span>{/if}</span>
+								<span class="fxwrap" class:fx={!!fxFor(p.id, slotIdx(cs, turnIdx))} style="--fxc:{colorOf(p.id)}"><TurnSlot heroId={cs.hero} played={cs.turns[turnIdx]} pending={cs.pending} isCurrent {revealed} examinable on:click={(e) => peekSlot(e, cs, turnIdx)} /></span>
 							</span>
 						{/if}
 						{#if cs && isSkipped(cs)}<span class="skiptag" title="No cards left — skipped this turn">skip</span>
@@ -597,7 +617,7 @@
 						{#if !dense}
 							<div class="pturns">
 								{#each [0, 1, 2, 3] as t}
-									<span class="fxwrap" class:fx={!!fxFor(p.id, slotIdx(cs, t))} style="--fxc:{colorOf(p.id)}"><TurnSlot heroId={cs.hero} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} label={ROMAN[t]} examinable on:click={(e) => peekSlot(e, cs, t)} />{#if fxFor(p.id, slotIdx(cs, t))}<span class="fxflame" title={fxLabel(fxFor(p.id, slotIdx(cs, t))!)}>{@html FLAME}</span>{/if}</span>
+									<span class="fxwrap" class:fx={!!fxFor(p.id, slotIdx(cs, t))} style="--fxc:{colorOf(p.id)}"><TurnSlot heroId={cs.hero} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} label={ROMAN[t]} examinable on:click={(e) => peekSlot(e, cs, t)} /></span>
 								{/each}
 								<!-- discard: the most recent card, count below (like your dash) -->
 								<span class="pdisc" title="Discard pile">
@@ -669,7 +689,7 @@
 							<div class="tlabel">Turn {t + 1}</div>
 							<div class="tslot">
 								<span class="tbroman">{ROMAN[t]}</span>
-								<span class="fxwrap" class:fx={!!fxFor(oid, slotIdx(cs, t))} style="--fxc:{colorOf(oid)}"><TurnSlot heroId={oh} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} examinable on:click={(e) => peekSlot(e, cs, t)} />{#if fxFor(oid, slotIdx(cs, t))}<span class="fxflame">{@html FLAME}</span><span class="fxbadge">⏳ {FX_SHORT[fxLabel(fxFor(oid, slotIdx(cs, t))!)]}</span>{/if}</span>
+								<span class="fxwrap" class:fx={!!fxFor(oid, slotIdx(cs, t))} style="--fxc:{colorOf(oid)}"><TurnSlot heroId={oh} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} examinable on:click={(e) => peekSlot(e, cs, t)} /></span>
 							</div>
 						</div>
 					{/each}
@@ -716,7 +736,7 @@
 					<!-- lingering effect: switch it on (duration read from the card) / end it -->
 					<div class="fxctl">
 						{#if examineFx}
-							<span class="fxstate">⏳ Effect active · <b>{fxLabel(examineFx)}</b></span>
+							<span class="fxstate">Effect active · <b>{fxLabel(examineFx)}</b></span>
 							{#if canFx}<button class="fxend" on:click={() => endFx(examineFx)}>End effect</button>{/if}
 						{:else}
 							<span class="fxstate">Lingering effect</span>
@@ -910,7 +930,7 @@
 			<div class="mslots">
 				{#each [0, 1, 2, 3] as t}
 					{@const dfx = fxFor(clientId, slotIdx(mine, t))}
-					<span class="msl fxwrap" class:fx={!!dfx} style="--fxc:{colorOf(clientId)}"><TurnSlot heroId={mine.hero} played={mine.turns[t]} pending={mine.pending} isCurrent={t === turnIdx} {revealed} label={ROMAN[t]} examinable on:click={(e) => peekSlot(e, mine, t)} />{#if dfx}<span class="fxflame">{@html FLAME}</span>{/if}</span>
+					<span class="msl fxwrap" class:fx={!!dfx} style="--fxc:{colorOf(clientId)}"><TurnSlot heroId={mine.hero} played={mine.turns[t]} pending={mine.pending} isCurrent={t === turnIdx} {revealed} label={ROMAN[t]} examinable on:click={(e) => peekSlot(e, mine, t)} /></span>
 				{/each}
 				<span class="msep"></span>
 				<span class="msl mdisc discwrap" role="group" aria-label="Discard pile">
@@ -1039,7 +1059,7 @@
 							{#if has}
 								{@const dfx = fxFor(clientId, slotIdx(mine, t))}
 								<div class="dm-on fxwrap" class:fx={!!dfx} style="--fxc:{colorOf(clientId)}"><TurnSlot heroId={mine.hero} played={mine.turns[t]} pending={mine.pending} isCurrent={t === turnIdx} {revealed}
-									examinable on:click={(e) => peekSlot(e, mine, t)} />{#if dfx}<span class="fxflame" title={fxLabel(dfx)}>{@html FLAME}</span>{/if}</div>
+									examinable on:click={(e) => peekSlot(e, mine, t)} /></div>
 							{/if}
 						</div>
 					{/each}
@@ -1145,8 +1165,10 @@
 		<div class="curtain" on:click={skipCurtain} on:keydown={(e) => e.key === 'Escape' && skipCurtain()} role="presentation">
 			<div class="curtain-inner">
 				<div class="curtain-title">Reveal — Turn {$ms.turn}</div>
-				<div class="curtain-cards" style="--n:{Math.max(1, seatedWithCards.length)}">
-					{#each seatedWithCards as p (p.id)}
+				<div class="curtain-cards" style="--cols:{curtainCols}; --rows:{curtainFit.rows}">
+					{#each curtainRows as row, ri (ri)}
+					<div class="cc-row">
+					{#each row as p (p.id)}
 						{@const cs = cards[p.id]}
 						{@const idx = cs.pending}
 						<div class="cc" style="--tint:{teamTint(p)}">
@@ -1158,8 +1180,10 @@
 							{:else}
 								<div class="cc-flip skip">—</div>
 							{/if}
-							<div class="cc-name"><PlayerIcon hero={cs.hero} team={pTeam(p)} color={colorHex(p.color)} size="1.8rem" ring={2} />{p.name}</div>
+							<div class="cc-name"><PlayerIcon hero={cs.hero} team={pTeam(p)} color={colorHex(p.color)} size="1.6em" ring={2} /><span>{p.name}</span></div>
 						</div>
+					{/each}
+					</div>
 					{/each}
 				</div>
 				<div class="curtain-hint">Resuming…</div>
@@ -1391,11 +1415,15 @@
 	.curtain { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; cursor: pointer;
 		background: radial-gradient(120% 90% at 50% 40%, rgba(20,14,6,.86), rgba(3,5,10,.96)); backdrop-filter: blur(6px); animation: curtainIn .35s ease; }
 	@keyframes curtainIn { from { opacity: 0; } to { opacity: 1; } }
-	.curtain-inner { display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 24px; max-width: 94vw; }
-	.curtain-title { font-family: 'Modesto Poster', serif; font-size: 2.4rem; letter-spacing: .06em; color: #f6ead2; text-shadow: 0 2px 12px rgba(0,0,0,.7), 0 0 22px rgba(199,154,78,.4); }
-	.curtain-cards { display: flex; flex-wrap: nowrap; justify-content: center; gap: 22px; }
-	.cc { display: flex; flex-direction: column; align-items: center; gap: 8px; perspective: 1300px; }
-	.cc-flip { width: min(320px, 46vh, calc((100vw - 140px) / var(--n, 4) - 22px)); aspect-ratio: 1192 / 1664; position: relative; transform-style: preserve-3d; transition: transform .7s cubic-bezier(.34,.08,.2,1); }
+	.curtain-inner { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 18px 16px; max-width: 100vw; }
+	/* one line at any width */
+	.curtain-title { font-family: 'Modesto Poster', serif; font-size: clamp(1.1rem, 5.2vw, 2.4rem); white-space: nowrap; letter-spacing: .06em; color: #f6ead2; text-shadow: 0 2px 12px rgba(0,0,0,.7), 0 0 22px rgba(199,154,78,.4); }
+	/* cards as large as both the width (widest row) and the height (all rows) allow */
+	.curtain-cards { --gap: clamp(8px, 1.6vw, 22px); display: flex; flex-direction: column; align-items: center; gap: calc(var(--gap) * 1.2);
+		--cw: min(320px, calc((100vw - 32px - (var(--cols) - 1) * var(--gap)) / var(--cols)), calc(((100vh - 120px) / var(--rows) - 44px) * 1192 / 1664)); }
+	.cc-row { display: flex; flex-wrap: wrap; justify-content: center; gap: calc(var(--gap) * 1.2) var(--gap); max-width: calc(var(--cols) * var(--cw) + (var(--cols) - 1) * var(--gap) + 1px); }
+	.cc { display: flex; flex-direction: column; align-items: center; gap: 6px; perspective: 1300px; width: var(--cw); }
+	.cc-flip { width: var(--cw); aspect-ratio: 1192 / 1664; position: relative; transform-style: preserve-3d; transition: transform .7s cubic-bezier(.34,.08,.2,1); }
 	.cc-face { box-shadow: 0 12px 30px rgba(0,0,0,.6); }
 	.cc-flip.up { transform: rotateY(180deg) scale(1.04); }
 	.cc-flip.skip { display: grid; place-items: center; border: 1.5px dashed rgba(255,255,255,.2); border-radius: 5%; color: #6b7a8d; font-size: 2rem; }
@@ -1409,7 +1437,8 @@
 	.cc-back .band.top::after { bottom: 0; } .cc-back .band.bot::after { top: 0; }
 	.cc-back .emblem { flex: 1; display: grid; place-items: center; padding: 12%; }
 	.cc-back .emblem img { width: 76%; max-height: 100%; object-fit: contain; filter: drop-shadow(0 2px 5px rgba(0,0,0,.4)); }
-	.cc-name { display: flex; align-items: center; gap: 8px; font-family: 'Modesto Poster', serif; font-size: 1.15rem; color: #eef2f8; }
+	.cc-name { display: flex; align-items: center; justify-content: center; gap: .4em; max-width: 100%; font-family: 'Modesto Poster', serif; font-size: clamp(.62rem, calc(var(--cw) / 14), 1.15rem); color: #eef2f8; }
+	.cc-name span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 	.cc-name img { width: 1.9rem; height: 1.9rem; border-radius: 50%; object-fit: cover; border: 2px solid var(--tint); }
 	.curtain-hint { font-size: .7rem; letter-spacing: .18em; text-transform: uppercase; color: #8b7a52; }
 
@@ -1431,14 +1460,9 @@
 	.fxend { padding: 5px 12px; border-radius: 8px; cursor: pointer; font-size: .74rem; color: #ffc9c2; background: rgba(220,60,60,.2); border: 1px solid rgba(239,68,68,.5); }
 	/* a played card with a live effect: glows in its player's colour + duration badge */
 	.fxwrap { position: relative; display: block; }
-	/* live effect: an ember glow in the player's colour (plus the corner flame) */
-	.fxwrap.fx :global(canvas) { box-shadow: 0 0 0 2px var(--fxc), 0 0 10px 2px var(--fxc), 0 0 18px 4px rgba(255,150,40,.45); }
-	.fxbadge { position: absolute; left: 50%; bottom: -6px; transform: translateX(-50%); z-index: 3; white-space: nowrap; pointer-events: none;
-		font-size: .5rem; letter-spacing: .04em; padding: 1px 5px; border-radius: 6px; color: #fff; background: rgba(11,16,26,.92); border: 1px solid var(--fxc); }
-	/* effect chips on a player's row */
-	.fxflame { position: absolute; top: -5px; right: -5px; z-index: 3; width: 14px; height: 14px; border-radius: 50%; display: grid; place-items: center; pointer-events: none;
-		background: #140c05; border: 1.5px solid #ffb347; box-shadow: 0 0 6px rgba(255,160,60,.6); }
-	.fxflame :global(svg) { width: 8px; height: 8px; }
+	/* live effect: the card glows in its player's colour */
+	.fxwrap.fx :global(canvas) { box-shadow: 0 0 0 2px var(--fxc), 0 0 10px 2px var(--fxc), 0 0 20px 5px color-mix(in srgb, var(--fxc) 55%, transparent); animation: fxglow 2.6s ease-in-out infinite; }
+	@keyframes fxglow { 50% { box-shadow: 0 0 0 2px var(--fxc), 0 0 14px 3px var(--fxc), 0 0 28px 8px color-mix(in srgb, var(--fxc) 65%, transparent); } }
 	/* activate-effect prompt in the dash action slot */
 	.fxq { font-size: .7rem; color: #f0dcae; letter-spacing: .03em; white-space: nowrap; }
 	.fxrow2 { display: flex; gap: 3px; }
@@ -1740,7 +1764,6 @@
 		.turns { gap: 4px; }
 		.tbox { padding: 5px 4px 6px; border-radius: 10px; }
 		.dkgrid { grid-template-columns: repeat(3, 1fr); }
-		.curtain-cards { flex-wrap: wrap; gap: 10px; }
 		.bigcard { width: min(78vw, 320px); }
 	}
 </style>

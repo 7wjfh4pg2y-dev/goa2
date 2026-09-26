@@ -8,6 +8,7 @@
 	import { effectLabel } from '$lib/effects';
 	import lifeSplit from '$lib/images/life_split.png';
 	import { heroCards } from '$lib/cards/deck';
+	import { ultimateIndex } from '$lib/cards/cardstate';
 	import { placeToken, moveToken, effectiveHex, MINES, tokenName, type ArmToken } from '$lib/tokens';
 	import {
 		colorHex, movePiece, teamForSeat, throneHex,
@@ -121,7 +122,6 @@
 	let cardLayer: CardLayer;
 	// every lingering card effect in play (switched on from a played card)
 	$: activeFx = $ms.effects ?? [];
-	const pColor = (pid: string) => colorHex($players.find((p) => p.id === pid)?.color ?? '');
 	// area radii (set from each player's dash): centred on that player's hero, in their colour
 	$: areas = Object.entries($ms.radii ?? {}).flatMap(([pid, r]) => {
 		const hero = $ms.pieces?.[pid];
@@ -238,10 +238,28 @@
 	let gvw = 1440;
 	$: mobile = gvw <= 760;
 	let menuOpen = false, lwOpen = false;
+	// the waves/life sheet follows a downward drag and closes past a threshold
+	let sheetY: number | null = null, sheetDy = 0, sheetDragged = false;
+	const sheetDown = (e: PointerEvent) => { sheetY = e.clientY; sheetDy = 0; sheetDragged = false; };
+	const sheetMove = (e: PointerEvent) => {
+		if (sheetY == null) return;
+		sheetDy = Math.max(0, e.clientY - sheetY);
+		if (sheetDy > 8 && !sheetDragged) { sheetDragged = true; (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); }
+	};
+	const sheetUp = () => {
+		if (sheetY == null) return;
+		if (sheetDy > 70) lwOpen = false;
+		sheetY = null; sheetDy = 0;
+	};
+	// a drag shouldn't also flip the token it started on
+	const sheetClick = (e: MouseEvent) => { if (sheetDragged) { e.stopPropagation(); e.preventDefault(); sheetDragged = false; } };
 	$: myCoins = $ms.cards?.[clientId]?.coins ?? null;
+	// top-bar ULT: locked until level 8, then opens your ultimate
+	$: myCs = $ms.cards?.[clientId];
+	$: myUltIdx = myCs ? ultimateIndex(myCs.hero) : -1;
 	function coins(d: number) { session.cardAction({ kind: 'coins', pid: clientId, delta: d }); }
 	const FX_SHORT: Record<string, string> = { 'This turn': 'Turn', 'Next turn': 'Next', 'This round': 'Round' };
-	// ☰ menu "Active abilities": one fixed row per hero (so the log never shifts),
+	// "Active abilities" (☰ menu on phones, left HUD on desktop): one fixed row per hero (so the log never shifts),
 	// five card-colour pips — the colour of a card with a live effect lights up
 	const FX_COLORS: Array<[string, string]> = [['GOLD', '#e8b64a'], ['SILVER', '#c6d0db'], ['RED', '#e0524a'], ['BLUE', '#3f7fe0'], ['GREEN', '#41ae59']];
 	const DUR_RANK: Record<string, number> = { turn: 0, next: 1, round: 2 };
@@ -423,6 +441,10 @@
 					<button class="gb" on:click={() => coins(1)} aria-label="Add coin">+</button>
 				</span>
 			{/if}
+			{#if myCs && myUltIdx >= 0}
+				<button class="mib ult" class:on={myCs.ultimate} disabled={!myCs.ultimate} on:click={() => myCs && cardLayer?.showCard(myCs.hero, myUltIdx)}
+					title={myCs.ultimate ? 'Your ultimate' : 'Ultimate — unlocks at level 8'} aria-label="Ultimate">ULT</button>
+			{/if}
 		</div>
 
 		<!-- ☰ menu: spawn, effects, activity, view, lobby / leave -->
@@ -490,7 +512,8 @@
 		<!-- waves & life: tap a token to flip it -->
 		{#if lwOpen}
 			<div class="mscrim" on:click={() => (lwOpen = false)} on:keydown={() => {}} role="presentation"></div>
-			<div class="msheet">
+			<div class="msheet" class:drag={sheetY != null} style:transform={sheetDy ? `translateY(${sheetDy}px)` : null}
+				on:pointerdown={sheetDown} on:pointermove={sheetMove} on:pointerup={sheetUp} on:pointercancel={sheetUp} on:click|capture={sheetClick} role="presentation">
 				<span class="grab"></span>
 				<div class="lsec"><div class="lh"><span>Waves</span><b>{$ms.waves} / {($ms.waveTok ?? []).length}</b></div>
 					<div class="lg w">{#each $ms.waveTok ?? [] as full, i}<button class="wtok" class:dep={!full} class:flip={flips[`w${i}`]} style="background-image:url({waveIcon})" on:click={() => toggleWave(i)} aria-label="Wave token"></button>{/each}</div></div>
@@ -582,18 +605,18 @@
 			<span>Tie-breaker: {$ms.tieBreaker === 'orange' ? 'Orange' : 'Blue'}</span>
 		</button>
 
-		<!-- active card effects: who, which card, how long — tap to read the card -->
-		{#if activeFx.length}
-			<div class="hsec fxlist">
-				<div class="fxhd">Active effects</div>
-				{#each activeFx as e (e.id)}
-					<button class="fxrow" style="--fxc:{pColor(e.pid)}" on:click={() => cardLayer?.showCard(e.hero, e.idx, e.pid)} title="Read {e.name}">
-						<span class="fxtxt"><b>{heroById(e.hero)?.name ?? ''}</b> · {e.name}</span>
-						<span class="fxwhen">{effectLabel(e, $ms.round, $ms.turn)}</span>
-					</button>
-				{/each}
-			</div>
-		{/if}
+		<!-- active abilities: one fixed row per hero (so nothing below shifts), card-colour pips light up; tap a live row to read the card -->
+		<div class="hsec fxlist">
+			<div class="fxhd">Active abilities</div>
+			{#each abilityRows as r (r.id)}
+				<button class="mab" class:live={!!r.fx} style="--tint:{r.team === 'orange' ? '#ef7d22' : '#2f7fe6'}" disabled={!r.fx}
+					on:click={() => { if (r.fx) cardLayer?.showCard(r.fx.hero, r.fx.idx, r.fx.pid); }} title={r.fx ? `Read ${r.fx.name}` : ''}>
+					<span class="abn">{r.name}</span>
+					<span class="abp">{#each FX_COLORS as [c, hex]}<i class:on={r.lit.has(c)} style="--pc:{hex}"></i>{/each}</span>
+					<span class="abt">{r.fx ? FX_SHORT[effectLabel(r.fx, $ms.round, $ms.turn)] : '–'}</span>
+				</button>
+			{/each}
+		</div>
 
 		<!-- activity log fills the space between the tie-breaker and the controls; retractable -->
 		<div class="logpanel" class:collapsed={!logOpen}>
@@ -764,12 +787,8 @@
 
 	.fxlist { gap: 3px; }
 	.fxhd { font-size: 0.56rem; letter-spacing: 0.1em; text-transform: uppercase; color: #b8a06a; margin-bottom: 1px; }
-	.fxrow { display: flex; align-items: center; gap: 6px; width: 100%; padding: 3px 6px; border-radius: 7px; cursor: zoom-in; text-align: left; color: #e5e7eb; font-size: 0.66rem;
-		background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); border-left: 3px solid var(--fxc); }
-	.fxrow:hover { background: rgba(255, 255, 255, 0.1); }
-	.fxtxt { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-	.fxtxt b { color: #f6ead2; font-weight: normal; }
-	.fxwhen { flex: none; font-size: 0.56rem; color: #e8c173; }
+		.fxlist .mab { margin-top: 0; }
+	.mab.live:hover { background: rgba(255, 255, 255, 0.12); }
 	.hsec { display: flex; flex-direction: column; gap: 4px; padding: 6px 8px; border-radius: 9px;
 		background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); }
 	.hsec.rt { gap: 4px; }
@@ -867,13 +886,13 @@
 	.boardarea { position: absolute; inset: 0; }
 	.boardarea.mob { top: 116px; bottom: 106px; }
 	.gamewrap.mob .pietool, .gamewrap.mob .placehint { top: 124px; max-width: 94vw; }
-	.mtop { position: absolute; top: 0; left: 0; right: 0; height: 44px; z-index: 14; display: flex; align-items: center; gap: 3px; padding: 0 5px;
+	.mtop { position: absolute; top: 0; left: 0; right: 0; height: 44px; z-index: 14; display: flex; align-items: center; gap: 2px; padding: 0 4px;
 		background: rgba(9, 13, 22, 0.96); border-bottom: 1px solid rgba(199, 154, 78, 0.35); }
 	.mib { flex: none; width: 29px; height: 30px; padding: 0; border-radius: 9px; display: grid; place-items: center; cursor: pointer; font-size: 17px; color: #f0dcae;
 		background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.16); }
 	.mib.tie img { width: 22px; height: 22px; }
 	.mib.tie img.flip { animation: coinflip 0.45s ease; }
-	.mpill { flex: none; height: 30px; display: flex; align-items: center; gap: 3px; padding: 0 5px; border-radius: 9px; cursor: pointer; font-size: 13px; color: #e5e7eb;
+	.mpill { flex: none; height: 30px; display: flex; align-items: center; gap: 2px; padding: 0 4px; border-radius: 9px; cursor: pointer; font-size: 13px; color: #e5e7eb;
 		background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.12); white-space: nowrap; }
 	.mpill b { font-weight: normal; color: #fff; }
 	/* fixed-width counters: one or two digits, nothing moves */
@@ -894,6 +913,9 @@
 	.abp i { width: 7px; height: 7px; border-radius: 50%; background: var(--pc); opacity: 0.18; }
 	.abp i.on { opacity: 1; box-shadow: 0 0 6px var(--pc); }
 	.abt { text-align: right; font-size: 10px; color: #e8c173; }
+	.mib.ult { width: 27px; font-size: 8.5px; letter-spacing: 0.04em; color: #8f7fae; background: rgba(120, 60, 190, 0.1); border-color: rgba(165, 110, 230, 0.25); }
+	.mib.ult:disabled { opacity: 0.55; cursor: default; }
+	.mib.ult.on { color: #fff; background: linear-gradient(160deg, #8a4fd6, #5b2aa0); border-color: rgba(200, 160, 255, 0.7); box-shadow: 0 0 10px rgba(165, 110, 230, 0.6); }
 	.mpill.gold { background: rgba(199, 154, 78, 0.14); border-color: rgba(199, 154, 78, 0.45); padding-left: 3px; }
 	.gc { width: 18px; height: 18px; border-radius: 50%; display: inline-grid; place-items: center; background: radial-gradient(circle at 35% 30%, #ffe7a1, #d4a64a 60%, #9a6f22); border: 1px solid #fbe7b0; }
 	.mscrim { position: fixed; inset: 0; z-index: 30; background: rgba(2, 5, 10, 0.55); }
@@ -920,7 +942,9 @@
 	.mbtn.lob { border: 1px solid rgba(199, 154, 78, 0.5); }
 	.mbtn.leave { color: #fca5a5; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.4); }
 	.msheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 31; max-height: 80vh; overflow-y: auto; padding: 18px 14px 20px; border-radius: 18px 18px 0 0;
-		background: rgba(10, 15, 25, 0.98); border-top: 1px solid rgba(199, 154, 78, 0.5); box-shadow: 0 -20px 50px rgba(0, 0, 0, 0.6); }
+		background: rgba(10, 15, 25, 0.98); border-top: 1px solid rgba(199, 154, 78, 0.5); box-shadow: 0 -20px 50px rgba(0, 0, 0, 0.6);
+		touch-action: none; transition: transform 0.22s ease; }
+	.msheet.drag { transition: none; }
 	.msheet .grab { position: absolute; top: 7px; left: 50%; transform: translateX(-50%); width: 42px; height: 4px; border-radius: 3px; background: rgba(255, 255, 255, 0.45); }
 	.lsec { margin-top: 12px; }
 	.lh { display: flex; justify-content: space-between; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: #b8a06a; margin-bottom: 6px; }

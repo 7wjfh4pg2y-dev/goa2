@@ -749,7 +749,7 @@
 
 					<div class="fld">
 						<div class="teamstop">
-							<span>Teams {mySeat < 0 ? '· flip, or tap an open seat' : (myTeam === 'orange' ? '· you’re Orange' : '· you’re Blue') + (ready ? '' : ' · tap an open seat to switch')}</span>
+							<span>Teams {#if mySeat < 0}· flip, or tap an open seat{:else}· <b class="youteam {myTeam}">you’re {myTeam === 'orange' ? 'Orange' : 'Blue'}</b>{/if}</span>
 							<!-- one slot: flip in while spectating, step out to spectate while seated -->
 							{#if mySeat < 0}
 								<button class="flipbtn hero" on:click={flipForTeam} disabled={flipping || seatedCount >= seatCount}>🪙 Flip for your team</button>
@@ -969,6 +969,9 @@
 	.flipbtn:disabled { opacity: 0.4; cursor: not-allowed; }
 	.flipbtn.hero { background: var(--hl); border-color: rgba(255, 255, 255, 0.35); padding: 0.42rem 1rem; font-size: 0.85rem; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3); }
 	.swaphint { font-size: 0.72rem; color: #94a3b8; }
+	.youteam { font-weight: inherit; }
+	.youteam.orange { color: #ef7d22; }
+	.youteam.blue { color: #2f7fe6; }
 	.tseat.open:disabled { cursor: default; opacity: 0.7; }
 	.tseat.open.swap:hover { background: rgba(255, 255, 255, 0.12); border-color: rgba(255, 255, 255, 0.45); transform: translateY(-2px); }
 	.teams { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
