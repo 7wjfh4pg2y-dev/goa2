@@ -539,8 +539,10 @@
 	@media (max-width: 760px) {
 		.draft { min-height: 0; }
 		.leave { top: 8px; left: 8px; padding: 5px 10px; font-size: 0.72rem; gap: 4px; }
-		.splash { inset: 0 0 auto 0; height: 42%; object-position: center 18%; }
-		.scrim { inset: 0 0 auto 0; height: 42%; background: linear-gradient(180deg, rgba(9,13,22,0.35) 0%, rgba(9,13,22,0.05) 45%, rgba(9,13,22,0.96) 100%); }
+		/* portrait: the hero panel hugs its 4 rows at the bottom; the splash fills everything above */
+		.stage { display: flex; flex-direction: column; justify-content: flex-end; }
+		.splash { object-position: center 18%; }
+		.scrim { background: linear-gradient(180deg, rgba(9,13,22,0.35) 0%, rgba(9,13,22,0.05) 22%, rgba(9,13,22,0.55) 48%, rgba(9,13,22,0.96) 72%); }
 		.turn { top: 8px; left: auto; right: 8px; transform: none; gap: 5px; padding: 4px 10px; max-width: calc(100% - 100px); }
 		.turn .btxt { font-size: 0.78rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 		.turn .sep { font-size: 0.8rem; }
@@ -560,7 +562,7 @@
 		.sicon { width: 16px; height: 13px; }
 		.pip { width: 8px; height: 8px; border-radius: 2px; }
 		.pips { gap: 2px; }
-		.idblock { left: 10px; right: 10px; bottom: auto; top: calc(42% - 104px); max-width: none; }
+		.idblock { position: relative; left: auto; bottom: auto; max-width: none; padding: 0 10px; margin-bottom: 8px; }
 		.nameline { gap: 8px; }
 		.logo { width: 40px; height: 40px; }
 		.nm { font-size: 1.9rem; }
@@ -569,13 +571,15 @@
 		.trait { width: 50px; gap: 2px; }
 		.trait img, .tdot { width: 22px; height: 22px; font-size: 0.9rem; }
 		.tl { font-size: 0.44rem; }
-		.rightcol { top: 42%; left: 8px; right: 8px; bottom: 6px; width: auto; gap: 6px; }
-		.browsewrap { flex-direction: column; gap: 6px; }
+		.rightcol { position: relative; top: auto; right: auto; bottom: auto; width: auto; flex: none; margin: 0 8px 6px; gap: 6px; }
+		.browsewrap { flex: none; flex-direction: column; gap: 6px; }
 		.filters { position: static; order: -1; flex-direction: row; flex: none; overflow-x: auto; scrollbar-width: none; opacity: 1; gap: 4px; padding: 4px; }
 		.filters::-webkit-scrollbar { display: none; }
 		.ftab { flex: none; width: 34px; height: 30px; min-height: 0; max-height: none; }
 		.fsep { width: 1px; height: 20px; margin: 0 2px; }
-		.browse { grid-template-columns: repeat(6, 1fr); grid-template-rows: none; grid-auto-rows: max-content; align-content: start; overflow-y: auto; gap: 5px; padding: 8px; }
+		.browse { flex: none; grid-template-columns: repeat(8, 1fr); grid-template-rows: none; grid-auto-rows: max-content; align-content: start; gap: 4px; padding: 6px; background: rgba(9,13,22,0.72); }
+		.hero { border-radius: 6px; }
+		.hero .soon { font-size: 0.38rem; letter-spacing: 0.04em; }
 		.hero { aspect-ratio: 1; }
 		.hero:hover { transform: none; }
 		.fcap { font-size: 0.72rem; }

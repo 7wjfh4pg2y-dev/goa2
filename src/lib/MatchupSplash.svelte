@@ -54,7 +54,7 @@
 										{#if h}
 											<div class="art"><img src={heroSplash(h.id)} alt={h.name} /></div>
 											<img class="sigil" src={heroLogo(h.id)} alt="" />
-											<div class="hname">{h.name}</div>
+											<div class="hname" style="--nl:{h.name.length}">{h.name}</div>
 											<div class="htitle">{h.title}</div>
 											<div class="who" class:me={id === clientId}>{nameOf(id)}{id === clientId ? ' · you' : ''}</div>
 											<div class="cx">{#each Array(h.stars) as _, s (s)}<img src={starIcon()} alt="★" />{/each}</div>
@@ -217,7 +217,8 @@
 		.packed .banners { gap: 4px; flex-wrap: wrap; justify-content: center; }
 		.packed .art { height: 58%; }
 		.packed .sigil { width: 24px; height: 24px; margin-top: -13px; }
-		.packed .hname { font-size: 0.7rem; padding: 0 2px; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+		/* shrink long names to fit the slim banner rather than cutting them off */
+		.packed .hname { font-size: min(0.7rem, calc((var(--bw) - 10px) / (var(--nl, 8) * 0.8))); padding: 0 2px; max-width: 100%; white-space: nowrap; overflow: hidden; }
 		.packed .htitle, .packed .stats { display: none; }
 		.packed .who { max-width: calc(100% - 6px); font-size: 0.46rem; padding: 1px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 	}
