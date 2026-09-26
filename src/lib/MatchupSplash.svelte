@@ -23,7 +23,7 @@
 	onDestroy(() => clearTimeout(readyTimer));
 
 	$: dense = Math.max(orange.length, blue.length) >= 3;
-	$: packed = Math.max(orange.length, blue.length) >= 4; // phones: 4–5 a side go compact
+	$: packed = Math.max(orange.length, blue.length) >= 4; // phones: 4–5 a side go most compact
 	const pip = (stat: [number, number], i: number) => (i < stat[0] ? 2 : i < stat[1] ? 1 : 0);
 	const roles = (traits: Trait[]) => [...traits].sort((a, b) => TRAIT_LABELS[a].localeCompare(TRAIT_LABELS[b]));
 	// stagger the drop: orange from the centre outwards, then blue
@@ -188,38 +188,52 @@
 	.wait.show { opacity: 1; animation: breathe 2.4s ease-in-out infinite; }
 	@keyframes breathe { 0%, 100% { opacity: 0.6; } 50% { opacity: 1; } }
 
-	/* ═══════════ phone (≤760px): teams stacked, smaller banners ═══════════ */
+	/* ═══════════ phone (≤760px): the two teams side by side, banners share the
+	   height between the title and a Begin bar that is always on screen ═══════════ */
 	@media (max-width: 760px) {
-		.splash, .splash.dense { --bw: min(108px, calc((100vw - 40px) / 3)); --bh: 250px; }
-		.head { margin-top: 62px; font-size: 0.8rem; letter-spacing: 0.14em; }
-		.field, .dense .field { flex-direction: column; align-items: center; gap: 6px; padding-top: 6px; }
-		.side { gap: 4px; }
-		.teamname { font-size: 0.85rem; }
-		.banners, .dense .banners { gap: 8px; }
-		.crest { margin: 0; width: 46px; height: 46px; border-width: 2px; }
-		.crest span { font-size: 1.1rem; }
-		.cloth-in { padding-bottom: 26px; }
-		.sigil, .dense .sigil { width: 30px; height: 30px; margin-top: -16px; }
-		.hname, .dense .hname { font-size: 0.95rem; padding: 0 4px; }
-		.htitle { font-size: 0.55rem; padding: 0 4px; }
-		.who { margin-top: 4px; padding: 1px 6px; font-size: 0.5rem; letter-spacing: 0.04em; }
+		.splash { height: 100%; }
+		.head { flex: none; margin-top: 58px; font-size: 0.78rem; letter-spacing: 0.14em; }
+		.field, .dense .field { flex: 1 1 0; min-height: 0; flex-direction: row; align-items: stretch; gap: 12px; padding: 10px 10px 0; }
+		.side { flex: 1 1 0; min-width: 0; min-height: 0; gap: 6px; align-items: stretch; text-align: center; }
+		.teamname { flex: none; font-size: 0.85rem; }
+		.banners, .dense .banners { flex: 1 1 0; min-height: 0; flex-direction: column; gap: 8px; }
+		.banner { width: 100%; flex: 1 1 0; min-height: 0; max-height: 330px; }
+		.hang { height: 100%; display: flex; flex-direction: column; }
+		.rod { flex: none; height: 7px; margin: 0 -4px -2px; }
+		.cloth { flex: 1; min-height: 0; height: auto; clip-path: polygon(0 0, 100% 0, 100% 100%, 50% calc(100% - 12px), 0 100%); filter: drop-shadow(0 8px 14px rgba(0,0,0,0.6)); }
+		.cloth-in { inset: 0 3px 3px; clip-path: polygon(0 0, 100% 0, 100% calc(100% - 3px), 50% calc(100% - 14px), 0 calc(100% - 3px));
+			justify-content: flex-end; padding: 0 4px 18px; }
+		/* the hero art fills the whole cloth, fading into the team colour behind the text */
+		.art { position: absolute; inset: 0; height: 100%; }
+		.art img { object-position: center 22%; }
+		.cloth.orange .art::after { background: linear-gradient(180deg, rgba(86,31,7,0) 25%, rgba(110,42,10,0.8) 62%, #561f07 100%); }
+		.cloth.blue .art::after { background: linear-gradient(180deg, rgba(13,42,85,0) 25%, rgba(20,58,112,0.8) 62%, #0d2a55 100%); }
+		.art.empty { font-size: 2rem; }
+		.sigil, .hname, .htitle, .who, .cx, .stats { position: relative; z-index: 1; flex: none; }
+		.sigil, .dense .sigil { width: 30px; height: 30px; margin-top: 0; }
+		.hname, .dense .hname { font-size: min(1.2rem, calc(150px / (var(--nl, 8) * 0.8))); max-width: 100%; white-space: nowrap; overflow: hidden; padding: 0 2px; }
+		.htitle { font-size: 0.62rem; padding: 0 2px; margin-top: 1px; }
+		.who { margin-top: 4px; padding: 1px 8px; font-size: 0.56rem; letter-spacing: 0.05em; max-width: calc(100% - 8px); }
 		.cx { margin-top: 3px; }
-		.cx img { width: 9px; height: 9px; }
-		.stats { gap: 2px; margin-top: 4px; }
-		.srow { gap: 3px; }
-		.srow img { width: 11px; height: 9px; }
-		.pips i, .dense .pips i { width: 5px; height: 5px; }
+		.cx img { width: 11px; height: 11px; }
+		.stats { gap: 2px; margin-top: 5px; }
+		.srow { gap: 4px; }
+		.srow img { width: 12px; height: 10px; }
+		.pips i, .dense .pips i { width: 7px; height: 7px; }
 		.roles { display: none; }
-		.foot { height: 70px; }
-		.begin { padding: 0.7rem 1.6rem; font-size: 1.05rem; }
-		/* 4–5 a side: five slim banners across, name + player only */
-		.splash.packed { --bw: calc((100vw - 36px) / 5); --bh: 180px; }
-		.packed .banners { gap: 4px; flex-wrap: wrap; justify-content: center; }
-		.packed .art { height: 58%; }
-		.packed .sigil { width: 24px; height: 24px; margin-top: -13px; }
-		/* shrink long names to fit the slim banner rather than cutting them off */
-		.packed .hname { font-size: min(0.7rem, calc((var(--bw) - 10px) / (var(--nl, 8) * 0.8))); padding: 0 2px; max-width: 100%; white-space: nowrap; overflow: hidden; }
-		.packed .htitle, .packed .stats { display: none; }
-		.packed .who { max-width: calc(100% - 6px); font-size: 0.46rem; padding: 1px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+		/* 3+ a side: shorter cards — name, player and stars only */
+		.dense .htitle, .dense .stats { display: none; }
+		.dense .sigil { width: 24px; height: 24px; }
+		.packed .sigil { display: none; }
+		.packed .cloth-in { padding-bottom: 12px; }
+		.packed .hname { font-size: min(0.95rem, calc(150px / (var(--nl, 8) * 0.8))); }
+		.packed .who { margin-top: 2px; padding: 0 7px; font-size: 0.5rem; }
+		.packed .cx { margin-top: 2px; }
+		.packed .cx img { width: 9px; height: 9px; }
+		.crest { position: absolute; left: 50%; top: 50%; z-index: 3; margin: 0; width: 48px; height: 48px; border-width: 2px; transform: translate(-50%, -50%);
+			animation: fade 0.6s 0.5s ease both; box-shadow: 0 0 0 4px rgba(216,181,106,0.18), 0 0 24px rgba(216,181,106,0.35), inset 0 0 12px rgba(0,0,0,0.8); }
+		.crest span { font-size: 1.15rem; }
+		.foot { flex: none; height: auto; padding: 12px 0 calc(14px + env(safe-area-inset-bottom)); }
+		.begin { padding: 0.75rem 1.8rem; font-size: 1.05rem; }
 	}
 </style>
