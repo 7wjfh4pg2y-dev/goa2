@@ -72,10 +72,22 @@
 		);
 	}
 
+	// the art is per card: when the same component is handed a different card
+	// (e.g. swiping through the hand preview), load the new art before repainting
+	$: artKey = `${heroId}/${backgroundSlug(card, extraSlotIndex)}`;
+	let loadedKey = '';
+	async function refreshBg(k: string) {
+		loadedKey = k;
+		const b = await loadBg();
+		if (loadedKey === k) bg = b;
+	}
+	$: if (ready && artKey !== loadedKey) refreshBg(artKey);
+
 	onMount(async () => {
 		if (!browser) return;
 		await Promise.all([preloadImages(), document.fonts.load('16px "Modesto Poster"'), document.fonts.ready]);
 		ctx = canvas.getContext('2d');
+		loadedKey = artKey;
 		bg = await loadBg();
 		ready = true;
 		paint();
