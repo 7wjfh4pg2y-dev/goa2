@@ -152,15 +152,17 @@
 	function armToken(t: ArmToken) { pendingSpawn = null; pendingToken = t; selPieceId = null; }
 	$: if (pendingSpawn) pendingToken = null;
 	$: placing = !!pendingSpawn || !!pendingToken;
-	// while something is held, it rides under the pointer over the board (the cursor)
-	const minionTokenArt = import.meta.glob('./images/minion_tokens/*.png', { eager: true, import: 'default' }) as Record<string, string>;
-	let ghost: { x: number; y: number } | null = null;
-	function trackGhost(e: PointerEvent) {
-		if (!placing) return;
-		const t = e.target as Element | null;
-		ghost = t?.closest?.('.board-wrap') ? { x: e.clientX, y: e.clientY } : null;
-	}
-	$: if (!placing) ghost = null;
+	// what's held, drawn by the board as a see-through ghost under the cursor
+	$: placeGhost = pendingSpawn
+		? { id: '__ghost', hex: '', team: pendingSpawn.team, role: pendingSpawn.role }
+		: pendingToken
+			? pendingToken.token === 'companion'
+				? { id: '__ghost', hex: '', team: pendingToken.team, letter: pendingToken.letter, color: colorHex(pendingToken.color ?? '') }
+				: { id: '__ghost', hex: '', team: pendingToken.team, token: pendingToken.token }
+			: null;
+	// the hex under a held object lights up in your chosen colour
+	$: myHoldColor = colorHex($players.find((p) => p.id === clientId)?.color ?? '');
+	function cancelPlace() { pendingSpawn = null; pendingToken = null; }
 	// board hex tapped while holding something: drop it right there
 	function onBoardHex(hex: string) {
 		if (pendingToken) {
@@ -256,18 +258,9 @@
 	});
 </script>
 
-<svelte:window on:keydown={(e) => { if (e.key !== 'Escape') return; if (confirmLeave) confirmLeave = false; else { pendingSpawn = null; pendingToken = null; } }} on:pointermove={trackGhost} on:pointerdown={(e) => { trackGhost(e); viewsOutside(e); }} />
+<svelte:window on:keydown={(e) => { if (e.key !== 'Escape') return; if (confirmLeave) confirmLeave = false; else { pendingSpawn = null; pendingToken = null; } }} on:pointerdown={viewsOutside} />
 
-<div class="gamewrap" class:spawning={placing}>
-	{#if pendingSpawn && ghost}
-		<img class="spawnghost" src={minionTokenArt[`./images/minion_tokens/${pendingSpawn.team}_${pendingSpawn.role}.png`]} alt="" style="left:{ghost.x}px; top:{ghost.y}px" />
-	{:else if pendingToken && ghost}
-		{#if pendingToken.letter}
-			<span class="spawnghost ltr" style="left:{ghost.x}px; top:{ghost.y}px; --pc:{colorHex(pendingToken.color ?? 'white')}; --tc:{pendingToken.team === 'blue' ? '#2f7fe6' : '#ef7d22'}">{pendingToken.letter}</span>
-		{:else}
-			<img class="spawnghost tok" src={pendingToken.img} alt="" style="left:{ghost.x}px; top:{ghost.y}px" />
-		{/if}
-	{/if}
+<div class="gamewrap">
 	{#if pendingToken}
 		<div class="placehint">
 			<span>Tap a hex to place {pendingToken.token === 'companion' ? pendingToken.label : tokenName(pendingToken.token)}{MINES.has(pendingToken.token) ? ' (face down)' : ''}</span>
@@ -275,7 +268,7 @@
 		</div>
 	{/if}
 	<div class="ocean"></div>
-	<BoardCanvas bind:this={board} map={$ms.map ?? {}} rotation={orientation} interactive={true} {placing} {areas} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} />
+	<BoardCanvas bind:this={board} map={$ms.map ?? {}} rotation={orientation} interactive={true} {placing} {placeGhost} holdColor={myHoldColor} onCancelPlace={cancelPlace} {areas} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} />
 
 	<CardLayer {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} onArmToken={armToken} holdingToken={!!pendingToken} bind:previewId />
 
@@ -515,11 +508,6 @@
 <style>
 	/* clip (not just hidden): a tucked hand extends past the bottom edge, and
 	   overflow:hidden would still let focus/scrollIntoView scroll the whole view */
-	/* holding a minion to spawn: the token replaces the cursor over the board */
-	.gamewrap.spawning :global(.board-wrap), .gamewrap.spawning :global(.board-wrap *) { cursor: none !important; }
-	.spawnghost { position: fixed; z-index: 70; width: 46px; height: 46px; object-fit: contain; pointer-events: none; transform: translate(-50%, -50%) scale(1.05);
-		filter: drop-shadow(0 6px 10px rgba(0,0,0,.6)); animation: ghostbob 1.1s ease-in-out infinite alternate; }
-	@keyframes ghostbob { from { transform: translate(-50%, -50%) scale(1.05); } to { transform: translate(-50%, -56%) scale(1.1); } }
 	.gamewrap { position: fixed; inset: 0; color: #f1f5f9; overflow: hidden; overflow: clip; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 	/* ocean backdrop — deep water with layered swells + moving caustics so the hex island reads as floating on sea */
 	.ocean { position: absolute; inset: 0;
@@ -699,8 +687,6 @@
 		border: 1px solid rgba(255, 255, 255, 0.18); box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5); }
 	.pieflip { border: 1px solid rgba(240, 200, 120, 0.55); background: rgba(199, 154, 78, 0.24); color: #f6e3b4; border-radius: 999px; padding: 4px 12px; font-weight: 700; cursor: pointer; font-size: 0.76rem; }
 	.pieflip:hover { background: rgba(199, 154, 78, 0.4); }
-	.spawnghost.tok { width: 40px; height: 40px; border-radius: 50%; background: rgba(9,13,22,.85); box-shadow: 0 0 0 3px rgba(240,200,120,.7), 0 6px 12px rgba(0,0,0,.6); padding: 3px; box-sizing: border-box; }
-	.spawnghost.ltr { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: var(--pc); border: 3px solid var(--tc); color: #0b1220; font-weight: 900; font-size: 18px; box-sizing: border-box; }
 	.placehint { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); z-index: 9; display: flex; align-items: center; gap: 10px; padding: 6px 8px 6px 14px; border-radius: 999px;
 		background: rgba(11, 16, 26, 0.9); border: 1px solid rgba(240, 200, 120, 0.5); color: #f0dcae; font-size: 0.8rem; box-shadow: 0 8px 24px rgba(0,0,0,.5); }
 	.pietxt { font-size: 0.78rem; font-weight: 700; color: #e5e7eb; text-transform: capitalize; }

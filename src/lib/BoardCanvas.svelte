@@ -21,6 +21,12 @@
 	export let placing = false;
 	// temporary area-effect radii: every hex within r of a hero, in that player's colour
 	export let areas: Array<{ hex: string; r: number; color: string }> = [];
+	// something being placed from outside (minion spawn / shelf token), drawn as the ghost
+	export let placeGhost: (typeof pieces)[number] | null = null;
+	// the highlight colour for the hex under a held object (the viewer's chosen colour)
+	export let holdColor = '#fde047';
+	// placing, but released off the board → put it back (cancel)
+	export let onCancelPlace: (() => void) | null = null;
 	export let onMovePiece: ((id: string, hex: string) => void) | null = null;
 	export let onSelect: (id: string | null) => void = () => {};
 	// tap on an empty hex (no piece under the cursor, nothing carried) — used by
@@ -218,6 +224,18 @@
 	let pressId: string | null = null; // token pressed at gesture start, if any
 	let dragId: string | null = null;  // token currently being carried
 	let dragPt = { x: 0, y: 0 };
+	type Piece = (typeof pieces)[number];
+	// while holding something: where the pointer is, and the (on-board) hex under it
+	let hoverPt = { x: 0, y: 0 };
+	let hoverHex: string | null = null;
+	$: carryId = dragId ?? selected;
+	$: ghostPiece = placing ? placeGhost : carryId ? pieces.find((q) => q.id === carryId) ?? null : null;
+	$: if (!ghostPiece) hoverHex = null;
+	function trackHover(clientX: number, clientY: number) {
+		const pt = toChild(clientX, clientY);
+		hoverPt = { x: pt.x, y: pt.y };
+		hoverHex = hexAt(pt.x, pt.y);
+	}
 	let selected: string | null = null; // token picked up via tap (click-to-move)
 	let lastSel: string | null | undefined = undefined;
 	$: if (selected !== lastSel) { lastSel = selected; onSelect(selected); }
@@ -252,6 +270,7 @@
 			zoomAt(pinch.scale0 * (twoDist(a, b) / pinch.dist), (a.x + b.x) / 2, (a.y + b.y) / 2);
 			return;
 		}
+		if (dragId || selected || placing) trackHover(e.clientX, e.clientY);
 		if (!panning && !dragId) return;
 		if (!moved) {
 			if (Math.hypot(e.clientX - downC.x, e.clientY - downC.y) < DRAG_THRESHOLD) return;
@@ -275,10 +294,11 @@
 			panning = false; pressId = null; moved = false;
 			return;
 		}
-		if (dragId) { // dropped a carried token
+		if (dragId) { // dropped a carried piece: onto a real hex, or back where it came from
 			const pt = toChild(e.clientX, e.clientY);
-			const hex = nearestHex(pt.x, pt.y);
-			if (hex && onMovePiece) onMovePiece(dragId, hex);
+			const hex = hexAt(pt.x, pt.y);
+			const from = pieces.find((q) => q.id === dragId)?.hex;
+			if (hex && hex !== from && onMovePiece) onMovePiece(dragId, hex);
 			dragId = null; selected = null;
 		} else if (!moved) {
 			handleTap(e);
@@ -288,24 +308,29 @@
 	$: if (placing) selected = null;
 	function handleTap(e: PointerEvent) {
 		if (!interactive) return;
-		if (placing) { // drop whatever is held on the nearest hex
+		if (placing) { // drop what's held on the hex under the pointer; off the board → put it back
 			const pt = toChild(e.clientX, e.clientY);
-			const hex = nearestHex(pt.x, pt.y);
-			if (hex && onHex) onHex(hex);
+			const hex = hexAt(pt.x, pt.y);
+			if (hex) onHex?.(hex); else onCancelPlace?.();
 			return;
 		}
-		if (pressId != null && onMovePiece) { selected = selected === pressId ? null : pressId; return; } // pick up / put down
-		if (selected != null && onMovePiece) { // tapped a hex with a token in hand → move it
+		if (selected != null && onMovePiece && pressId !== selected) { // holding a piece → drop it where tapped
 			const pt = toChild(e.clientX, e.clientY);
-			const hex = nearestHex(pt.x, pt.y);
-			if (hex) onMovePiece(selected, hex);
+			const hex = hexAt(pt.x, pt.y);
+			const from = pieces.find((q) => q.id === selected)?.hex;
+			if (hex && hex !== from) onMovePiece(selected, hex); // off the board → stays where it was
 			selected = null;
+			return;
+		}
+		if (pressId != null && onMovePiece) { // pick up / put down
+			selected = selected === pressId ? null : pressId;
+			if (selected) trackHover(e.clientX, e.clientY);
 			return;
 		}
 		// empty-hex tap → report which hex (placement modes)
 		if (onHex && pressId == null) {
 			const pt = toChild(e.clientX, e.clientY);
-			const hex = nearestHex(pt.x, pt.y);
+			const hex = hexAt(pt.x, pt.y);
 			if (hex) onHex(hex);
 		}
 	}
@@ -316,6 +341,13 @@
 	function centerOf(id: string) {
 		const [c, r] = id.split('_').map(Number);
 		return { x: size * SQRT3 * (c + 0.5 * (r & 1)), y: size * 1.5 * r };
+	}
+	// the hex actually under a point — null when the point is off the board
+	function hexAt(x: number, y: number): string | null {
+		const h = nearestHex(x, y);
+		if (!h) return null;
+		const c = centerOf(h);
+		return (c.x - x) ** 2 + (c.y - y) ** 2 <= (size * 0.95) ** 2 ? h : null;
 	}
 	function nearestHex(x: number, y: number): string | null {
 		let best: string | null = null, bd = Infinity;
@@ -353,6 +385,52 @@
 	const pieceColor = (t: string) => (t === 'orange' ? '#ea6a1e' : t === 'blue' ? '#2f79e6' : '#9aa4b2');
 </script>
 
+{#snippet pieceBody(p: Piece, c: { x: number; y: number }, sel: boolean, cid: string)}
+		{#if p.letter}
+			<!-- companion (Turret / Pyro): player-colour disc, its letter, team ring -->
+			<circle cx={c.x} cy={c.y} r={size * 0.6} fill={p.color ?? pieceColor(p.team)} stroke={sel ? '#fde047' : pieceColor(p.team)} stroke-width={size * 0.16} />
+			<text x={c.x} y={c.y} text-anchor="middle" dominant-baseline="central" font-size={size * 0.7} font-weight="900" fill="#0b1220" pointer-events="none">{p.letter}</text>
+		{:else if p.mine === 'down'}
+			<!-- a mine, face down: the owner's colour, brass ring, skull & crossbones emblem -->
+			{@const R = size * 0.6}
+			<circle cx={c.x} cy={c.y} r={R} fill={p.color ?? pieceColor(p.team)} />
+			<circle cx={c.x} cy={c.y} r={R} fill="url(#mine-shade)" />
+			<circle cx={c.x} cy={c.y} r={R * 0.86} fill="none" stroke="#c79a4e" stroke-opacity=".85" stroke-width={R * 0.035} />
+			<circle cx={c.x} cy={c.y} r={R} fill="none" stroke={sel ? '#fde047' : '#12161e'} stroke-width={R * 0.12} />
+			<use href="#mine-skull" x={c.x - R} y={c.y - R} width={R * 2} height={R * 2} pointer-events="none" />
+			{#if p.peek}
+				<!-- only its owner sees which mine this is -->
+				<circle cx={c.x + size * 0.46} cy={c.y + size * 0.42} r={size * 0.2} fill="#0b1220" stroke="#f4ecd8" stroke-width={size * 0.04} pointer-events="none" />
+				<text x={c.x + size * 0.46} y={c.y + size * 0.43} text-anchor="middle" dominant-baseline="central" font-size={size * 0.24} fill="#f4ecd8" pointer-events="none">{p.peek}</text>
+			{/if}
+		{:else if p.token}
+			<circle cx={c.x} cy={c.y} r={size * 0.6} fill="rgba(9,13,22,.82)" stroke={sel ? '#fde047' : pieceColor(p.team)} stroke-width={size * 0.12} />
+			{#if tokenImg(p.token) ?? p.sym}
+				<image href={tokenImg(p.token) ?? p.sym} x={c.x - size * 0.5} y={c.y - size * 0.5} width={size} height={size} preserveAspectRatio="xMidYMid meet" pointer-events="none" />
+			{:else if p.label}
+				<text x={c.x} y={c.y} text-anchor="middle" dominant-baseline="central" font-size={size * 0.6} font-weight="800" fill="#f6ead2" pointer-events="none">{p.label[0]}</text>
+			{/if}
+		{:else if p.role}
+			<image href={minionToken(p.team, p.role)} x={c.x - size * 0.7} y={c.y - size * 0.7} width={size * 1.4} height={size * 1.4} preserveAspectRatio="xMidYMid meet" pointer-events="none"
+				transform={minionRot(p, c.x, c.y, rotEff, teamSpawnDir)} />
+			<circle cx={c.x} cy={c.y} r={size * 0.66} fill="transparent" stroke={sel ? '#fde047' : pieceColor(p.team)} stroke-width={size * 0.14} />
+		{:else}
+			<!-- hero piece = the player icon: face portrait, team ring, player-colour outer ring -->
+			{@const R = size * 0.68}
+			<circle cx={c.x} cy={c.y} r={R} fill={p.color ?? pieceColor(p.team)} />
+			<circle cx={c.x} cy={c.y} r={R * 0.84} fill={pieceColor(p.team)} />
+			{#if p.hero}
+				{@const pr = portraitRect(p.hero, c.x, c.y, R * 1.36)}
+				<clipPath id="pc-{cid}"><circle cx={c.x} cy={c.y} r={R * 0.68} /></clipPath>
+				<image href={pr.href} x={pr.x} y={pr.y} width={pr.w} height={pr.h} clip-path="url(#pc-{cid})" preserveAspectRatio="none" pointer-events="none" />
+			{:else if p.sym}
+				<image href={p.sym} x={c.x - size * 0.46} y={c.y - size * 0.46} width={size * 0.92} height={size * 0.92} preserveAspectRatio="xMidYMid meet" pointer-events="none" style="filter:drop-shadow(0 1px 2px rgba(0,0,0,.6))" />
+			{:else if p.label}
+				<text x={c.x} y={c.y} text-anchor="middle" dominant-baseline="central" font-size={size * 0.72} font-weight="800" fill="#0b1220" stroke="rgba(255,255,255,.6)" stroke-width={size * 0.02} pointer-events="none">{p.label}</text>
+			{/if}
+		{/if}
+{/snippet}
+
 <div
 	class="board-wrap"
 	class:interactive
@@ -361,6 +439,8 @@
 	on:pointermove={move}
 	on:pointerup={up}
 	on:pointercancel={up}
+	on:pointerleave={() => { if (!dragId) hoverHex = null; }}
+	class:holding={!!ghostPiece}
 	role="img"
 	aria-label={map.name ? `Game board: ${map.name}` : 'Game board'}
 >
@@ -402,6 +482,12 @@
 				<polygon points={poly(h.x, h.y, size)} fill="none" stroke="rgba(6,10,18,.7)" stroke-width="4" stroke-linejoin="round" />
 			{/each}
 
+			<!-- the hex a held object would land on, in the viewer's colour -->
+			{#if ghostPiece && hoverHex}
+				{@const hc = centerOf(hoverHex)}
+				<polygon points={poly(hc.x, hc.y, size)} fill={holdColor} fill-opacity=".3" stroke={holdColor} stroke-opacity=".9" stroke-width={size * 0.07} stroke-linejoin="round" pointer-events="none" />
+			{/if}
+
 			<!-- area radii (under the pieces): translucent fill + a solid outer edge -->
 			{#each areaShapes as a}
 				<g pointer-events="none">
@@ -411,12 +497,11 @@
 			{/each}
 
 			{#each pieces.filter((q) => !q.attachTo) as p (p.id)}
-				{@const carry = dragId === p.id}
 				{@const base = centerOf(p.hex)}
 				{@const off = pieceOffset[p.id] ?? { x: 0, y: 0 }}
-				{@const c = carry ? dragPt : { x: base.x + off.x, y: base.y + off.y }}
-				{@const sel = selected === p.id || carry}
-				<g class="piece" class:selectable={!!onMovePiece} class:selected={sel} class:carry
+				{@const c = { x: base.x + off.x, y: base.y + off.y }}
+				{@const sel = selected === p.id || dragId === p.id}
+				<g class="piece" class:selectable={!!onMovePiece} class:selected={sel} class:lifted={sel && !!hoverHex}
 					role="button" tabindex="-1" data-piece={p.id}
 					aria-label={p.role ? `${p.team} ${p.role} minion` : `${p.team} ${p.label ?? 'piece'}`}
 					transform={rotEff ? `rotate(${-rotEff} ${c.x} ${c.y})` : undefined}
@@ -424,49 +509,7 @@
 					{#if sel}
 						<circle class="selring" cx={c.x} cy={c.y} r={size * 0.82} fill="none" stroke="#fde047" stroke-width={size * 0.1} stroke-dasharray="{size * 0.32} {size * 0.22}" pointer-events="none" />
 					{/if}
-					{#if p.letter}
-						<!-- companion (Turret / Pyro): player-colour disc, its letter, team ring -->
-						<circle cx={c.x} cy={c.y} r={size * 0.6} fill={p.color ?? pieceColor(p.team)} stroke={sel ? '#fde047' : pieceColor(p.team)} stroke-width={size * 0.16} />
-						<text x={c.x} y={c.y} text-anchor="middle" dominant-baseline="central" font-size={size * 0.7} font-weight="900" fill="#0b1220" pointer-events="none">{p.letter}</text>
-					{:else if p.mine === 'down'}
-						<!-- a mine, face down: the owner's colour, brass ring, skull & crossbones emblem -->
-						{@const R = size * 0.6}
-						<circle cx={c.x} cy={c.y} r={R} fill={p.color ?? pieceColor(p.team)} />
-						<circle cx={c.x} cy={c.y} r={R} fill="url(#mine-shade)" />
-						<circle cx={c.x} cy={c.y} r={R * 0.86} fill="none" stroke="#c79a4e" stroke-opacity=".85" stroke-width={R * 0.035} />
-						<circle cx={c.x} cy={c.y} r={R} fill="none" stroke={sel ? '#fde047' : '#12161e'} stroke-width={R * 0.12} />
-						<use href="#mine-skull" x={c.x - R} y={c.y - R} width={R * 2} height={R * 2} pointer-events="none" />
-						{#if p.peek}
-							<!-- only its owner sees which mine this is -->
-							<circle cx={c.x + size * 0.46} cy={c.y + size * 0.42} r={size * 0.2} fill="#0b1220" stroke="#f4ecd8" stroke-width={size * 0.04} pointer-events="none" />
-							<text x={c.x + size * 0.46} y={c.y + size * 0.43} text-anchor="middle" dominant-baseline="central" font-size={size * 0.24} fill="#f4ecd8" pointer-events="none">{p.peek}</text>
-						{/if}
-					{:else if p.token}
-						<circle cx={c.x} cy={c.y} r={size * 0.6} fill="rgba(9,13,22,.82)" stroke={sel ? '#fde047' : pieceColor(p.team)} stroke-width={size * 0.12} />
-						{#if tokenImg(p.token) ?? p.sym}
-							<image href={tokenImg(p.token) ?? p.sym} x={c.x - size * 0.5} y={c.y - size * 0.5} width={size} height={size} preserveAspectRatio="xMidYMid meet" pointer-events="none" />
-						{:else if p.label}
-							<text x={c.x} y={c.y} text-anchor="middle" dominant-baseline="central" font-size={size * 0.6} font-weight="800" fill="#f6ead2" pointer-events="none">{p.label[0]}</text>
-						{/if}
-					{:else if p.role}
-						<image href={minionToken(p.team, p.role)} x={c.x - size * 0.7} y={c.y - size * 0.7} width={size * 1.4} height={size * 1.4} preserveAspectRatio="xMidYMid meet" pointer-events="none"
-							transform={minionRot(p, c.x, c.y, rotEff, teamSpawnDir)} />
-						<circle cx={c.x} cy={c.y} r={size * 0.66} fill="transparent" stroke={sel ? '#fde047' : pieceColor(p.team)} stroke-width={size * 0.14} />
-					{:else}
-						<!-- hero piece = the player icon: face portrait, team ring, player-colour outer ring -->
-						{@const R = size * 0.68}
-						<circle cx={c.x} cy={c.y} r={R} fill={p.color ?? pieceColor(p.team)} />
-						<circle cx={c.x} cy={c.y} r={R * 0.84} fill={pieceColor(p.team)} />
-						{#if p.hero}
-							{@const pr = portraitRect(p.hero, c.x, c.y, R * 1.36)}
-							<clipPath id="pc-{p.id}"><circle cx={c.x} cy={c.y} r={R * 0.68} /></clipPath>
-							<image href={pr.href} x={pr.x} y={pr.y} width={pr.w} height={pr.h} clip-path="url(#pc-{p.id})" preserveAspectRatio="none" pointer-events="none" />
-						{:else if p.sym}
-							<image href={p.sym} x={c.x - size * 0.46} y={c.y - size * 0.46} width={size * 0.92} height={size * 0.92} preserveAspectRatio="xMidYMid meet" pointer-events="none" style="filter:drop-shadow(0 1px 2px rgba(0,0,0,.6))" />
-						{:else if p.label}
-							<text x={c.x} y={c.y} text-anchor="middle" dominant-baseline="central" font-size={size * 0.72} font-weight="800" fill="#0b1220" stroke="rgba(255,255,255,.6)" stroke-width={size * 0.02} pointer-events="none">{p.label}</text>
-						{/if}
-					{/if}
+					{@render pieceBody(p, c, sel, p.id)}
 				</g>
 			{/each}
 
@@ -475,10 +518,10 @@
 				{#if host}
 					{@const hc = posOf(host.id, host.hex)}
 					{@const ang = ((-45 - rotEff) * Math.PI) / 180 + (badgeIdx[p.id] ?? 0) * 0.62} <!-- upper-right on screen, whatever the board's rotation -->
-					{@const c = dragId === p.id ? dragPt : { x: hc.x + Math.cos(ang) * size * 0.66, y: hc.y + Math.sin(ang) * size * 0.66 }}
+					{@const c = { x: hc.x + Math.cos(ang) * size * 0.66, y: hc.y + Math.sin(ang) * size * 0.66 }}
 					{@const sel = selected === p.id || dragId === p.id}
 					<!-- a marker riding on a hero (poison / bounty): a small badge that moves with them -->
-					<g class="piece" class:selectable={!!onMovePiece} class:selected={sel} role="button" tabindex="-1" data-piece={p.id} aria-label="{p.token ?? 'marker'} on a hero"
+					<g class="piece" class:selectable={!!onMovePiece} class:selected={sel} class:lifted={sel && !!hoverHex} role="button" tabindex="-1" data-piece={p.id} aria-label="{p.token ?? 'marker'} on a hero"
 						transform={rotEff ? `rotate(${-rotEff} ${c.x} ${c.y})` : undefined}>
 						<circle cx={c.x} cy={c.y} r={size * 0.3} fill="rgba(9,13,22,.9)" stroke={sel ? '#fde047' : '#f4ecd8'} stroke-width={size * 0.06} />
 						{#if tokenImg(p.token)}
@@ -487,9 +530,15 @@
 					</g>
 				{/if}
 			{/each}
+
+			<!-- the held object's ghost, riding under the cursor (only over real hexes) -->
+			{#if ghostPiece && hoverHex}
+				<g class="ghost" opacity=".62" pointer-events="none" transform={rotEff ? `rotate(${-rotEff} ${hoverPt.x} ${hoverPt.y})` : undefined}>
+					{@render pieceBody(ghostPiece, hoverPt, false, 'ghost')}
+				</g>
+			{/if}
 		</g>
 	</svg>
-	<slot />
 </div>
 
 <style>
@@ -499,7 +548,10 @@
 	.board-wrap.interactive:active { cursor: grabbing; }
 	svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 	.piece.selectable { cursor: pointer; }
-	.piece.carry { cursor: grabbing; }
+	/* holding something: the closed hand everywhere over the board, and the picked-up
+	   piece dims while its ghost rides the cursor */
+	.board-wrap.holding, .board-wrap.holding :global(*) { cursor: grabbing !important; }
+	.piece.lifted { opacity: .4; }
 	.piece.selected circle { filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.6)); }
 	.selring { animation: spin 8s linear infinite; transform-box: fill-box; transform-origin: center; }
 	@keyframes spin { to { transform: rotate(360deg); } }
