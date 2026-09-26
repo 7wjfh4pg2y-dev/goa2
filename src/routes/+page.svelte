@@ -81,7 +81,9 @@
 	// same proportions (only the spare width changes with the aspect ratio). The
 	// board (GameView) is already fluid and isn't scaled.
 	let ui = 1;
-	const fitUi = () => { if (browser) ui = Math.min(1.5, Math.max(0.7, Math.min(innerWidth / 1440, innerHeight / 900))); };
+	// desktop: a virtual 1440×900 canvas scaled to fit. Phones (≤760px wide) render at
+	// real size instead — their own portrait CSS takes over (see @media max-width 760px).
+	const fitUi = () => { if (browser) ui = innerWidth <= 760 ? 1 : Math.min(1.5, Math.max(0.7, Math.min(innerWidth / 1440, innerHeight / 900))); };
 	fitUi();
 	let coinCaption = '';
 	let coinPending = 'Flipping…'; // caption while the coin spins
@@ -1012,5 +1014,31 @@
 
 	@media (max-width: 560px) {
 		.grid2 { grid-template-columns: 1fr; gap: 16px; }
+	}
+	/* phones: smaller crest so the forms sit higher, stacked columns, wrapping rows */
+	@media (max-width: 760px) {
+		.wrap:not(.landing) { padding: 18px 12px 28px; gap: 16px; }
+		.wrap:not(.landing) .logo { width: min(150px, 40 * var(--vw)); }
+		.card.form { padding: 16px 14px; }
+		.form.narrow, .form.wide { width: min(560px, calc(100vw - 24px)); }
+		.joincols.two { grid-template-columns: 1fr; gap: 16px; }
+		.joincols.two .jcol.right { border-left: none; padding-left: 0; border-top: 1px solid rgba(255, 255, 255, 0.09); padding-top: 14px; }
+		.primary, .ghost { padding: 0.65rem 1.1rem; }
+		/* lobby */
+		.form.lobby { width: calc(100vw - 24px) !important; }
+		.lobbyhead { align-items: flex-start; }
+		.headright { flex-direction: column; align-items: flex-end; gap: 6px; }
+		.copybtn { padding: 0.42rem 0.8rem; font-size: 0.82rem; }
+		.teamstop { flex-wrap: wrap; row-gap: 6px; }
+		.teamstop > span { white-space: normal; }
+		.teams { gap: 8px; }
+		.teampanel { padding: 8px 6px; }
+		.tseats { gap: 6px; }
+		.tseat { flex: 1 1 64px; min-width: 60px; padding: 7px 3px; }
+		.tokenrow { flex-wrap: wrap; }
+		.tokenrow .swatches { flex: 1 1 100%; gap: 7px; }
+		.sw { flex: 1 1 0; width: auto; height: auto; max-width: 1.6rem; aspect-ratio: 1; }
+		.row.wraprow { row-gap: 8px; }
+		.rightbtns { margin-left: auto; }
 	}
 </style>
