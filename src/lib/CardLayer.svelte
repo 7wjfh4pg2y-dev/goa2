@@ -295,6 +295,8 @@
 	//   PR2 AR2 PB2 AB2 PG2 AG2   (level 2)
 	//   PR3 AR3 PB3 AB3 PG3 AG3   (level 3)
 	let deckOpen = false;
+	// phones: one deck section at a time (tabs) instead of one long scroll
+	let deckTab: 'hand' | 'deck' | 'upgrade' | 'removed' = 'hand';
 	let deckSel: number | null = null; // card being managed (selected in the deck view)
 	const GRID_COLORS = ['RED', 'BLUE', 'GREEN'];
 	function findCard(hero: string, color: string, level: number, first: number): number {
@@ -762,23 +764,31 @@
 		{@const selZone = deckSel != null ? zoneOf(mine, deckSel) : null}
 		{@const selInGrid = deckSel != null && myGrid.flat().some((g) => g.idx === deckSel)}
 		<div class="scrim" on:click={() => { deckOpen = false; deckSel = null; }} on:keydown={(e) => e.key === 'Escape' && (deckOpen = false)} role="presentation">
-			<div class="deckmodal" on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" tabindex="-1">
+			<div class="deckmodal" class:mob={mobile} on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" tabindex="-1">
 				<div class="mhead">
 					<span class="mav" style="--tint:{ORANGE}"><img src={heroLogo(dh)} alt="" /></span>
 					<div class="mtitle">
 						<div class="mnm">{heroName(dh)} · Deck<em class="lvtag">Lv {levelOf(mine)}</em></div>
-						<div class="mtt">Select a card, then send it to your hand, upgrade area or removed pile</div>
+						<div class="mtt">{mobile ? 'Tap a card, then choose where it goes' : 'Select a card, then send it to your hand, upgrade area or removed pile'}</div>
 					</div>
 					<button class="ix" on:click={() => { deckOpen = false; deckSel = null; }}>✕</button>
 				</div>
+				{#if mobile}
+					<div class="dktabs" role="tablist">
+						{#each [['hand', 'Hand', mine.hand.length], ['deck', 'Deck', deckCards(mine).length], ['upgrade', 'Upgrade', mine.upgrade.length], ['removed', 'Removed', mine.removed.length]] as [k, lbl, n] (k)}
+							<button class="dktab {k}" class:on={deckTab === k} role="tab" aria-selected={deckTab === k} on:click={() => (deckTab = k as typeof deckTab)}>{lbl}<b>{n}</b></button>
+						{/each}
+					</div>
+				{/if}
 
 				<!-- HAND: ultimate parked far left, then basics, then colour cards -->
+				{#if !mobile || deckTab === 'hand'}
 				<div class="dklabel">Your hand <span class="ct">{mine.hand.length}</span> <span class="zhint">double-click any card to enlarge it</span></div>
 				<div class="dkhand">
 					<!-- Ultimate: never in hand; previewable; unlock appears once you hit level 8 -->
 					{#if myUlt >= 0}
 						<div class="ultslot" class:on={mine.ultimate}>
-							<button class="dkcard ult" class:locked={!mine.ultimate} on:dblclick={() => examineCard(dh, myUlt)} title="Double-click to preview your ultimate">
+							<button class="dkcard ult" class:locked={!mine.ultimate} on:click={() => mobile && examineCard(dh, myUlt)} on:dblclick={() => examineCard(dh, myUlt)} title="Double-click to preview your ultimate">
 								<Card heroId={dh} card={heroCards(dh)[myUlt]} />
 								{#if !mine.ultimate}<span class="ultlock">🔒 Lv 8</span>{/if}
 							</button>
@@ -792,7 +802,7 @@
 					{/if}
 
 					{#each split.basics as i (i)}
-						<div class="dkcard basic" title="Basic card — stays in your hand" on:dblclick={() => examineCard(dh, i)} role="presentation">
+						<div class="dkcard basic" title="Basic card — stays in your hand" on:click={() => mobile && examineCard(dh, i)} on:dblclick={() => examineCard(dh, i)} role="presentation">
 							<Card heroId={dh} card={heroCards(dh)[i]} />
 							<span class="dklock">🔒</span>
 						</div>
@@ -805,8 +815,10 @@
 					{/each}
 					{#if !split.rest.length}<span class="empty-note">—</span>{/if}
 				</div>
+				{/if}
 
 				<!-- UPGRADE DECK grid (fixed positions; status shows where each card is) -->
+				{#if !mobile || deckTab === 'deck'}
 				<div class="dklabel">Upgrade deck — Tier II &amp; III <span class="ct">{deckCards(mine).length} in deck</span></div>
 				<div class="dkgrid">
 					{#each myGrid as row}
@@ -826,9 +838,11 @@
 						{/each}
 					{/each}
 				</div>
+				{/if}
 
 				<!-- UPGRADE + REMOVED zones -->
 				<div class="dkzones">
+					{#if !mobile || deckTab === 'upgrade'}
 					<div class="dkzone upg">
 						<div class="dklabel">
 							Upgrade area <span class="ct">{mine.upgrade.length}</span>
@@ -850,6 +864,8 @@
 							{#if !mine.upgrade.length}<span class="empty-note">Cards you skip on level-up go here</span>{/if}
 						</div>
 					</div>
+					{/if}
+					{#if !mobile || deckTab === 'removed'}
 					<div class="dkzone rem">
 						<div class="dklabel">Removed <span class="ct">{mine.removed.length}</span> <span class="zhint">open to all players</span></div>
 						<div class="dkrow">
@@ -861,12 +877,14 @@
 							{#if !mine.removed.length}<span class="empty-note">Drop cards taken out of play here</span>{/if}
 						</div>
 					</div>
+					{/if}
 				</div>
 
 				<!-- action bar: destinations for the selected card -->
 				{#if deckSel != null}
 					<div class="dkbar">
 						<span class="dksel">Selected · {heroCards(dh)[deckSel]?.name}</span>
+						{#if mobile}<button class="act ghost sm" on:click={() => examineCard(dh, deckSel!)}>🔍 Enlarge</button>{/if}
 						{#if selZone !== 'hand'}<button class="act primary sm" on:click={() => moveTo(deckSel!, 'hand')}>→ Hand</button>{/if}
 						{#if selZone !== 'upgrade'}<button class="act sm" on:click={() => moveTo(deckSel!, 'upgrade')}>→ Upgrade</button>{/if}
 						{#if selZone !== 'removed'}<button class="act danger sm" on:click={() => moveTo(deckSel!, 'removed')}>→ Removed</button>{/if}
@@ -1393,6 +1411,36 @@
 	.dkbar { position: sticky; bottom: 0; margin: 12px -18px -12px; padding: 10px 18px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
 		background: linear-gradient(0deg, rgba(11,16,26,.99), rgba(11,16,26,.9)); border-top: 1px solid rgba(199,154,78,.4); }
 	.dksel { font-size: .74rem; font-weight: 700; color: #f0dcae; margin-right: auto; }
+	/* ── phone deck: full-screen sheet, tabs, big tap targets, sticky actions ── */
+	.deckmodal.mob { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; max-height: none; border-radius: 0; border: none; padding: 10px 12px 0;
+		display: flex; flex-direction: column; scrollbar-gutter: auto; }
+	.deckmodal.mob .mhead { flex: none; }
+	.dktabs { position: sticky; top: -10px; z-index: 3; flex: none; display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin: 8px -12px 0; padding: 8px 12px;
+		background: rgba(11,16,26,.98); border-bottom: 1px solid rgba(255,255,255,.08); }
+	.dktab { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 7px 2px; border-radius: 10px; cursor: pointer; font-size: .7rem; letter-spacing: .03em; color: #93a3b8;
+		background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.1); }
+	.dktab b { font-weight: normal; font-size: .95rem; color: #f1f5f9; font-variant-numeric: tabular-nums; }
+	.dktab.on { color: #fff; }
+	.dktab.hand.on { background: rgba(239,125,34,.22); border-color: #ef7d22; }
+	.dktab.deck.on { background: rgba(199,154,78,.2); border-color: #c79a4e; }
+	.dktab.upgrade.on { background: rgba(63,127,224,.22); border-color: #3f7fe0; }
+	.dktab.removed.on { background: rgba(150,160,175,.18); border-color: rgba(150,160,175,.7); }
+	.mob .zhint { display: none; }
+	.mob .dkcard:hover { transform: none; }
+	.mob .dkhand { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; align-items: start; }
+	.mob .dkhand .dkcard, .mob .dkcard.ult, .mob .dkcard.sm { width: 100%; }
+	.mob .dkpart { display: none; }
+	.mob .ultslot { grid-column: span 1; }
+	.mob .dkgrid { grid-template-columns: repeat(3, 1fr); }
+	.mob .dkzones { grid-template-columns: 1fr; }
+	.mob .dkrow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+	.mob .empty-note { grid-column: 1 / -1; padding: 16px 0; text-align: center; }
+	.mob .dkbadge { font-size: .6rem; }
+	.mob .dkbar { margin: auto -12px 0; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); gap: 6px; }
+	.mob .dkbar .dksel { flex: 1 1 100%; margin: 0; }
+	.mob .dkbar .act { flex: 1 1 auto; padding: .6rem .4rem; font-size: .8rem; }
+	/* keep the bottom of the last row reachable above the sticky bar */
+	.mob .dkzones, .mob .dkgrid, .mob .dkhand { margin-bottom: 12px; }
 
 	/* synced pre-reveal countdown — big number, doesn't block the hand/take-back */
 	.countdown { position: fixed; inset: 0; z-index: 57; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; pointer-events: none; }
@@ -1461,8 +1509,9 @@
 	/* a played card with a live effect: glows in its player's colour + duration badge */
 	.fxwrap { position: relative; display: block; }
 	/* live effect: the card glows in its player's colour */
-	.fxwrap.fx :global(canvas) { box-shadow: 0 0 0 2px var(--fxc), 0 0 10px 2px var(--fxc), 0 0 20px 5px color-mix(in srgb, var(--fxc) 55%, transparent); animation: fxglow 2.6s ease-in-out infinite; }
-	@keyframes fxglow { 50% { box-shadow: 0 0 0 2px var(--fxc), 0 0 14px 3px var(--fxc), 0 0 28px 8px color-mix(in srgb, var(--fxc) 65%, transparent); } }
+	/* drop-shadow on the wrapper follows the card's shape and isn't clipped by the flip face's overflow */
+	.fxwrap.fx { filter: drop-shadow(0 0 1.5px var(--fxc)) drop-shadow(0 0 4px var(--fxc)) drop-shadow(0 0 9px color-mix(in srgb, var(--fxc) 70%, transparent)); animation: fxglow 2.6s ease-in-out infinite; }
+	@keyframes fxglow { 50% { filter: drop-shadow(0 0 2px var(--fxc)) drop-shadow(0 0 7px var(--fxc)) drop-shadow(0 0 16px color-mix(in srgb, var(--fxc) 80%, transparent)); } }
 	/* activate-effect prompt in the dash action slot */
 	.fxq { font-size: .7rem; color: #f0dcae; letter-spacing: .03em; white-space: nowrap; }
 	.fxrow2 { display: flex; gap: 3px; }

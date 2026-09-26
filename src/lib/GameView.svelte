@@ -433,6 +433,12 @@
 			<button class="mib tie" on:click={flipTie} title="Tie-breaker: {$ms.tieBreaker === 'orange' ? 'Orange' : 'Blue'} — tap to flip"><img src={tieArt($ms.tieBreaker)} class:flip={tieFlip} alt="" /></button>
 			<button class="mpill" on:click={() => (lwOpen = true)} aria-label="Waves"><img class="wv" src={waveIcon} alt="" /><b class="n2">{$ms.waves}</b></button>
 			<button class="mpill life" on:click={() => (lwOpen = true)} aria-label="Life"><b class="n2 lo">{$ms.life.orange}</b><img src={lifeSplit} alt="" /><b class="n2 lb">{$ms.life.blue}</b></button>
+			<!-- your ultimate (centred between life and gold): always previewable; lights up (purple pulse) once unlocked -->
+			<span class="msp"></span>
+			{#if myCs && myUltIdx >= 0}
+				<button class="mib ult" class:on={myCs.ultimate} on:click={() => myCs && cardLayer?.showCard(myCs.hero, myUltIdx)}
+					title={myCs.ultimate ? 'Your ultimate' : 'Ultimate — unlocks at level 8'} aria-label="Ultimate">{#if !myCs.ultimate}<span class="ulk">🔒</span>{/if}ULT</button>
+			{/if}
 			<span class="msp"></span>
 			{#if myCoins != null}
 				<span class="goldctl">
@@ -440,10 +446,6 @@
 					<span class="mpill gold"><span class="gc"></span><b class="n2">{myCoins}</b></span>
 					<button class="gb" on:click={() => coins(1)} aria-label="Add coin">+</button>
 				</span>
-			{/if}
-			{#if myCs && myUltIdx >= 0}
-				<button class="mib ult" class:on={myCs.ultimate} disabled={!myCs.ultimate} on:click={() => myCs && cardLayer?.showCard(myCs.hero, myUltIdx)}
-					title={myCs.ultimate ? 'Your ultimate' : 'Ultimate — unlocks at level 8'} aria-label="Ultimate">ULT</button>
 			{/if}
 		</div>
 
@@ -914,8 +916,12 @@
 	.abp i.on { opacity: 1; box-shadow: 0 0 6px var(--pc); }
 	.abt { text-align: right; font-size: 10px; color: #e8c173; }
 	.mib.ult { width: 27px; font-size: 8.5px; letter-spacing: 0.04em; color: #8f7fae; background: rgba(120, 60, 190, 0.1); border-color: rgba(165, 110, 230, 0.25); }
-	.mib.ult:disabled { opacity: 0.55; cursor: default; }
-	.mib.ult.on { color: #fff; background: linear-gradient(160deg, #8a4fd6, #5b2aa0); border-color: rgba(200, 160, 255, 0.7); box-shadow: 0 0 10px rgba(165, 110, 230, 0.6); }
+	.mib.ult { position: relative; }
+	.mib.ult .ulk { position: absolute; top: -5px; right: -4px; font-size: 8px; filter: grayscale(1); }
+	/* unlocked: purple with the same breathing glow as the desktop dash */
+	.mib.ult.on { color: #fff; background: linear-gradient(160deg, #9a5ce6, #5b2aa0); border-color: rgba(210, 175, 255, 0.85); text-shadow: 0 0 6px rgba(255, 255, 255, 0.6);
+		animation: ultbtn 2.4s ease-in-out infinite; }
+	@keyframes ultbtn { 0%, 100% { box-shadow: 0 0 6px rgba(165, 110, 230, 0.5), inset 0 0 6px rgba(255, 255, 255, 0.15); } 50% { box-shadow: 0 0 16px rgba(185, 130, 250, 0.95), inset 0 0 8px rgba(255, 255, 255, 0.3); } }
 	.mpill.gold { background: rgba(199, 154, 78, 0.14); border-color: rgba(199, 154, 78, 0.45); padding-left: 3px; }
 	.gc { width: 18px; height: 18px; border-radius: 50%; display: inline-grid; place-items: center; background: radial-gradient(circle at 35% 30%, #ffe7a1, #d4a64a 60%, #9a6f22); border: 1px solid #fbe7b0; }
 	.mscrim { position: fixed; inset: 0; z-index: 30; background: rgba(2, 5, 10, 0.55); }
