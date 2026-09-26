@@ -13,6 +13,7 @@
 	import PlayerIcon from '$lib/PlayerIcon.svelte';
 	import { heroCards, heroName, heroTitle, heroStat } from '$lib/cards/deck';
 	import { heroAvatar, heroLogo, heroSplash } from '$lib/heroes';
+	import { detectDuration, endOf, effectLabel, DUR_LABEL, type Effect, type EffectDur } from '$lib/effects';
 	import { HERO_KIT, COMPANIONS, MINES, statusFrom, toggleStatusMarker, tokenName, type ArmToken } from '$lib/tokens';
 	import { PASS, statDeltas, levelOf, ultimateIndex, type PlayerCardState, type StatKey, type CardZone } from '$lib/cards/cardstate';
 
@@ -130,7 +131,7 @@
 
 	// overlay + examine
 	let overlayId: string | null = null;
-	let examine: { hid: string; idx: number } | null = null;
+	let examine: { hid: string; idx: number; pid?: string } | null = null;
 	$: ovPlayer = seated.find((p) => p.id === overlayId) ?? null;
 	// board hands us a player id to preview → open their overlay, then clear it
 	$: if (previewId) { overlayId = previewId; previewId = null; }
@@ -164,8 +165,34 @@
 	// the container (a player row / your dash opens the full board)
 	function peekSlot(e: Event, cs: PlayerCardState, t: number) {
 		const i = cs.turns[t] ?? (t === turnIdx && revealed ? cs.pending : null);
-		if (i != null && i !== PASS) { e.stopPropagation(); examine = { hid: cs.hero, idx: i }; }
+		if (i != null && i !== PASS) { e.stopPropagation(); examine = { hid: cs.hero, idx: i, pid: pidOf(cs) }; }
 	}
+	const pidOf = (cs: PlayerCardState) => Object.keys(cards).find((k) => cards[k] === cs);
+	// the card sitting in turn slot t (played, or this turn's once revealed)
+	const slotIdx = (cs: PlayerCardState, t: number) => { const i = cs.turns[t] ?? (t === turnIdx && revealed ? cs.pending : null); return i != null && i !== PASS ? i : null; };
+
+	// ── lingering card effects (see effects.ts) ──────────────────────────────
+	// Switched on from a played card's zoom view by its owner (or the host); the
+	// card glows in the player's colour with a duration badge, the player's row gets
+	// a chip, the left HUD lists it, and it ends itself when its time runs out.
+	$: effects = $ms.effects ?? [];
+	$: fxFor = (pid: string | undefined, idx: number | null) => (pid && idx != null ? effects.find((e) => e.pid === pid && e.idx === idx) : undefined);
+	$: fxLabel = (e: Effect) => effectLabel(e, $ms.round, $ms.turn);
+	const FX_SHORT: Record<string, string> = { 'This turn': 'Turn', 'Next turn': 'Next', 'This round': 'Round' };
+	$: colorOf = (pid: string) => colorHex(seated.find((p) => p.id === pid)?.color ?? '');
+	let fxPick: EffectDur = 'turn';
+	$: examineFx = examine?.pid ? fxFor(examine.pid, examine.idx) : undefined;
+	$: examineDetected = examine ? detectDuration(heroCards(examine.hid)[examine.idx]?.description) : null;
+	$: if (examine) fxPick = examineDetected ?? 'turn';
+	$: canFx = !!examine?.pid && (examine.pid === clientId || iAmHost);
+	function activateFx(pid: string, hero: string, idx: number, dur: EffectDur) {
+		const name = heroCards(hero)[idx]?.name ?? 'Effect';
+		const e: Effect = { id: `fx_${pid}_${idx}_${Date.now().toString(36)}`, pid, hero, idx, name, dur, round: $ms.round, turn: $ms.turn, ...endOf(dur, $ms.round, $ms.turn) };
+		session.act(`${name} — ${DUR_LABEL[dur].toLowerCase()} effect active`, { effects: [...effects.filter((x) => !(x.pid === pid && x.idx === idx)), e] });
+	}
+	function endFx(e: Effect) { session.act(`${e.name} — effect ended`, { effects: effects.filter((x) => x.id !== e.id) }); }
+	// the left HUD's effects list opens a card through here
+	export function showCard(hid: string, idx: number, pid?: string) { examine = { hid, idx, pid }; }
 
 	// discard piles (dash + boards): hover (mouse) or tap to fan out every card;
 	// click one to preview it (your own open in the hand preview, so you can recover)
@@ -415,7 +442,7 @@
 					</span>
 					{#if cs && dense}
 						<span class="dslot">
-							<TurnSlot heroId={cs.hero} played={cs.turns[turnIdx]} pending={cs.pending} isCurrent {revealed} examinable on:click={(e) => peekSlot(e, cs, turnIdx)} />
+							<span class="fxwrap" class:fx={!!fxFor(p.id, slotIdx(cs, turnIdx))} style="--fxc:{colorOf(p.id)}"><TurnSlot heroId={cs.hero} played={cs.turns[turnIdx]} pending={cs.pending} isCurrent {revealed} examinable on:click={(e) => peekSlot(e, cs, turnIdx)} />{#if fxFor(p.id, slotIdx(cs, turnIdx))}<span class="fxbadge">⏳ {FX_SHORT[fxLabel(fxFor(p.id, slotIdx(cs, turnIdx))!)]}</span>{/if}</span>
 						</span>
 					{/if}
 					{#if cs && isSkipped(cs)}<span class="skiptag" title="No cards left — skipped this turn">skip</span>
@@ -438,10 +465,20 @@
 							</span>
 						{/each}
 					</div>
+					{@const pfx = effects.filter((e) => e.pid === p.id)}
+					{#if pfx.length}
+						<div class="fxchips">
+							{#each pfx as e (e.id)}
+								<button class="fxchip" style="--fxc:{colorOf(p.id)}" on:click|stopPropagation={() => showCard(e.hero, e.idx, e.pid)} title="{e.name} — {fxLabel(e)}">
+									<span class="fxn">⏳ {e.name}</span><span class="fxd">{FX_SHORT[fxLabel(e)]}</span>
+								</button>
+							{/each}
+						</div>
+					{/if}
 					{#if !dense}
 						<div class="pturns">
 							{#each [0, 1, 2, 3] as t}
-								<TurnSlot heroId={cs.hero} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} label={ROMAN[t]} examinable on:click={(e) => peekSlot(e, cs, t)} />
+								<span class="fxwrap" class:fx={!!fxFor(p.id, slotIdx(cs, t))} style="--fxc:{colorOf(p.id)}"><TurnSlot heroId={cs.hero} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} label={ROMAN[t]} examinable on:click={(e) => peekSlot(e, cs, t)} />{#if fxFor(p.id, slotIdx(cs, t))}<span class="fxbadge">⏳ {FX_SHORT[fxLabel(fxFor(p.id, slotIdx(cs, t))!)]}</span>{/if}</span>
 							{/each}
 							<!-- discard: the most recent card, count below (like your dash) -->
 							<span class="pdisc" title="Discard pile">
@@ -511,7 +548,7 @@
 							<div class="tlabel">Turn {t + 1}</div>
 							<div class="tslot">
 								<span class="tbroman">{ROMAN[t]}</span>
-								<TurnSlot heroId={oh} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} examinable on:click={(e) => peekSlot(e, cs, t)} />
+								<span class="fxwrap" class:fx={!!fxFor(oid, slotIdx(cs, t))} style="--fxc:{colorOf(oid)}"><TurnSlot heroId={oh} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} examinable on:click={(e) => peekSlot(e, cs, t)} />{#if fxFor(oid, slotIdx(cs, t))}<span class="fxbadge">⏳ {FX_SHORT[fxLabel(fxFor(oid, slotIdx(cs, t))!)]}</span>{/if}</span>
 							</div>
 						</div>
 					{/each}
@@ -552,7 +589,28 @@
 	<!-- ───────── examine one card ───────── -->
 	{#if examine}
 		<div class="scrim2" on:click={() => (examine = null)} on:keydown={(e) => e.key === 'Escape' && (examine = null)} role="presentation">
-			<div class="bigcard" role="dialog" aria-modal="true" tabindex="-1"><Card heroId={examine.hid} card={heroCards(examine.hid)[examine.idx]} /></div>
+			<div class="bigwrap" role="dialog" aria-modal="true" tabindex="-1" on:click|stopPropagation on:keydown|stopPropagation>
+				<div class="bigcard" class:fxon={!!examineFx} style="--fxc:{examine.pid ? colorOf(examine.pid) : '#fde047'}"><Card heroId={examine.hid} card={heroCards(examine.hid)[examine.idx]} /></div>
+				{#if examine.pid && (canFx || examineFx)}
+					<!-- lingering effect: switch it on (duration read from the card) / end it -->
+					<div class="fxctl">
+						{#if examineFx}
+							<span class="fxstate">⏳ Effect active · <b>{fxLabel(examineFx)}</b></span>
+							{#if canFx}<button class="fxend" on:click={() => endFx(examineFx)}>End effect</button>{/if}
+						{:else}
+							<span class="fxstate">Lingering effect</span>
+							<div class="fxdurs">
+								{#each ['turn', 'next', 'round'] as d}
+									<button class="fxdur" class:on={fxPick === d} on:click={() => (fxPick = d as EffectDur)} title={examineDetected === d ? 'From the card text' : ''}>
+										{DUR_LABEL[d as EffectDur]}{#if examineDetected === d}<i>✦</i>{/if}
+									</button>
+								{/each}
+							</div>
+							<button class="fxgo" on:click={() => examine?.pid && activateFx(examine.pid, examine.hid, examine.idx, fxPick)}>Activate</button>
+						{/if}
+					</div>
+				{/if}
+			</div>
 		</div>
 	{/if}
 
@@ -823,8 +881,9 @@
 						<div class="dm-slot" role="button" tabindex="-1" title="Open your board" on:click={() => (overlayId = clientId)} on:keydown={(e) => e.key === 'Enter' && (overlayId = clientId)}>
 							<span class="roman">{['I', 'II', 'III', 'IV'][t]}</span>
 							{#if has}
-								<div class="dm-on"><TurnSlot heroId={mine.hero} played={mine.turns[t]} pending={mine.pending} isCurrent={t === turnIdx} {revealed}
-									examinable on:click={(e) => peekSlot(e, mine, t)} /></div>
+								{@const dfx = fxFor(clientId, slotIdx(mine, t))}
+								<div class="dm-on fxwrap" class:fx={!!dfx} style="--fxc:{colorOf(clientId)}"><TurnSlot heroId={mine.hero} played={mine.turns[t]} pending={mine.pending} isCurrent={t === turnIdx} {revealed}
+									examinable on:click={(e) => peekSlot(e, mine, t)} />{#if dfx}<span class="fxbadge">⏳ {FX_SHORT[fxLabel(dfx)]}</span>{/if}</div>
 							{/if}
 						</div>
 					{/each}
@@ -1213,6 +1272,30 @@
 	/* examine */
 	.scrim2 { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; background: rgba(2,4,9,.8); backdrop-filter: blur(4px); }
 	.bigcard { width: min(360px, 62vw); filter: drop-shadow(0 20px 50px rgba(0,0,0,.7)); }
+	.bigwrap { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+	.bigcard.fxon { filter: drop-shadow(0 0 3px var(--fxc)) drop-shadow(0 0 16px var(--fxc)) drop-shadow(0 20px 50px rgba(0,0,0,.7)); }
+	/* lingering-effect controls under a played card */
+	.fxctl { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center; padding: 8px 10px; border-radius: 12px;
+		background: rgba(11,16,26,.94); border: 1px solid rgba(199,154,78,.5); box-shadow: 0 12px 30px rgba(0,0,0,.5); max-width: min(560px, 92vw); }
+	.fxstate { font-size: .78rem; color: #f0dcae; letter-spacing: .03em; }
+	.fxstate b { color: #fff; }
+	.fxdurs { display: flex; gap: 4px; }
+	.fxdur { position: relative; padding: 5px 10px; border-radius: 8px; cursor: pointer; font-size: .72rem; color: #e5e7eb; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.16); }
+	.fxdur i { font-style: normal; margin-left: 4px; color: #e8c173; }
+	.fxdur.on { background: rgba(199,154,78,.32); border-color: rgba(230,190,110,.85); color: #fff; }
+	.fxgo { padding: 5px 14px; border-radius: 8px; cursor: pointer; font-size: .78rem; color: #1a0f06; background: linear-gradient(180deg, #f3d08a, #d4a64a); border: 1px solid #fbe7b0; }
+	.fxend { padding: 5px 12px; border-radius: 8px; cursor: pointer; font-size: .74rem; color: #ffc9c2; background: rgba(220,60,60,.2); border: 1px solid rgba(239,68,68,.5); }
+	/* a played card with a live effect: glows in its player's colour + duration badge */
+	.fxwrap { position: relative; display: block; }
+	.fxwrap.fx :global(canvas) { box-shadow: 0 0 0 2px var(--fxc), 0 0 12px var(--fxc); }
+	.fxbadge { position: absolute; left: 50%; bottom: -6px; transform: translateX(-50%); z-index: 3; white-space: nowrap; pointer-events: none;
+		font-size: .5rem; letter-spacing: .04em; padding: 1px 5px; border-radius: 6px; color: #fff; background: rgba(11,16,26,.92); border: 1px solid var(--fxc); }
+	/* effect chips on a player's row */
+	.fxchips { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 4px; }
+	.fxchip { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; padding: 1px 6px; border-radius: 7px; cursor: zoom-in; font-size: .58rem; color: #f3f4f6;
+		background: rgba(11,16,26,.6); border: 1px solid var(--fxc); box-shadow: inset 3px 0 0 var(--fxc); }
+	.fxchip .fxn { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.fxchip .fxd { flex: none; color: #e8c173; }
 	.bigcard :global(canvas) { border-radius: 4%; }
 
 	/* centered preview of a picked hand card */
