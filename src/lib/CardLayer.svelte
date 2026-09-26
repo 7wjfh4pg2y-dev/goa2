@@ -190,6 +190,22 @@
 		const e: Effect = { id: `fx_${pid}_${idx}_${Date.now().toString(36)}`, pid, hero, idx, name, dur, round: $ms.round, turn: $ms.turn, ...endOf(dur, $ms.round, $ms.turn) };
 		session.act(`${name} — ${DUR_LABEL[dur].toLowerCase()} effect active`, { effects: [...effects.filter((x) => !(x.pid === pid && x.idx === idx)), e] });
 	}
+	// the corner flame marking a card whose effect is live (glow + flame; no badge under it)
+	const FLAME = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2c1 4 5 5.5 5 11a5 5 0 0 1-10 0c0-2.5 1.2-4 2.4-5.2.3 1.6 1 2.6 2 3.2C11 8.5 11.3 5 12 2z" fill="#ffb347"/></svg>';
+	// After the reveal, if YOUR card this turn names a lingering effect, the dash
+	// action asks "Activate effect?" — No: carry on; Yes: pick how long (✕ = back).
+	let fxDecided = new Set<string>();
+	let fxStage: 'ask' | 'pick' = 'ask';
+	$: myTurnCard = mine && revealed ? slotIdx(mine, turnIdx) : null;
+	$: myTurnDur = mine && myTurnCard != null ? detectDuration(heroCards(mine.hero)[myTurnCard]?.description) : null;
+	$: fxKey = `${$ms.round}-${$ms.turn}-${myTurnCard}`;
+	$: fxAsking = !!mine && myTurnCard != null && !!myTurnDur && !fxFor(clientId, myTurnCard) && !fxDecided.has(fxKey);
+	$: if (!fxAsking) fxStage = 'ask';
+	function fxNo() { fxDecided = new Set(fxDecided).add(fxKey); fxStage = 'ask'; }
+	function fxPickDur(d: EffectDur) {
+		if (mine && myTurnCard != null) activateFx(clientId, mine.hero, myTurnCard, d);
+		fxDecided = new Set(fxDecided).add(fxKey); fxStage = 'ask';
+	}
 	function endFx(e: Effect) { session.act(`${e.name} — effect ended`, { effects: effects.filter((x) => x.id !== e.id) }); }
 	// the left HUD's effects list opens a card through here
 	export function showCard(hid: string, idx: number, pid?: string) { examine = { hid, idx, pid }; }
@@ -442,7 +458,7 @@
 					</span>
 					{#if cs && dense}
 						<span class="dslot">
-							<span class="fxwrap" class:fx={!!fxFor(p.id, slotIdx(cs, turnIdx))} style="--fxc:{colorOf(p.id)}"><TurnSlot heroId={cs.hero} played={cs.turns[turnIdx]} pending={cs.pending} isCurrent {revealed} examinable on:click={(e) => peekSlot(e, cs, turnIdx)} />{#if fxFor(p.id, slotIdx(cs, turnIdx))}<span class="fxbadge">⏳ {FX_SHORT[fxLabel(fxFor(p.id, slotIdx(cs, turnIdx))!)]}</span>{/if}</span>
+							<span class="fxwrap" class:fx={!!fxFor(p.id, slotIdx(cs, turnIdx))} style="--fxc:{colorOf(p.id)}"><TurnSlot heroId={cs.hero} played={cs.turns[turnIdx]} pending={cs.pending} isCurrent {revealed} examinable on:click={(e) => peekSlot(e, cs, turnIdx)} />{#if fxFor(p.id, slotIdx(cs, turnIdx))}<span class="fxflame" title={fxLabel(fxFor(p.id, slotIdx(cs, turnIdx))!)}>{@html FLAME}</span>{/if}</span>
 						</span>
 					{/if}
 					{#if cs && isSkipped(cs)}<span class="skiptag" title="No cards left — skipped this turn">skip</span>
@@ -465,20 +481,10 @@
 							</span>
 						{/each}
 					</div>
-					{@const pfx = effects.filter((e) => e.pid === p.id)}
-					{#if pfx.length}
-						<div class="fxchips">
-							{#each pfx as e (e.id)}
-								<button class="fxchip" style="--fxc:{colorOf(p.id)}" on:click|stopPropagation={() => showCard(e.hero, e.idx, e.pid)} title="{e.name} — {fxLabel(e)}">
-									<span class="fxn">⏳ {e.name}</span><span class="fxd">{FX_SHORT[fxLabel(e)]}</span>
-								</button>
-							{/each}
-						</div>
-					{/if}
 					{#if !dense}
 						<div class="pturns">
 							{#each [0, 1, 2, 3] as t}
-								<span class="fxwrap" class:fx={!!fxFor(p.id, slotIdx(cs, t))} style="--fxc:{colorOf(p.id)}"><TurnSlot heroId={cs.hero} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} label={ROMAN[t]} examinable on:click={(e) => peekSlot(e, cs, t)} />{#if fxFor(p.id, slotIdx(cs, t))}<span class="fxbadge">⏳ {FX_SHORT[fxLabel(fxFor(p.id, slotIdx(cs, t))!)]}</span>{/if}</span>
+								<span class="fxwrap" class:fx={!!fxFor(p.id, slotIdx(cs, t))} style="--fxc:{colorOf(p.id)}"><TurnSlot heroId={cs.hero} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} label={ROMAN[t]} examinable on:click={(e) => peekSlot(e, cs, t)} />{#if fxFor(p.id, slotIdx(cs, t))}<span class="fxflame" title={fxLabel(fxFor(p.id, slotIdx(cs, t))!)}>{@html FLAME}</span>{/if}</span>
 							{/each}
 							<!-- discard: the most recent card, count below (like your dash) -->
 							<span class="pdisc" title="Discard pile">
@@ -548,7 +554,7 @@
 							<div class="tlabel">Turn {t + 1}</div>
 							<div class="tslot">
 								<span class="tbroman">{ROMAN[t]}</span>
-								<span class="fxwrap" class:fx={!!fxFor(oid, slotIdx(cs, t))} style="--fxc:{colorOf(oid)}"><TurnSlot heroId={oh} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} examinable on:click={(e) => peekSlot(e, cs, t)} />{#if fxFor(oid, slotIdx(cs, t))}<span class="fxbadge">⏳ {FX_SHORT[fxLabel(fxFor(oid, slotIdx(cs, t))!)]}</span>{/if}</span>
+								<span class="fxwrap" class:fx={!!fxFor(oid, slotIdx(cs, t))} style="--fxc:{colorOf(oid)}"><TurnSlot heroId={oh} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} examinable on:click={(e) => peekSlot(e, cs, t)} />{#if fxFor(oid, slotIdx(cs, t))}<span class="fxflame">{@html FLAME}</span><span class="fxbadge">⏳ {FX_SHORT[fxLabel(fxFor(oid, slotIdx(cs, t))!)]}</span>{/if}</span>
 							</div>
 						</div>
 					{/each}
@@ -883,7 +889,7 @@
 							{#if has}
 								{@const dfx = fxFor(clientId, slotIdx(mine, t))}
 								<div class="dm-on fxwrap" class:fx={!!dfx} style="--fxc:{colorOf(clientId)}"><TurnSlot heroId={mine.hero} played={mine.turns[t]} pending={mine.pending} isCurrent={t === turnIdx} {revealed}
-									examinable on:click={(e) => peekSlot(e, mine, t)} />{#if dfx}<span class="fxbadge">⏳ {FX_SHORT[fxLabel(dfx)]}</span>{/if}</div>
+									examinable on:click={(e) => peekSlot(e, mine, t)} />{#if dfx}<span class="fxflame" title={fxLabel(dfx)}>{@html FLAME}</span>{/if}</div>
 							{/if}
 						</div>
 					{/each}
@@ -912,7 +918,17 @@
 			<div class="dright">
 				<!-- fixed-width slot for the turn buttons, so nothing shifts when one appears -->
 				<div class="dact">
-					{#if revealed && iAmHost}
+					{#if fxAsking && fxStage === 'ask'}
+						<span class="fxq">Activate effect?</span>
+						<span class="fxrow2"><button class="fxb yes" on:click={() => (fxStage = 'pick')}>Yes</button><button class="fxb" on:click={fxNo}>No</button></span>
+					{:else if fxAsking}
+						<span class="fxrow2">
+							{#each ['turn', 'next', 'round'] as d}
+								<button class="fxb dur" class:on={myTurnDur === d} on:click={() => fxPickDur(d as EffectDur)} title={DUR_LABEL[d as EffectDur]}>{d === 'turn' ? 'Turn' : d === 'next' ? 'Next' : 'Round'}</button>
+							{/each}
+							<button class="fxb x" on:click={() => (fxStage = 'ask')} title="Back">✕</button>
+						</span>
+					{:else if revealed && iAmHost}
 						{#if !isFinalTurn}
 							<button class="act primary" on:click={onAdvanceTurn}>Next turn →</button>
 						{:else if !battlePhase}
@@ -1287,15 +1303,22 @@
 	.fxend { padding: 5px 12px; border-radius: 8px; cursor: pointer; font-size: .74rem; color: #ffc9c2; background: rgba(220,60,60,.2); border: 1px solid rgba(239,68,68,.5); }
 	/* a played card with a live effect: glows in its player's colour + duration badge */
 	.fxwrap { position: relative; display: block; }
-	.fxwrap.fx :global(canvas) { box-shadow: 0 0 0 2px var(--fxc), 0 0 12px var(--fxc); }
+	/* live effect: an ember glow in the player's colour (plus the corner flame) */
+	.fxwrap.fx :global(canvas) { box-shadow: 0 0 0 2px var(--fxc), 0 0 10px 2px var(--fxc), 0 0 18px 4px rgba(255,150,40,.45); }
 	.fxbadge { position: absolute; left: 50%; bottom: -6px; transform: translateX(-50%); z-index: 3; white-space: nowrap; pointer-events: none;
 		font-size: .5rem; letter-spacing: .04em; padding: 1px 5px; border-radius: 6px; color: #fff; background: rgba(11,16,26,.92); border: 1px solid var(--fxc); }
 	/* effect chips on a player's row */
-	.fxchips { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 4px; }
-	.fxchip { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; padding: 1px 6px; border-radius: 7px; cursor: zoom-in; font-size: .58rem; color: #f3f4f6;
-		background: rgba(11,16,26,.6); border: 1px solid var(--fxc); box-shadow: inset 3px 0 0 var(--fxc); }
-	.fxchip .fxn { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-	.fxchip .fxd { flex: none; color: #e8c173; }
+	.fxflame { position: absolute; top: -5px; right: -5px; z-index: 3; width: 14px; height: 14px; border-radius: 50%; display: grid; place-items: center; pointer-events: none;
+		background: #140c05; border: 1.5px solid #ffb347; box-shadow: 0 0 6px rgba(255,160,60,.6); }
+	.fxflame :global(svg) { width: 8px; height: 8px; }
+	/* activate-effect prompt in the dash action slot */
+	.fxq { font-size: .7rem; color: #f0dcae; letter-spacing: .03em; white-space: nowrap; }
+	.fxrow2 { display: flex; gap: 3px; }
+	.fxb { height: 24px; padding: 0 8px; border-radius: 7px; cursor: pointer; font-size: .7rem; color: #e5e7eb; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.2); white-space: nowrap; }
+	.fxb.yes { color: #1a0f06; background: linear-gradient(180deg, #f3d08a, #d4a64a); border-color: #fbe7b0; }
+	.fxb.dur { padding: 0 4px; font-size: .62rem; }
+	.fxb.dur.on { background: rgba(199,154,78,.34); border-color: rgba(230,190,110,.9); color: #fff; }
+	.fxb.x { padding: 0 6px; }
 	.bigcard :global(canvas) { border-radius: 4%; }
 
 	/* centered preview of a picked hand card */
