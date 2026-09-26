@@ -7,6 +7,7 @@
 	import { zoneName } from '$lib/zones';
 	import { effectLabel } from '$lib/effects';
 	import lifeSplit from '$lib/images/life_split.png';
+	import { heroCards } from '$lib/cards/deck';
 	import { placeToken, moveToken, effectiveHex, MINES, tokenName, type ArmToken } from '$lib/tokens';
 	import {
 		colorHex, movePiece, teamForSeat, throneHex,
@@ -236,10 +237,24 @@
 	// ── phone layout (≤760px wide): top bar + ☰ menu instead of the left HUD ──
 	let gvw = 1440;
 	$: mobile = gvw <= 760;
-	let menuOpen = false, lwOpen = false, goldOpen = false;
+	let menuOpen = false, lwOpen = false;
 	$: myCoins = $ms.cards?.[clientId]?.coins ?? null;
 	function coins(d: number) { session.cardAction({ kind: 'coins', pid: clientId, delta: d }); }
 	const FX_SHORT: Record<string, string> = { 'This turn': 'Turn', 'Next turn': 'Next', 'This round': 'Round' };
+	// ☰ menu "Active abilities": one fixed row per hero (so the log never shifts),
+	// five card-colour pips — the colour of a card with a live effect lights up
+	const FX_COLORS: Array<[string, string]> = [['GOLD', '#e8b64a'], ['SILVER', '#c6d0db'], ['RED', '#e0524a'], ['BLUE', '#3f7fe0'], ['GREEN', '#41ae59']];
+	const DUR_RANK: Record<string, number> = { turn: 0, next: 1, round: 2 };
+	$: abilityRows = $players
+		.filter((p) => p.seat >= 0 && p.seat < $ms.seats && $ms.cards?.[p.id])
+		.sort((a, b) => a.seat - b.seat)
+		.map((p) => {
+			const hero = $ms.cards![p.id].hero;
+			const fx = activeFx.filter((e) => e.pid === p.id);
+			const lit = new Set(fx.map((e) => heroCards(e.hero)[e.idx]?.color));
+			const longest = fx.slice().sort((a, b) => DUR_RANK[b.dur] - DUR_RANK[a.dur])[0];
+			return { id: p.id, hero, name: heroById(hero)?.name ?? '', team: teamForSeat(p.seat, $ms.seats), lit, fx: longest };
+		});
 
 	// ── saved views: 3 slots of rotation + zoom + pan, kept in this browser ─────
 	// (they carry over to new games, so a player's preferred angle is one tap away)
@@ -272,7 +287,7 @@
 	});
 </script>
 
-<svelte:window on:keydown={(e) => { if (e.key !== 'Escape') return; if (confirmLeave) confirmLeave = false; else { pendingSpawn = null; pendingToken = null; } }} on:pointerdown={(e) => { viewsOutside(e); if (goldOpen && !(e.target as Element | null)?.closest?.('.goldwrap')) goldOpen = false; }} bind:innerWidth={gvw} />
+<svelte:window on:keydown={(e) => { if (e.key !== 'Escape') return; if (confirmLeave) confirmLeave = false; else { pendingSpawn = null; pendingToken = null; } }} on:pointerdown={(e) => { viewsOutside(e); }} bind:innerWidth={gvw} />
 
 <div class="gamewrap" class:mob={mobile}>
 	{#if pendingToken || (mobile && pendingSpawn)}
@@ -402,11 +417,10 @@
 			<button class="mpill life" on:click={() => (lwOpen = true)} aria-label="Life"><b class="n2 lo">{$ms.life.orange}</b><img src={lifeSplit} alt="" /><b class="n2 lb">{$ms.life.blue}</b></button>
 			<span class="msp"></span>
 			{#if myCoins != null}
-				<span class="goldwrap">
-					<button class="mpill gold" on:click={() => (goldOpen = !goldOpen)} aria-label="Coins"><span class="gc"></span><b class="n2">{myCoins}</b></button>
-					{#if goldOpen}
-						<div class="goldpop"><button on:click={() => coins(-1)} aria-label="Remove coin">−</button><span class="gc big">{myCoins}</span><button on:click={() => coins(1)} aria-label="Add coin">+</button></div>
-					{/if}
+				<span class="goldctl">
+					<button class="gb" on:click={() => coins(-1)} aria-label="Remove coin">−</button>
+					<span class="mpill gold"><span class="gc"></span><b class="n2">{myCoins}</b></span>
+					<button class="gb" on:click={() => coins(1)} aria-label="Add coin">+</button>
 				</span>
 			{/if}
 		</div>
@@ -426,22 +440,6 @@
 							{#each MINION_ROLES as r}<button class="mn" on:click={() => { armSpawn(t as Team, r); menuOpen = false; }} title="{t} {r}">{r[0].toUpperCase()}</button>{/each}
 						</div>
 					{/each}
-				</div>
-				{#if activeFx.length}
-					<div class="msec">
-						<div class="mlbl">Effects</div>
-						{#each activeFx as e (e.id)}
-							<button class="mfx" style="--fxc:{pColor(e.pid)}" on:click={() => { menuOpen = false; cardLayer?.showCard(e.hero, e.idx, e.pid); }}>
-								<span>{heroById(e.hero)?.name ?? ''}</span><i>{FX_SHORT[effectLabel(e, $ms.round, $ms.turn)]}</i>
-							</button>
-						{/each}
-					</div>
-				{/if}
-				<div class="msec mlog">
-					<div class="mlbl">Activity</div>
-					<div class="mlogb">
-						{#each log.slice(-8) as e (e.id)}<p><b>{e.by}</b> {e.text}</p>{:else}<p>No moves yet.</p>{/each}
-					</div>
 				</div>
 				<div class="msec mviews">
 					<div class="mlbl">View</div>
@@ -463,6 +461,24 @@
 							</div>
 						{/each}
 					{/if}
+				</div>
+				<div class="msec">
+					<div class="mlbl">Active abilities</div>
+					{#each abilityRows as r (r.id)}
+						<button class="mab" class:live={!!r.fx} style="--tint:{r.team === 'orange' ? '#ef7d22' : '#2f7fe6'}" disabled={!r.fx}
+							on:click={() => { if (r.fx) { menuOpen = false; cardLayer?.showCard(r.fx.hero, r.fx.idx, r.fx.pid); } }}>
+							<span class="abn">{r.name}</span>
+							<span class="abp">{#each FX_COLORS as [c, hex]}<i class:on={r.lit.has(c)} style="--pc:{hex}"></i>{/each}</span>
+							<span class="abt">{r.fx ? FX_SHORT[effectLabel(r.fx, $ms.round, $ms.turn)] : '–'}</span>
+						</button>
+					{/each}
+				</div>
+
+				<div class="msec mlog">
+					<div class="mlbl">Activity</div>
+					<div class="mlogb">
+						{#each log.slice(-8) as e (e.id)}<p><b>{e.by}</b> {e.text}</p>{:else}<p>No moves yet.</p>{/each}
+					</div>
 				</div>
 				<div class="mrow2">
 					<button class="mbtn lob" on:click={() => { menuOpen = false; manageOpen = true; }}>👥 Lobby{#if iAmHost && seatRequests.length}<span class="reqbadge">{seatRequests.length}</span>{/if}</button>
@@ -849,31 +865,37 @@
 
 	/* ═══════════ phone layout (≤760px wide) ═══════════ */
 	.boardarea { position: absolute; inset: 0; }
-	.boardarea.mob { top: 116px; bottom: 100px; }
+	.boardarea.mob { top: 116px; bottom: 106px; }
 	.gamewrap.mob .pietool, .gamewrap.mob .placehint { top: 124px; max-width: 94vw; }
-	.mtop { position: absolute; top: 0; left: 0; right: 0; height: 44px; z-index: 14; display: flex; align-items: center; gap: 5px; padding: 0 8px;
+	.mtop { position: absolute; top: 0; left: 0; right: 0; height: 44px; z-index: 14; display: flex; align-items: center; gap: 3px; padding: 0 5px;
 		background: rgba(9, 13, 22, 0.96); border-bottom: 1px solid rgba(199, 154, 78, 0.35); }
-	.mib { flex: none; width: 32px; height: 32px; padding: 0; border-radius: 9px; display: grid; place-items: center; cursor: pointer; font-size: 17px; color: #f0dcae;
+	.mib { flex: none; width: 29px; height: 30px; padding: 0; border-radius: 9px; display: grid; place-items: center; cursor: pointer; font-size: 17px; color: #f0dcae;
 		background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.16); }
-	.mib.tie img { width: 24px; height: 24px; }
+	.mib.tie img { width: 22px; height: 22px; }
 	.mib.tie img.flip { animation: coinflip 0.45s ease; }
-	.mpill { flex: none; height: 30px; display: flex; align-items: center; gap: 4px; padding: 0 7px; border-radius: 9px; cursor: pointer; font-size: 13px; color: #e5e7eb;
+	.mpill { flex: none; height: 30px; display: flex; align-items: center; gap: 3px; padding: 0 5px; border-radius: 9px; cursor: pointer; font-size: 13px; color: #e5e7eb;
 		background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.12); white-space: nowrap; }
 	.mpill b { font-weight: normal; color: #fff; }
 	/* fixed-width counters: one or two digits, nothing moves */
 	.mpill .n2 { display: inline-block; min-width: 1.25em; text-align: center; font-variant-numeric: tabular-nums; }
 	.mpill.rt { cursor: default; gap: 2px; }
 	.mpill .wv { width: 18px; height: 18px; object-fit: contain; }
-	.mpill.life img { width: 21px; height: 20px; }
+	.mpill.life img { width: 19px; height: 18px; }
 	.mpill.life .lo { color: #ffb27a; } .mpill.life .lb { color: #8cc0ff; }
 	.msp { flex: 1; }
-	.goldwrap { position: relative; flex: none; }
-	.mpill.gold { background: rgba(199, 154, 78, 0.14); border-color: rgba(199, 154, 78, 0.45); padding-left: 4px; }
+	.goldctl { flex: none; display: flex; align-items: center; gap: 2px; }
+	.gb { width: 19px; height: 30px; padding: 0; border-radius: 7px; cursor: pointer; font-size: 15px; line-height: 1; color: #f0dcae; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.16); }
+	.mab { display: grid; grid-template-columns: 1fr auto 42px; align-items: center; gap: 6px; width: 100%; margin-top: 3px; padding: 3px 6px; border-radius: 6px; cursor: default;
+		font-size: 11px; color: #9aa8bc; text-align: left; background: rgba(255, 255, 255, 0.03); border: none; border-left: 3px solid var(--tint); }
+	.mab.live { cursor: zoom-in; color: #e5e7eb; background: rgba(255, 255, 255, 0.06); }
+	.mab:disabled { opacity: 1; }
+	.abn { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.abp { display: flex; gap: 3px; }
+	.abp i { width: 7px; height: 7px; border-radius: 50%; background: var(--pc); opacity: 0.18; }
+	.abp i.on { opacity: 1; box-shadow: 0 0 6px var(--pc); }
+	.abt { text-align: right; font-size: 10px; color: #e8c173; }
+	.mpill.gold { background: rgba(199, 154, 78, 0.14); border-color: rgba(199, 154, 78, 0.45); padding-left: 3px; }
 	.gc { width: 18px; height: 18px; border-radius: 50%; display: inline-grid; place-items: center; background: radial-gradient(circle at 35% 30%, #ffe7a1, #d4a64a 60%, #9a6f22); border: 1px solid #fbe7b0; }
-	.gc.big { width: 36px; height: 36px; font-size: 16px; color: #3a2604; }
-	.goldpop { position: absolute; right: 0; top: calc(100% + 8px); z-index: 20; display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 12px;
-		background: rgba(11, 16, 26, 0.97); border: 1px solid rgba(199, 154, 78, 0.55); box-shadow: 0 12px 30px rgba(0, 0, 0, 0.6); }
-	.goldpop button { width: 34px; height: 34px; border-radius: 9px; cursor: pointer; font-size: 20px; color: #fff; background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.2); }
 	.mscrim { position: fixed; inset: 0; z-index: 30; background: rgba(2, 5, 10, 0.55); }
 	.mdrawer { position: fixed; top: 0; bottom: 0; left: 0; z-index: 31; width: min(232px, 78vw); padding: 12px 10px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;
 		background: rgba(10, 15, 25, 0.98); border-right: 1px solid rgba(199, 154, 78, 0.45); box-shadow: 20px 0 50px rgba(0, 0, 0, 0.6); color: #e5e7eb; }
@@ -886,9 +908,6 @@
 	.tm.orange { background: rgba(239, 125, 34, 0.3); border: 1px solid rgba(239, 125, 34, 0.7); }
 	.tm.blue { background: rgba(47, 127, 230, 0.3); border: 1px solid rgba(47, 127, 230, 0.7); }
 	.mn { flex: 1; height: 28px; border-radius: 7px; cursor: pointer; font-size: 12px; color: #e5e7eb; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.16); }
-	.mfx { display: flex; justify-content: space-between; width: 100%; margin-top: 3px; padding: 3px 6px; border-radius: 6px; cursor: zoom-in; font-size: 11px; color: #e5e7eb;
-		background: rgba(255, 255, 255, 0.04); border: none; border-left: 3px solid var(--fxc); }
-	.mfx i { font-style: normal; font-size: 10px; color: #e8c173; }
 	.mlogb p { font-size: 10.5px; line-height: 1.3; color: #d1d5db; margin-top: 2px; }
 	.mlogb b { font-weight: normal; color: #fff; }
 	.mvg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }

@@ -239,6 +239,20 @@
 
 	function preview(idx: number, src: 'hand' | 'discard' = 'hand') { selected = idx; previewSrc = src; }
 	function closePreview() { if (!committing) selected = null; }
+	// previewing a hand card: swipe (or ‹ ›) through the rest of your hand
+	$: pvList = previewSrc === 'hand' ? handOrdered : [];
+	$: pvPos = selected != null ? pvList.indexOf(selected) : -1;
+	function stepPreview(d: number) {
+		if (committing || pvList.length < 2 || pvPos < 0) return;
+		selected = pvList[(pvPos + d + pvList.length) % pvList.length];
+	}
+	let swipeX: number | null = null;
+	function swipeStart(e: PointerEvent) { swipeX = e.clientX; }
+	function swipeEnd(e: PointerEvent) {
+		if (swipeX == null) return;
+		const dx = e.clientX - swipeX; swipeX = null;
+		if (Math.abs(dx) > 40) stepPreview(dx < 0 ? 1 : -1);
+	}
 	function commit(idx: number) {
 		if (!canCommit) return;
 		committing = true; // flip the preview to its back, then send + close
@@ -848,7 +862,8 @@
 	{#if mine && selected != null}
 		<div class="pvscrim" on:click={closePreview} on:keydown={(e) => e.key === 'Escape' && closePreview()} role="presentation"></div>
 		<div class="pvwrap" role="presentation" style={dashVars}>
-			<div class="pvcard" style="--glow:{cardGlow(mine.hero, selected)}">
+			{#if pvList.length > 1}<button class="pvnav prev" on:click={() => stepPreview(-1)} aria-label="Previous card">‹</button>{/if}
+			<div class="pvcard" style="--glow:{cardGlow(mine.hero, selected)}" on:pointerdown={swipeStart} on:pointerup={swipeEnd} on:pointercancel={() => (swipeX = null)} role="presentation">
 				<div class="pvflip" class:up={committing}>
 					<div class="pvface front"><Card heroId={mine.hero} card={heroCards(mine.hero)[selected]} /></div>
 					<div class="pvface back">
@@ -856,9 +871,11 @@
 					</div>
 				</div>
 			</div>
+			{#if pvList.length > 1}<button class="pvnav next" on:click={() => stepPreview(1)} aria-label="Next card">›</button>{/if}
 		</div>
 		<!-- actions sit in the freed space below the hand -->
 		<div class="pvbar" style={dashVars}>
+			{#if pvList.length > 1}<span class="pvdots">{#each pvList as c (c)}<i class:on={c === selected}></i>{/each}</span>{/if}
 			{#if previewSrc === 'discard'}
 				<button class="act primary" on:click={() => pullBack(selected!)}>Recover to hand</button>
 			{:else if canCommit}
@@ -880,9 +897,6 @@
 				</button>
 			{/each}
 		</div>
-		{#if fxAsking || revealed || myReady}
-			<div class="mact">{@render actionBody()}</div>
-		{/if}
 		<div class="mdash" class:ultdash={mine.ultimate} style={teamVars(myTeam)}>
 			<div class="mdl">
 				<div class="mdtop">
@@ -891,6 +905,8 @@
 				</div>
 				<span class="msx">{#each allStats(mine) as r}<span class:up={r.delta > 0}>{#if r.delta > 0}<span class="pp">{#each Array(r.delta) as _}<i></i>{/each}</span>{/if}<img src={statImg(r.key)} alt={r.label} /></span>{/each}</span>
 			</div>
+			<!-- middle: turn slots, and under them the action (Take back / Activate effect? / Next turn) -->
+			<div class="mmid">
 			<div class="mslots">
 				{#each [0, 1, 2, 3] as t}
 					{@const dfx = fxFor(clientId, slotIdx(mine, t))}
@@ -913,6 +929,8 @@
 					{:else}<span class="mtrash">{@html TRASH}</span>{/if}
 				</span>
 				<button class="msl mdeck" on:click={() => (deckOpen = true)} title="Your deck"><b>{deckCards(mine).length}</b></button>
+			</div>
+			<div class="mact">{@render actionBody()}</div>
 			</div>
 			<div class="mbtns">
 				<span class="mb" class:off={myInit == null} title="Your initiative this turn"><i class="inicon">{@html CLOCK}</i><b>{myInit ?? '–'}</b></span>
@@ -1449,6 +1467,13 @@
 	.pvface.back .emblem.sym img { width: 74%; border-radius: 0; opacity: 1; filter: drop-shadow(0 2px 4px rgba(0,0,0,.4)); }
 	.pvbar { position: fixed; left: 224px; right: 260px; bottom: calc(var(--dh, 70px) + 4px); z-index: 32; pointer-events: none; display: flex; gap: 8px; justify-content: center; }
 	.pvbar .act { pointer-events: auto; }
+	.pvcard { touch-action: pan-y; }
+	.pvnav { pointer-events: auto; flex: none; width: 40px; height: 64px; margin: 0 10px; border-radius: 12px; cursor: pointer; font-size: 30px; line-height: 1; color: #f0dcae;
+		background: rgba(11,16,26,.7); border: 1px solid rgba(199,154,78,.45); }
+	.pvnav:hover { background: rgba(199,154,78,.25); }
+	.pvdots { position: absolute; left: 0; right: 0; top: -16px; display: flex; justify-content: center; gap: 5px; pointer-events: none; }
+	.pvdots i { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,.25); }
+	.pvdots i.on { background: #f0dcae; box-shadow: 0 0 6px rgba(240,220,174,.8); }
 
 	/* bottom dashboard */
 	.dash { position: absolute; left: var(--dx, 224px); bottom: 12px; width: 1180px; height: 78px; box-sizing: border-box; transform: scale(var(--ds, 1)); transform-origin: bottom left;
@@ -1656,7 +1681,7 @@
 	.msx .pp { position: absolute; top: 2px; left: 0; right: 0; display: flex; justify-content: center; gap: 1.5px; }
 	.msx .pp i { flex: none; width: 4px; height: 3px; border-radius: 1px; transform: skewX(-24deg); background: rgb(var(--tcl)); box-shadow: 0 0 3px rgb(var(--tcl)); }
 	/* the compact dash */
-	.mdash { position: absolute; left: 0; right: 0; bottom: 0; height: 68px; z-index: 11; display: flex; align-items: center; gap: 4px; padding: 4px 5px; color: #e5e7eb;
+	.mdash { position: absolute; left: 0; right: 0; bottom: 0; height: 72px; z-index: 11; display: flex; align-items: center; gap: 4px; padding: 4px 5px; color: #e5e7eb;
 		background: linear-gradient(90deg, rgb(var(--tcr) / .22), rgba(9,13,22,.96) 30%); border-top: 1px solid rgb(var(--tcr) / .55); }
 	.mdash.ultdash { border-top-color: rgba(165,110,230,.7); }
 	.mdl { flex: none; width: 116px; display: flex; flex-direction: column; gap: 3px; }
@@ -1668,15 +1693,16 @@
 	.mdid b { font-size: 13px; }
 	.mdid small { font-size: 9.5px; color: #93a3b8; white-space: nowrap; }
 	.mdid em { font-style: normal; margin-left: 3px; padding: 0 3px; border-radius: 4px; font-size: 8.5px; color: #f0dcae; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.15); }
-	.mslots { flex: 1; min-width: 0; display: flex; gap: 2px; justify-content: center; align-items: center; }
-	.msl { position: relative; flex: none; width: 29px; }
-	.msep { flex: none; width: 1px; height: 34px; margin: 0 1px; background: rgba(255,255,255,.14); }
-	.mdisc { height: 39px; display: grid; place-items: center; border: 1px dashed rgba(255,255,255,.2); border-radius: 4px; }
+	.mmid { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+	.mslots { width: 100%; display: flex; gap: 2px; justify-content: center; align-items: center; }
+	.msl { position: relative; flex: none; width: 27px; }
+	.msep { flex: none; width: 1px; height: 30px; margin: 0 1px; background: rgba(255,255,255,.14); }
+	.mdisc { height: 36px; display: grid; place-items: center; border: 1px dashed rgba(255,255,255,.2); border-radius: 4px; }
 	.mdstack { position: relative; width: 100%; padding: 0; background: none; border: none; cursor: pointer; }
 	.mdstack :global(canvas) { display: block; width: 100%; border-radius: 4px; }
 	.mtrash { width: 14px; color: rgba(255,255,255,.25); display: grid; }
 	.mtrash :global(svg) { width: 100%; }
-	.mdeck { height: 39px; padding: 0; border-radius: 4px; cursor: pointer; display: grid; place-items: center; border: 1px solid rgba(120,95,55,.6);
+	.mdeck { height: 36px; padding: 0; border-radius: 4px; cursor: pointer; display: grid; place-items: center; border: 1px solid rgba(120,95,55,.6);
 		background: radial-gradient(115% 78% at 50% 40%, #fdfcf8, #efe9db 62%, #ddd4c1); box-shadow: 2px 2px 0 #cbbf9f, 3px 3px 0 #b9ad8c; }
 	.mdeck b { font-weight: normal; font-size: 12px; color: #3a2604; font-variant-numeric: tabular-nums; }
 	.mbtns { flex: none; display: grid; grid-template-columns: repeat(2, 30px); grid-template-rows: repeat(3, 18px); gap: 3px; }
@@ -1693,15 +1719,16 @@
 	.mb.undo:disabled { opacity: .32; cursor: not-allowed; }
 	.mbtns .radpop, .mbtns .tokdrawer { left: auto; right: 0; bottom: calc(100% + 8px); }
 	.mdisc .discpop.up { left: 50%; transform: translateX(-50%); }
-	/* floating action: Take back / Activate effect? / Next turn, above the dash's right side */
-	.mact { position: absolute; right: 6px; bottom: 74px; z-index: 13; display: flex; align-items: center; gap: 5px; padding: 4px; border-radius: 12px;
-		background: rgba(9,13,22,.95); border: 1px solid rgba(199,154,78,.5); box-shadow: 0 8px 20px rgba(0,0,0,.6); }
-	.mact .act { padding: 6px 12px; font-size: .8rem; white-space: nowrap; }
-	.mact .fxb { height: 28px; font-size: .74rem; }
-	.mact .fxb.dur { padding: 0 7px; }
-	.mact .waithost { max-width: none; white-space: nowrap; padding: 0 6px; }
+	/* the action row under the slots: fixed height, so nothing moves when it fills */
+	.mact { height: 22px; display: flex; align-items: center; justify-content: center; gap: 4px; }
+	.mact .act { padding: 0 11px; height: 22px; font-size: .72rem; white-space: nowrap; box-shadow: none; }
+	.mact .act.primary { box-shadow: 0 2px 0 #a8560f; }
+	.mact .fxq { font-size: .66rem; }
+	.mact .fxb { height: 22px; font-size: .68rem; }
+	.mact .fxb.dur { padding: 0 6px; }
+	.mact .waithost { max-width: none; white-space: nowrap; font-size: .68rem; }
 	/* hand tips: fixed card size; hidden = just the tops peek above the dash */
-	.tray.mob { --cw: 62px; left: 0; right: 0; bottom: 68px; justify-content: flex-start; padding-left: 18px; }
+	.tray.mob { --cw: 62px; left: 0; right: 0; bottom: 72px; justify-content: center; }
 	.tray.mob.retracted { transform: translateY(calc(var(--cw) * 1.396 - 30px)); clip-path: inset(-800px -800px calc(var(--cw) * 1.396 - 30px) -800px); }
 
 	/* phone-size overlays: preview, boards, deck, reveal */
