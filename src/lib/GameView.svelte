@@ -5,6 +5,7 @@
 	import CardLayer from '$lib/CardLayer.svelte';
 	import { heroById, heroLogo } from '$lib/heroes';
 	import { zoneName } from '$lib/zones';
+	import { effectLabel } from '$lib/effects';
 	import { placeToken, moveToken, effectiveHex, MINES, tokenName, type ArmToken } from '$lib/tokens';
 	import {
 		colorHex, movePiece, teamForSeat, throneHex,
@@ -115,6 +116,10 @@
 	}));
 
 	let board: BoardCanvas;
+	let cardLayer: CardLayer;
+	// every lingering card effect in play (switched on from a played card)
+	$: activeFx = $ms.effects ?? [];
+	const pColor = (pid: string) => colorHex($players.find((p) => p.id === pid)?.color ?? '');
 	// area radii (set from each player's dash): centred on that player's hero, in their colour
 	$: areas = Object.entries($ms.radii ?? {}).flatMap(([pid, r]) => {
 		const hero = $ms.pieces?.[pid];
@@ -270,7 +275,7 @@
 	<div class="ocean"></div>
 	<BoardCanvas bind:this={board} map={$ms.map ?? {}} rotation={orientation} interactive={true} {placing} {placeGhost} holdColor={myHoldColor} onCancelPlace={cancelPlace} {areas} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} />
 
-	<CardLayer {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} onArmToken={armToken} holdingToken={!!pendingToken} bind:previewId />
+	<CardLayer bind:this={cardLayer} {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} onArmToken={armToken} holdingToken={!!pendingToken} bind:previewId />
 
 	<!-- selected minion/token: offer delete (heroes aren't deletable) -->
 	{#if selPiece && (selPiece.role || selPiece.token)}
@@ -452,6 +457,19 @@
 			<span>Tie-breaker: {$ms.tieBreaker === 'orange' ? 'Orange' : 'Blue'}</span>
 		</button>
 
+		<!-- active card effects: who, which card, how long — tap to read the card -->
+		{#if activeFx.length}
+			<div class="hsec fxlist">
+				<div class="fxhd">Active effects</div>
+				{#each activeFx as e (e.id)}
+					<button class="fxrow" style="--fxc:{pColor(e.pid)}" on:click={() => cardLayer?.showCard(e.hero, e.idx, e.pid)} title="Read {e.name}">
+						<span class="fxtxt"><b>{heroById(e.hero)?.name ?? ''}</b> · {e.name}</span>
+						<span class="fxwhen">{effectLabel(e, $ms.round, $ms.turn)}</span>
+					</button>
+				{/each}
+			</div>
+		{/if}
+
 		<!-- activity log fills the space between the tie-breaker and the controls; retractable -->
 		<div class="logpanel" class:collapsed={!logOpen}>
 			<div class="loghdr">
@@ -618,6 +636,14 @@
 		border-radius: 12px; padding: 9px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), inset 0 0 26px rgba(199, 154, 78, 0.06); }
 	.hud .mapname { font-family: 'Modesto Poster', serif; font-size: 1.02rem; letter-spacing: 0.03em; color: #f6ead2; text-align: center; }
 
+	.fxlist { gap: 3px; }
+	.fxhd { font-size: 0.56rem; letter-spacing: 0.1em; text-transform: uppercase; color: #b8a06a; margin-bottom: 1px; }
+	.fxrow { display: flex; align-items: center; gap: 6px; width: 100%; padding: 3px 6px; border-radius: 7px; cursor: zoom-in; text-align: left; color: #e5e7eb; font-size: 0.66rem;
+		background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); border-left: 3px solid var(--fxc); }
+	.fxrow:hover { background: rgba(255, 255, 255, 0.1); }
+	.fxtxt { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.fxtxt b { color: #f6ead2; font-weight: normal; }
+	.fxwhen { flex: none; font-size: 0.56rem; color: #e8c173; }
 	.hsec { display: flex; flex-direction: column; gap: 4px; padding: 6px 8px; border-radius: 9px;
 		background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); }
 	.hsec.rt { gap: 4px; }

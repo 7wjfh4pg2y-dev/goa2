@@ -13,6 +13,7 @@
 // broken by `updatedAt`) wins. For a handful of players nudging a shared
 // tracker this is robust and easy to reason about.
 
+import { expireEffects, type Effect } from './effects'
 import { writable, type Readable } from 'svelte/store'
 import { supabase } from './supabase'
 import { tabClientId } from './identity'
@@ -66,9 +67,9 @@ export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 			// round over: hands refresh, and the board is swept of tokens and markers
 			const pieces: Record<string, Piece> = {}
 			for (const id in s.pieces ?? {}) if (keepsThroughRound(s.pieces[id])) pieces[id] = s.pieces[id]
-			return { cards: endRoundAll(migrated), round: s.round + 1, turn: 1, battlePhase: false, pieces, status: {}, radii: {} }
+			return { cards: endRoundAll(migrated), round: s.round + 1, turn: 1, battlePhase: false, pieces, status: {}, radii: {}, effects: expireEffects(s.effects, s.round, s.turn) }
 		}
-		return { cards: migrated, turn: s.turn + 1, radii: {} }
+		return { cards: migrated, turn: s.turn + 1, radii: {}, effects: expireEffects(s.effects, s.round, s.turn) }
 	}
 
 	const cs = cards[req.pid]
@@ -204,6 +205,9 @@ export interface MatchState {
 	// temporary area-effect radius shown around a player's hero (1–8 hexes);
 	// cleared whenever the turn advances
 	radii?: Record<string, number>
+	// lingering card effects (This turn / Next turn / This round), switched on per
+	// played card; they expire on their own as turns advance (see effects.ts)
+	effects?: Effect[]
 	// durable seat ownership: seat index (as string) → the clientId + name that
 	// owns that seat's hero. Set at game start; survives a player dropping from
 	// presence, so a vacated seat can be identified and taken over.
@@ -959,6 +963,11 @@ export function joinMatch(
 		for (const pid in patch.cards ?? {}) {
 			const before = local.cards?.[pid], after = patch.cards![pid]
 			if (before && after && levelOf(after) > levelOf(before)) note(pid, `reached Level ${levelOf(after)} ⬆`)
+		}
+		// lingering effects that just ran out
+		if (patch.effects) {
+			const kept = new Set(patch.effects.map((e) => e.id))
+			for (const e of local.effects ?? []) if (!kept.has(e.id)) note(e.pid, `${e.name} — effect ended`)
 		}
 		if (entries.length) update({ ...patch, log: [...local.log, ...entries].slice(-LOG_CAP) })
 		else update(patch)
