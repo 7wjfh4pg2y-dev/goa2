@@ -23,6 +23,7 @@
 	onDestroy(() => clearTimeout(readyTimer));
 
 	$: dense = Math.max(orange.length, blue.length) >= 3;
+	$: packed = Math.max(orange.length, blue.length) >= 4; // phones: 4–5 a side go compact
 	const pip = (stat: [number, number], i: number) => (i < stat[0] ? 2 : i < stat[1] ? 1 : 0);
 	const roles = (traits: Trait[]) => [...traits].sort((a, b) => TRAIT_LABELS[a].localeCompare(TRAIT_LABELS[b]));
 	// stagger the drop: orange from the centre outwards, then blue
@@ -30,7 +31,7 @@
 		0.15 + (team === 'orange' ? n - 1 - i : n + i) * 0.13;
 </script>
 
-<div class="splash" class:dense role="dialog" aria-label="Team versus team">
+<div class="splash" class:dense class:packed role="dialog" aria-label="Team versus team">
 	<div class="wash orange"></div>
 	<div class="wash blue"></div>
 	<div class="head">The battle lines are drawn</div>
@@ -186,4 +187,38 @@
 	.wait { opacity: 0; transition: opacity 0.4s; font-family: 'Modesto Poster', serif; font-size: 1.05rem; letter-spacing: 0.08em; color: #cbb488; }
 	.wait.show { opacity: 1; animation: breathe 2.4s ease-in-out infinite; }
 	@keyframes breathe { 0%, 100% { opacity: 0.6; } 50% { opacity: 1; } }
+
+	/* ═══════════ phone (≤760px): teams stacked, smaller banners ═══════════ */
+	@media (max-width: 760px) {
+		.splash, .splash.dense { --bw: min(108px, calc((100vw - 40px) / 3)); --bh: 250px; }
+		.head { margin-top: 62px; font-size: 0.8rem; letter-spacing: 0.14em; }
+		.field, .dense .field { flex-direction: column; align-items: center; gap: 6px; padding-top: 6px; }
+		.side { gap: 4px; }
+		.teamname { font-size: 0.85rem; }
+		.banners, .dense .banners { gap: 8px; }
+		.crest { margin: 0; width: 46px; height: 46px; border-width: 2px; }
+		.crest span { font-size: 1.1rem; }
+		.cloth-in { padding-bottom: 26px; }
+		.sigil, .dense .sigil { width: 30px; height: 30px; margin-top: -16px; }
+		.hname, .dense .hname { font-size: 0.95rem; padding: 0 4px; }
+		.htitle { font-size: 0.55rem; padding: 0 4px; }
+		.who { margin-top: 4px; padding: 1px 6px; font-size: 0.5rem; letter-spacing: 0.04em; }
+		.cx { margin-top: 3px; }
+		.cx img { width: 9px; height: 9px; }
+		.stats { gap: 2px; margin-top: 4px; }
+		.srow { gap: 3px; }
+		.srow img { width: 11px; height: 9px; }
+		.pips i, .dense .pips i { width: 5px; height: 5px; }
+		.roles { display: none; }
+		.foot { height: 70px; }
+		.begin { padding: 0.7rem 1.6rem; font-size: 1.05rem; }
+		/* 4–5 a side: five slim banners across, name + player only */
+		.splash.packed { --bw: calc((100vw - 36px) / 5); --bh: 180px; }
+		.packed .banners { gap: 4px; flex-wrap: wrap; justify-content: center; }
+		.packed .art { height: 58%; }
+		.packed .sigil { width: 24px; height: 24px; margin-top: -13px; }
+		.packed .hname { font-size: 0.7rem; padding: 0 2px; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+		.packed .htitle, .packed .stats { display: none; }
+		.packed .who { max-width: calc(100% - 6px); font-size: 0.46rem; padding: 1px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	}
 </style>

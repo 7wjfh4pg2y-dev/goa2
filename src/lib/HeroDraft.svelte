@@ -331,7 +331,7 @@
 		</div>
 	</div>
 
-	<footer class="rails" class:dense={Math.max(rosters.orange.length, rosters.blue.length) >= 3}>
+	<footer class="rails" class:dense={Math.max(rosters.orange.length, rosters.blue.length) >= 3} class:packed={Math.max(rosters.orange.length, rosters.blue.length) >= 4}>
 		{#each [{ team: 'orange', ids: rosters.orange }, { team: 'blue', ids: rosters.blue }] as r (r.team)}
 			<div class="rail {r.team}" aria-label="{r.team === 'orange' ? 'Orange' : 'Blue'} team">
 				{#each r.ids as id (id)}
@@ -533,4 +533,70 @@
 	.vs { flex: none; align-self: center; font-family: 'Modesto Poster', serif; font-size: 1.15rem; letter-spacing: 0.08em; color: #cbb488; text-shadow: 0 2px 8px rgba(0,0,0,0.6); }
 	.ban { width: 34px; height: 34px; border-radius: 6px; object-fit: cover; filter: grayscale(1) brightness(0.45); }
 	.nobans { color: #64748b; }
+
+	/* ═══════════ phone (≤760px): portrait draft ═══════════
+	   splash on top (name, traits, stats over it) · filter row · hero grid · Lock In · two team rows */
+	@media (max-width: 760px) {
+		.draft { min-height: 0; }
+		.leave { top: 8px; left: 8px; padding: 5px 10px; font-size: 0.72rem; gap: 4px; }
+		.splash { inset: 0 0 auto 0; height: 42%; object-position: center 18%; }
+		.scrim { inset: 0 0 auto 0; height: 42%; background: linear-gradient(180deg, rgba(9,13,22,0.35) 0%, rgba(9,13,22,0.05) 45%, rgba(9,13,22,0.96) 100%); }
+		.turn { top: 8px; left: auto; right: 8px; transform: none; gap: 5px; padding: 4px 10px; max-width: calc(100% - 100px); }
+		.turn .btxt { font-size: 0.78rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+		.turn .sep { font-size: 0.8rem; }
+		.turn .clock { font-size: 0.85rem; }
+		.turn .mode { display: none; }
+		.toast { top: 46px; min-width: 0; width: 94vw; gap: 10px; padding: 6px 12px 6px 6px; white-space: normal; }
+		.tav, .tav img { width: 44px; height: 44px; }
+		.twho { font-size: 0.6rem; }
+		.tact { font-size: 1.15rem; }
+		.tverb { font-size: 0.7rem; }
+		.ttitle { font-size: 0.72rem; }
+		.stats { top: 46px; left: auto; right: 10px; gap: 3px; align-items: flex-end; }
+		.cx { gap: 3px; }
+		.star { width: 13px; height: 13px; }
+		.pack { font-size: 0.66rem; }
+		.statrow { gap: 5px; }
+		.sicon { width: 16px; height: 13px; }
+		.pip { width: 8px; height: 8px; border-radius: 2px; }
+		.pips { gap: 2px; }
+		.idblock { left: 10px; right: 10px; bottom: auto; top: calc(42% - 104px); max-width: none; }
+		.nameline { gap: 8px; }
+		.logo { width: 40px; height: 40px; }
+		.nm { font-size: 1.9rem; }
+		.ti { font-size: 0.82rem; }
+		.traits { gap: 2px; margin: 6px 0 0; }
+		.trait { width: 50px; gap: 2px; }
+		.trait img, .tdot { width: 22px; height: 22px; font-size: 0.9rem; }
+		.tl { font-size: 0.44rem; }
+		.rightcol { top: 42%; left: 8px; right: 8px; bottom: 6px; width: auto; gap: 6px; }
+		.browsewrap { flex-direction: column; gap: 6px; }
+		.filters { position: static; order: -1; flex-direction: row; flex: none; overflow-x: auto; scrollbar-width: none; opacity: 1; gap: 4px; padding: 4px; }
+		.filters::-webkit-scrollbar { display: none; }
+		.ftab { flex: none; width: 34px; height: 30px; min-height: 0; max-height: none; }
+		.fsep { width: 1px; height: 20px; margin: 0 2px; }
+		.browse { grid-template-columns: repeat(6, 1fr); grid-template-rows: none; grid-auto-rows: max-content; align-content: start; overflow-y: auto; gap: 5px; padding: 8px; }
+		.hero { aspect-ratio: 1; }
+		.hero:hover { transform: none; }
+		.fcap { font-size: 0.72rem; }
+		.actslot { height: 3rem; }
+		.lockin { font-size: 0.95rem; }
+		.rails, .rails.dense { flex-direction: column; gap: 4px; padding: 5px 6px; }
+		.rail, .rails.dense .rail { gap: 4px; justify-content: flex-start; }
+		.rail.blue { justify-content: flex-start; }
+		.pcard, .rails.dense .pcard { flex: 1 1 0; gap: 5px; padding: 3px 5px 3px 3px; border-radius: 9px; }
+		.pav, .rails.dense .pav { width: 30px; height: 30px; border-radius: 7px; }
+		.pn, .rails.dense .pn { font-size: 0.72rem; }
+		.pp { font-size: 0.54rem; }
+		/* 4–5 a side: avatar over the names so nothing truncates to "Ch…" */
+		.rails.packed .pcard { flex-direction: column; align-items: center; gap: 2px; padding: 3px 2px; }
+		.rails.packed .pinfo { width: 100%; align-items: center; text-align: center; }
+		.rails.packed .pn { font-size: 0.6rem; max-width: 100%; }
+		.rails.packed .pcard:not(.filled) .pn { font-size: 0.56rem; }
+		.rails.packed .pp { font-size: 0.5rem; max-width: 100%; }
+		.proles, .pstats { display: none; }
+		.vs { display: none; }
+		.banrail { justify-content: flex-start; }
+		.ban { width: 24px; height: 24px; }
+	}
 </style>
