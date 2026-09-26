@@ -6,6 +6,7 @@
 	import { heroById, heroLogo } from '$lib/heroes';
 	import { zoneName } from '$lib/zones';
 	import { effectLabel } from '$lib/effects';
+	import lifeSplit from '$lib/images/life_split.png';
 	import { placeToken, moveToken, effectiveHex, MINES, tokenName, type ArmToken } from '$lib/tokens';
 	import {
 		colorHex, movePiece, teamForSeat, throneHex,
@@ -232,6 +233,14 @@
 
 	let confirmLeave = false;
 
+	// ── phone layout (≤760px wide): top bar + ☰ menu instead of the left HUD ──
+	let gvw = 1440;
+	$: mobile = gvw <= 760;
+	let menuOpen = false, lwOpen = false, goldOpen = false;
+	$: myCoins = $ms.cards?.[clientId]?.coins ?? null;
+	function coins(d: number) { session.cardAction({ kind: 'coins', pid: clientId, delta: d }); }
+	const FX_SHORT: Record<string, string> = { 'This turn': 'Turn', 'Next turn': 'Next', 'This round': 'Round' };
+
 	// ── saved views: 3 slots of rotation + zoom + pan, kept in this browser ─────
 	// (they carry over to new games, so a player's preferred angle is one tap away)
 	type SavedView = { spin: number; scale: number; panX: number; panY: number };
@@ -247,7 +256,7 @@
 	function goView(i: number) { const v = views[i]; if (v && board) board.setView(v); }
 	const viewLabel = (v: SavedView) => `${Math.round(v.spin)}° · ${v.scale.toFixed(1)}×`;
 	function viewsOutside(e: PointerEvent) {
-		if (viewsOpen && !(e.target as Element | null)?.closest?.('.viewswrap')) viewsOpen = false;
+		if (viewsOpen && !(e.target as Element | null)?.closest?.('.viewswrap, .mviews')) viewsOpen = false;
 	}
 	$: log = $ms.log ?? [];
 	const hhmm = (t: number) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -263,19 +272,26 @@
 	});
 </script>
 
-<svelte:window on:keydown={(e) => { if (e.key !== 'Escape') return; if (confirmLeave) confirmLeave = false; else { pendingSpawn = null; pendingToken = null; } }} on:pointerdown={viewsOutside} />
+<svelte:window on:keydown={(e) => { if (e.key !== 'Escape') return; if (confirmLeave) confirmLeave = false; else { pendingSpawn = null; pendingToken = null; } }} on:pointerdown={(e) => { viewsOutside(e); if (goldOpen && !(e.target as Element | null)?.closest?.('.goldwrap')) goldOpen = false; }} bind:innerWidth={gvw} />
 
-<div class="gamewrap">
-	{#if pendingToken}
+<div class="gamewrap" class:mob={mobile}>
+	{#if pendingToken || (mobile && pendingSpawn)}
 		<div class="placehint">
-			<span>Tap a hex to place {pendingToken.token === 'companion' ? pendingToken.label : tokenName(pendingToken.token)}{MINES.has(pendingToken.token) ? ' (face down)' : ''}</span>
-			<button class="spcancel" on:click={() => (pendingToken = null)}>Cancel</button>
+			{#if pendingToken}
+				<span>Tap a hex to place {pendingToken.token === 'companion' ? pendingToken.label : tokenName(pendingToken.token)}{MINES.has(pendingToken.token) ? ' (face down)' : ''}</span>
+			{:else if pendingSpawn}
+				<span>Tap a hex to place the {pendingSpawn.team} {pendingSpawn.role}</span>
+			{/if}
+			<button class="spcancel" on:click={cancelPlace}>Cancel</button>
 		</div>
 	{/if}
 	<div class="ocean"></div>
+	<!-- on a phone the board sits between the top bar + player strip and the dash -->
+	<div class="boardarea" class:mob={mobile}>
 	<BoardCanvas bind:this={board} map={$ms.map ?? {}} rotation={orientation} interactive={true} {placing} {placeGhost} holdColor={myHoldColor} onCancelPlace={cancelPlace} {areas} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} />
+	</div>
 
-	<CardLayer bind:this={cardLayer} {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} onArmToken={armToken} holdingToken={!!pendingToken} bind:previewId />
+	<CardLayer bind:this={cardLayer} {mobile} {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} onArmToken={armToken} holdingToken={!!pendingToken} bind:previewId />
 
 	<!-- selected minion/token: offer delete (heroes aren't deletable) -->
 	{#if selPiece && (selPiece.role || selPiece.token)}
@@ -376,6 +392,99 @@
 		</div>
 	{/if}
 
+	{#if mobile}
+		<!-- ───────── phone top bar: ☰ · round/turn · tie-breaker · waves · life · gold ───────── -->
+		<div class="mtop">
+			<button class="mib" on:click={() => (menuOpen = true)} aria-label="Menu">☰</button>
+			<span class="mpill rt"><b>R{$ms.round}</b>·<b>T{$ms.turn}</b></span>
+			<button class="mib tie" on:click={flipTie} title="Tie-breaker: {$ms.tieBreaker === 'orange' ? 'Orange' : 'Blue'} — tap to flip"><img src={tieArt($ms.tieBreaker)} class:flip={tieFlip} alt="" /></button>
+			<button class="mpill" on:click={() => (lwOpen = true)} aria-label="Waves"><img class="wv" src={waveIcon} alt="" /><b class="n2">{$ms.waves}</b></button>
+			<button class="mpill life" on:click={() => (lwOpen = true)} aria-label="Life"><b class="n2 lo">{$ms.life.orange}</b><img src={lifeSplit} alt="" /><b class="n2 lb">{$ms.life.blue}</b></button>
+			<span class="msp"></span>
+			{#if myCoins != null}
+				<span class="goldwrap">
+					<button class="mpill gold" on:click={() => (goldOpen = !goldOpen)} aria-label="Coins"><span class="gc"></span><b class="n2">{myCoins}</b></button>
+					{#if goldOpen}
+						<div class="goldpop"><button on:click={() => coins(-1)} aria-label="Remove coin">−</button><span class="gc big">{myCoins}</span><button on:click={() => coins(1)} aria-label="Add coin">+</button></div>
+					{/if}
+				</span>
+			{/if}
+		</div>
+
+		<!-- ☰ menu: spawn, effects, activity, view, lobby / leave -->
+		{#if menuOpen}
+			<div class="mscrim" on:click={() => (menuOpen = false)} on:keydown={() => {}} role="presentation"></div>
+			<div class="mdrawer">
+				<div class="mdh">
+					<div class="mdname">{$ms.map?.name ?? 'Board'}</div>
+					<small>{room} · <span class="conn {$status}"><span class="cdot"></span>{connLabel($status)}</span></small>
+				</div>
+				<div class="msec">
+					<div class="mlbl">Spawn</div>
+					{#each ['orange', 'blue'] as t}
+						<div class="spr"><span class="tm {t}">{t === 'orange' ? 'O' : 'B'}</span>
+							{#each MINION_ROLES as r}<button class="mn" on:click={() => { armSpawn(t as Team, r); menuOpen = false; }} title="{t} {r}">{r[0].toUpperCase()}</button>{/each}
+						</div>
+					{/each}
+				</div>
+				{#if activeFx.length}
+					<div class="msec">
+						<div class="mlbl">Effects</div>
+						{#each activeFx as e (e.id)}
+							<button class="mfx" style="--fxc:{pColor(e.pid)}" on:click={() => { menuOpen = false; cardLayer?.showCard(e.hero, e.idx, e.pid); }}>
+								<span>{heroById(e.hero)?.name ?? ''}</span><i>{FX_SHORT[effectLabel(e, $ms.round, $ms.turn)]}</i>
+							</button>
+						{/each}
+					</div>
+				{/if}
+				<div class="msec mlog">
+					<div class="mlbl">Activity</div>
+					<div class="mlogb">
+						{#each log.slice(-8) as e (e.id)}<p><b>{e.by}</b> {e.text}</p>{:else}<p>No moves yet.</p>{/each}
+					</div>
+				</div>
+				<div class="msec mviews">
+					<div class="mlbl">View</div>
+					<div class="mvg">
+						<button class="mvb rec" on:click={() => board?.reset()} aria-label="Recenter">⌖</button>
+						<button class="mvb" on:click={() => board?.rotateBy(-45)} aria-label="Rotate left">⟲</button>
+						<button class="mvb" on:click={() => board?.rotateBy(45)} aria-label="Rotate right">⟳</button>
+						<button class="mvb" on:click={() => board?.zoomBtn(1.2)} aria-label="Zoom in">＋</button>
+						<button class="mvb" on:click={() => board?.zoomBtn(1 / 1.2)} aria-label="Zoom out">−</button>
+						<button class="mvb" class:on={viewsOpen} on:click={() => (viewsOpen = !viewsOpen)} aria-label="Saved views">
+							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M3 8.5a2 2 0 0 1 2-2h2.2l1.4-2h6.8l1.4 2H19a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><circle cx="12" cy="13" r="3.6" /></svg>
+						</button>
+					</div>
+					{#if viewsOpen}
+						{#each views as v, i}
+							<div class="vslot">
+								<button class="vgo" disabled={!v} on:click={() => { goView(i); menuOpen = false; }}><b>{i + 1}</b><span>{v ? viewLabel(v) : 'Empty'}</span></button>
+								<button class="vsave" on:click={() => saveView(i)}>{v ? 'Overwrite' : 'Save'}</button>
+							</div>
+						{/each}
+					{/if}
+				</div>
+				<div class="mrow2">
+					<button class="mbtn lob" on:click={() => { menuOpen = false; manageOpen = true; }}>👥 Lobby{#if iAmHost && seatRequests.length}<span class="reqbadge">{seatRequests.length}</span>{/if}</button>
+					<button class="mbtn leave" on:click={() => { menuOpen = false; confirmLeave = true; }}>⎋ Leave</button>
+				</div>
+			</div>
+		{/if}
+
+		<!-- waves & life: tap a token to flip it -->
+		{#if lwOpen}
+			<div class="mscrim" on:click={() => (lwOpen = false)} on:keydown={() => {}} role="presentation"></div>
+			<div class="msheet">
+				<span class="grab"></span>
+				<div class="lsec"><div class="lh"><span>Waves</span><b>{$ms.waves} / {($ms.waveTok ?? []).length}</b></div>
+					<div class="lg w">{#each $ms.waveTok ?? [] as full, i}<button class="wtok" class:dep={!full} class:flip={flips[`w${i}`]} style="background-image:url({waveIcon})" on:click={() => toggleWave(i)} aria-label="Wave token"></button>{/each}</div></div>
+				{#each ['orange', 'blue'] as t}
+					<div class="lsec"><div class="lh {t}"><span>{t === 'orange' ? 'Orange' : 'Blue'} life</span><b>{$ms.life[t as Team]} / {lifeMax}</b></div>
+						<div class="lg">{#each $ms.lifeTok?.[t as Team] ?? [] as full, i}<button class="ltok" class:dep={!full} class:flip={flips[`l${t}${i}`]} style="background-image:url({lifeArt(t as Team, full ? 'front' : 'back')})" on:click={() => toggleLife(t as Team, i)} aria-label="Life token"></button>{/each}</div></div>
+				{/each}
+			</div>
+		{/if}
+	{:else}
 	<!-- game HUD: right-side panel -->
 	<div class="hud">
 		<div class="mapline">
@@ -521,6 +630,7 @@
 			</div>
 		</div>
 	</div>
+	{/if}
 </div>
 
 <style>
@@ -736,4 +846,69 @@
 	.logline { font-size: 0.72rem; color: #cbd5e1; line-height: 1.3; }
 	.logline b { color: #f1f5f9; }
 	.logempty { font-size: 0.72rem; color: #64748b; }
+
+	/* ═══════════ phone layout (≤760px wide) ═══════════ */
+	.boardarea { position: absolute; inset: 0; }
+	.boardarea.mob { top: 116px; bottom: 100px; }
+	.gamewrap.mob .pietool, .gamewrap.mob .placehint { top: 124px; max-width: 94vw; }
+	.mtop { position: absolute; top: 0; left: 0; right: 0; height: 44px; z-index: 14; display: flex; align-items: center; gap: 5px; padding: 0 8px;
+		background: rgba(9, 13, 22, 0.96); border-bottom: 1px solid rgba(199, 154, 78, 0.35); }
+	.mib { flex: none; width: 32px; height: 32px; padding: 0; border-radius: 9px; display: grid; place-items: center; cursor: pointer; font-size: 17px; color: #f0dcae;
+		background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.16); }
+	.mib.tie img { width: 24px; height: 24px; }
+	.mib.tie img.flip { animation: coinflip 0.45s ease; }
+	.mpill { flex: none; height: 30px; display: flex; align-items: center; gap: 4px; padding: 0 7px; border-radius: 9px; cursor: pointer; font-size: 13px; color: #e5e7eb;
+		background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.12); white-space: nowrap; }
+	.mpill b { font-weight: normal; color: #fff; }
+	/* fixed-width counters: one or two digits, nothing moves */
+	.mpill .n2 { display: inline-block; min-width: 1.25em; text-align: center; font-variant-numeric: tabular-nums; }
+	.mpill.rt { cursor: default; gap: 2px; }
+	.mpill .wv { width: 18px; height: 18px; object-fit: contain; }
+	.mpill.life img { width: 21px; height: 20px; }
+	.mpill.life .lo { color: #ffb27a; } .mpill.life .lb { color: #8cc0ff; }
+	.msp { flex: 1; }
+	.goldwrap { position: relative; flex: none; }
+	.mpill.gold { background: rgba(199, 154, 78, 0.14); border-color: rgba(199, 154, 78, 0.45); padding-left: 4px; }
+	.gc { width: 18px; height: 18px; border-radius: 50%; display: inline-grid; place-items: center; background: radial-gradient(circle at 35% 30%, #ffe7a1, #d4a64a 60%, #9a6f22); border: 1px solid #fbe7b0; }
+	.gc.big { width: 36px; height: 36px; font-size: 16px; color: #3a2604; }
+	.goldpop { position: absolute; right: 0; top: calc(100% + 8px); z-index: 20; display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 12px;
+		background: rgba(11, 16, 26, 0.97); border: 1px solid rgba(199, 154, 78, 0.55); box-shadow: 0 12px 30px rgba(0, 0, 0, 0.6); }
+	.goldpop button { width: 34px; height: 34px; border-radius: 9px; cursor: pointer; font-size: 20px; color: #fff; background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.2); }
+	.mscrim { position: fixed; inset: 0; z-index: 30; background: rgba(2, 5, 10, 0.55); }
+	.mdrawer { position: fixed; top: 0; bottom: 0; left: 0; z-index: 31; width: min(232px, 78vw); padding: 12px 10px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;
+		background: rgba(10, 15, 25, 0.98); border-right: 1px solid rgba(199, 154, 78, 0.45); box-shadow: 20px 0 50px rgba(0, 0, 0, 0.6); color: #e5e7eb; }
+	.mdname { font-size: 15px; color: #f6ead2; }
+	.mdh small { font-size: 10px; color: #93a3b8; display: flex; align-items: center; gap: 4px; }
+	.msec { padding: 7px 8px; border-radius: 10px; background: rgba(12, 18, 32, 0.6); border: 1px solid rgba(255, 255, 255, 0.1); }
+	.mlbl { font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: #b8a06a; margin-bottom: 5px; }
+	.spr { display: flex; gap: 4px; margin-top: 4px; }
+	.tm { width: 28px; height: 28px; border-radius: 7px; display: grid; place-items: center; font-size: 13px; }
+	.tm.orange { background: rgba(239, 125, 34, 0.3); border: 1px solid rgba(239, 125, 34, 0.7); }
+	.tm.blue { background: rgba(47, 127, 230, 0.3); border: 1px solid rgba(47, 127, 230, 0.7); }
+	.mn { flex: 1; height: 28px; border-radius: 7px; cursor: pointer; font-size: 12px; color: #e5e7eb; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.16); }
+	.mfx { display: flex; justify-content: space-between; width: 100%; margin-top: 3px; padding: 3px 6px; border-radius: 6px; cursor: zoom-in; font-size: 11px; color: #e5e7eb;
+		background: rgba(255, 255, 255, 0.04); border: none; border-left: 3px solid var(--fxc); }
+	.mfx i { font-style: normal; font-size: 10px; color: #e8c173; }
+	.mlogb p { font-size: 10.5px; line-height: 1.3; color: #d1d5db; margin-top: 2px; }
+	.mlogb b { font-weight: normal; color: #fff; }
+	.mvg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+	.mvb { height: 32px; border-radius: 8px; cursor: pointer; display: grid; place-items: center; font-size: 15px; color: #f0dcae; background: rgba(199, 154, 78, 0.14); border: 1px solid rgba(199, 154, 78, 0.4); }
+	.mvb svg { width: 16px; height: 16px; }
+	.mvb.rec, .mvb.on { background: rgba(199, 154, 78, 0.3); border-color: rgba(214, 170, 92, 0.7); }
+	.mdrawer .vslot { margin-top: 5px; }
+	.mrow2 { display: flex; gap: 6px; margin-top: auto; }
+	.mbtn { position: relative; flex: 1; height: 32px; border-radius: 9px; cursor: pointer; font-size: 12px; color: #e5e7eb; background: rgba(255, 255, 255, 0.05); }
+	.mbtn.lob { border: 1px solid rgba(199, 154, 78, 0.5); }
+	.mbtn.leave { color: #fca5a5; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.4); }
+	.msheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 31; max-height: 80vh; overflow-y: auto; padding: 18px 14px 20px; border-radius: 18px 18px 0 0;
+		background: rgba(10, 15, 25, 0.98); border-top: 1px solid rgba(199, 154, 78, 0.5); box-shadow: 0 -20px 50px rgba(0, 0, 0, 0.6); }
+	.msheet .grab { position: absolute; top: 7px; left: 50%; transform: translateX(-50%); width: 42px; height: 4px; border-radius: 3px; background: rgba(255, 255, 255, 0.45); }
+	.lsec { margin-top: 12px; }
+	.lh { display: flex; justify-content: space-between; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: #b8a06a; margin-bottom: 6px; }
+	.lh b { font-weight: normal; color: #fff; font-variant-numeric: tabular-nums; }
+	.lh.orange span { color: #ef9a52; } .lh.blue span { color: #6ea8f0; }
+	.lg { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; justify-items: center; }
+	.lg.w { grid-template-columns: repeat(7, 1fr); }
+	.msheet .ltok { width: 44px; height: 42px; }
+	.msheet .wtok { width: 34px; height: 34px; }
 </style>
