@@ -1,6 +1,6 @@
 # GoA2 — Guards of Atlantis II (digital, for friends)
 
-A rebrand/replica of Stats-of-Atlantis plus a **digital multiplayer** version of the
+A **digital multiplayer** version of the
 Guards of Atlantis II board game (lobby → teams → hero draft → board). Personal use.
 
 Deployed to GitHub Pages: **https://7wjfh4pg2y-dev.github.io/goa2/**
