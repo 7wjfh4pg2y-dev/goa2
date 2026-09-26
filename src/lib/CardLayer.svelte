@@ -25,6 +25,7 @@
 	export let previewId: string | null = null; // set by the board to open a player's overlay
 	export let onArmToken: (t: ArmToken) => void = () => {}; // pick a token off the shelf → place it on a hex
 	export let holdingToken = false; // a shelf token is in hand, waiting for its hex
+	export let mobile = false; // phone layout (set by GameView at ≤760px wide): strip + compact dash
 
 	const ORANGE = '#ef7d22';
 	const BLUE = '#2f7fe6';
@@ -39,6 +40,11 @@
 	const ui = import.meta.glob('./cards/images/*.png', { eager: true, import: 'default' }) as Record<string, string>;
 	const icon = (n: string) => ui[`./cards/images/${n}.png`];
 	const GLOW: Record<string, string> = { GOLD: '#e8b64a', SILVER: '#c6d0db', RED: '#e0524a', GREEN: '#41ae59', BLUE: '#3f7fe0', PURPLE: '#a56ee6' };
+	// the detailed stat art (phone layout) — keyed like STAT_DEFS
+	const statArt = import.meta.glob('./images/stats/*.png', { eager: true, import: 'default' }) as Record<string, string>;
+	const STAT_FILE: Record<string, string> = { atk: 'attack', def: 'defense', init: 'initiative', move: 'movement', range: 'range', radius: 'area' };
+	const statImg = (k: string) => statArt[`./images/stats/${STAT_FILE[k]}.png`];
+	const canUndoS = session.canUndo;
 	const cardGlow = (hero: string, idx: number) => GLOW[heroCards(hero)[idx]?.color] ?? '#efb46a';
 
 	$: seated = ($players ?? []).filter((p) => p.seat >= 0 && p.seat < $ms.seats).sort((a, b) => a.seat - b.seat);
@@ -426,80 +432,175 @@
 
 <svelte:window on:pointerdown={onWindowDown} bind:innerWidth={vw} />
 
-{#if $ms.cards}
-	<!-- ───────── right side: the OTHER players ───────── -->
-	<div class="ppanel" class:dense class:withdash={!!mine && dashUnderPanel} style={dashVars}>
-		<div class="pptitle">
-			Players
-			<span class="phasetag" class:resolve={revealed} class:counting={countdownActive}>
-				{revealed ? `Revealed · Turn ${$ms.turn}` : countdownActive ? `Revealing… ${countdownLabel}` : `Planning · Turn ${$ms.turn} · ${readyCount}/${seatedWithCards.length} ready`}
-			</span>
-		</div>
-		{#each others as p (p.id)}
-			{@const cs = cards[p.id]}
-			{@const st = statusMap[p.id] ?? EMPTY_STATUS}
-			{#if p.id === firstBlueId}<div class="ppdiv"></div>{/if}
-			<!-- a row opens that player's board; a face-up card inside previews directly -->
-			<div class="prow" class:ultrow={cs?.ultimate} style="--tint:{teamTint(p)}; {teamVars(pTeam(p))}" role="button" tabindex="0"
-				on:click={() => (overlayId = p.id)} on:keydown={(e) => (e.key === 'Enter' || e.key === ' ') && (overlayId = p.id)}>
-				<div class="prtop">
-					<PlayerIcon hero={cs?.hero ?? ''} team={pTeam(p)} color={colorHex(p.color)} size="2rem" ring={2} ult={!!cs?.ultimate}>
-						{#if cs?.ultimate}<span class="crown">♛</span>{/if}
-					</PlayerIcon>
-					<span class="pmid">
-						<span class="pname">
-							{p.name}<em>Lv {cs ? levelOf(cs) : 1}</em>
-							{#if cs}<span class="coin" title="Coins">{cs.coins}</span>{/if}
-							{#if cs && cs.discard.length}<span class="dchip" title="Cards in discard pile"><i class="trashi">{@html TRASH}</i>{cs.discard.length}</span>{/if}
-							{#if st.poison}<span class="statmk pois" title="Poison"><img src={icon('marker_poison')} alt="" /></span>{/if}
-							{#if st.bounty}<span class="statmk bnty" title="Bounty"><img src={icon('marker_bounty')} alt="" /></span>{/if}
-						</span>
-						<span class="phero">{cs ? heroName(cs.hero) : ''}</span>
-					</span>
-					{#if cs && dense}
-						<span class="dslot">
-							<span class="fxwrap" class:fx={!!fxFor(p.id, slotIdx(cs, turnIdx))} style="--fxc:{colorOf(p.id)}"><TurnSlot heroId={cs.hero} played={cs.turns[turnIdx]} pending={cs.pending} isCurrent {revealed} examinable on:click={(e) => peekSlot(e, cs, turnIdx)} />{#if fxFor(p.id, slotIdx(cs, turnIdx))}<span class="fxflame" title={fxLabel(fxFor(p.id, slotIdx(cs, turnIdx))!)}>{@html FLAME}</span>{/if}</span>
-						</span>
-					{/if}
-					{#if cs && isSkipped(cs)}<span class="skiptag" title="No cards left — skipped this turn">skip</span>
-					{:else if cs && !revealed}<span class="rdot" class:on={isReady(cs)} title={isReady(cs) ? 'Ready' : 'Not ready'}></span>{/if}
-					<!-- this turn's initiative (card + upgrades), once revealed — sits above the radius stat -->
-					{#if cs}
-						{@const ini = initOf(cs, revealed)}
-						<span class="initb" class:off={ini == null} title="Initiative this turn">
-							<i class="inicon">{@html CLOCK}</i><b>{ini ?? '–'}</b>
-						</span>
-					{/if}
-				</div>
-				{#if cs}
-					<div class="pstats">
-						{#each allStats(cs) as r}
-							<span class="pstat" class:up={r.delta > 0}>
-								<span class="stripes">{#each Array(r.delta) as _}<span class="stripe"></span>{/each}</span>
-								<img src={icon(r.icon)} alt={r.label} />
-								<b>{r.delta > 0 ? '+' + r.delta : '–'}</b>
-							</span>
-						{/each}
-					</div>
-					{#if !dense}
-						<div class="pturns">
-							{#each [0, 1, 2, 3] as t}
-								<span class="fxwrap" class:fx={!!fxFor(p.id, slotIdx(cs, t))} style="--fxc:{colorOf(p.id)}"><TurnSlot heroId={cs.hero} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} label={ROMAN[t]} examinable on:click={(e) => peekSlot(e, cs, t)} />{#if fxFor(p.id, slotIdx(cs, t))}<span class="fxflame" title={fxLabel(fxFor(p.id, slotIdx(cs, t))!)}>{@html FLAME}</span>{/if}</span>
-							{/each}
-							<!-- discard: the most recent card, count below (like your dash) -->
-							<span class="pdisc" title="Discard pile">
-								<span class="trashw">{@html TRASH}</span>
-								{#if cs.discard.length}
-									<span class="pdcard"><Card heroId={cs.hero} card={heroCards(cs.hero)[cs.discard[cs.discard.length - 1]]} /></span>
-									<span class="pdct">{cs.discard.length}</span>
-								{/if}
-							</span>
+<!-- controls shared by the desktop dash and the phone dash -->
+{#snippet radiusCtl()}
+	<span class="radwrap">
+					<button class="radbtn" class:on={myRadius > 0} on:click={() => (radiusOpen = !radiusOpen)} title={myRadius ? `Radius ${myRadius} showing — click to change or clear` : 'Show an area radius around your hero'} aria-label="Area radius">
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke-dasharray="3 2.4" /><circle cx="12" cy="12" r="4.2" /><circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none" /></svg>
+						<b>{myRadius || '–'}</b>
+					</button>
+					{#if radiusOpen}
+						<div class="radpop">
+							<div class="toklbl">Area radius</div>
+							<div class="radgrid">
+								{#each [1, 2, 3, 4, 5, 6, 7, 8] as n}
+									<button class="radn" class:on={myRadius === n} on:click={() => setRadius(n)}>{n}</button>
+								{/each}
+							</div>
+							<div class="tokfoot">
+								<span class="tokhint">Clears at end of turn</span>
+								<button class="tokclear" disabled={!myRadius} on:click={() => setRadius(0)}>Clear</button>
+							</div>
 						</div>
 					{/if}
-				{/if}
+				</span>
+{/snippet}
+{#snippet tokenCtl()}
+	<div class="tokwrap">
+		<button class="tokbtn" class:on={tokenDrawer} disabled={!shelf.length} on:click={() => (tokenDrawer = !tokenDrawer)} title={shelf.length ? 'Tokens and Markers' : 'Your hero has no tokens or markers'}>
+			{#if !shelf.length}<span class="tokglyph">◈</span>{:else if shelf[0].letter}<span class="ltrdisc" style="--pc:{colorHex(myColor)}">{shelf[0].letter}</span>{:else}<img src={shelf[0].img} alt="" />{/if}
+			{#if myTokenCount}<span class="tokct">{myTokenCount}</span>{/if}
+		</button>
+		{#if tokenDrawer}
+			<div class="tokdrawer">
+				<div class="toklbl">Tokens and Markers</div>
+				<div class="tokgrid">
+					{#each shelf as it (it.key)}
+						<button class="tok {it.cls}" on:click={() => armToken(it)} title={it.title}>
+							{#if it.letter}<span class="ltrdisc" style="--pc:{colorHex(myColor)}">{it.letter}</span>{:else}<img src={it.img} alt="" />{/if}{#if it.label}<span class="toktag">{it.label}</span>{/if}
+						</button>
+					{/each}
+				</div>
+				<div class="tokfoot">
+					<span class="tokhint">Pick one · tap a hex to place</span>
+					<button class="tokclear" disabled={!myTokenCount} on:click={clearTokens} title="Remove every token and marker you've placed">Clear</button>
+				</div>
 			</div>
-		{/each}
+		{/if}
 	</div>
+{/snippet}
+{#snippet actionBody()}
+
+		{#if fxAsking && fxStage === 'ask'}
+			<span class="fxq">Activate effect?</span>
+			<span class="fxrow2"><button class="fxb yes" on:click={() => (fxStage = 'pick')}>Yes</button><button class="fxb" on:click={fxNo}>No</button></span>
+		{:else if fxAsking}
+			<span class="fxrow2">
+				{#each ['turn', 'next', 'round'] as d}
+					<button class="fxb dur" class:on={myTurnDur === d} on:click={() => fxPickDur(d as EffectDur)} title={DUR_LABEL[d as EffectDur]}>{d === 'turn' ? 'Turn' : d === 'next' ? 'Next' : 'Round'}</button>
+				{/each}
+				<button class="fxb x" on:click={() => (fxStage = 'ask')} title="Back">✕</button>
+			</span>
+		{:else if revealed && iAmHost}
+			{#if !isFinalTurn}
+				<button class="act primary" on:click={onAdvanceTurn}>Next turn →</button>
+			{:else if !battlePhase}
+				<button class="act primary" on:click={startBattle}>Minion Battle</button>
+			{:else}
+				<button class="act primary" on:click={onAdvanceTurn}>Next round →</button>
+			{/if}
+		{:else if revealed}
+			<span class="waithost">Waiting for host…</span>
+		{:else if myReady}
+			<button class="act takeback" on:click={takeBack}>↩ Take back</button>
+		{/if}
+{/snippet}
+
+{#if $ms.cards}
+	<!-- ───────── phone: the other players, a sideways-scrolling strip ───────── -->
+	{#if mobile}
+		<div class="mstrip">
+			{#each others as p (p.id)}
+				{@const cs = cards[p.id]}
+				{#if cs}
+					{@const ini = initOf(cs, revealed)}
+					{@const cfx = fxFor(p.id, slotIdx(cs, turnIdx))}
+					<div class="mpc" style={teamVars(pTeam(p))} role="button" tabindex="0" on:click={() => (overlayId = p.id)} on:keydown={(e) => e.key === 'Enter' && (overlayId = p.id)}>
+						<span class="mpic"><PlayerIcon hero={cs.hero} team={pTeam(p)} color={colorHex(p.color)} size="28px" ring={2} ult={cs.ultimate} /></span>
+						<span class="mpn"><b>{p.name}</b><small>{heroName(cs.hero)}</small></span>
+						<span class="mlv"><em>Lv {levelOf(cs)}</em><i class="mini" class:off={ini == null}>{@html CLOCK}<b>{ini ?? '–'}</b></i></span>
+						<span class="mcard fxwrap" class:fx={!!cfx} style="--fxc:{colorOf(p.id)}"><TurnSlot heroId={cs.hero} played={cs.turns[turnIdx]} pending={cs.pending} isCurrent {revealed} examinable on:click={(e) => peekSlot(e, cs, turnIdx)} />{#if cfx}<span class="fxflame">{@html FLAME}</span>{/if}</span>
+						<span class="msx">{#each allStats(cs) as r}<span class:up={r.delta > 0}>{#if r.delta > 0}<span class="pp">{#each Array(r.delta) as _}<i></i>{/each}</span>{/if}<img src={statImg(r.key)} alt={r.label} /></span>{/each}</span>
+					</div>
+				{/if}
+			{/each}
+		</div>
+	{:else}
+	<!-- ───────── right side: the OTHER players ───────── -->
+		<div class="ppanel" class:dense class:withdash={!!mine && dashUnderPanel} style={dashVars}>
+			<div class="pptitle">
+				Players
+				<span class="phasetag" class:resolve={revealed} class:counting={countdownActive}>
+					{revealed ? `Revealed · Turn ${$ms.turn}` : countdownActive ? `Revealing… ${countdownLabel}` : `Planning · Turn ${$ms.turn} · ${readyCount}/${seatedWithCards.length} ready`}
+				</span>
+			</div>
+			{#each others as p (p.id)}
+				{@const cs = cards[p.id]}
+				{@const st = statusMap[p.id] ?? EMPTY_STATUS}
+				{#if p.id === firstBlueId}<div class="ppdiv"></div>{/if}
+				<!-- a row opens that player's board; a face-up card inside previews directly -->
+				<div class="prow" class:ultrow={cs?.ultimate} style="--tint:{teamTint(p)}; {teamVars(pTeam(p))}" role="button" tabindex="0"
+					on:click={() => (overlayId = p.id)} on:keydown={(e) => (e.key === 'Enter' || e.key === ' ') && (overlayId = p.id)}>
+					<div class="prtop">
+						<PlayerIcon hero={cs?.hero ?? ''} team={pTeam(p)} color={colorHex(p.color)} size="2rem" ring={2} ult={!!cs?.ultimate}>
+							{#if cs?.ultimate}<span class="crown">♛</span>{/if}
+						</PlayerIcon>
+						<span class="pmid">
+							<span class="pname">
+								{p.name}<em>Lv {cs ? levelOf(cs) : 1}</em>
+								{#if cs}<span class="coin" title="Coins">{cs.coins}</span>{/if}
+								{#if cs && cs.discard.length}<span class="dchip" title="Cards in discard pile"><i class="trashi">{@html TRASH}</i>{cs.discard.length}</span>{/if}
+								{#if st.poison}<span class="statmk pois" title="Poison"><img src={icon('marker_poison')} alt="" /></span>{/if}
+								{#if st.bounty}<span class="statmk bnty" title="Bounty"><img src={icon('marker_bounty')} alt="" /></span>{/if}
+							</span>
+							<span class="phero">{cs ? heroName(cs.hero) : ''}</span>
+						</span>
+						{#if cs && dense}
+							<span class="dslot">
+								<span class="fxwrap" class:fx={!!fxFor(p.id, slotIdx(cs, turnIdx))} style="--fxc:{colorOf(p.id)}"><TurnSlot heroId={cs.hero} played={cs.turns[turnIdx]} pending={cs.pending} isCurrent {revealed} examinable on:click={(e) => peekSlot(e, cs, turnIdx)} />{#if fxFor(p.id, slotIdx(cs, turnIdx))}<span class="fxflame" title={fxLabel(fxFor(p.id, slotIdx(cs, turnIdx))!)}>{@html FLAME}</span>{/if}</span>
+							</span>
+						{/if}
+						{#if cs && isSkipped(cs)}<span class="skiptag" title="No cards left — skipped this turn">skip</span>
+						{:else if cs && !revealed}<span class="rdot" class:on={isReady(cs)} title={isReady(cs) ? 'Ready' : 'Not ready'}></span>{/if}
+						<!-- this turn's initiative (card + upgrades), once revealed — sits above the radius stat -->
+						{#if cs}
+							{@const ini = initOf(cs, revealed)}
+							<span class="initb" class:off={ini == null} title="Initiative this turn">
+								<i class="inicon">{@html CLOCK}</i><b>{ini ?? '–'}</b>
+							</span>
+						{/if}
+					</div>
+					{#if cs}
+						<div class="pstats">
+							{#each allStats(cs) as r}
+								<span class="pstat" class:up={r.delta > 0}>
+									<span class="stripes">{#each Array(r.delta) as _}<span class="stripe"></span>{/each}</span>
+									<img src={icon(r.icon)} alt={r.label} />
+									<b>{r.delta > 0 ? '+' + r.delta : '–'}</b>
+								</span>
+							{/each}
+						</div>
+						{#if !dense}
+							<div class="pturns">
+								{#each [0, 1, 2, 3] as t}
+									<span class="fxwrap" class:fx={!!fxFor(p.id, slotIdx(cs, t))} style="--fxc:{colorOf(p.id)}"><TurnSlot heroId={cs.hero} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} label={ROMAN[t]} examinable on:click={(e) => peekSlot(e, cs, t)} />{#if fxFor(p.id, slotIdx(cs, t))}<span class="fxflame" title={fxLabel(fxFor(p.id, slotIdx(cs, t))!)}>{@html FLAME}</span>{/if}</span>
+								{/each}
+								<!-- discard: the most recent card, count below (like your dash) -->
+								<span class="pdisc" title="Discard pile">
+									<span class="trashw">{@html TRASH}</span>
+									{#if cs.discard.length}
+										<span class="pdcard"><Card heroId={cs.hero} card={heroCards(cs.hero)[cs.discard[cs.discard.length - 1]]} /></span>
+										<span class="pdct">{cs.discard.length}</span>
+									{/if}
+								</span>
+							</div>
+						{/if}
+					{/if}
+				</div>
+			{/each}
+		</div>
+
+	{/if}
 
 	<!-- ───────── overlay: a player's whole board ───────── -->
 	{#if overlayId && ovPlayer && cards[overlayId]}
@@ -769,7 +870,78 @@
 	{/if}
 
 	<!-- ───────── bottom: hand floats ABOVE the dashboard (unless docked) ───────── -->
-	{#if mine}
+	{#if mine && mobile}
+		<!-- ───────── phone: hand tips above a compact dash ───────── -->
+		<div class="tray mob" class:retracted class:spread={spreadHand}>
+			{#each handOrdered as idx, k (idx)}
+				{@const f = fan(k, handOrdered.length)}
+				<button class="hc" style="--rot:{spreadHand ? 0 : f.rot}deg; --y:{spreadHand ? 0 : f.y}px" on:click={() => handCardClick(idx)}>
+					<Card heroId={mine.hero} card={heroCards(mine.hero)[idx]} />
+				</button>
+			{/each}
+		</div>
+		{#if fxAsking || revealed || myReady}
+			<div class="mact">{@render actionBody()}</div>
+		{/if}
+		<div class="mdash" class:ultdash={mine.ultimate} style={teamVars(myTeam)}>
+			<div class="mdl">
+				<div class="mdtop">
+					<button class="mdme" on:click={() => (overlayId = clientId)} title="Open your board"><PlayerIcon hero={mine.hero} team={myTeam ?? 'orange'} color={colorHex(myColor)} size="32px" ring={2} ult={mine.ultimate} /></button>
+					<button class="mdid" on:click={() => (overlayId = clientId)}><b>{myName}</b><small>{heroName(mine.hero)}<em>Lv {levelOf(mine)}</em></small></button>
+				</div>
+				<span class="msx">{#each allStats(mine) as r}<span class:up={r.delta > 0}>{#if r.delta > 0}<span class="pp">{#each Array(r.delta) as _}<i></i>{/each}</span>{/if}<img src={statImg(r.key)} alt={r.label} /></span>{/each}</span>
+			</div>
+			<div class="mslots">
+				{#each [0, 1, 2, 3] as t}
+					{@const dfx = fxFor(clientId, slotIdx(mine, t))}
+					<span class="msl fxwrap" class:fx={!!dfx} style="--fxc:{colorOf(clientId)}"><TurnSlot heroId={mine.hero} played={mine.turns[t]} pending={mine.pending} isCurrent={t === turnIdx} {revealed} label={ROMAN[t]} examinable on:click={(e) => peekSlot(e, mine, t)} />{#if dfx}<span class="fxflame">{@html FLAME}</span>{/if}</span>
+				{/each}
+				<span class="msep"></span>
+				<span class="msl mdisc discwrap" role="group" aria-label="Discard pile">
+					{#if mine.discard.length}
+						<button class="mdstack" on:click={() => (mine.discard.length === 1 ? openDiscard(mine.hero, mine.discard[0], true) : discTap('dash'))} title="Discard">
+							<Card heroId={mine.hero} card={heroCards(mine.hero)[mine.discard[mine.discard.length - 1]]} />
+							<span class="ds-count">{mine.discard.length}</span>
+						</button>
+						{#if discOpen === 'dash'}
+							<div class="discpop up">
+								{#each mine.discard as i (i)}
+									<button class="dpc" on:click={() => openDiscard(mine.hero, i, true)}><Card heroId={mine.hero} card={heroCards(mine.hero)[i]} /></button>
+								{/each}
+							</div>
+						{/if}
+					{:else}<span class="mtrash">{@html TRASH}</span>{/if}
+				</span>
+				<button class="msl mdeck" on:click={() => (deckOpen = true)} title="Your deck"><b>{deckCards(mine).length}</b></button>
+			</div>
+			<div class="mbtns">
+				<span class="mb" class:off={myInit == null} title="Your initiative this turn"><i class="inicon">{@html CLOCK}</i><b>{myInit ?? '–'}</b></span>
+				{@render radiusCtl()}
+				<button class="mb" class:on={!autoRetract} on:click={toggleRetract} aria-label="Show / hide hand" title={autoRetract ? 'Hand hidden — tap to show' : 'Hand shown — tap to hide'}>
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true">
+						<rect x="4.5" y="2.5" width="8" height="11" rx="1.4" fill="rgba(9,13,22,.9)" transform="rotate(-9 8.5 8)" />
+						<rect x="11.5" y="2.5" width="8" height="11" rx="1.4" fill="rgba(9,13,22,.9)" transform="rotate(9 15.5 8)" />
+						<path d="M2.5 15.5h19" />
+						{#if autoRetract}<path d="M9 18.5l3 3 3-3" />{:else}<path d="M9 21.5l3-3 3 3" />{/if}
+					</svg>
+				</button>
+				<button class="mb" class:on={spreadHand} on:click={toggleSpread} aria-label="Fan / spread hand" title={spreadHand ? 'Spread — tap to fan' : 'Fanned — tap to spread'}>
+					<svg viewBox="0 0 24 24" fill="rgba(9,13,22,.9)" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true">
+						{#if spreadHand}
+							<rect x="1.5" y="6" width="6.2" height="10" rx="1.2" /><rect x="8.9" y="6" width="6.2" height="10" rx="1.2" /><rect x="16.3" y="6" width="6.2" height="10" rx="1.2" />
+						{:else}
+							<rect x="8.5" y="4" width="7" height="11" rx="1.3" transform="rotate(-22 12 21)" />
+							<rect x="8.5" y="4" width="7" height="11" rx="1.3" transform="rotate(22 12 21)" />
+							<rect x="8.5" y="4" width="7" height="11" rx="1.3" />
+						{/if}
+					</svg>
+				</button>
+				{@render tokenCtl()}
+				<!-- undo is the host's; red so it reads apart, disabled for everyone else -->
+				<button class="mb undo" disabled={!iAmHost || !$canUndoS} on:click={() => session.undo()} title={iAmHost ? 'Undo the last move this turn' : 'Only the host can undo'} aria-label="Undo">↶</button>
+			</div>
+		</div>
+	{:else if mine}
 		{@const mst = statusMap[clientId] ?? EMPTY_STATUS}
 		{#if !dockHand}
 			<div class="tray" class:retracted class:spread={spreadHand} style={dashVars}>
@@ -797,27 +969,8 @@
 						<span class="dsname">
 							<button class="dsopen dsnmbtn" on:click={() => (overlayId = clientId)} title="Open your board"><span class="dsnm">{myName}</span><em>Lv {levelOf(mine)}</em></button>
 							<span class="initb" class:off={myInit == null} title="Your initiative this turn (card + upgrades)"><i class="inicon">{@html CLOCK}</i><b>{myInit ?? '–'}</b></span>
-							<span class="radwrap">
-								<button class="radbtn" class:on={myRadius > 0} on:click={() => (radiusOpen = !radiusOpen)} title={myRadius ? `Radius ${myRadius} showing — click to change or clear` : 'Show an area radius around your hero'} aria-label="Area radius">
-									<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke-dasharray="3 2.4" /><circle cx="12" cy="12" r="4.2" /><circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none" /></svg>
-									<b>{myRadius || '–'}</b>
-								</button>
-								{#if radiusOpen}
-									<div class="radpop">
-										<div class="toklbl">Area radius</div>
-										<div class="radgrid">
-											{#each [1, 2, 3, 4, 5, 6, 7, 8] as n}
-												<button class="radn" class:on={myRadius === n} on:click={() => setRadius(n)}>{n}</button>
-											{/each}
-										</div>
-										<div class="tokfoot">
-											<span class="tokhint">Clears at end of turn</span>
-											<button class="tokclear" disabled={!myRadius} on:click={() => setRadius(0)}>Clear</button>
-										</div>
-									</div>
-								{/if}
-							</span>
-							<span class="dsmk">
+							{@render radiusCtl()}
+														<span class="dsmk">
 								{#if mst.poison}<img class="pois" src={icon('marker_poison')} alt="Poison" title="Poisoned" />{/if}
 								{#if mst.bounty}<img class="bnty" src={icon('marker_bounty')} alt="Bounty" title="Bounty on you" />{/if}
 							</span>
@@ -837,28 +990,7 @@
 				</div>
 
 				<!-- tokens and markers: one shelf; the button shows its first item -->
-				<div class="tokwrap">
-					<button class="tokbtn" class:on={tokenDrawer} disabled={!shelf.length} on:click={() => (tokenDrawer = !tokenDrawer)} title={shelf.length ? 'Tokens and Markers' : 'Your hero has no tokens or markers'}>
-						{#if !shelf.length}<span class="tokglyph">◈</span>{:else if shelf[0].letter}<span class="ltrdisc" style="--pc:{colorHex(myColor)}">{shelf[0].letter}</span>{:else}<img src={shelf[0].img} alt="" />{/if}
-						{#if myTokenCount}<span class="tokct">{myTokenCount}</span>{/if}
-					</button>
-					{#if tokenDrawer}
-						<div class="tokdrawer">
-							<div class="toklbl">Tokens and Markers</div>
-							<div class="tokgrid">
-								{#each shelf as it (it.key)}
-									<button class="tok {it.cls}" on:click={() => armToken(it)} title={it.title}>
-										{#if it.letter}<span class="ltrdisc" style="--pc:{colorHex(myColor)}">{it.letter}</span>{:else}<img src={it.img} alt="" />{/if}{#if it.label}<span class="toktag">{it.label}</span>{/if}
-									</button>
-								{/each}
-							</div>
-							<div class="tokfoot">
-								<span class="tokhint">Pick one · tap a hex to place</span>
-								<button class="tokclear" disabled={!myTokenCount} on:click={clearTokens} title="Remove every token and marker you've placed">Clear</button>
-							</div>
-						</div>
-					{/if}
-				</div>
+				{@render tokenCtl()}
 
 				<!-- your deck (face-down stack) and, once unlocked, your ultimate -->
 				<button class="deckstack" on:click={() => (deckOpen = true)} title="View & manage your deck">
@@ -918,29 +1050,7 @@
 			<div class="dright">
 				<!-- fixed-width slot for the turn buttons, so nothing shifts when one appears -->
 				<div class="dact">
-					{#if fxAsking && fxStage === 'ask'}
-						<span class="fxq">Activate effect?</span>
-						<span class="fxrow2"><button class="fxb yes" on:click={() => (fxStage = 'pick')}>Yes</button><button class="fxb" on:click={fxNo}>No</button></span>
-					{:else if fxAsking}
-						<span class="fxrow2">
-							{#each ['turn', 'next', 'round'] as d}
-								<button class="fxb dur" class:on={myTurnDur === d} on:click={() => fxPickDur(d as EffectDur)} title={DUR_LABEL[d as EffectDur]}>{d === 'turn' ? 'Turn' : d === 'next' ? 'Next' : 'Round'}</button>
-							{/each}
-							<button class="fxb x" on:click={() => (fxStage = 'ask')} title="Back">✕</button>
-						</span>
-					{:else if revealed && iAmHost}
-						{#if !isFinalTurn}
-							<button class="act primary" on:click={onAdvanceTurn}>Next turn →</button>
-						{:else if !battlePhase}
-							<button class="act primary" on:click={startBattle}>Minion Battle</button>
-						{:else}
-							<button class="act primary" on:click={onAdvanceTurn}>Next round →</button>
-						{/if}
-					{:else if revealed}
-						<span class="waithost">Waiting for host…</span>
-					{:else if myReady}
-						<button class="act takeback" on:click={takeBack}>↩ Take back</button>
-					{/if}
+					{@render actionBody()}
 				</div>
 
 				<!-- money: coins from killing minions, spent on level-ups -->
@@ -1516,4 +1626,94 @@
 	.disc-card :global(canvas) { display: block; width: 100%; border-radius: 4px; }
 
 	.ppanel.withdash { bottom: calc(22px + var(--dh, 70px)); }
+
+	/* ═══════════ phone layout (GameView sets `mobile` at ≤760px) ═══════════
+	   top bar 44px (GameView) · player strip 72px · board · hand tips · dash 68px.
+	   Every counter has a fixed width so 1- or 2-digit values never shift things. */
+	.mstrip { position: absolute; top: 44px; left: 0; right: 0; height: 72px; z-index: 12; display: flex; gap: 6px; padding: 5px 8px;
+		overflow-x: auto; overflow-y: hidden; scrollbar-width: none; background: rgba(9,13,22,.9); border-bottom: 1px solid rgba(255,255,255,.08); }
+	.mstrip::-webkit-scrollbar { display: none; }
+	.mpc { flex: none; width: 170px; height: 62px; display: grid; grid-template-columns: 30px 1fr 32px 40px; grid-template-rows: 32px 1fr; column-gap: 4px; row-gap: 2px;
+		padding: 3px 5px 3px 7px; border-radius: 10px; cursor: pointer; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.1); box-shadow: inset 3px 0 0 var(--tc); }
+	.mpic { grid-column: 1; grid-row: 1; align-self: center; display: grid; }
+	.mpn { grid-column: 2; grid-row: 1; min-width: 0; align-self: center; display: flex; flex-direction: column; line-height: 1.08; }
+	.mpn b, .mdid b { font-weight: normal; font-size: 12px; color: #f6ead2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.mpn small { font-size: 9.5px; color: #93a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.mlv { grid-column: 3; grid-row: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
+	.mlv em { font-style: normal; font-size: 9px; color: #9aa8bc; white-space: nowrap; }
+	.mini { width: 32px; height: 14px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; gap: 1px; font-style: normal; border-radius: 4px;
+		font-size: 9.5px; color: #f6e3b4; background: rgba(199,154,78,.2); border: 1px solid rgba(214,170,92,.55); }
+	.mini :global(svg) { width: 8px; height: 8px; flex: none; }
+	.mini b { font-weight: normal; min-width: 1.2em; text-align: center; font-variant-numeric: tabular-nums; }
+	.mini.off { opacity: .5; }
+	.mcard { grid-column: 4; grid-row: 1 / 3; align-self: center; width: 40px; }
+	/* stats with item-upgrade pips: detailed art, one same-size pip per upgrade (room for 3) */
+	.msx { grid-column: 1 / 4; grid-row: 2; display: flex; gap: 2px; align-self: end; }
+	.msx > span { position: relative; flex: 1; min-width: 0; height: 19px; display: grid; place-items: end center; padding-bottom: 1px; border-radius: 4px; background: rgba(255,255,255,.03); }
+	.msx img { width: 12px; height: 12px; object-fit: contain; opacity: .38; filter: grayscale(.3); }
+	.msx > span.up { background: rgba(199,154,78,.16); box-shadow: inset 0 0 0 1px rgba(214,170,92,.45); }
+	.msx > span.up img { opacity: 1; filter: none; }
+	.msx .pp { position: absolute; top: 2px; left: 0; right: 0; display: flex; justify-content: center; gap: 1.5px; }
+	.msx .pp i { flex: none; width: 4px; height: 3px; border-radius: 1px; transform: skewX(-24deg); background: rgb(var(--tcl)); box-shadow: 0 0 3px rgb(var(--tcl)); }
+	/* the compact dash */
+	.mdash { position: absolute; left: 0; right: 0; bottom: 0; height: 68px; z-index: 11; display: flex; align-items: center; gap: 4px; padding: 4px 5px; color: #e5e7eb;
+		background: linear-gradient(90deg, rgb(var(--tcr) / .22), rgba(9,13,22,.96) 30%); border-top: 1px solid rgb(var(--tcr) / .55); }
+	.mdash.ultdash { border-top-color: rgba(165,110,230,.7); }
+	.mdl { flex: none; width: 116px; display: flex; flex-direction: column; gap: 3px; }
+	.mdl .msx { width: 116px; }
+	.mdtop { display: flex; align-items: center; gap: 4px; min-width: 0; }
+	.mdme, .mdid { padding: 0; background: none; border: none; color: inherit; cursor: pointer; text-align: left; font: inherit; }
+	.mdme { flex: none; display: grid; }
+	.mdid { min-width: 0; display: flex; flex-direction: column; line-height: 1.08; }
+	.mdid b { font-size: 13px; }
+	.mdid small { font-size: 9.5px; color: #93a3b8; white-space: nowrap; }
+	.mdid em { font-style: normal; margin-left: 3px; padding: 0 3px; border-radius: 4px; font-size: 8.5px; color: #f0dcae; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.15); }
+	.mslots { flex: 1; min-width: 0; display: flex; gap: 2px; justify-content: center; align-items: center; }
+	.msl { position: relative; flex: none; width: 29px; }
+	.msep { flex: none; width: 1px; height: 34px; margin: 0 1px; background: rgba(255,255,255,.14); }
+	.mdisc { height: 39px; display: grid; place-items: center; border: 1px dashed rgba(255,255,255,.2); border-radius: 4px; }
+	.mdstack { position: relative; width: 100%; padding: 0; background: none; border: none; cursor: pointer; }
+	.mdstack :global(canvas) { display: block; width: 100%; border-radius: 4px; }
+	.mtrash { width: 14px; color: rgba(255,255,255,.25); display: grid; }
+	.mtrash :global(svg) { width: 100%; }
+	.mdeck { height: 39px; padding: 0; border-radius: 4px; cursor: pointer; display: grid; place-items: center; border: 1px solid rgba(120,95,55,.6);
+		background: radial-gradient(115% 78% at 50% 40%, #fdfcf8, #efe9db 62%, #ddd4c1); box-shadow: 2px 2px 0 #cbbf9f, 3px 3px 0 #b9ad8c; }
+	.mdeck b { font-weight: normal; font-size: 12px; color: #3a2604; font-variant-numeric: tabular-nums; }
+	.mbtns { flex: none; display: grid; grid-template-columns: repeat(2, 30px); grid-template-rows: repeat(3, 18px); gap: 3px; }
+	.mb, .mbtns .radbtn, .mbtns .tokbtn { width: 30px; height: 18px; box-sizing: border-box; padding: 0; border-radius: 5px; display: inline-flex; align-items: center; justify-content: center; gap: 1px;
+		font-size: 9.5px; color: #f6e3b4; background: rgba(199,154,78,.16); border: 1px solid rgba(199,154,78,.45); cursor: pointer; }
+	.mb b, .mbtns .radbtn b { font-weight: normal; min-width: 1.2em; font-size: 9.5px; text-align: center; font-variant-numeric: tabular-nums; }
+	.mb :global(svg), .mbtns .radbtn svg { width: 12px; height: 12px; flex: none; }
+	.mb .inicon { width: 9px; height: 9px; }
+	.mbtns .tokbtn img, .mbtns .tokbtn .ltrdisc, .mbtns .tokbtn .tokglyph { width: 13px; height: 13px; font-size: 10px; }
+	.mbtns .tokwrap, .mbtns .radwrap { position: relative; display: flex; align-self: auto; }
+	.mb.on { background: rgba(199,154,78,.32); border-color: rgba(230,190,110,.85); color: #fff3d6; }
+	.mb.off { opacity: .5; }
+	.mb.undo { font-size: 13px; color: #ffe3de; background: linear-gradient(180deg, rgba(224,70,60,.55), rgba(168,38,32,.55)); border-color: rgba(255,150,140,.65); }
+	.mb.undo:disabled { opacity: .32; cursor: not-allowed; }
+	.mbtns .radpop, .mbtns .tokdrawer { left: auto; right: 0; bottom: calc(100% + 8px); }
+	.mdisc .discpop.up { left: 50%; transform: translateX(-50%); }
+	/* floating action: Take back / Activate effect? / Next turn, above the dash's right side */
+	.mact { position: absolute; right: 6px; bottom: 74px; z-index: 13; display: flex; align-items: center; gap: 5px; padding: 4px; border-radius: 12px;
+		background: rgba(9,13,22,.95); border: 1px solid rgba(199,154,78,.5); box-shadow: 0 8px 20px rgba(0,0,0,.6); }
+	.mact .act { padding: 6px 12px; font-size: .8rem; white-space: nowrap; }
+	.mact .fxb { height: 28px; font-size: .74rem; }
+	.mact .fxb.dur { padding: 0 7px; }
+	.mact .waithost { max-width: none; white-space: nowrap; padding: 0 6px; }
+	/* hand tips: fixed card size; hidden = just the tops peek above the dash */
+	.tray.mob { --cw: 62px; left: 0; right: 0; bottom: 68px; justify-content: flex-start; padding-left: 18px; }
+	.tray.mob.retracted { transform: translateY(calc(var(--cw) * 1.396 - 30px)); clip-path: inset(-800px -800px calc(var(--cw) * 1.396 - 30px) -800px); }
+
+	/* phone-size overlays: preview, boards, deck, reveal */
+	@media (max-width: 760px) {
+		.pvwrap { inset: 116px 0 150px 0 !important; }
+		.pvcard { width: min(62vw, 250px); }
+		.pvbar { left: 0 !important; right: 0 !important; bottom: 110px !important; }
+		.modal, .modal.board, .deckmodal { width: 97vw; max-height: 88vh; padding: 10px; }
+		.turns { gap: 4px; }
+		.tbox { padding: 5px 4px 6px; border-radius: 10px; }
+		.dkgrid { grid-template-columns: repeat(3, 1fr); }
+		.curtain-cards { flex-wrap: wrap; gap: 10px; }
+		.bigcard { width: min(78vw, 320px); }
+	}
 </style>
