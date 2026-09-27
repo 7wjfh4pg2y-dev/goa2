@@ -271,7 +271,9 @@
 			const fx = activeFx.filter((e) => e.pid === p.id);
 			const lit = new Set(fx.map((e) => heroCards(e.hero)[e.idx]?.color));
 			const longest = fx.slice().sort((a, b) => DUR_RANK[b.dur] - DUR_RANK[a.dur])[0];
-			return { id: p.id, hero, name: heroById(hero)?.name ?? '', team: teamForSeat(p.seat, $ms.seats), lit, fx: longest };
+			// all of this player's live cards, longest-lasting first — the zoom view pages through them
+			const all = fx.slice().sort((a, b) => DUR_RANK[b.dur] - DUR_RANK[a.dur]).map((e) => ({ hid: e.hero, idx: e.idx, pid: e.pid }));
+			return { id: p.id, hero, name: heroById(hero)?.name ?? '', team: teamForSeat(p.seat, $ms.seats), lit, fx: longest, all };
 		});
 
 	// ── saved views: 3 slots of rotation + zoom + pan, kept in this browser ─────
@@ -433,13 +435,13 @@
 			<button class="mib tie" on:click={flipTie} title="Tie-breaker: {$ms.tieBreaker === 'orange' ? 'Orange' : 'Blue'} — tap to flip"><img src={tieArt($ms.tieBreaker)} class:flip={tieFlip} alt="" /></button>
 			<button class="mpill" on:click={() => (lwOpen = true)} aria-label="Waves"><img class="wv" src={waveIcon} alt="" /><b class="n2">{$ms.waves}</b></button>
 			<button class="mpill life" on:click={() => (lwOpen = true)} aria-label="Life"><b class="n2 lo">{$ms.life.orange}</b><img src={lifeSplit} alt="" /><b class="n2 lb">{$ms.life.blue}</b></button>
-			<!-- your ultimate (centred between life and gold): always previewable; lights up (purple pulse) once unlocked -->
-			<span class="msp"></span>
+			<!-- your ultimate fills the gap between life and gold: always previewable; purple pulse once unlocked -->
 			{#if myCs && myUltIdx >= 0}
 				<button class="mib ult" class:on={myCs.ultimate} on:click={() => myCs && cardLayer?.showCard(myCs.hero, myUltIdx)}
-					title={myCs.ultimate ? 'Your ultimate' : 'Ultimate — unlocks at level 8'} aria-label="Ultimate">{#if !myCs.ultimate}<span class="ulk">🔒</span>{/if}ULT</button>
+					title={myCs.ultimate ? 'Your ultimate' : 'Ultimate — unlocks at level 8'} aria-label="Ultimate">{#if !myCs.ultimate}<span class="ulk">🔒</span>{/if}<span class="ul-long">Ultimate</span><span class="ul-short">ULT</span></button>
+			{:else}
+				<span class="msp"></span>
 			{/if}
-			<span class="msp"></span>
 			{#if myCoins != null}
 				<span class="goldctl">
 					<button class="gb" on:click={() => coins(-1)} aria-label="Remove coin">−</button>
@@ -490,7 +492,7 @@
 					<div class="mlbl">Active abilities</div>
 					{#each abilityRows as r (r.id)}
 						<button class="mab" class:live={!!r.fx} style="--tint:{r.team === 'orange' ? '#ef7d22' : '#2f7fe6'}" disabled={!r.fx}
-							on:click={() => { if (r.fx) { menuOpen = false; cardLayer?.showCard(r.fx.hero, r.fx.idx, r.fx.pid); } }}>
+							on:click={() => { if (r.fx) { menuOpen = false; cardLayer?.showCard(r.fx.hero, r.fx.idx, r.fx.pid, r.all); } }}>
 							<span class="abn">{r.name}</span>
 							<span class="abp">{#each FX_COLORS as [c, hex]}<i class:on={r.lit.has(c)} style="--pc:{hex}"></i>{/each}</span>
 							<span class="abt">{r.fx ? FX_SHORT[effectLabel(r.fx, $ms.round, $ms.turn)] : '–'}</span>
@@ -612,7 +614,7 @@
 			<div class="fxhd">Active abilities</div>
 			{#each abilityRows as r (r.id)}
 				<button class="mab" class:live={!!r.fx} style="--tint:{r.team === 'orange' ? '#ef7d22' : '#2f7fe6'}" disabled={!r.fx}
-					on:click={() => { if (r.fx) cardLayer?.showCard(r.fx.hero, r.fx.idx, r.fx.pid); }} title={r.fx ? `Read ${r.fx.name}` : ''}>
+					on:click={() => { if (r.fx) cardLayer?.showCard(r.fx.hero, r.fx.idx, r.fx.pid, r.all); }} title={r.fx ? `Read ${r.fx.name}` : ''}>
 					<span class="abn">{r.name}</span>
 					<span class="abp">{#each FX_COLORS as [c, hex]}<i class:on={r.lit.has(c)} style="--pc:{hex}"></i>{/each}</span>
 					<span class="abt">{r.fx ? FX_SHORT[effectLabel(r.fx, $ms.round, $ms.turn)] : '–'}</span>
@@ -915,8 +917,10 @@
 	.abp i { width: 7px; height: 7px; border-radius: 50%; background: var(--pc); opacity: 0.18; }
 	.abp i.on { opacity: 1; box-shadow: 0 0 6px var(--pc); }
 	.abt { text-align: right; font-size: 10px; color: #e8c173; }
-	.mib.ult { width: 27px; font-size: 8.5px; letter-spacing: 0.04em; color: #8f7fae; background: rgba(120, 60, 190, 0.1); border-color: rgba(165, 110, 230, 0.25); }
+	.mib.ult { flex: 1 1 0; min-width: 27px; width: auto; container-type: inline-size; font-size: 11px; letter-spacing: 0.06em; color: #8f7fae; background: rgba(120, 60, 190, 0.1); border-color: rgba(165, 110, 230, 0.25); overflow: visible; }
 	.mib.ult { position: relative; }
+	.mib.ult .ul-short { display: none; font-size: 8.5px; }
+	@container (max-width: 58px) { .mib.ult .ul-long { display: none; } .mib.ult .ul-short { display: inline; } }
 	.mib.ult .ulk { position: absolute; top: -5px; right: -4px; font-size: 8px; filter: grayscale(1); }
 	/* unlocked: purple with the same breathing glow as the desktop dash */
 	.mib.ult.on { color: #fff; background: linear-gradient(160deg, #9a5ce6, #5b2aa0); border-color: rgba(210, 175, 255, 0.85); text-shadow: 0 0 6px rgba(255, 255, 255, 0.6);

@@ -97,7 +97,7 @@
 	$: curtainFit = fitReveal(curtainRows.map((r) => r.length), vw, vhPx);
 	$: curtainCols = curtainFit.cols;
 	function fitReveal(counts: number[], w: number, h: number) {
-		const most = Math.max(1, ...counts), gap = Math.min(22, Math.max(8, w * 0.016));
+		const most = Math.max(1, ...counts), gap = Math.min(26, Math.max(16, w * 0.024));
 		let best = { cols: most, rows: counts.length, cw: 0 };
 		for (let c = 1; c <= most; c++) {
 			const rows = counts.reduce((n, k) => n + Math.ceil(k / c), 0);
@@ -159,7 +159,22 @@
 
 	// overlay + examine
 	let overlayId: string | null = null;
-	let examine: { hid: string; idx: number; pid?: string } | null = null;
+	type ExCard = { hid: string; idx: number; pid?: string };
+	// `list`: several cards to page through (e.g. a player's active effects) — ‹ › / swipe
+	let examine: (ExCard & { list?: ExCard[] }) | null = null;
+	$: exList = examine?.list && examine.list.length > 1 ? examine.list : null;
+	$: exPos = exList && examine ? exList.findIndex((c) => c.hid === examine!.hid && c.idx === examine!.idx) : -1;
+	function stepExamine(d: number) {
+		if (!examine || !exList) return;
+		const n = exList[((exPos < 0 ? 0 : exPos) + d + exList.length) % exList.length];
+		examine = { ...n, list: exList };
+	}
+	let exSwipeX: number | null = null;
+	const exSwipeEnd = (e: PointerEvent) => {
+		if (exSwipeX == null) return;
+		const dx = e.clientX - exSwipeX; exSwipeX = null;
+		if (Math.abs(dx) > 40) stepExamine(dx < 0 ? 1 : -1);
+	};
 	$: ovPlayer = seated.find((p) => p.id === overlayId) ?? null;
 	// board hands us a player id to preview → open their overlay, then clear it
 	$: if (previewId) { overlayId = previewId; previewId = null; }
@@ -234,7 +249,7 @@
 	}
 	function endFx(e: Effect) { session.act(`${e.name} — effect ended`, { effects: effects.filter((x) => x.id !== e.id) }); }
 	// the left HUD's effects list opens a card through here
-	export function showCard(hid: string, idx: number, pid?: string) { examine = { hid, idx, pid }; }
+	export function showCard(hid: string, idx: number, pid?: string, list?: ExCard[]) { examine = { hid, idx, pid, list }; }
 
 	// discard piles (dash + boards): hover (mouse) or tap to fan out every card;
 	// click one to preview it (your own open in the hand preview, so you can recover)
@@ -733,7 +748,13 @@
 	{#if examine}
 		<div class="scrim2" on:click={() => (examine = null)} on:keydown={(e) => e.key === 'Escape' && (examine = null)} role="presentation">
 			<div class="bigwrap" role="dialog" aria-modal="true" tabindex="-1" on:click|stopPropagation on:keydown|stopPropagation>
-				<div class="bigcard" class:fxon={!!examineFx} style="--fxc:{examine.pid ? colorOf(examine.pid) : '#fde047'}"><Card heroId={examine.hid} card={heroCards(examine.hid)[examine.idx]} /></div>
+				<div class="exrow" class:multi={!!exList}>
+					{#if exList}<button class="pvnav prev" on:click={() => stepExamine(-1)} aria-label="Previous card">‹</button>{/if}
+					<div class="bigcard" class:fxon={!!examineFx} style="--fxc:{examine.pid ? colorOf(examine.pid) : '#fde047'}"
+						on:pointerdown={(e) => (exSwipeX = e.clientX)} on:pointerup={exSwipeEnd} on:pointercancel={() => (exSwipeX = null)} role="presentation"><Card heroId={examine.hid} card={heroCards(examine.hid)[examine.idx]} /></div>
+					{#if exList}<button class="pvnav next" on:click={() => stepExamine(1)} aria-label="Next card">›</button>{/if}
+				</div>
+				{#if exList}<span class="exdots">{#each exList as c, i (i)}<i class:on={i === exPos}></i>{/each}</span>{/if}
 				{#if examine.pid && (canFx || examineFx)}
 					<!-- lingering effect: switch it on (duration read from the card) / end it -->
 					<div class="fxctl">
@@ -764,7 +785,7 @@
 		{@const selZone = deckSel != null ? zoneOf(mine, deckSel) : null}
 		{@const selInGrid = deckSel != null && myGrid.flat().some((g) => g.idx === deckSel)}
 		<div class="scrim" on:click={() => { deckOpen = false; deckSel = null; }} on:keydown={(e) => e.key === 'Escape' && (deckOpen = false)} role="presentation">
-			<div class="deckmodal" class:mob={mobile} on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" tabindex="-1">
+			<div class="deckmodal" class:mob={mobile} style={teamVars(myTeam)} on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" tabindex="-1">
 				<div class="mhead">
 					<span class="mav" style="--tint:{ORANGE}"><img src={heroLogo(dh)} alt="" /></span>
 					<div class="mtitle">
@@ -884,12 +905,15 @@
 				{#if deckSel != null}
 					<div class="dkbar">
 						<span class="dksel">Selected · {heroCards(dh)[deckSel]?.name}</span>
-						{#if mobile}<button class="act ghost sm" on:click={() => examineCard(dh, deckSel!)}>🔍 Enlarge</button>{/if}
-						{#if selZone !== 'hand'}<button class="act primary sm" on:click={() => moveTo(deckSel!, 'hand')}>→ Hand</button>{/if}
-						{#if selZone !== 'upgrade'}<button class="act sm" on:click={() => moveTo(deckSel!, 'upgrade')}>→ Upgrade</button>{/if}
-						{#if selZone !== 'removed'}<button class="act danger sm" on:click={() => moveTo(deckSel!, 'removed')}>→ Removed</button>{/if}
-						{#if selInGrid && selZone !== null}<button class="act ghost sm" on:click={() => moveTo(deckSel!, 'deck')}>→ Deck</button>{/if}
-						<button class="act ghost sm" on:click={() => (deckSel = null)}>Cancel</button>
+						<!-- one row: preview · destinations · cancel -->
+						<div class="dkacts">
+							{#if mobile}<button class="act ghost sm" on:click={() => examineCard(dh, deckSel!)}>Preview</button>{/if}
+							{#if selZone !== 'hand'}<button class="act tohand sm" on:click={() => moveTo(deckSel!, 'hand')}>→ Hand</button>{/if}
+							{#if selZone !== 'upgrade'}<button class="act sm" on:click={() => moveTo(deckSel!, 'upgrade')}>→ Upgrade</button>{/if}
+							{#if selZone !== 'removed'}<button class="act danger sm" on:click={() => moveTo(deckSel!, 'removed')}>→ Removed</button>{/if}
+							{#if selInGrid && selZone !== null}<button class="act todeck sm" on:click={() => moveTo(deckSel!, 'deck')}>→ Deck</button>{/if}
+							<button class="act ghost sm" on:click={() => (deckSel = null)}>Cancel</button>
+						</div>
 					</div>
 				{/if}
 			</div>
@@ -915,7 +939,7 @@
 		<div class="pvbar" style={dashVars}>
 			{#if pvList.length > 1}<span class="pvdots">{#each pvList as c (c)}<i class:on={c === selected}></i>{/each}</span>{/if}
 			{#if previewSrc === 'discard'}
-				<button class="act primary" on:click={() => pullBack(selected!)}>Recover to hand</button>
+				<button class="act tohand" style={teamVars(myTeam)} on:click={() => pullBack(selected!)}>Recover to hand</button>
 			{:else if canCommit}
 				<button class="act primary" on:click={() => commit(selected!)}>Commit · Turn {$ms.turn}</button>
 				<button class="act danger" on:click={() => defend(selected!)}>Defend (discard)</button>
@@ -1392,12 +1416,15 @@
 	.ultslot.on .dkcard.ult { box-shadow: 0 0 0 2px #b482f0, 0 0 16px rgba(165,110,230,.75), 0 6px 16px rgba(0,0,0,.55); }
 	.ultbtn { background: linear-gradient(180deg, rgba(165,110,230,.3), rgba(165,110,230,.16)); border-color: rgba(180,130,240,.6); color: #efe0ff; }
 	/* grid card status: available = bright, placed elsewhere = tinted + dim */
-	.dkgrid .dkcard.zdeck { filter: grayscale(.5) brightness(.66); }
-	.dkgrid .dkcard.zhand { outline: 2px solid #ef7d22; }
-	.dkgrid .dkcard.zupg { outline: 2px solid #3f7fe0; filter: brightness(.8); }
-	.dkgrid .dkcard.zrem { outline: 2px solid rgba(150,160,175,.6); filter: grayscale(.85) brightness(.55); }
+	/* the deck grid shows what's still available: cards in the deck are bright; ones already moved out dim, with a badge saying where */
+	.dkgrid .dkcard.zhand { outline: 2px solid var(--tc, #ef7d22); }
+	.dkgrid .dkcard.zupg { outline: 2px solid #3f7fe0; }
+	.dkgrid .dkcard.zrem { outline: 2px solid rgba(150,160,175,.6); }
+	.dkgrid .dkcard.zhand :global(canvas), .dkgrid .dkcard.zupg :global(canvas) { filter: grayscale(.55) brightness(.5); }
+	.dkgrid .dkcard.zrem :global(canvas) { filter: grayscale(.9) brightness(.42); }
+	.dkgrid .dkcard.sel :global(canvas) { filter: none; }
 	.dkbadge { position: absolute; left: 3px; bottom: 3px; right: 3px; font-size: .54rem; font-weight: 800; letter-spacing: .02em; text-align: center; padding: 2px 0; border-radius: 5px; }
-	.dkbadge.hand { background: rgba(239,125,34,.92); color: #1a0f06; }
+	.dkbadge.hand { background: var(--tc, #ef7d22); color: #fff; }
 	.dkbadge.upg { background: rgba(63,127,224,.92); color: #04122b; }
 	.dkbadge.rem { background: rgba(150,160,175,.9); color: #10151d; }
 	.dkitem { position: absolute; bottom: 3px; right: 3px; display: inline-flex; align-items: center; gap: 1px; font-size: .56rem; font-weight: 900; color: #ffcfa3; background: rgba(20,14,6,.85); border: 1px solid rgba(239,125,34,.5); border-radius: 5px; padding: 0 3px; }
@@ -1411,6 +1438,10 @@
 	.dkbar { position: sticky; bottom: 0; margin: 12px -18px -12px; padding: 10px 18px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
 		background: linear-gradient(0deg, rgba(11,16,26,.99), rgba(11,16,26,.9)); border-top: 1px solid rgba(199,154,78,.4); }
 	.dksel { font-size: .74rem; font-weight: 700; color: #f0dcae; margin-right: auto; }
+	.dkacts { display: flex; gap: 8px; flex-wrap: wrap; }
+	/* sending to hand = your team colour; back to deck = the deck's brass */
+	.act.tohand { background: var(--tc, #ef7d22); color: #fff; border-color: transparent; box-shadow: 0 3px 0 rgb(var(--tcr, 239 125 34) / .55); text-shadow: 0 1px 1px rgba(0,0,0,.35); }
+	.act.todeck { background: rgba(199,154,78,.2); border-color: rgba(199,154,78,.65); color: #f0dcae; }
 	/* ── phone deck: full-screen sheet, tabs, big tap targets, sticky actions ── */
 	.deckmodal.mob { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; max-height: none; border-radius: 0; border: none; padding: 10px 12px 0;
 		display: flex; flex-direction: column; scrollbar-gutter: auto; }
@@ -1438,7 +1469,8 @@
 	.mob .dkbadge { font-size: .6rem; }
 	.mob .dkbar { margin: auto -12px 0; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); gap: 6px; }
 	.mob .dkbar .dksel { flex: 1 1 100%; margin: 0; }
-	.mob .dkbar .act { flex: 1 1 auto; padding: .6rem .4rem; font-size: .8rem; }
+	.mob .dkacts { flex: 1 1 100%; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 5px; }
+	.mob .dkbar .act { min-width: 0; padding: .62rem .1rem; font-size: clamp(.6rem, 2.9vw, .76rem); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 	/* keep the bottom of the last row reachable above the sticky bar */
 	.mob .dkzones, .mob .dkgrid, .mob .dkhand { margin-bottom: 12px; }
 
@@ -1467,7 +1499,7 @@
 	/* one line at any width */
 	.curtain-title { font-family: 'Modesto Poster', serif; font-size: clamp(1.1rem, 5.2vw, 2.4rem); white-space: nowrap; letter-spacing: .06em; color: #f6ead2; text-shadow: 0 2px 12px rgba(0,0,0,.7), 0 0 22px rgba(199,154,78,.4); }
 	/* cards as large as both the width (widest row) and the height (all rows) allow */
-	.curtain-cards { --gap: clamp(8px, 1.6vw, 22px); display: flex; flex-direction: column; align-items: center; gap: calc(var(--gap) * 1.2);
+	.curtain-cards { --gap: clamp(16px, 2.4vw, 26px); display: flex; flex-direction: column; align-items: center; gap: calc(var(--gap) * 1.2);
 		--cw: min(320px, calc((100vw - 32px - (var(--cols) - 1) * var(--gap)) / var(--cols)), calc(((100vh - 120px) / var(--rows) - 44px) * 1192 / 1664)); }
 	.cc-row { display: flex; flex-wrap: wrap; justify-content: center; gap: calc(var(--gap) * 1.2) var(--gap); max-width: calc(var(--cols) * var(--cw) + (var(--cols) - 1) * var(--gap) + 1px); }
 	.cc { display: flex; flex-direction: column; align-items: center; gap: 6px; perspective: 1300px; width: var(--cw); }
@@ -1493,6 +1525,11 @@
 	/* examine */
 	.scrim2 { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; background: rgba(2,4,9,.8); backdrop-filter: blur(4px); }
 	.bigcard { width: min(360px, 62vw); filter: drop-shadow(0 20px 50px rgba(0,0,0,.7)); }
+	.exrow { display: flex; align-items: center; justify-content: center; }
+	.exrow.multi .bigcard { touch-action: pan-y; }
+	.exdots { display: flex; justify-content: center; gap: 6px; margin-top: 10px; }
+	.exdots i { width: 7px; height: 7px; border-radius: 50%; background: rgba(255,255,255,.25); }
+	.exdots i.on { background: #f0dcae; box-shadow: 0 0 6px rgba(240,220,174,.8); }
 	.bigwrap { display: flex; flex-direction: column; align-items: center; gap: 12px; }
 	.bigcard.fxon { filter: drop-shadow(0 0 3px var(--fxc)) drop-shadow(0 0 16px var(--fxc)) drop-shadow(0 20px 50px rgba(0,0,0,.7)); }
 	/* lingering-effect controls under a played card */
@@ -1778,10 +1815,10 @@
 	.mdeck { height: 36px; padding: 0; border-radius: 4px; cursor: pointer; display: grid; place-items: center; border: 1px solid rgba(120,95,55,.6);
 		background: radial-gradient(115% 78% at 50% 40%, #fdfcf8, #efe9db 62%, #ddd4c1); box-shadow: 2px 2px 0 #cbbf9f, 3px 3px 0 #b9ad8c; }
 	.mdeck b { font-weight: normal; font-size: 12px; color: #3a2604; font-variant-numeric: tabular-nums; }
-	.mbtns { flex: none; display: grid; grid-template-columns: repeat(2, 30px); grid-template-rows: repeat(3, 18px); gap: 3px; }
-	.mb, .mbtns .radbtn, .mbtns .tokbtn { width: 30px; height: 18px; box-sizing: border-box; padding: 0; border-radius: 5px; display: inline-flex; align-items: center; justify-content: center; gap: 1px;
+	.mbtns { flex: none; display: grid; grid-template-columns: repeat(2, 36px); grid-template-rows: repeat(3, 18px); gap: 3px; }
+	.mb, .mbtns .radbtn, .mbtns .tokbtn { width: 36px; height: 18px; box-sizing: border-box; padding: 0; border-radius: 5px; display: inline-flex; align-items: center; justify-content: center; gap: 1px;
 		font-size: 9.5px; color: #f6e3b4; background: rgba(199,154,78,.16); border: 1px solid rgba(199,154,78,.45); cursor: pointer; }
-	.mb b, .mbtns .radbtn b { font-weight: normal; min-width: 1.2em; font-size: 9.5px; text-align: center; font-variant-numeric: tabular-nums; }
+	.mb b, .mbtns .radbtn b { font-weight: normal; min-width: 1.35em; font-size: 9.5px; text-align: center; font-variant-numeric: tabular-nums; }
 	.mb :global(svg), .mbtns .radbtn svg { width: 12px; height: 12px; flex: none; }
 	.mb .inicon { width: 9px; height: 9px; }
 	.mbtns .tokbtn img, .mbtns .tokbtn .ltrdisc, .mbtns .tokbtn .tokglyph { width: 13px; height: 13px; font-size: 10px; }
@@ -1814,5 +1851,7 @@
 		.tbox { padding: 5px 4px 6px; border-radius: 10px; }
 		.dkgrid { grid-template-columns: repeat(3, 1fr); }
 		.bigcard { width: min(78vw, 320px); }
+		.exrow.multi .bigcard { width: min(68vw, 300px); }
+		.exrow .pvnav { width: 30px; height: 56px; margin: 0 5px; font-size: 24px; }
 	}
 </style>
