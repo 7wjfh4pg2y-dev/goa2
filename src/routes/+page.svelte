@@ -561,7 +561,7 @@
 	{#if seatNotice}<div class="seattoast">{seatNotice}</div>{/if}
 {:else}
 <div class="uiscale" style="--ui:{ui}">
-<main class="wrap" class:landing={mode === 'landing'}>
+<main class="wrap" class:landing={mode === 'landing'} class:creating={mode === 'create'}>
 	<button class="home-link" class:hero={mode === 'landing'} on:click={onLogo} aria-label={mode === 'landing' ? 'Enter' : 'Main menu'}>
 		<img class="logo" src={logoImage} alt="Guards of Atlantis II" />
 		{#if mode === 'landing'}<span class="entrhint">Click the crest to enter</span>{/if}
@@ -624,8 +624,8 @@
 			</div>
 		{:else if mode === 'create'}
 			<div class="step" transition:reveal bind:clientHeight={h['create']}>
-				<div class="card form wide">
-					<label class="fld"><span>Your name</span><input class="field" bind:value={name} placeholder="Your name" /></label>
+				<div class="card form wide createform">
+					<label class="fld namefld"><span>Your name</span><input class="field" bind:value={name} placeholder="Your name" /></label>
 					<div class="grid2">
 						<div class="col">
 							<div class="fld">
@@ -637,13 +637,18 @@
 								</div>
 							</div>
 							{#if ruleset === 'custom'}
-								<div class="fld">
+								<div class="fld custchips">
 									<span>Waves</span>
 									<div class="chips">{#each [1, 2, 3, 4, 5, 6, 7] as w (w)}<button class="chip" class:on={customWaves === w} on:click={() => (customWaves = w)}>{w}</button>{/each}</div>
 								</div>
-								<div class="fld">
+								<div class="fld custchips">
 									<span>Life / team</span>
 									<div class="chips">{#each [3, 4, 5, 6, 7, 8, 9, 10] as l (l)}<button class="chip" class:on={customLife === l} on:click={() => (customLife = l)}>{l}</button>{/each}</div>
+								</div>
+								<!-- phones: both on one row as steppers -->
+								<div class="custstep">
+									<span>Waves</span><button class="stp" on:click={() => (customWaves = Math.max(1, customWaves - 1))} aria-label="Fewer waves">−</button><b>{customWaves}</b><button class="stp" on:click={() => (customWaves = Math.min(7, customWaves + 1))} aria-label="More waves">+</button>
+									<span>Life</span><button class="stp" on:click={() => (customLife = Math.max(3, customLife - 1))} aria-label="Less life">−</button><b>{customLife}</b><button class="stp" on:click={() => (customLife = Math.min(10, customLife + 1))} aria-label="More life">+</button>
 								</div>
 							{/if}
 							<div class="fld">
@@ -902,6 +907,7 @@
 	.hint.warn { color: #fca5a5; }
 	.draftfld { border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 12px; margin-top: 1px; }
 	.chip.star { letter-spacing: 1px; }
+	.custstep { display: none; }
 	.chip.locked { opacity: 0.4; cursor: not-allowed; filter: grayscale(1); }
 	.joincols { display: flex; flex-direction: column; gap: 14px; }
 	.joincols.two { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; align-items: start; }
@@ -1016,12 +1022,35 @@
 	/* phones: smaller crest so the forms sit higher, stacked columns, wrapping rows */
 	@media (max-width: 760px) {
 		.wrap:not(.landing) { padding: 18px 12px 28px; gap: 16px; }
-		.wrap:not(.landing) .logo { width: min(150px, 40 * var(--vw)); }
+		.wrap:not(.landing) .logo { width: min(120px, 32 * var(--vw)); }
 		.card.form { padding: 16px 14px; }
 		.form.narrow, .form.wide { width: min(560px, calc(100vw - 24px)); }
 		.joincols.two { grid-template-columns: 1fr; gap: 16px; }
 		.joincols.two .jcol.right { border-left: none; padding-left: 0; border-top: 1px solid rgba(255, 255, 255, 0.09); padding-top: 14px; }
 		.primary, .ghost { padding: 0.65rem 1.1rem; }
+		/* create game: everything (even Custom's waves/life rows) fits one phone screen, no scrolling */
+		.createform { gap: 9px; padding: 12px 12px; }
+		.createform .fld { gap: 4px; }
+		.createform .fld > span { font-size: 0.76rem; }
+		.createform .namefld > span { display: none; }
+		.createform .field { padding: 0.45rem 0.65rem; }
+		.createform .grid2 { gap: 9px; }
+		.createform .col { gap: 9px; }
+		.createform .chips { gap: 5px; }
+		.createform .chips.two { grid-template-columns: repeat(4, 1fr); }
+		.createform .chip { padding: 0.32rem 0.55rem; font-size: 0.78rem; }
+		.createform .chips.two .chip { padding: 0.32rem 0.2rem; font-size: 0.7rem; white-space: nowrap; }
+		.createform .draftfld { padding-top: 8px; }
+		.createform .hint { margin: 0; }
+		.createform .row { margin-top: 2px; }
+		.wrap.creating .home-link { display: none; }
+		.createform .custchips { display: none; }
+		.createform .custstep { display: flex; align-items: center; gap: 6px; font-size: 0.8rem; color: #e2e8f0; }
+		.custstep span { margin-right: 2px; }
+		.custstep span + .stp { margin-left: 0; }
+		.custstep b { min-width: 1.5em; text-align: center; font-weight: normal; font-size: 0.95rem; color: #fff; font-variant-numeric: tabular-nums; }
+		.custstep b + .stp + span { margin-left: auto; }
+		.stp { width: 30px; height: 28px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.2); background: rgba(255, 255, 255, 0.06); color: #f0dcae; font-size: 1rem; line-height: 1; cursor: pointer; padding: 0; }
 		/* lobby */
 		.form.lobby { width: calc(100vw - 24px) !important; }
 		.lobbyhead { align-items: flex-start; }

@@ -220,7 +220,13 @@
 		.srow { gap: 4px; }
 		.srow img { width: 12px; height: 10px; }
 		.pips i, .dense .pips i { width: 7px; height: 7px; }
-		.roles { display: none; }
+		/* role icons ride along the top of the banner, over the art — the text layout below is untouched */
+		.roles { position: absolute; top: 6px; left: 0; right: 0; z-index: 1; margin: 0; padding: 0; gap: 4px; flex-wrap: nowrap; }
+		.role, .dense .role { width: auto; }
+		.role span:not(.rdot) { display: none; }
+		.role img, .rdot { width: 18px; height: 18px; font-size: 0.7rem; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.95)) drop-shadow(0 0 4px rgba(0,0,0,0.6)); }
+		.packed .roles { top: 4px; gap: 2px; }
+		.packed .role img, .packed .rdot { width: 14px; height: 14px; }
 		/* 3+ a side: shorter cards — name, player and stars only */
 		.dense .htitle, .dense .stats { display: none; }
 		.dense .sigil { width: 24px; height: 24px; }

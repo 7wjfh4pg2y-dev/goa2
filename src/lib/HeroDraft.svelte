@@ -225,9 +225,12 @@
 	// first press asks for confirmation (picks are final); the second swears it
 	let confirmHero = '';
 	$: confirming = !!confirmHero && confirmHero === sel && actionEnabled && !complete;
+	// the confirm arms after a beat, so a double-tap on Lock In can't swear the oath by accident
+	let confirmAt = 0;
 	function onAction() {
 		if (complete) return startGame();
-		if (confirmHero !== sel) { confirmHero = sel; return; }
+		if (confirmHero !== sel) { confirmHero = sel; confirmAt = Date.now(); return; }
+		if (Date.now() - confirmAt < 450) return;
 		confirmHero = '';
 		act();
 	}
@@ -319,9 +322,10 @@
 							<span class="oath-t">{isBanTurn ? `Ban ${selHero.name}?` : `Choose ${selHero.name}?`}</span>
 							<span class="oath-s">{isBanTurn ? 'Bans are final.' : 'Oaths are binding.'}</span>
 						</div>
+						<!-- side by side, the sworn button on the far edge (away from where Lock In was tapped) -->
 						<div class="oath-b">
-							<button class="lockin" style="background:{actionBg}" on:click={onAction}>{isBanTurn ? 'Ban Hero' : 'Select Hero'}</button>
 							<button class="oath-no" on:click={() => (confirmHero = '')}>Pick Another</button>
+							<button class="lockin" style="background:{actionBg}" on:click={onAction}>{isBanTurn ? 'Ban Hero' : 'Select Hero'}</button>
 						</div>
 					</div>
 				{:else}
@@ -489,9 +493,9 @@
 	.oath-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.1; }
 	.oath-t { font-size: 1.08rem; color: #f6ead2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 	.oath-s { font-size: 0.66rem; color: #cbb488; white-space: nowrap; }
-	.oath-b { flex: none; width: 118px; height: 100%; display: flex; flex-direction: column; gap: 3px; }
-	.oath .lockin { flex: 1; min-height: 0; padding: 0 0.6rem; font-size: 0.86rem; box-shadow: none; border-radius: 7px; }
-	.oath-no { flex: 1; min-height: 0; padding: 0 8px; font-size: 0.72rem; border-radius: 7px; border: 1px solid rgba(255,255,255,0.25); background: rgba(255,255,255,0.06); color: #e5e7eb; font-weight: 700; cursor: pointer; }
+	.oath-b { flex: none; height: 100%; display: flex; flex-direction: row; gap: 6px; }
+	.oath .lockin { width: auto; flex: none; min-height: 0; padding: 0 0.8rem; font-size: 0.86rem; box-shadow: none; border-radius: 8px; white-space: nowrap; }
+	.oath-no { flex: none; min-height: 0; padding: 0 10px; font-size: 0.74rem; white-space: nowrap; border-radius: 7px; border: 1px solid rgba(255,255,255,0.25); background: rgba(255,255,255,0.06); color: #e5e7eb; font-weight: 700; cursor: pointer; }
 	.oath-no:hover { background: rgba(255,255,255,0.14); }
 	@keyframes oathIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 	.lockin:disabled { opacity: 0.45; cursor: not-allowed; }
