@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { afterUpdate } from 'svelte';
+	import { afterUpdate, onDestroy } from 'svelte';
 	import type { Readable } from 'svelte/store';
 	import BoardCanvas from '$lib/BoardCanvas.svelte';
 	import CardLayer from '$lib/CardLayer.svelte';
@@ -208,13 +208,34 @@
 		const what = selPiece.role ? `${selPiece.team} ${selPiece.role} minion` : (selPiece.token ? (selPiece.faceDown ? 'a mine' : tokenName(selPiece.token)) : 'a piece');
 		session.act(`removed ${what}`, { pieces: next });
 		confirmDelete = false; selPieceId = null;
+		board?.release();
 	}
 	// Min's mines: flip to reveal Blast / Dud (or back face down)
 	function flipMine() {
 		if (!selPiece) return;
 		const up = !!selPiece.faceDown;
 		session.act(up ? `flipped a mine — ${selPiece.token === 'token_blast' ? 'Blast!' : 'Dud'}` : 'turned a mine face down', { pieces: { ...$ms.pieces, [selPiece.id]: { ...selPiece, faceDown: !up } } });
+		// the action is done: put the mine down, so the next click can't carry it somewhere else
+		board?.release(); selPieceId = null;
 	}
+	// only Min (the mine's owner) and the host may flip a mine
+	$: canFlip = !!selPiece?.token && MINES.has(selPiece.token) && (selPiece.owner === clientId || iAmHost);
+	// desktop: the toolbar floats just above the selected piece (not across the board at the top)
+	let tipPos: { x: number; y: number } | null = null;
+	let tipRaf = 0;
+	function trackTip() {
+		if (typeof window === 'undefined') return;
+		cancelAnimationFrame(tipRaf);
+		if (!selPieceId || mobile) { tipPos = null; return; }
+		const loop = () => {
+			const p = selPieceId ? board?.clientPos(selPieceId) : null;
+			tipPos = p ? { x: p.x, y: p.y - p.r - 8 } : null;
+			if (selPieceId) tipRaf = requestAnimationFrame(loop);
+		};
+		loop();
+	}
+	$: selPieceId, mobile, trackTip();
+	onDestroy(() => { if (typeof window !== 'undefined') cancelAnimationFrame(tipRaf); });
 	$: selLabel = !selPiece ? '' : selPiece.role ? `${selPiece.team} ${selPiece.role} minion`
 		: selPiece.token === 'companion' ? (selPiece.label ?? 'companion')
 		: selPiece.token && MINES.has(selPiece.token) ? (selPiece.faceDown ? 'mine (face down)' : tokenName(selPiece.token))
@@ -330,12 +351,12 @@
 
 	<!-- selected minion/token: offer delete (heroes aren't deletable) -->
 	{#if selPiece && (selPiece.role || selPiece.token)}
-		<div class="pietool">
+		<div class="pietool" class:anchored={!!tipPos} style={tipPos ? `left:${tipPos.x}px; top:${tipPos.y}px` : ''}>
 			<span class="pietxt">{selLabel}</span>
-			{#if selPiece.token && MINES.has(selPiece.token)}
+			{#if canFlip}
 				<button class="pieflip" on:click={flipMine}>{selPiece.faceDown ? 'Flip — reveal' : 'Flip face down'}</button>
 			{/if}
-			<button class="piedel" on:click={() => (confirmDelete = true)}>Delete</button>
+			<button class="piedel" on:click={() => { board?.release(); confirmDelete = true; }}>Delete</button>
 		</div>
 	{/if}
 
@@ -860,6 +881,10 @@
 	.pietool { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); z-index: 8; display: flex; align-items: center; gap: 10px;
 		padding: 6px 8px 6px 12px; border-radius: 999px; background: rgba(9, 13, 22, 0.9); backdrop-filter: blur(8px);
 		border: 1px solid rgba(255, 255, 255, 0.18); box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5); }
+	/* desktop: floats right above the selected piece */
+	.pietool.anchored { position: fixed; transform: translate(-50%, -100%); padding: 4px 6px 4px 10px; gap: 7px; }
+	.pietool.anchored::after { content: ''; position: absolute; left: 50%; bottom: -6px; width: 10px; height: 10px; transform: translateX(-50%) rotate(45deg);
+		background: rgba(9, 13, 22, 0.9); border-right: 1px solid rgba(255, 255, 255, 0.18); border-bottom: 1px solid rgba(255, 255, 255, 0.18); }
 	.pieflip { border: 1px solid rgba(240, 200, 120, 0.55); background: rgba(199, 154, 78, 0.24); color: #f6e3b4; border-radius: 999px; padding: 4px 12px; font-weight: 700; cursor: pointer; font-size: 0.76rem; }
 	.pieflip:hover { background: rgba(199, 154, 78, 0.4); }
 	.placehint { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); z-index: 9; display: flex; align-items: center; gap: 10px; padding: 6px 8px 6px 14px; border-radius: 999px;
@@ -890,6 +915,10 @@
 	.boardarea { position: absolute; inset: 0; }
 	.boardarea.mob { top: 116px; bottom: 106px; }
 	.gamewrap.mob .pietool, .gamewrap.mob .placehint { top: 124px; max-width: 94vw; }
+	/* phone toolbar: everything stays inside the pill — the label gives way first */
+	.gamewrap.mob .pietool { gap: 6px; padding: 5px 6px 5px 10px; box-sizing: border-box; }
+	.gamewrap.mob .pietxt { min-width: 0; flex: 1 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.72rem; }
+	.gamewrap.mob .pieflip, .gamewrap.mob .piedel { flex: none; white-space: nowrap; padding: 4px 9px; font-size: 0.7rem; }
 	.mtop { position: absolute; top: 0; left: 0; right: 0; height: 44px; z-index: 14; display: flex; align-items: center; gap: 2px; padding: 0 4px;
 		background: rgba(9, 13, 22, 0.96); border-bottom: 1px solid rgba(199, 154, 78, 0.35); }
 	.mib { flex: none; width: 29px; height: 30px; padding: 0; border-radius: 9px; display: grid; place-items: center; cursor: pointer; font-size: 17px; color: #f0dcae;

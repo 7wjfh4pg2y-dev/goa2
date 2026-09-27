@@ -7,7 +7,7 @@
 	// writer for the card map). Advancing locks the turn's cards into their slots.
 	import type { Readable } from 'svelte/store';
 	import type { MatchSession, MatchState, Player } from '$lib/match';
-	import { teamForSeat, colorHex } from '$lib/match';
+	import { teamForSeat, colorHex, battlePatch } from '$lib/match';
 	import Card from '$lib/cards/Card.svelte';
 	import TurnSlot from '$lib/cards/TurnSlot.svelte';
 	import PlayerIcon from '$lib/PlayerIcon.svelte';
@@ -139,7 +139,8 @@
 	// end-of-round flow: turn 4 → Minion Battle (manual, no rules yet) → Next round
 	$: isFinalTurn = $ms.turn >= 4;
 	$: battlePhase = $ms.battlePhase ?? false;
-	function startBattle() { session.act('the minion battle begins', { battlePhase: true }); }
+	// the battle hands every card back (like a round end) so players can level up / swap now
+	function startBattle() { session.act('the minion battle begins — cards return to hand', battlePatch($ms)); }
 
 	// "Round X" banner that pops for a few seconds when a new round starts
 	let roundBanner = 0;
@@ -577,7 +578,7 @@
 				{#if cs}
 					{@const ini = initOf(cs, revealed)}
 					{@const cfx = fxFor(p.id, slotIdx(cs, turnIdx))}
-					<div class="mpc" style={teamVars(pTeam(p))} role="button" tabindex="0" on:click={() => (overlayId = p.id)} on:keydown={(e) => e.key === 'Enter' && (overlayId = p.id)}>
+					<div class="mpc" class:fxon={effects.some((e) => e.pid === p.id)} style="{teamVars(pTeam(p))} --fxc:{colorOf(p.id)}" role="button" tabindex="0" on:click={() => (overlayId = p.id)} on:keydown={(e) => e.key === 'Enter' && (overlayId = p.id)}>
 						<span class="mpic"><PlayerIcon hero={cs.hero} team={pTeam(p)} color={colorHex(p.color)} size="28px" ring={2} ult={cs.ultimate} /></span>
 						<span class="mpn"><b>{p.name}</b><small>{heroName(cs.hero)}</small></span>
 						<span class="mlv"><em>Lv {levelOf(cs)}</em><i class="mini" class:off={ini == null}>{@html CLOCK}<b>{ini ?? '–'}</b></i></span>
@@ -1877,6 +1878,12 @@
 	.mini b { font-weight: normal; min-width: 1.2em; text-align: center; font-variant-numeric: tabular-nums; }
 	.mini.off { opacity: .5; }
 	.mcard { grid-column: 4; grid-row: 1 / 3; align-self: center; width: 40px; }
+	/* this player has a lingering effect running (maybe from an earlier turn's card): the whole card glows in their colour */
+	.mpc.fxon { border-color: var(--fxc); animation: mpcfx 2.6s ease-in-out infinite; }
+	@keyframes mpcfx {
+		0%, 100% { box-shadow: inset 3px 0 0 var(--tc), inset 0 0 0 1px var(--fxc), inset 0 0 10px color-mix(in srgb, var(--fxc) 40%, transparent); }
+		50% { box-shadow: inset 3px 0 0 var(--tc), inset 0 0 0 1px var(--fxc), inset 0 0 18px color-mix(in srgb, var(--fxc) 65%, transparent); }
+	}
 	/* stats with item-upgrade pips: detailed art, one same-size pip per upgrade (room for 3) */
 	.msx { grid-column: 1 / 4; grid-row: 2; display: flex; gap: 2px; align-self: end; }
 	.msx > span { position: relative; flex: 1; min-width: 0; height: 19px; display: grid; place-items: end center; padding-bottom: 1px; border-radius: 4px; background: rgba(255,255,255,.03); }

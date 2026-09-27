@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { placeToken, moveToken, statusFrom, toggleStatusMarker, effectiveHex } from './tokens'
-import { applyCardReq, type Piece, type MatchState } from './match'
+import { applyCardReq, battlePatch, type Piece, type MatchState } from './match'
 
 const heroes: Record<string, Piece> = {
 	bain: { id: 'bain', hex: '1_1', team: 'orange', kind: 'hero', hero: 'bain' },
@@ -62,5 +62,21 @@ describe('radius overlays', () => {
 	it('clear when the turn advances', () => {
 		const s = { turn: 2, round: 1, pieces: {}, cards: {}, radii: { a: 3 } } as unknown as MatchState
 		expect(applyCardReq(s, { kind: 'advance', pid: 'a' }).radii).toEqual({})
+	})
+})
+
+describe('minion battle', () => {
+	it('returns every card to hand, like a round end', () => {
+		const cs = { hero: 'arien', level: 1, coins: 0, ultimate: false, hand: [5], turns: [0, 1, 2, null], pending: 3, discard: [4], upgrade: [], removed: [] }
+		const s = { turn: 4, round: 1, pieces: {}, cards: { a: cs } } as unknown as MatchState
+		const p = battlePatch(s)
+		expect(p.battlePhase).toBe(true)
+		expect(p.cards!.a.hand).toEqual([0, 1, 2, 3, 4, 5])
+		expect(p.cards!.a.turns).toEqual([null, null, null, null])
+		expect(p.cards!.a.pending).toBeNull()
+		// the round advance afterwards has nothing left to return
+		const after = applyCardReq({ ...s, cards: p.cards, battlePhase: true } as MatchState, { kind: 'advance', pid: 'a' })
+		expect(after.cards!.a.hand).toEqual([0, 1, 2, 3, 4, 5])
+		expect(after.round).toBe(2)
 	})
 })
