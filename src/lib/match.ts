@@ -14,7 +14,7 @@
 // tracker this is robust and easy to reason about.
 
 import { expireEffects, type Effect } from './effects'
-import { writable, type Readable } from 'svelte/store'
+import { get, writable, type Readable } from 'svelte/store'
 import { supabase } from './supabase'
 import { tabClientId } from './identity'
 import type { RealtimeChannel } from '@supabase/supabase-js'
@@ -725,7 +725,10 @@ export function joinMatch(
 	let channel: RealtimeChannel
 	let stateTimer: ReturnType<typeof setTimeout> | null = null
 	let watchdog: ReturnType<typeof setTimeout> | null = null
+	let joinDeadline: ReturnType<typeof setTimeout> | null = null
 	let backoff = 1500
+	let left = false
+	const JOIN_DEADLINE_MS = 8000
 
 	const applyRemote = (incoming: MatchState) => {
 		// last-write-wins: accept strictly newer revisions, break ties on time
@@ -832,20 +835,48 @@ export function joinMatch(
 
 	const clearWatchdog = () => { if (watchdog) { clearTimeout(watchdog); watchdog = null } }
 	const armWatchdog = () => { if (!watchdog) watchdog = setTimeout(hardReconnect, backoff) }
-	// If the channel stays down past the backoff, tear it down and rebuild it —
-	// Supabase's own rejoin sometimes wedges after a rate-limit close.
-	const hardReconnect = () => {
-		watchdog = null
-		backoff = Math.min(backoff * 2, 10000)
-		try { supabase.removeChannel(channel) } catch { /* ignore */ }
-		buildChannel()
+	const clearJoinDeadline = () => { if (joinDeadline) { clearTimeout(joinDeadline); joinDeadline = null } }
+
+	// Drop a channel from the Supabase client for good. removeChannel() is async
+	// (it waits for the server to confirm the leave), and until it finishes
+	// supabase.channel(sameTopic) hands back that SAME dying channel — so a rebuild
+	// would silently reuse it and never subscribe (stuck on "connecting"). Wait a
+	// little for the leave, then purge it from the client's list ourselves.
+	const dropChannel = async (ch: RealtimeChannel | undefined) => {
+		if (!ch) return
+		try { ch.untrack() } catch { /* ignore */ }
+		try { await Promise.race([supabase.removeChannel(ch), new Promise((r) => setTimeout(r, 3000))]) } catch { /* ignore */ }
+		try {
+			const rt = supabase.realtime as unknown as { channels: RealtimeChannel[] }
+			rt.channels = rt.channels.filter((c) => c !== ch)
+		} catch { /* ignore */ }
 	}
 
-	const onStatus = (s: string) => {
+	// If the channel stays down past the backoff (or never finishes joining), tear
+	// it down and rebuild it — Supabase's own rejoin sometimes wedges after a
+	// rate-limit close, and a first join on a cold page load can stall.
+	let rebuilding = false
+	const hardReconnect = async () => {
+		watchdog = null
+		clearJoinDeadline()
+		if (rebuilding || left) return
+		rebuilding = true
+		backoff = Math.min(backoff * 2, 10000)
+		const old = channel
+		await dropChannel(old)
+		rebuilding = false
+		if (!left) buildChannel()
+	}
+
+	// status callbacks are per channel: a replaced channel's late CLOSED/ERROR
+	// must not knock over its replacement
+	const onStatusFor = (ch: RealtimeChannel) => (s: string) => {
+		if (ch !== channel || left) return
 		if (s === 'SUBSCRIBED') {
 			conn.set('connected')
 			backoff = 1500
 			clearWatchdog()
+			clearJoinDeadline()
 			channel.track(me) // (re-)announce presence, also after a reconnect
 			channel.send({ type: 'broadcast', event: 'hello', payload: { id: clientId } })
 			startProbe()
@@ -856,11 +887,18 @@ export function joinMatch(
 	}
 
 	function buildChannel() {
-		channel = supabase.channel(`match:${room}`, {
+		const ch = supabase.channel(`match:${room}`, {
 			config: { broadcast: { self: false }, presence: { key: clientId } }
 		})
-		registerHandlers(channel)
-		channel.subscribe(onStatus)
+		channel = ch
+		registerHandlers(ch)
+		ch.subscribe(onStatusFor(ch))
+		// never sit on "connecting" forever: no SUBSCRIBED in time → rebuild
+		clearJoinDeadline()
+		joinDeadline = setTimeout(() => {
+			joinDeadline = null
+			if (ch === channel && !left && get(conn) !== 'connected') { conn.set('reconnecting'); void hardReconnect() }
+		}, JOIN_DEADLINE_MS)
 	}
 
 	buildChannel()
@@ -1017,12 +1055,9 @@ export function joinMatch(
 		if (trackTimer) clearTimeout(trackTimer)
 		if (stateTimer) clearTimeout(stateTimer)
 		clearWatchdog()
-		try {
-			channel.untrack()
-			supabase.removeChannel(channel)
-		} catch {
-			/* ignore */
-		}
+		clearJoinDeadline()
+		left = true
+		void dropChannel(channel)
 	}
 
 	return { state, players, update, act, setSelf, cardAction, kick, flipJoin, joinFlip, undo, canUndo, requestSeat, resolveSeat, seatGranted, seatDenied, kicked, notFound, status: conn, leave, clientId }

@@ -89,7 +89,11 @@ export async function claimIdentity(): Promise<{ id: string; ticket: ResumeTicke
 	if (!hasTabId()) {
 		tickets.sort((a, b) => b.at - a.at);
 		for (const t of tickets) {
-			if (!(await idInUse(t.id))) { adoptId(t.id); break; }
+			const busy = await idInUse(t.id)
+			// the page may have minted an id while we were checking (e.g. the player
+			// raced into Create) — never swap identities under a live session
+			if (hasTabId()) break;
+			if (!busy) { adoptId(t.id); break; }
 		}
 	}
 	const id = tabClientId();
