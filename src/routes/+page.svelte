@@ -822,10 +822,12 @@
 
 					<!-- one flat row: every button is its own flex item, so they share the width and never overlap -->
 					<div class="lobbybtns">
-						<button class="ghost leave" on:click={leaveRoom}>Leave</button>
+						<!-- the host's way out is Close (ends the room for everyone); guests just Leave -->
 						{#if iAmHost}
-							<button class="ghost danger" on:click={closeGame}>Close</button>
+							<button class="ghost danger leave" on:click={closeGame}>Close</button>
 							<button class="primary" disabled={!allReady} on:click={beginGame}>Begin</button>
+						{:else}
+							<button class="ghost leave" on:click={leaveRoom}>Leave</button>
 						{/if}
 						{#if mySeat >= 0}
 							<button class="primary" class:isready={ready} on:click={toggleReady}>{ready ? '✓ Ready' : 'Ready up'}</button>
@@ -1043,7 +1045,9 @@
 		.createform .draftfld { padding-top: 8px; }
 		.createform .hint { margin: 0; }
 		.createform .row { margin-top: 2px; }
-		.wrap.creating .home-link { display: none; }
+		/* create: a smaller crest and tighter gaps keep the whole form on one screen */
+		.wrap.creating { padding-top: 10px; padding-bottom: 12px; gap: 10px; }
+		.wrap.creating .logo { width: min(84px, 22 * var(--vw)); }
 		.createform .custchips { display: none; }
 		.createform .custstep { display: flex; align-items: center; gap: 6px; font-size: 0.8rem; color: #e2e8f0; }
 		.custstep span { margin-right: 2px; }
@@ -1067,5 +1071,12 @@
 		/* buttons split the row evenly and shrink their text rather than collide */
 		.lobbybtns { gap: 6px; }
 		.lobbybtns > button { flex: 1 1 0; margin: 0; padding: 0.65rem 0.3rem; font-size: clamp(0.72rem, 3.6vw, 0.95rem); text-align: center; }
+	}
+	/* very short phone screens: shrink the create page a notch more */
+	@media (max-width: 760px) and (max-height: 640px) {
+		.wrap.creating { padding-top: 6px; gap: 6px; }
+		.wrap.creating .logo { width: 58px; }
+		.createform { gap: 7px; padding-top: 10px; padding-bottom: 10px; }
+		.createform .grid2, .createform .col { gap: 7px; }
 	}
 </style>

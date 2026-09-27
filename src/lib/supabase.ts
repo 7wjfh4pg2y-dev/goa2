@@ -18,3 +18,21 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 		params: { eventsPerSecond: 30 },
 	},
 })
+
+// realtime-js drops a closed channel from its list BY TOPIC. When we rebuild a
+// wedged room channel, the old one can finish closing after the new one (same
+// topic) exists — and would evict the new one with it. Compare by identity
+// instead. (Guarded: if the internals ever change, this is simply skipped.)
+{
+	const rt = supabase.realtime as unknown as {
+		channels?: unknown[]
+		_remove?: (ch: unknown) => void
+		_schedulePendingDisconnect?: () => void
+	}
+	if (typeof rt._remove === 'function' && Array.isArray(rt.channels)) {
+		rt._remove = (ch: unknown) => {
+			rt.channels = (rt.channels ?? []).filter((c) => c !== ch)
+			if (!rt.channels.length) rt._schedulePendingDisconnect?.()
+		}
+	}
+}

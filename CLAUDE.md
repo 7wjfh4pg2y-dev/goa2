@@ -43,7 +43,7 @@ Deployed to GitHub Pages: **https://7wjfh4pg2y-dev.github.io/goa2/**
   - Begin flow: **tie-breaker coin flip → host `buildDraft()` → everyone enters draft → host "Start game" → board (placeholder)**.
 - **`src/lib/match.ts`** — shared match state engine over one Supabase channel per room.
   - Sync model: **full-snapshot last-write-wins by `rev`** (ties by `updatedAt`). `update()` bumps rev + broadcasts (throttled/coalesced ~140ms). Presence `track()` also throttled (~320ms) — Supabase rate-limits per channel; flooding wedges the socket.
-  - Auto-reconnect **watchdog** rebuilds the channel with backoff if it stays down.
+  - Auto-reconnect **watchdog** rebuilds the channel with backoff if it stays down, plus a **join deadline** (8s without SUBSCRIBED → rebuild) so a cold first join never sits on "connecting". Rebuilds go through `dropChannel()` (waits ≤3s for the leave, then purges the old channel from the client — `supabase.channel(topic)` otherwise hands back the dying one); status callbacks are per channel; `supabase.ts` patches realtime's `_remove` to compare by identity (it filters by topic).
   - Players live in **presence** (id, name, colour, ready, seat). Seat `< 0` = spectator/unseated. `teamForSeat`: first half = orange, second = blue.
   - **Draft** state lives in shared match state (`draft: DraftState | null`), so it persists across disconnects. `buildDraft / draftAdvance / draftSetPick / draftComplete / draftBlocked / teamRosters`. Systems: `all-pick | all-random | single-draft | pick-ban`. `DRAFT_TURN_MS = 45000`. `lastAction` drives the announcement toast.
   - Coin flips (join team + start tie-breaker) use a broadcast-instruction pattern so each client applies its own presence — avoids LWW map clobber.
