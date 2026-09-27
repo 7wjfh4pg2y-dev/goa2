@@ -330,6 +330,17 @@
 	$: myGrid = mine ? deckGrid(mine.hero) : [];
 	// basics never leave the hand — pin them to the right with a partition
 	const isBasic = (hero: string, idx: number) => ['GOLD', 'SILVER'].includes(heroCards(hero)[idx]?.color);
+	// phone Hand tab: one slot per colour (the card you currently hold in it); anything else goes in `extra`
+	const SLOT_COLORS: Array<[string, string, string]> = [['RED', 'Red', '#e0524a'], ['BLUE', 'Blue', '#3f7fe0'], ['GREEN', 'Green', '#41ae59']];
+	function colourSlots(hero: string, rest: number[]) {
+		const used = new Set<number>();
+		const slots = SLOT_COLORS.map(([color, label, hex]) => {
+			const idx = rest.find((i) => !used.has(i) && heroCards(hero)[i]?.color === color);
+			if (idx != null) used.add(idx);
+			return { color, label, hex, idx: idx ?? null };
+		});
+		return { slots, extra: rest.filter((i) => !used.has(i)) };
+	}
 	function handSplit(cs: PlayerCardState) {
 		const basics: number[] = [], rest: number[] = [];
 		for (const i of cs.hand) (isBasic(cs.hero, i) ? basics : rest).push(i);
@@ -802,8 +813,62 @@
 					</div>
 				{/if}
 
-				<!-- HAND: ultimate parked far left, then basics, then colour cards -->
-				{#if !mobile || deckTab === 'hand'}
+				<!-- HAND (phones): shelves — basics · your colours · ultimate -->
+				{#if mobile && deckTab === 'hand'}
+					{@const cols = colourSlots(dh, split.rest)}
+					<div class="hshelves">
+						<div class="hshelf">
+							<div class="hs-h"><span>Basics</span><em>🔒 always in hand</em></div>
+							<div class="hs-pair">
+								{#each split.basics as i (i)}
+									<button class="hs-card basic {heroCards(dh)[i]?.color === 'GOLD' ? 'g' : 's'}" on:click={() => examineCard(dh, i)} title="Tap to preview">
+										<Card heroId={dh} card={heroCards(dh)[i]} /><span class="dklock">🔒</span>
+									</button>
+								{/each}
+							</div>
+						</div>
+						<div class="hshelf">
+							<div class="hs-h"><span>Your colours</span><em>swap as you level up</em></div>
+							<div class="hs-tri">
+								{#each cols.slots as sl (sl.color)}
+									<div class="hs-col" style="--c:{sl.hex}">
+										<span class="hs-pill">{sl.label}{sl.idx != null ? ` · ${ROMAN[(heroCards(dh)[sl.idx]?.level ?? 1) - 1]}` : ''}</span>
+										{#if sl.idx != null}
+											<button class="hs-card col" class:sel={deckSel === sl.idx} on:click={() => (deckSel = sl.idx)}><Card heroId={dh} card={heroCards(dh)[sl.idx]} /></button>
+										{:else}
+											<div class="hs-empty">—</div>
+										{/if}
+									</div>
+								{/each}
+							</div>
+							{#if cols.extra.length}
+								<div class="hs-extra">
+									{#each cols.extra as i (i)}<button class="hs-card" class:sel={deckSel === i} on:click={() => (deckSel = i)}><Card heroId={dh} card={heroCards(dh)[i]} /></button>{/each}
+								</div>
+							{/if}
+						</div>
+						{#if myUlt >= 0}
+							<div class="hs-ult" class:on={mine.ultimate}>
+								<button class="hs-ultthumb" on:click={() => examineCard(dh, myUlt)} title="Tap to preview your ultimate"><Card heroId={dh} card={heroCards(dh)[myUlt]} /></button>
+								<div class="hs-ultinfo">
+									<b>Ultimate · {heroCards(dh)[myUlt]?.name}</b>
+									<div class="hs-lv">{#each Array(8) as _, k (k)}<i class:on={k < levelOf(mine)}></i>{/each}</div>
+									<span>{mine.ultimate ? 'Unlocked · tap to read' : 'Unlocks at level 8 · tap to preview'}</span>
+								</div>
+								{#if mine.ultimate}
+									<button class="act ghost sm" on:click={() => toggleUlt(false)}>Re-lock</button>
+								{:else if levelOf(mine) >= 7}
+									<button class="act sm ultbtn" on:click={() => toggleUlt(true)}>Unlock ★</button>
+								{:else}
+									<span class="hs-seal">🔒</span>
+								{/if}
+							</div>
+						{/if}
+					</div>
+				{/if}
+
+				<!-- HAND (desktop): ultimate parked far left, then basics, then colour cards -->
+				{#if !mobile}
 				<div class="dklabel">Your hand <span class="ct">{mine.hand.length}</span> <span class="zhint">double-click any card to enlarge it</span></div>
 				<div class="dkhand">
 					<!-- Ultimate: never in hand; previewable; unlock appears once you hit level 8 -->
@@ -1471,6 +1536,36 @@
 	.mob .dkbar .dksel { flex: 1 1 100%; margin: 0; }
 	.mob .dkacts { flex: 1 1 100%; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 5px; }
 	.mob .dkbar .act { min-width: 0; padding: .62rem .1rem; font-size: clamp(.6rem, 2.9vw, .76rem); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	/* phone Hand tab: shelves */
+	.hshelves { flex: 1 0 auto; display: flex; flex-direction: column; gap: 12px; padding-top: 12px; }
+	.hshelf { padding: 10px; border-radius: 14px; background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.08); }
+	.hs-h { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 9px; font-size: .7rem; letter-spacing: .1em; text-transform: uppercase; color: #cbd5e1; }
+	.hs-h em { font-style: normal; font-size: .6rem; letter-spacing: .04em; text-transform: none; color: #7c8aa0; }
+	.hs-card { position: relative; display: block; width: 100%; padding: 0; background: none; border: none; cursor: pointer; border-radius: 6px; }
+	.hs-card :global(canvas) { display: block; width: 100%; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,.55); }
+	.hs-pair { display: flex; justify-content: center; gap: 14px; }
+	.hs-pair .hs-card { width: min(112px, 29vw); cursor: zoom-in; }
+	.hs-card.basic.g :global(canvas) { box-shadow: 0 0 0 2px #e8b64a, 0 4px 12px rgba(0,0,0,.55); }
+	.hs-card.basic.s :global(canvas) { box-shadow: 0 0 0 2px #c6d0db, 0 4px 12px rgba(0,0,0,.55); }
+	.hs-tri { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; }
+	.hs-col { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; }
+	.hs-pill { font-size: .62rem; padding: 2px 8px; border-radius: 999px; white-space: nowrap; background: color-mix(in srgb, var(--c) 25%, transparent); border: 1px solid var(--c); color: #fff; }
+	.hs-card.col :global(canvas) { box-shadow: 0 0 0 2px var(--c), 0 4px 12px rgba(0,0,0,.55); }
+	.hs-card.sel :global(canvas) { box-shadow: 0 0 0 3px #efb46a, 0 0 14px rgba(239,180,106,.6); }
+	.hs-empty { width: 100%; aspect-ratio: 1192 / 1664; display: grid; place-items: center; border-radius: 6px; border: 1px dashed color-mix(in srgb, var(--c) 50%, transparent); color: #55637a; }
+	.hs-extra { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 10px; }
+	.hs-ult { margin-top: auto; margin-bottom: 12px; display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 14px;
+		background: linear-gradient(90deg, rgba(120,60,190,.28), rgba(40,20,70,.4)); border: 1px solid rgba(165,110,230,.45); }
+	.hs-ult.on { border-color: rgba(200,160,255,.8); box-shadow: 0 0 18px rgba(165,110,230,.4); }
+	.hs-ultthumb { width: 58px; flex: none; padding: 0; background: none; border: none; cursor: zoom-in; border-radius: 5px; }
+	.hs-ultthumb :global(canvas) { display: block; width: 100%; border-radius: 5px; filter: grayscale(.8) brightness(.55); }
+	.hs-ult.on .hs-ultthumb :global(canvas) { filter: none; box-shadow: 0 0 0 2px #b482f0, 0 0 12px rgba(165,110,230,.7); }
+	.hs-ultinfo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; font-size: .62rem; color: #b9a7d6; }
+	.hs-ultinfo b { font-weight: normal; font-size: .82rem; color: #efe0ff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.hs-lv { display: flex; gap: 3px; }
+	.hs-lv i { flex: 1; height: 6px; border-radius: 3px; background: rgba(255,255,255,.12); }
+	.hs-lv i.on { background: #b482f0; box-shadow: 0 0 5px rgba(180,130,240,.7); }
+	.hs-seal { font-size: 1.1rem; }
 	/* keep the bottom of the last row reachable above the sticky bar */
 	.mob .dkzones, .mob .dkgrid, .mob .dkhand { margin-bottom: 12px; }
 
