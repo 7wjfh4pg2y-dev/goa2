@@ -195,6 +195,17 @@
 	export function reset() { scale = 1; panX = 0; panY = 0; spin = 0; }
 	// saved views: rotation (relative to your team's orientation), zoom and pan
 	type BoardView = { spin: number; scale: number; panX: number; panY: number };
+	/** Put down whatever is picked up (tap-to-move hold / carry). */
+	export function release() { selected = null; dragId = null; hoverHex = null; }
+	/** Where a piece sits on screen (client px), for anchoring UI next to it. */
+	export function clientPos(id: string): { x: number; y: number; r: number } | null {
+		const p = pieces.find((q) => q.id === id);
+		const m = viewG?.getScreenCTM();
+		if (!p || !m) return null;
+		const c = centerOf(p.hex);
+		const pt = new DOMPoint(c.x, c.y).matrixTransform(m);
+		return { x: pt.x, y: pt.y, r: size * 0.8 * Math.hypot(m.a, m.b) };
+	}
 	export function getView(): BoardView { return { spin: ((spin % 360) + 360) % 360, scale, panX, panY }; }
 	export function setView(v: BoardView) { spin = v.spin; scale = clamp(v.scale, 0.4, 8); panX = v.panX; panY = v.panY; clampPan(); }
 
@@ -336,6 +347,8 @@
 	}
 
 	onMount(() => { if (interactive) wrapEl?.addEventListener('wheel', onWheel, { passive: false }); });
+	// Esc puts a picked-up piece back down
+	function onKey(e: KeyboardEvent) { if (e.key === 'Escape' && (selected || dragId)) release(); }
 	onDestroy(() => wrapEl?.removeEventListener('wheel', onWheel));
 
 	function centerOf(id: string) {
@@ -431,6 +444,7 @@
 		{/if}
 {/snippet}
 
+<svelte:window on:keydown={onKey} />
 <div
 	class="board-wrap"
 	class:interactive

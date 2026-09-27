@@ -47,6 +47,17 @@ export type CardReq =
 	| { kind: 'forcepass'; pid: string } // host: pass everyone not yet committed
 	| { kind: 'advance'; pid: string } // host: lock this turn's cards into their slots, go to next turn
 
+/** Minion battle (after turn 4 is revealed): lock the last cards in, then every
+ *  card goes back to its owner's hand as if the round had ended — so players can
+ *  level up and swap cards before the next round. (The later "Next round"
+ *  advance then finds nothing left to return.) */
+export function battlePatch(s: MatchState): Partial<MatchState> {
+	const cards = s.cards ?? {}
+	const migrated: Record<string, PlayerCardState> = {}
+	for (const pid in cards) migrated[pid] = revealPlayer(cards[pid], s.turn - 1)
+	return { battlePhase: true, cards: endRoundAll(migrated) }
+}
+
 /** Apply a card instruction to the shared state, returning the patch to broadcast. */
 export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 	const cards = s.cards ?? {}
