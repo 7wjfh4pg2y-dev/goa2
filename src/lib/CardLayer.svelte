@@ -1957,7 +1957,9 @@
 	.bstack { --bw: clamp(230px, 72vw, 320px); position: absolute; right: 6px; bottom: 80px; z-index: 10; width: var(--bw); display: flex; flex-direction: column; gap: 3px;
 		transition: transform .28s cubic-bezier(.2,.8,.2,1); filter: drop-shadow(0 6px 14px rgba(0,0,0,.6)); }
 	.bstack :global(.bn) { --bh: clamp(34px, 5.2vh, 44px); }
-	.bwrap { transition: transform .26s cubic-bezier(.2,.8,.2,1); }
+	/* only the banners themselves take touches — the stack's box would otherwise swallow board pans/pinches */
+	.bstack { pointer-events: none; }
+	.bwrap { pointer-events: auto; transition: transform .26s cubic-bezier(.2,.8,.2,1); }
 	.bwrap.tucked { transform: translateX(calc(var(--bw) - clamp(34px, 5.2vh, 44px) * 1.4 + 4px)); }
 	.bsgap { height: 4px; }
 	.tray.mob { --cw: 62px; left: 0; right: 0; bottom: 72px; justify-content: center; }
