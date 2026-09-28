@@ -9,6 +9,7 @@
 	import lifeSplit from '$lib/images/life_split.png';
 	import { heroCards } from '$lib/cards/deck';
 	import { ultimateIndex } from '$lib/cards/cardstate';
+	import { uiLayout, layoutVars } from '$lib/layout';
 	import { placeToken, moveToken, effectiveHex, MINES, tokenName, type ArmToken } from '$lib/tokens';
 	import {
 		colorHex, movePiece, teamForSeat, throneHex,
@@ -256,8 +257,10 @@
 	let confirmLeave = false;
 
 	// ── phone layout (≤760px wide): top bar + ☰ menu instead of the left HUD ──
-	let gvw = 1440;
+	let gvw = 1440, gvh = 900;
 	$: mobile = gvw <= 760;
+	// desktop/tablet: one UI scale for HUD, panels, dash and overlays (layout.ts)
+	$: lay = uiLayout(gvw, gvh);
 	let menuOpen = false, lwOpen = false;
 	// the waves/life sheet follows a downward drag and closes past a threshold
 	let sheetY: number | null = null, sheetDy = 0, sheetDragged = false;
@@ -328,9 +331,9 @@
 	});
 </script>
 
-<svelte:window on:keydown={(e) => { if (e.key !== 'Escape') return; if (confirmLeave) confirmLeave = false; else { pendingSpawn = null; pendingToken = null; } }} on:pointerdown={(e) => { viewsOutside(e); }} bind:innerWidth={gvw} />
+<svelte:window on:keydown={(e) => { if (e.key !== 'Escape') return; if (confirmLeave) confirmLeave = false; else { pendingSpawn = null; pendingToken = null; } }} on:pointerdown={(e) => { viewsOutside(e); }} bind:innerWidth={gvw} bind:innerHeight={gvh} />
 
-<div class="gamewrap" class:mob={mobile}>
+<div class="gamewrap" class:mob={mobile} class:dashfull={!mobile && lay.underHud} style={mobile ? '' : layoutVars(lay)}>
 	{#if pendingToken || (mobile && pendingSpawn)}
 		<div class="placehint">
 			{#if pendingToken}
@@ -351,7 +354,7 @@
 
 	<!-- selected minion/token: offer delete (heroes aren't deletable) -->
 	{#if selPiece && (selPiece.role || selPiece.token)}
-		<div class="pietool" class:anchored={!!tipPos} style={tipPos ? `left:${tipPos.x}px; top:${tipPos.y}px` : ''}>
+		<div class="pietool" class:anchored={!!tipPos} style={tipPos ? `left:${tipPos.x / lay.s}px; top:${tipPos.y / lay.s}px` : ''}>
 			<span class="pietxt">{selLabel}</span>
 			{#if canFlip}
 				<button class="pieflip" on:click={flipMine}>{selPiece.faceDown ? 'Flip — reveal' : 'Flip face down'}</button>
@@ -808,6 +811,10 @@
 	.hud { position: absolute; top: 12px; left: 12px; bottom: 12px; z-index: 6; width: 204px; display: flex; flex-direction: column; gap: 6px;
 		overflow-y: auto; background: rgba(9, 13, 22, 0.74); backdrop-filter: blur(8px); border: 1px solid rgba(199, 154, 78, 0.4);
 		border-radius: 12px; padding: 9px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), inset 0 0 26px rgba(199, 154, 78, 0.06); }
+	/* zoomed as a whole; its insets are design px, so the real-px dash is divided back */
+	.gamewrap:not(.mob) .hud { zoom: var(--uis, 1); }
+	.gamewrap.dashfull .hud { bottom: calc(22px + var(--dh, 70px) / var(--uis, 1)); }
+	.gamewrap:not(.mob) :is(.modal, .managepanel, .pietool, .placehint) { zoom: var(--uis, 1); }
 	.hud .mapname { font-family: 'Modesto Poster', serif; font-size: 1.02rem; letter-spacing: 0.03em; color: #f6ead2; text-align: center; }
 
 	.fxlist { gap: 3px; }

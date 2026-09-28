@@ -10,6 +10,7 @@
 	import { teamForSeat, colorHex, battlePatch } from '$lib/match';
 	import Card from '$lib/cards/Card.svelte';
 	import DeckView from '$lib/DeckView.svelte';
+	import { uiLayout, layoutVars } from '$lib/layout';
 	import CardBanner from '$lib/CardBanner.svelte';
 	import TurnSlot from '$lib/cards/TurnSlot.svelte';
 	import PlayerIcon from '$lib/PlayerIcon.svelte';
@@ -473,15 +474,13 @@
 		open();
 	}
 
-	// The dash is ONE fixed layout (DASH_W × DASH_H css px) on every screen and
-	// browser, scaled as a whole to the room between the left HUD and the window's
-	// right edge (it runs under a shortened player panel when it needs to).
-	const DASH_W = 1180, DASH_H = 78, HUD_L = 224, EDGE = 12;
+	// Desktop/tablet: ONE UI scale for the whole layout (see layout.ts). The dash is a
+	// fixed DASH_W × DASH_H design scaled as a whole; it runs under a shortened player
+	// panel (and, on portrait screens, under the HUD too) when it needs the room.
 	let vw = 1440;
-	$: dashS = Math.min(1.25, Math.max(0.5, (vw - HUD_L - EDGE) / DASH_W));
-	$: dashX = HUD_L + Math.max(0, (vw - HUD_L - EDGE - DASH_W * dashS) / 2);
-	$: dashUnderPanel = dashX + DASH_W * dashS > vw - 268;
-	$: dashVars = `--ds:${dashS}; --dx:${dashX}px; --dh:${DASH_H * dashS}px`;
+	$: lay = uiLayout(vw, vhPx);
+	$: dashUnderPanel = lay.underPanel;
+	$: dashVars = layoutVars(lay);
 	function toggleDock() { dockHand = !dockHand; writePref(PREF_DOCK, dockHand); handUp = false; }
 	let handUp = false;
 	let lowerTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1105,7 +1104,7 @@
 			<div class="tray" class:retracted class:spread={spreadHand} style={dashVars}>
 				{#each handOrdered as idx, k (idx)}
 					{@const f = fan(k, handOrdered.length)}
-					<button class="hc" style="--rot:{spreadHand ? 0 : f.rot}deg; --y:{spreadHand ? 0 : f.y}px"
+					<button class="hc" style="--rot:{spreadHand ? 0 : f.rot}deg; --y:{spreadHand ? 0 : f.y * lay.s}px"
 						on:click={() => handCardClick(idx)} on:pointerenter={raiseHand} on:pointerleave={lowerHandSoon}>
 						<Card heroId={mine.hero} card={heroCards(mine.hero)[idx]} />
 					</button>
@@ -1314,7 +1313,7 @@
 
 <style>
 	/* right-side player panel */
-	.ppanel { position: absolute; top: 12px; right: 12px; bottom: 12px; z-index: 6; width: 244px; padding: 10px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; color: #e5e7eb; background: rgba(9,13,22,.72); backdrop-filter: blur(9px); border: 1px solid rgba(199,154,78,.4); border-radius: 14px; }
+	.ppanel { position: absolute; top: 12px; right: 12px; bottom: 12px; z-index: 6; width: 244px; padding: 10px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; color: #e5e7eb; background: rgba(9,13,22,.72); backdrop-filter: blur(9px); border: 1px solid rgba(199,154,78,.4); border-radius: 14px; zoom: var(--uis, 1); }
 	.pptitle { font-size: .6rem; letter-spacing: .16em; text-transform: uppercase; font-weight: 800; color: #b8a06a; padding: 2px 4px 4px; display: flex; flex-direction: column; gap: 3px; }
 	.phasetag { font-size: .56rem; letter-spacing: .04em; font-weight: 700; color: #7d8ba0; text-transform: none; }
 	.phasetag.resolve { color: #efb46a; }
@@ -1397,7 +1396,7 @@
 	/* overlay */
 	.scrim { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; background: rgba(3,6,12,.62); backdrop-filter: blur(3px); }
 	.modal.board { width: min(1040px, 96vw); background: linear-gradient(180deg, rgba(11,16,26,.8), rgba(11,16,26,.9) 55%, rgba(11,16,26,.95)), var(--bgimg) center 22% / cover no-repeat, #0b101a; }
-	.modal { width: min(780px, 94vw); max-height: 90vh; overflow-y: auto; padding: 16px 18px; color: #e5e7eb; background: rgba(11,16,26,.94); border: 1px solid rgba(199,154,78,.5); border-radius: 16px; box-shadow: 0 24px 70px rgba(0,0,0,.7); }
+	.modal { zoom: var(--uis, 1); width: min(780px, 94vw); max-height: 90vh; overflow-y: auto; padding: 16px 18px; color: #e5e7eb; background: rgba(11,16,26,.94); border: 1px solid rgba(199,154,78,.5); border-radius: 16px; box-shadow: 0 24px 70px rgba(0,0,0,.7); }
 	.mhead { display: flex; align-items: center; gap: 11px; margin-bottom: 12px; }
 	.mav { position: relative; width: 3rem; height: 3rem; border-radius: 50%; overflow: hidden; border: 2px solid var(--tint); flex: none; }
 	.mav img { width: 100%; height: 100%; object-fit: cover; }
@@ -1636,7 +1635,7 @@
 	.exdots { display: flex; justify-content: center; gap: 6px; margin-top: 10px; }
 	.exdots i { width: 7px; height: 7px; border-radius: 50%; background: rgba(255,255,255,.25); }
 	.exdots i.on { background: #f0dcae; box-shadow: 0 0 6px rgba(240,220,174,.8); }
-	.bigwrap { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+	.bigwrap { display: flex; flex-direction: column; align-items: center; gap: 12px; zoom: var(--uis, 1); }
 	.bigcard.fxon { filter: drop-shadow(0 0 3px var(--fxc)) drop-shadow(0 0 16px var(--fxc)) drop-shadow(0 20px 50px rgba(0,0,0,.7)); }
 	/* lingering-effect controls under a played card */
 	.fxctl { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center; padding: 8px 10px; border-radius: 12px;
@@ -1667,8 +1666,8 @@
 
 	/* centered preview of a picked hand card */
 	.pvscrim { position: fixed; inset: 0; z-index: 30; background: rgba(3,6,12,.55); backdrop-filter: blur(3px); }
-	.pvwrap { position: fixed; inset: 0 0 calc(var(--dh, 70px) + 26px) 0; z-index: 31; display: flex; align-items: center; justify-content: center; pointer-events: none; }
-	.pvcard { width: min(320px, 56vw); border-radius: 5%; pointer-events: auto; perspective: 1400px; }
+	.pvwrap { position: fixed; inset: 0 0 calc(var(--db, 12px) + var(--dh, 70px) + 14px * var(--uis, 1)) 0; z-index: 31; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+	.pvcard { width: min(320px * var(--uis, 1), 56vw); border-radius: 5%; pointer-events: auto; perspective: 1400px; }
 	.pvflip { position: relative; width: 100%; aspect-ratio: 1192 / 1664; transform-style: preserve-3d; transition: transform .46s cubic-bezier(.4,.15,.2,1); }
 	.pvflip.up { transform: rotateY(180deg); }
 	.pvface { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; border-radius: 3%; overflow: hidden; }
@@ -1681,7 +1680,7 @@
 	.pvface.back .emblem { flex: 1; display: grid; place-items: center; padding: 12%; }
 	.pvface.back .emblem img { width: 60%; border-radius: 50%; opacity: .85; }
 	.pvface.back .emblem.sym img { width: 74%; border-radius: 0; opacity: 1; filter: drop-shadow(0 2px 4px rgba(0,0,0,.4)); }
-	.pvbar { position: fixed; left: 224px; right: 260px; bottom: calc(var(--dh, 70px) + 4px); z-index: 32; pointer-events: none; display: flex; gap: 8px; justify-content: center; }
+	.pvbar { position: fixed; left: 224px; right: 260px; bottom: calc((var(--db, 12px) + var(--dh, 70px)) / var(--uis, 1) - 8px); zoom: var(--uis, 1); z-index: 32; pointer-events: none; display: flex; gap: 8px; justify-content: center; }
 	.pvbar .act { pointer-events: auto; }
 	.pvcard { touch-action: pan-y; }
 	.pvnav { pointer-events: auto; flex: none; width: 40px; height: 64px; margin: 0 10px; border-radius: 12px; cursor: pointer; font-size: 30px; line-height: 1; color: #f0dcae;
@@ -1692,7 +1691,7 @@
 	.pvdots i.on { background: #f0dcae; box-shadow: 0 0 6px rgba(240,220,174,.8); }
 
 	/* bottom dashboard */
-	.dash { position: absolute; left: var(--dx, 224px); bottom: 12px; width: 1180px; height: 78px; box-sizing: border-box; transform: scale(var(--ds, 1)); transform-origin: bottom left;
+	.dash { position: absolute; left: var(--dx, 224px); bottom: var(--db, 12px); width: 1180px; height: 78px; box-sizing: border-box; transform: scale(var(--ds, 1)); transform-origin: bottom left;
 		z-index: 11; display: flex; align-items: center; gap: 18px; padding: 0 14px; border-radius: 13px; color: #e5e7eb; backdrop-filter: blur(9px);
 		background: linear-gradient(90deg, rgb(var(--tcr) / .2), rgba(9,13,22,.84) 26%, rgba(9,13,22,.84) 74%, rgb(var(--tcr) / .16)); border: 1px solid rgb(var(--tcr) / .55); box-shadow: 0 12px 34px rgba(0,0,0,.5), inset 0 1px 0 rgb(var(--tcl) / .14); }
 	.dleft { flex: none; display: flex; align-items: center; gap: 10px; }
@@ -1748,16 +1747,16 @@
 
 	/* hand floats above the dashboard, with a clear gap */
 	/* --cw = hand card width; scales with the viewport so the fan still fits on a tablet */
-	.tray { --cw: clamp(104px, 10.5vw, 150px); position: absolute; left: 224px; right: 260px; bottom: calc(48px + var(--dh, 70px)); z-index: 10; display: flex; align-items: flex-end; justify-content: center; pointer-events: none;
+	.tray { --cw: calc(150px * var(--uis, 1)); position: absolute; left: calc(224px * var(--uis, 1)); right: calc(260px * var(--uis, 1)); bottom: calc(var(--db, 12px) + var(--dh, 70px) + 36px * var(--uis, 1)); z-index: 10; display: flex; align-items: flex-end; justify-content: center; pointer-events: none;
 		clip-path: inset(-800px -800px -60px -800px);
 		transition: transform .3s cubic-bezier(.3,.7,.2,1), clip-path .3s cubic-bezier(.3,.7,.2,1); }
 	/* auto-hide: sink the hand behind the dash (z 11) so only ~30px of card tips peek
 	   out; the clip keeps the sunk part from showing in the gap under the dash */
-	.tray.retracted { transform: translateY(calc(var(--cw) * 1.396 + 6px)); clip-path: inset(-800px -800px calc(var(--cw) * 1.396 - 30px - var(--dh, 70px)) -800px); }
+	.tray.retracted { transform: translateY(calc(var(--cw) * 1.396 + 6px * var(--uis, 1))); clip-path: inset(-800px -800px calc(var(--cw) * 1.396 - 30px * var(--uis, 1) - var(--dh, 70px)) -800px); }
 	.hc { width: var(--cw); margin: 0 calc(var(--cw) * -0.11); padding: 0; background: none; border: none; cursor: pointer; pointer-events: auto; transform-origin: bottom center; transform: translateY(var(--y)) rotate(var(--rot)); transition: transform .16s; }
 	.hc :global(canvas) { display: block; width: 100%; border-radius: 6%; box-shadow: 0 8px 18px rgba(0,0,0,.55); }
 	/* hovered / tapped card straightens and magnifies so its text is readable */
-	.hc:hover { transform: translateY(calc(var(--y) - 36px)) rotate(0deg) scale(1.45); z-index: 5; }
+	.hc:hover { transform: translateY(calc(var(--y) - 36px * var(--uis, 1))) rotate(0deg) scale(1.45); z-index: 5; }
 	.hc:hover :global(canvas) { box-shadow: 0 14px 34px rgba(0,0,0,.7); }
 	.tray.retracted .hc:hover { transform: translateY(var(--y)) rotate(var(--rot)); } /* the whole hand rises first */
 	/* spread layout: side by side, no overlap; shrink evenly if the hand is wide */
@@ -1866,7 +1865,8 @@
 		box-shadow: 0 2px 5px rgba(0,0,0,.6); transform: translate(calc(var(--i) * 2.5px), calc(var(--i) * 2.5px)); z-index: var(--i); }
 	.disc-card :global(canvas) { display: block; width: 100%; border-radius: 4px; }
 
-	.ppanel.withdash { bottom: calc(22px + var(--dh, 70px)); }
+	/* zoomed: its own insets are in design px, so the real-px dash height is divided back */
+	.ppanel.withdash { bottom: calc(22px + var(--dh, 70px) / var(--uis, 1)); }
 
 	/* ═══════════ phone layout (GameView sets `mobile` at ≤760px) ═══════════
 	   top bar 44px (GameView) · player strip 72px · board · hand tips · dash 68px.
@@ -1967,7 +1967,7 @@
 	@media (max-width: 760px) {
 		.pvwrap { inset: 116px 0 150px 0 !important; }
 		.pvcard { width: min(62vw, 250px); }
-		.pvbar { left: 0 !important; right: 0 !important; bottom: 110px !important; }
+		.pvbar { left: 0 !important; right: 0 !important; bottom: 110px !important; zoom: 1; }
 		.modal, .modal.board, .deckmodal { width: 97vw; max-height: 88vh; padding: 10px; }
 		.turns { gap: 4px; }
 		.tbox { padding: 5px 4px 6px; border-radius: 10px; }
