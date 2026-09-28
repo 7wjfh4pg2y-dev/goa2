@@ -35,7 +35,11 @@ export interface PlayerCardState {
 	upgrade: number[]
 	/** Extra manual +N per stat (rarely needed; stat growth is mostly derived). */
 	items: Partial<Record<StatKey, number>>
+	/** The ultimate is a passive (level 8) — flagged here, never held in hand. */
 	ultimate: boolean
+	/** Cards picked in this round's level-up phase: they can still be swapped for
+	 *  their twin until the round ends; cleared (= locked in) at the next round. */
+	roundPicks?: number[]
 }
 
 /** A place a card can live in a player's collection. */
@@ -266,9 +270,99 @@ export function endRoundAll(
 	return out
 }
 
-/** Unlock the ultimate (level-8 step): no card swap, just flip the flag + level. */
+/** Unlock the ultimate (level-8 step): a passive, so it only flips the flag + level. */
 export function unlockUltimate(s: PlayerCardState): PlayerCardState {
-	const ult = ultimateIndex(s.hero)
-	const hand = ult >= 0 && !s.hand.includes(ult) ? [...s.hand, ult].sort((a, b) => a - b) : s.hand
-	return { ...s, level: s.level + 1, ultimate: true, hand }
+	return { ...s, level: s.level + 1, ultimate: true, hand: s.hand.filter((i) => i !== ultimateIndex(s.hero)) }
+}
+
+// ── level-up rules ────────────────────────────────────────────────────────────
+// Level-ups happen in the end-of-round phase after the minion battle and are
+// forced: while you can afford the next level you must take it. One card of each
+// colour is held at a time. Levels 2–4 each take a Tier II of a colour that is
+// still on Tier I; levels 5–7 each take a Tier III of a colour on Tier II (so no
+// Tier III before all three Tier IIs); level 8 unlocks the ultimate. A pick puts
+// the card in hand, its twin under the board as an item, and removes the card it
+// replaces. Picks made this round can be swapped for their twin until the round
+// ends. A hero who couldn't level up at all gets a pity coin.
+
+export const MAX_LEVEL = 8
+export const COLOURS = ['RED', 'BLUE', 'GREEN'] as const
+
+/** Coins it costs to go from `lvl` to lvl + 1. */
+export const levelCost = (lvl: number) => lvl
+
+/** The tier the next level-up takes: 2 (levels 2–4), 3 (levels 5–7), 4 = the ultimate, 0 = maxed. */
+export function pickTier(s: PlayerCardState): number {
+	const n = levelOf(s) + 1
+	return n <= 4 ? 2 : n <= 7 ? 3 : n === MAX_LEVEL ? 4 : 0
+}
+
+const heldList = (s: PlayerCardState) =>
+	[...s.hand, ...s.discard, ...s.turns, s.pending].filter((i): i is number => i != null && i >= 0)
+
+/** Highest tier held (hand, played, discarded or face down) in a colour; 1 if none. */
+export function tierIn(s: PlayerCardState, color: string): number {
+	const cards = heroCards(s.hero)
+	return Math.max(1, ...heldList(s).filter((i) => cards[i]?.color === color).map((i) => cards[i]?.level ?? 1))
+}
+
+/** The other card of the same colour and tier (the one that becomes the item), or -1. */
+export function twinOf(hero: string, idx: number): number {
+	const cards = heroCards(hero)
+	const c = cards[idx]
+	if (!c || !isColor(c.color, ...COLOURS) || (c.level ?? 1) < 2) return -1
+	return cards.findIndex((x, i) => i !== idx && !x.handicapped && x.color === c.color && (x.level ?? 1) === (c.level ?? 1))
+}
+
+/** Is `idx` a legal pick for the next level (ignoring coins)? */
+export function canPick(s: PlayerCardState, idx: number): boolean {
+	const t = pickTier(s)
+	const c = heroCards(s.hero)[idx]
+	if (!t || !c || c.handicapped) return false
+	if (t === 4) return c.color === 'PURPLE' && !s.ultimate && COLOURS.every((col) => tierIn(s, col) >= 3)
+	return isColor(c.color, ...COLOURS) && (c.level ?? 1) === t && tierIn(s, c.color) === t - 1 &&
+		!s.removed.includes(idx) && !s.upgrade.includes(idx) && !heldList(s).includes(idx)
+}
+
+/** Can this hero pay for the next level? */
+export const canAfford = (s: PlayerCardState) => pickTier(s) > 0 && s.coins >= levelCost(levelOf(s))
+
+/** Forced level-up: affordable and there is a legal pick. */
+export function mustLevel(s: PlayerCardState): boolean {
+	return canAfford(s) && heroCards(s.hero).some((_, i) => canPick(s, i))
+}
+
+/** Level up by picking `idx` (a Tier II/III card, or the ultimate at level 8); pays the cost. */
+export function levelUp(s: PlayerCardState, idx: number): PlayerCardState {
+	if (!canAfford(s) || !canPick(s, idx)) return s
+	const cost = levelCost(levelOf(s))
+	const next = heroCards(s.hero)[idx]?.color === 'PURPLE' ? { ...s, ultimate: true } : takeUpgrade(s, idx)
+	return { ...next, coins: s.coins - cost, level: levelOf(next), roundPicks: [...(s.roundPicks ?? []), idx] }
+}
+
+/** The pick (made this round, still held) whose twin is `idx`, if `idx` can be swapped in. */
+export function swapSource(s: PlayerCardState, idx: number): number | null {
+	if (!s.upgrade.includes(idx)) return null
+	const p = (s.roundPicks ?? []).find((q) => twinOf(s.hero, q) === idx)
+	return p != null && heldList(s).includes(p) ? p : null
+}
+
+/** Swap a pick made this round for its twin: the twin comes to hand, the pick becomes the item. */
+export function swapPick(s: PlayerCardState, idx: number): PlayerCardState {
+	const p = swapSource(s, idx)
+	if (p == null) return s
+	let next: PlayerCardState = {
+		...s,
+		discard: s.discard.filter((i) => i !== p),
+		turns: s.turns.map((i) => (i === p ? null : i)),
+		pending: s.pending === p ? null : s.pending
+	}
+	next = moveCard(moveCard(next, idx, 'hand'), p, 'upgrade')
+	return { ...next, roundPicks: (s.roundPicks ?? []).map((q) => (q === p ? idx : q)) }
+}
+
+/** Round end after the level-up phase: lock in this round's picks; no level-up = a pity coin. */
+export function closeLevelPhase(s: PlayerCardState): PlayerCardState {
+	const leveled = (s.roundPicks ?? []).length > 0
+	return { ...s, coins: leveled ? s.coins : s.coins + 1, roundPicks: [] }
 }

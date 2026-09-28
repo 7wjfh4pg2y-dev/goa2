@@ -18,7 +18,8 @@
 	import { heroAvatar, heroLogo, heroSplash } from '$lib/heroes';
 	import { detectDuration, endOf, effectLabel, DUR_LABEL, type Effect, type EffectDur } from '$lib/effects';
 	import { HERO_KIT, COMPANIONS, MINES, statusFrom, toggleStatusMarker, tokenName, type ArmToken } from '$lib/tokens';
-	import { PASS, statDeltas, levelOf, ultimateIndex, type PlayerCardState, type StatKey, type CardZone } from '$lib/cards/cardstate';
+	import { PASS, statDeltas, levelOf, levelCost, ultimateIndex, mustLevel, canPick, canAfford, swapSource, twinOf, type PlayerCardState, type StatKey, type CardZone } from '$lib/cards/cardstate';
+	import LevelConfirm from '$lib/LevelConfirm.svelte';
 
 	export let session: MatchSession;
 	export let ms: Readable<MatchState>;
@@ -144,6 +145,20 @@
 	$: battlePhase = $ms.battlePhase ?? false;
 	// the battle hands every card back (like a round end) so players can level up / swap now
 	function startBattle() { session.act('the minion battle begins — cards return to hand', battlePatch($ms)); }
+	// then the level-up phase: forced while you can afford it (the deck opens by
+	// itself), and the host's "Next round" waits until everyone present is done
+	$: levelWaiting = battlePhase ? seatedWithCards.filter((p) => mustLevel(cards[p.id])) : [];
+	$: iMustLevel = battlePhase && !!mine && mustLevel(mine);
+	let autoOpened = false;
+	$: if (!battlePhase) autoOpened = false;
+	$: if (iMustLevel && !autoOpened) { autoOpened = true; deckOpen = true; deckTab = 'deck'; }
+	// phone level-up / swap confirmation
+	let lvConfirm: { kind: 'take' | 'swap'; idx: number } | null = null;
+	function confirmLevel() {
+		if (lvConfirm && mine) session.cardAction({ kind: lvConfirm.kind, pid: clientId, idx: lvConfirm.idx });
+		lvConfirm = null; deckSel = null;
+	}
+	const canTakeNow = (cs: PlayerCardState, i: number) => battlePhase && canAfford(cs) && canPick(cs, i);
 
 	// "Round X" banner that pops for a few seconds when a new round starts
 	let roundBanner = 0;
@@ -371,7 +386,6 @@
 	}
 	// the ultimate (PURPLE) card — shown separately, unlocked at level 8
 	$: myUlt = mine ? ultimateIndex(mine.hero) : -1;
-	function toggleUlt(on: boolean) { if (mine) session.cardAction({ kind: 'ult', pid: clientId, on }); }
 	// double-click any card in the deck view to examine it full size
 	function examineCard(hid: string, idx: number) { if (idx >= 0) examine = { hid, idx }; }
 
@@ -579,6 +593,8 @@
 				<button class="act primary" on:click={onAdvanceTurn}>Next turn →</button>
 			{:else if !battlePhase}
 				<button class="act primary" on:click={startBattle}>Minion Battle</button>
+			{:else if levelWaiting.length}
+				<span class="waithost" title="Level-ups are forced while a hero can afford them">Waiting for {levelWaiting.map((p) => p.name).join(', ')} to level up…</span>
 			{:else}
 				<button class="act primary" on:click={onAdvanceTurn}>Next round →</button>
 			{/if}
@@ -813,8 +829,10 @@
 	<!-- ───────── desktop deck: upgrade tree + every card as a banner ───────── -->
 	{#if deckOpen && mine && !mobile}
 		<DeckView cs={mine} teamStyle={teamVars(myTeam)} onClose={() => { deckOpen = false; deckSel = null; }}
-			onMove={(i, to) => moveTo(i, to)} onTake={(i) => session.cardAction({ kind: 'take', pid: clientId, idx: i })}
-			onPreview={(i) => mine && examineCard(mine.hero, i)} onUlt={toggleUlt} />
+			levelPhase={battlePhase} onMove={(i, to) => moveTo(i, to)}
+			onTake={(i) => session.cardAction({ kind: 'take', pid: clientId, idx: i })}
+			onSwap={(i) => session.cardAction({ kind: 'swap', pid: clientId, idx: i })}
+			onPreview={(i) => mine && examineCard(mine.hero, i)} />
 	{/if}
 
 	<!-- ───────── phone deck view: tabs across the four zones ───────── -->
@@ -832,6 +850,14 @@
 						<div class="mtt">{mobile ? 'Tap a card, then choose where it goes' : 'Select a card, then send it to your hand, upgrade area or removed pile'}</div>
 					</div>
 					<button class="ix" on:click={() => { deckOpen = false; deckSel = null; }}>✕</button>
+				</div>
+				<div class="dklv" class:hot={iMustLevel}>
+					<span class="dkcoin"></span><b>{mine.coins}</b>
+					{#if levelOf(mine) >= 8}Max level — ultimate active
+					{:else if iMustLevel}⬆ Level up! {levelOf(mine)} → {levelOf(mine) + 1} costs {levelCost(levelOf(mine))} · pick a glowing card
+					{:else if battlePhase && (mine.roundPicks ?? []).length}Levelled up · swap this round's pick until the round ends
+					{:else if battlePhase}Not enough coins · +1 pity coin at round end
+					{:else}Next level costs {levelCost(levelOf(mine))} · after the minion battle{/if}
 				</div>
 				{#if mobile}
 					<div class="dktabs" role="tablist">
@@ -884,9 +910,9 @@
 									<span>{mine.ultimate ? 'Unlocked · tap to read' : 'Unlocks at level 8 · tap to preview'}</span>
 								</div>
 								{#if mine.ultimate}
-									<button class="act ghost sm" on:click={() => toggleUlt(false)}>Re-lock</button>
-								{:else if levelOf(mine) >= 7}
-									<button class="act sm ultbtn" on:click={() => toggleUlt(true)}>Unlock ★</button>
+									<span class="hs-seal">★</span>
+								{:else if canTakeNow(mine, myUlt)}
+									<button class="act sm ultbtn" on:click={() => (lvConfirm = { kind: 'take', idx: myUlt })}>Unlock ★</button>
 								{:else}
 									<span class="hs-seal">🔒</span>
 								{/if}
@@ -903,7 +929,7 @@
 						{#each row as cell (cell.color + cell.level + cell.first)}
 							{#if cell.idx >= 0}
 								{@const z = zoneOf(mine, cell.idx)}
-								<button class="dkcard" class:sel={deckSel === cell.idx} class:zhand={z === 'hand'} class:zupg={z === 'upgrade'} class:zrem={z === 'removed'} class:zdeck={z === null}
+								<button class="dkcard" class:zpick={canTakeNow(mine, cell.idx)} class:sel={deckSel === cell.idx} class:zhand={z === 'hand'} class:zupg={z === 'upgrade'} class:zrem={z === 'removed'} class:zdeck={z === null}
 									on:click={() => (deckSel = cell.idx)} on:dblclick={() => examineCard(dh, cell.idx)}>
 									<Card heroId={dh} card={heroCards(dh)[cell.idx]} />
 									{#if z === 'hand'}<span class="dkbadge hand">In hand</span>
@@ -965,16 +991,27 @@
 						<!-- one row: preview · destinations · cancel -->
 						<div class="dkacts">
 							{#if mobile}<button class="act ghost sm" on:click={() => examineCard(dh, deckSel!)}>Preview</button>{/if}
+							{#if canTakeNow(mine, deckSel)}
+								{@const tw = twinOf(dh, deckSel)}
+								<button class="act tohand sm lvtake" on:click={() => (lvConfirm = { kind: 'take', idx: deckSel! })}>Take{#if tw >= 0 && heroCards(dh)[tw]?.item} · +1 <img src={statIcon(heroCards(dh)[tw]?.item)} alt="" />{/if}</button>
+							{:else if battlePhase && swapSource(mine, deckSel) != null}
+								<button class="act tohand sm lvtake" on:click={() => (lvConfirm = { kind: 'swap', idx: deckSel! })}>Swap to this path</button>
+							{:else}
 							{#if selZone !== 'hand'}<button class="act tohand sm" on:click={() => moveTo(deckSel!, 'hand')}>→ Hand</button>{/if}
 							{#if selZone !== 'upgrade'}<button class="act sm" on:click={() => moveTo(deckSel!, 'upgrade')}>→ Upgrade</button>{/if}
-							{#if selZone !== 'removed'}<button class="act danger sm" on:click={() => moveTo(deckSel!, 'removed')}>→ Removed</button>{/if}
 							{#if selInGrid && selZone !== null}<button class="act todeck sm" on:click={() => moveTo(deckSel!, 'deck')}>→ Deck</button>{/if}
+							{#if selZone !== 'removed'}<button class="act danger sm" on:click={() => moveTo(deckSel!, 'removed')}>→ Remove</button>{/if}
+							{/if}
 							<button class="act ghost sm" on:click={() => (deckSel = null)}>Cancel</button>
 						</div>
 					</div>
 				{/if}
 			</div>
 		</div>
+	{/if}
+
+	{#if lvConfirm && mine && mobile}
+		<div class="lvwrap"><LevelConfirm cs={mine} idx={lvConfirm.idx} kind={lvConfirm.kind} teamStyle={teamVars(myTeam)} onConfirm={confirmLevel} onCancel={() => (lvConfirm = null)} /></div>
 	{/if}
 
 	<!-- ───────── centered preview of a picked hand card ───────── -->
@@ -1065,7 +1102,7 @@
 						{/if}
 					{:else}<span class="mtrash">{@html TRASH}</span>{/if}
 				</span>
-				<button class="msl mdeck" on:click={() => (deckOpen = true)} title="Your deck — {deckCards(mine).length} cards"><img src={heroLogo(mine.hero)} alt="" /><b>{deckCards(mine).length}</b></button>
+				<button class="msl mdeck" class:lvup={iMustLevel} on:click={() => (deckOpen = true)} title="Your deck — {deckCards(mine).length} cards"><img src={heroLogo(mine.hero)} alt="" /><b>{deckCards(mine).length}</b></button>
 			</div>
 			<div class="mact">{@render actionBody()}</div>
 			</div>
@@ -1150,7 +1187,7 @@
 				{@render tokenCtl()}
 
 				<!-- your deck (face-down stack) and, once unlocked, your ultimate -->
-				<button class="deckstack" on:click={() => (deckOpen = true)} title="View & manage your deck">
+				<button class="deckstack" class:lvup={iMustLevel} on:click={() => (deckOpen = true)} title="View & manage your deck">
 					<span class="ds-card ds3"></span>
 					<span class="ds-card ds2"></span>
 					<span class="ds-card ds1"><img src={heroLogo(mine.hero)} alt="" /></span>
@@ -1576,6 +1613,18 @@
 	.hs-lv i { flex: 1; height: 6px; border-radius: 3px; background: rgba(255,255,255,.12); }
 	.hs-lv i.on { background: #b482f0; box-shadow: 0 0 5px rgba(180,130,240,.7); }
 	.hs-seal { font-size: 1.1rem; }
+	/* level-up phase */
+	.dklv { display: flex; align-items: center; gap: 6px; margin: 0 0 8px; padding: 6px 10px; border-radius: 9px; font-size: .74rem; color: #93a3b8; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08); }
+	.dklv b { color: #fbe7b0; margin-right: 6px; }
+	.dkcoin { width: 14px; height: 14px; flex: none; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff3c4, #e8b64a 45%, #9a6a18); box-shadow: 0 0 0 1px #6b4a10; }
+	.dklv.hot { color: #1a1206; background: linear-gradient(180deg, #f0c060, #c98a26); border-color: #fbe7b0; }
+	.dklv.hot b { color: #1a1206; }
+	.dkcard.zpick { box-shadow: 0 0 0 2px #f0c060, 0 0 14px rgba(240,192,96,.7); }
+	.lvtake { flex: 2 1 auto; white-space: nowrap; }
+	.lvtake img { width: 16px; height: 12px; object-fit: contain; vertical-align: middle; }
+	.lvwrap { position: fixed; inset: 0; z-index: 45; }
+	.deckstack.lvup, .mdeck.lvup { animation: deckpulse 1.4s ease-in-out infinite; border-radius: 6px; }
+	@keyframes deckpulse { 0%, 100% { box-shadow: 0 0 0 2px rgba(240,192,96,.5); } 50% { box-shadow: 0 0 0 2px #f0c060, 0 0 18px rgba(240,192,96,.9); } }
 	/* keep the bottom of the last row reachable above the sticky bar */
 	.mob .dkzones, .mob .dkgrid, .mob .dkhand { margin-bottom: 12px; }
 
