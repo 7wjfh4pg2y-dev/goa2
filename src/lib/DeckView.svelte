@@ -95,7 +95,7 @@
 	// fixed design size, scaled to the window
 	const DW = 1420, DH = 920;
 	let vw = 1440, vh = 900;
-	$: scale = Math.min((vw - 32) / DW, (vh - 32) / DH, 1.25);
+	$: scale = Math.min((vw - 32) / DW, (vh - 32) / DH, 2.2);
 
 	// tree geometry (px): three colour columns, the side panel to their right
 	const GUT = 88, CGAP = 22, PANEL = 252, PGAP = 26, CARDS_W = 1392 - GUT - PANEL - PGAP;
