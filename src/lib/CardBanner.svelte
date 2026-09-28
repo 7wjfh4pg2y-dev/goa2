@@ -3,6 +3,7 @@
 	// marker with the card's value printed over its action icon, the name, and the
 	// secondary stats underneath. The ultimate shows an 8-segment level bar instead.
 	import { heroCards, backgroundSlug } from '$lib/cards/deck';
+	import ultGear from '$lib/images/ult_gear.png';
 
 	export let heroId: string;
 	export let idx: number;
@@ -34,7 +35,7 @@
 {#if c}
 	<button class="bn" class:dim class:sel class:ult={isUlt} class:on={isUlt && unlocked} style="--c:{COL[c.color] ?? '#888'}" on:click on:dblclick title={c.name}>
 		<span class="mark">
-			{#if act}<img src={ic(`${act}_${clr}`)} alt={c.primaryAction} />{:else}<span class="iv">IV</span>{/if}
+			{#if act}<img src={ic(`${act}_${clr}`)} alt={c.primaryAction} />{:else if isUlt}<img class="gear" src={ultGear} alt="Ultimate" />{:else}<span class="iv">IV</span>{/if}
 			{#if c.primaryValue != null}<b>{c.primaryValue}</b>{/if}
 		</span>
 		<span class="body" style="background-image: linear-gradient(90deg, #0d121c 34%, rgba(13,18,28,.6) 64%, rgba(13,18,28,.2)), url({art})">
@@ -68,6 +69,7 @@
 	.mark img { grid-area: 1 / 1; width: calc(var(--bh) * .82); height: calc(var(--bh) * .74); object-fit: contain; filter: drop-shadow(0 1px 2px #000); }
 	/* the value printed over its icon, dead centre of the coloured part */
 	.mark b { grid-area: 1 / 1; position: relative; z-index: 1; font-weight: normal; font-size: calc(var(--bh) * .5); line-height: 1; color: #fff; -webkit-text-stroke: calc(var(--bh) * .075) #10131a; paint-order: stroke fill; text-shadow: 0 1px 3px rgba(0,0,0,.8); }
+	.mark img.gear { width: calc(var(--bh) * .78); height: calc(var(--bh) * .78); }
 	.iv { grid-area: 1 / 1; font-size: calc(var(--bh) * .34); color: #e6d2ff; letter-spacing: .06em; }
 	.body { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: calc(var(--bh) * .07); padding: 0 calc(var(--bh) * .2) 0 calc(var(--bh) * .22);
 		background-size: 100%, 58%; background-position: 0 0, right 32%; background-repeat: no-repeat; }

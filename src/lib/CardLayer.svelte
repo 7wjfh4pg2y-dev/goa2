@@ -458,7 +458,20 @@
 	// "hide" then tucks them against the right edge, only the coloured markers showing
 	const PREF_BANNERS = 'goa2-hand-banners';
 	let bannerHand = readPref(PREF_BANNERS, false);
-	function toggleBanners() { bannerHand = !bannerHand; writePref(PREF_BANNERS, bannerHand); handUp = false; }
+	// phone hand button cycles: fanned cards → spread cards → banners → fanned …
+	function cycleHandStyle() {
+		if (bannerHand) { bannerHand = false; spreadHand = false; }
+		else if (spreadHand) { bannerHand = true; spreadHand = false; }
+		else spreadHand = true;
+		writePref(PREF_BANNERS, bannerHand); writePref(PREF_SPREAD, spreadHand); handUp = false; bannerOpen = null;
+	}
+	// hidden banners: each one tucks on its own — tap one to pull it out (the last
+	// one goes back), tap it again to read it, tap anywhere else to tuck them all
+	let bannerOpen: number | null = null;
+	function bannerTap(key: number, open: () => void) {
+		if (autoRetract && bannerOpen !== key) { bannerOpen = key; return; }
+		open();
+	}
 
 	// The dash is ONE fixed layout (DASH_W × DASH_H css px) on every screen and
 	// browser, scaled as a whole to the room between the left HUD and the window's
@@ -491,7 +504,8 @@
 	// tapping anywhere outside the hand tucks it away again
 	function onWindowDown(e: PointerEvent) {
 		const t = e.target as Element | null;
-		if (handUp && !t?.closest?.('.tray, .bstack')) handUp = false;
+		if (handUp && !t?.closest?.('.tray')) handUp = false;
+		if (bannerOpen != null && !t?.closest?.('.bstack, .pvwrap, .pvbar, .scrim2')) bannerOpen = null;
 		if (discOpen && !t?.closest?.('.discwrap')) discOpen = null;
 		// token shelf: close on any outside click — except the click that drops a held token
 		if (radiusOpen && !t?.closest?.('.radwrap')) radiusOpen = false;
@@ -997,21 +1011,25 @@
 		<!-- ───────── phone: hand tips above a compact dash ───────── -->
 		{#if bannerHand}
 			<!-- hand as banners (+ the ultimate and its level bar); hidden = tucked to the right edge, markers showing -->
-			<div class="bstack" class:tucked={retracted}>
+			<div class="bstack">
 				{#each handOrdered as idx (idx)}
-					<CardBanner heroId={mine.hero} {idx} sel={selected === idx} on:click={() => handCardClick(idx)} />
+					<div class="bwrap" class:tucked={autoRetract && bannerOpen !== idx}>
+						<CardBanner heroId={mine.hero} {idx} sel={selected === idx} on:click={() => bannerTap(idx, () => preview(idx))} />
+					</div>
 				{/each}
 				{#if myUlt >= 0}
 					<span class="bsgap"></span>
-					<CardBanner heroId={mine.hero} idx={myUlt} level={levelOf(mine)} unlocked={mine.ultimate} dim={!mine.ultimate && !retracted}
-						on:click={() => (retracted ? (handUp = true) : examineCard(mine.hero, myUlt))} />
+					<div class="bwrap" class:tucked={autoRetract && bannerOpen !== myUlt}>
+						<CardBanner heroId={mine.hero} idx={myUlt} level={levelOf(mine)} unlocked={mine.ultimate} dim={!mine.ultimate}
+							on:click={() => bannerTap(myUlt, () => mine && examineCard(mine.hero, myUlt))} />
+					</div>
 				{/if}
 			</div>
 		{:else}
-			<div class="tray mob" class:retracted>
+			<div class="tray mob" class:retracted class:spread={spreadHand}>
 				{#each handOrdered as idx, k (idx)}
 					{@const f = fan(k, handOrdered.length)}
-					<button class="hc" style="--rot:{f.rot}deg; --y:{f.y}px" on:click={() => handCardClick(idx)}>
+					<button class="hc" style="--rot:{spreadHand ? 0 : f.rot}deg; --y:{spreadHand ? 0 : f.y}px" on:click={() => handCardClick(idx)}>
 						<Card heroId={mine.hero} card={heroCards(mine.hero)[idx]} />
 					</button>
 				{/each}
@@ -1048,7 +1066,7 @@
 						{/if}
 					{:else}<span class="mtrash">{@html TRASH}</span>{/if}
 				</span>
-				<button class="msl mdeck" on:click={() => (deckOpen = true)} title="Your deck"><b>{deckCards(mine).length}</b></button>
+				<button class="msl mdeck" on:click={() => (deckOpen = true)} title="Your deck — {deckCards(mine).length} cards"><img src={heroLogo(mine.hero)} alt="" /><b>{deckCards(mine).length}</b></button>
 			</div>
 			<div class="mact">{@render actionBody()}</div>
 			</div>
@@ -1063,10 +1081,12 @@
 						{#if autoRetract}<path d="M9 18.5l3 3 3-3" />{:else}<path d="M9 21.5l3-3 3 3" />{/if}
 					</svg>
 				</button>
-				<button class="mb" class:on={bannerHand} on:click={toggleBanners} aria-label="Fan / banner hand" title={bannerHand ? 'Banners — tap to fan the cards' : 'Fanned — tap for banners'}>
+				<button class="mb" class:on={bannerHand || spreadHand} on:click={cycleHandStyle} aria-label="Hand style: fan, spread or banners" title={bannerHand ? 'Banners — tap to fan the cards' : spreadHand ? 'Spread — tap for banners' : 'Fanned — tap to spread'}>
 					<svg viewBox="0 0 24 24" fill="rgba(9,13,22,.9)" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true">
 						{#if bannerHand}
 							<path d="M3 4.5h18v4H3z" /><path d="M3 10h18v4H3z" /><path d="M3 15.5h18v4H3z" /><path d="M7 4.5v15" fill="none" />
+						{:else if spreadHand}
+							<rect x="1.5" y="6" width="6.2" height="10" rx="1.2" /><rect x="8.9" y="6" width="6.2" height="10" rx="1.2" /><rect x="16.3" y="6" width="6.2" height="10" rx="1.2" />
 						{:else}
 							<rect x="8.5" y="4" width="7" height="11" rx="1.3" transform="rotate(-22 12 21)" />
 							<rect x="8.5" y="4" width="7" height="11" rx="1.3" transform="rotate(22 12 21)" />
@@ -1906,7 +1926,10 @@
 	.mtrash :global(svg) { width: 100%; }
 	.mdeck { height: 36px; padding: 0; border-radius: 4px; cursor: pointer; display: grid; place-items: center; border: 1px solid rgba(120,95,55,.6);
 		background: radial-gradient(115% 78% at 50% 40%, #fdfcf8, #efe9db 62%, #ddd4c1); box-shadow: 2px 2px 0 #cbbf9f, 3px 3px 0 #b9ad8c; }
-	.mdeck b { font-weight: normal; font-size: 12px; color: #3a2604; font-variant-numeric: tabular-nums; }
+	.mdeck { position: relative; overflow: visible; }
+	.mdeck img { width: 78%; max-height: 78%; object-fit: contain; filter: drop-shadow(0 1px 2px rgba(0,0,0,.35)); }
+	.mdeck b { position: absolute; right: -5px; bottom: -5px; min-width: 15px; height: 15px; padding: 0 3px; box-sizing: border-box; border-radius: 8px; display: grid; place-items: center;
+		font-weight: normal; font-size: 9px; line-height: 1; color: #fff; background: #1c140a; border: 1px solid #c79a4e; font-variant-numeric: tabular-nums; box-shadow: 0 1px 3px rgba(0,0,0,.6); }
 	.mbtns { flex: none; display: grid; grid-template-columns: repeat(2, 36px); grid-template-rows: repeat(3, 18px); gap: 3px; }
 	.mb, .mbtns .radbtn, .mbtns .tokbtn { width: 36px; height: 18px; box-sizing: border-box; padding: 0; border-radius: 5px; display: inline-flex; align-items: center; justify-content: center; gap: 1px;
 		font-size: 9.5px; color: #f6e3b4; background: rgba(199,154,78,.16); border: 1px solid rgba(199,154,78,.45); cursor: pointer; }
@@ -1934,7 +1957,8 @@
 	.bstack { --bw: clamp(230px, 72vw, 320px); position: absolute; right: 6px; bottom: 80px; z-index: 10; width: var(--bw); display: flex; flex-direction: column; gap: 3px;
 		transition: transform .28s cubic-bezier(.2,.8,.2,1); filter: drop-shadow(0 6px 14px rgba(0,0,0,.6)); }
 	.bstack :global(.bn) { --bh: clamp(34px, 5.2vh, 44px); }
-	.bstack.tucked { transform: translateX(calc(var(--bw) - clamp(34px, 5.2vh, 44px) * 1.4 + 4px)); }
+	.bwrap { transition: transform .26s cubic-bezier(.2,.8,.2,1); }
+	.bwrap.tucked { transform: translateX(calc(var(--bw) - clamp(34px, 5.2vh, 44px) * 1.4 + 4px)); }
 	.bsgap { height: 4px; }
 	.tray.mob { --cw: 62px; left: 0; right: 0; bottom: 72px; justify-content: center; }
 	.tray.mob.retracted { transform: translateY(calc(var(--cw) * 1.396 - 30px)); clip-path: inset(-800px -800px calc(var(--cw) * 1.396 - 30px) -800px); }
