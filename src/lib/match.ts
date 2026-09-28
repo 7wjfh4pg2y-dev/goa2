@@ -28,7 +28,9 @@ import {
 	undiscard,
 	revealPlayer,
 	endRoundAll,
-	takeUpgrade,
+	levelUp,
+	swapPick,
+	closeLevelPhase,
 	addCoins,
 	moveCard,
 	levelOf,
@@ -45,7 +47,8 @@ export type CardReq =
 	| { kind: 'coins'; pid: string; delta: number }
 	| { kind: 'cardmove'; pid: string; idx: number; to: CardZone } // move a card between hand/deck/upgrade/removed
 	| { kind: 'ult'; pid: string; on: boolean } // unlock / relock the ultimate (level 8)
-	| { kind: 'take'; pid: string; idx: number } // level-up pick: card → hand, twin → item, older card → removed
+	| { kind: 'take'; pid: string; idx: number } // level-up pick (level-up phase only, pays coins): card → hand, twin → item, older card → removed
+	| { kind: 'swap'; pid: string; idx: number } // level-up phase: swap this round's pick for its twin (idx = the twin)
 	| { kind: 'forcepass'; pid: string } // host: pass everyone not yet committed
 	| { kind: 'advance'; pid: string } // host: lock this turn's cards into their slots, go to next turn
 
@@ -80,7 +83,10 @@ export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 			// round over: hands refresh, and the board is swept of tokens and markers
 			const pieces: Record<string, Piece> = {}
 			for (const id in s.pieces ?? {}) if (keepsThroughRound(s.pieces[id])) pieces[id] = s.pieces[id]
-			return { cards: endRoundAll(migrated), round: s.round + 1, turn: 1, battlePhase: false, pieces, status: {}, radii: {}, effects: expireEffects(s.effects, s.round, s.turn) }
+			// the level-up phase closes with the round: picks lock in, no level-up = pity coin
+			let next = endRoundAll(migrated)
+			if (s.battlePhase) next = Object.fromEntries(Object.entries(next).map(([pid, c]) => [pid, closeLevelPhase(c)]))
+			return { cards: next, round: s.round + 1, turn: 1, battlePhase: false, pieces, status: {}, radii: {}, effects: expireEffects(s.effects, s.round, s.turn) }
 		}
 		return { cards: migrated, turn: s.turn + 1, radii: {}, effects: expireEffects(s.effects, s.round, s.turn) }
 	}
@@ -96,7 +102,8 @@ export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 	else if (req.kind === 'coins') next = addCoins(cs, req.delta)
 	else if (req.kind === 'cardmove') next = moveCard(cs, req.idx, req.to)
 	else if (req.kind === 'ult') next = { ...cs, ultimate: req.on }
-	else if (req.kind === 'take') next = takeUpgrade(cs, req.idx)
+	else if (req.kind === 'take') { if (!s.battlePhase) return {}; next = levelUp(cs, req.idx) }
+	else if (req.kind === 'swap') { if (!s.battlePhase) return {}; next = swapPick(cs, req.idx) }
 	return { cards: { ...cards, [req.pid]: next } }
 }
 
@@ -1015,7 +1022,10 @@ export function joinMatch(
 		for (const pid in patch.cards ?? {}) {
 			const before = local.cards?.[pid], after = patch.cards![pid]
 			if (before && after && levelOf(after) > levelOf(before)) note(pid, `reached Level ${levelOf(after)} ⬆`)
+			if (req.kind === 'advance' && local.battlePhase && before && after && !(before.roundPicks ?? []).length && after.coins > before.coins)
+				note(pid, `couldn't level up — pity coin +1 → ${after.coins}`)
 		}
+		if (req.kind === 'swap' && patch.cards?.[req.pid]) note(req.pid, 'swapped a level-up pick for its twin')
 		// lingering effects that just ran out
 		if (patch.effects) {
 			const kept = new Set(patch.effects.map((e) => e.id))

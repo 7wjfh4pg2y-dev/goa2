@@ -78,5 +78,13 @@ describe('minion battle', () => {
 		const after = applyCardReq({ ...s, cards: p.cards, battlePhase: true } as MatchState, { kind: 'advance', pid: 'a' })
 		expect(after.cards!.a.hand).toEqual([0, 1, 2, 3, 4, 5])
 		expect(after.round).toBe(2)
+		expect(after.cards!.a.coins).toBe(1) // no level-up this round → pity coin
+	})
+
+	it('only allows level-ups in the phase after the battle', () => {
+		const cs = { hero: 'arien', level: 1, coins: 3, ultimate: false, hand: [], turns: [null, null, null, null], pending: null, discard: [], upgrade: [], removed: [], items: {} }
+		const s = { turn: 4, round: 1, pieces: {}, cards: { a: cs } } as unknown as MatchState
+		const red2 = 2 // any card index works for the gate check
+		expect(applyCardReq(s, { kind: 'take', pid: 'a', idx: red2 })).toEqual({})
 	})
 })

@@ -86,6 +86,7 @@
 	onMount(async () => {
 		if (!browser) return;
 		await Promise.all([preloadImages(), document.fonts.load('16px "Modesto Poster"'), document.fonts.ready]);
+		if (!canvas) return; // unmounted while the fonts / art were loading
 		ctx = canvas.getContext('2d');
 		loadedKey = artKey;
 		bg = await loadBg();
