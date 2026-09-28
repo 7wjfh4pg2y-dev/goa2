@@ -87,6 +87,34 @@ export function moveCard(s: PlayerCardState, idx: number, to: CardZone): PlayerC
 const isColor = (c: string, ...want: string[]) => want.includes(c)
 
 /**
+ * Level-up pick: take a Tier II/III card into hand. Its twin (the other card of
+ * the same colour and tier) goes to the upgrade area as an item, and the lower
+ * tier card of that colour you held is removed — wherever it currently sits
+ * (hand, a played turn, the discard, or face-down). One atomic step, so a
+ * level-up can never be half-applied.
+ */
+export function takeUpgrade(s: PlayerCardState, idx: number): PlayerCardState {
+	const cards = heroCards(s.hero)
+	const c = cards[idx]
+	if (!c) return s
+	const lvl = c.level ?? 1
+	if (!isColor(c.color, 'RED', 'BLUE', 'GREEN') || lvl < 2) return moveCard(s, idx, 'hand')
+	const older = (i: number | null): i is number => i != null && i !== idx && cards[i]?.color === c.color && (cards[i]?.level ?? 1) < lvl
+	const held = [...s.hand, ...s.discard, ...s.turns, s.pending].filter(older)
+	let next: PlayerCardState = {
+		...s,
+		discard: s.discard.filter((i) => !held.includes(i)),
+		turns: s.turns.map((i) => (i != null && held.includes(i) ? null : i)),
+		pending: s.pending != null && held.includes(s.pending) ? null : s.pending
+	}
+	next = moveCard(next, idx, 'hand')
+	for (const o of held) next = moveCard(next, o, 'removed')
+	const twin = cards.findIndex((x, i) => i !== idx && !x.handicapped && x.color === c.color && (x.level ?? 1) === lvl)
+	if (twin >= 0 && !next.hand.includes(twin) && !next.removed.includes(twin)) next = moveCard(next, twin, 'upgrade')
+	return next
+}
+
+/**
  * The starting five: the GOLD basic, the SILVER basic, and the three Tier-I
  * (level 1) coloured cards — blue, red, green.
  */
