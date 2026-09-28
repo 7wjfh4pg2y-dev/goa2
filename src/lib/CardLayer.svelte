@@ -9,6 +9,7 @@
 	import type { MatchSession, MatchState, Player } from '$lib/match';
 	import { teamForSeat, colorHex, battlePatch } from '$lib/match';
 	import Card from '$lib/cards/Card.svelte';
+	import DeckView from '$lib/DeckView.svelte';
 	import TurnSlot from '$lib/cards/TurnSlot.svelte';
 	import PlayerIcon from '$lib/PlayerIcon.svelte';
 	import { heroCards, heroName, heroTitle, heroStat } from '$lib/cards/deck';
@@ -790,8 +791,15 @@
 		</div>
 	{/if}
 
-	<!-- ───────── deck view: manage your cards across the four zones ───────── -->
-	{#if deckOpen && mine}
+	<!-- ───────── desktop deck: upgrade tree + every card as a banner ───────── -->
+	{#if deckOpen && mine && !mobile}
+		<DeckView cs={mine} teamStyle={teamVars(myTeam)} onClose={() => { deckOpen = false; deckSel = null; }}
+			onMove={(i, to) => moveTo(i, to)} onTake={(i) => session.cardAction({ kind: 'take', pid: clientId, idx: i })}
+			onPreview={(i) => mine && examineCard(mine.hero, i)} onUlt={toggleUlt} />
+	{/if}
+
+	<!-- ───────── phone deck view: tabs across the four zones ───────── -->
+	{#if deckOpen && mine && mobile}
 		{@const dh = mine.hero}
 		{@const split = handSplit(mine)}
 		{@const selZone = deckSel != null ? zoneOf(mine, deckSel) : null}
@@ -866,42 +874,6 @@
 							</div>
 						{/if}
 					</div>
-				{/if}
-
-				<!-- HAND (desktop): ultimate parked far left, then basics, then colour cards -->
-				{#if !mobile}
-				<div class="dklabel">Your hand <span class="ct">{mine.hand.length}</span> <span class="zhint">double-click any card to enlarge it</span></div>
-				<div class="dkhand">
-					<!-- Ultimate: never in hand; previewable; unlock appears once you hit level 8 -->
-					{#if myUlt >= 0}
-						<div class="ultslot" class:on={mine.ultimate}>
-							<button class="dkcard ult" class:locked={!mine.ultimate} on:click={() => mobile && examineCard(dh, myUlt)} on:dblclick={() => examineCard(dh, myUlt)} title="Double-click to preview your ultimate">
-								<Card heroId={dh} card={heroCards(dh)[myUlt]} />
-								{#if !mine.ultimate}<span class="ultlock">🔒 Lv 8</span>{/if}
-							</button>
-							{#if mine.ultimate}
-								<button class="act ghost sm" on:click={() => toggleUlt(false)}>Re-lock</button>
-							{:else if levelOf(mine) >= 7}
-								<button class="act sm ultbtn" on:click={() => toggleUlt(true)}>Unlock ★</button>
-							{/if}
-						</div>
-						<span class="dkpart tall" title="Ultimate"></span>
-					{/if}
-
-					{#each split.basics as i (i)}
-						<div class="dkcard basic" title="Basic card — stays in your hand" on:click={() => mobile && examineCard(dh, i)} on:dblclick={() => examineCard(dh, i)} role="presentation">
-							<Card heroId={dh} card={heroCards(dh)[i]} />
-							<span class="dklock">🔒</span>
-						</div>
-					{/each}
-					{#if split.basics.length}<span class="dkpart" title="Basics stay in hand"></span>{/if}
-					{#each split.rest as i (i)}
-						<button class="dkcard" class:sel={deckSel === i} on:click={() => (deckSel = i)} on:dblclick={() => examineCard(dh, i)}>
-							<Card heroId={dh} card={heroCards(dh)[i]} />
-						</button>
-					{/each}
-					{#if !split.rest.length}<span class="empty-note">—</span>{/if}
-				</div>
 				{/if}
 
 				<!-- UPGRADE DECK grid (fixed positions; status shows where each card is) -->
@@ -1461,7 +1433,6 @@
 	.dkhand { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px; border-radius: 12px; background: rgba(239,125,34,.08); border: 1px solid rgba(239,125,34,.25); min-height: 40px; align-items: center; }
 	.dkgrid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
 	.dkcard { position: relative; width: 100%; padding: 0; background: none; border: none; cursor: pointer; border-radius: 6px; overflow: hidden; box-shadow: 0 3px 8px rgba(0,0,0,.5); transition: transform .12s; }
-	.dkhand .dkcard { width: 72px; }
 	.dkcard.sm { width: 58px; }
 	.dkcard:hover { transform: translateY(-4px); z-index: 2; }
 	.dkcard :global(canvas) { display: block; width: 100%; border-radius: 6px; }
@@ -1479,7 +1450,6 @@
 	.dkcard.ult.locked { filter: grayscale(.85) brightness(.5); }
 	.dkcard.ult.locked:hover { transform: none; }
 	.ultlock { position: absolute; inset: 0; display: grid; place-items: center; font-size: .6rem; font-weight: 800; letter-spacing: .04em; color: #e9dcff; background: rgba(20,10,35,.5); }
-	.ultslot.on .dkcard.ult { box-shadow: 0 0 0 2px #b482f0, 0 0 16px rgba(165,110,230,.75), 0 6px 16px rgba(0,0,0,.55); }
 	.ultbtn { background: linear-gradient(180deg, rgba(165,110,230,.3), rgba(165,110,230,.16)); border-color: rgba(180,130,240,.6); color: #efe0ff; }
 	/* grid card status: available = bright, placed elsewhere = tinted + dim */
 	/* the deck grid shows what's still available: cards in the deck are bright; ones already moved out dim, with a badge saying where */
@@ -1525,7 +1495,7 @@
 	.mob .zhint { display: none; }
 	.mob .dkcard:hover { transform: none; }
 	.mob .dkhand { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; align-items: start; }
-	.mob .dkhand .dkcard, .mob .dkcard.ult, .mob .dkcard.sm { width: 100%; }
+	.mob .dkcard.ult, .mob .dkcard.sm { width: 100%; }
 	.mob .dkpart { display: none; }
 	.mob .ultslot { grid-column: span 1; }
 	.mob .dkgrid { grid-template-columns: repeat(3, 1fr); }

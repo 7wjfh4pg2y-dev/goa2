@@ -13,6 +13,8 @@ import {
 	addCoins,
 	applyLevelUp,
 	unlockUltimate,
+	takeUpgrade,
+	levelOf,
 	TURNS_PER_ROUND
 } from './cardstate'
 import { heroCards } from './deck'
@@ -130,5 +132,31 @@ describe('initCards', () => {
 		const cards = initCards({ p1: 'arien', p2: 'brogan', p3: '' })
 		expect(Object.keys(cards).sort()).toEqual(['p1', 'p2'])
 		expect(cards.p1.hero).toBe('arien')
+	})
+})
+
+describe('takeUpgrade (level-up pick)', () => {
+	const cards = heroCards('arien')
+	const of = (color: string, lvl: number) => cards.map((c, i) => ({ c, i })).filter((x) => x.c.color === color && (x.c.level ?? 1) === lvl && !x.c.handicapped).map((x) => x.i)
+	it('takes the card, turns its twin into an item and removes the older card', () => {
+		const s = newPlayerCardState('arien')
+		const [a, b] = of('RED', 2)
+		const [red1] = of('RED', 1)
+		const n = takeUpgrade(s, a)
+		expect(n.hand).toContain(a)
+		expect(n.hand).not.toContain(red1)
+		expect(n.removed).toEqual([red1])
+		expect(n.upgrade).toEqual([b])
+		expect(levelOf(n)).toBe(2)
+	})
+	it('pulls the older card out of a played turn too', () => {
+		let s = newPlayerCardState('arien')
+		const [blue1] = of('BLUE', 1)
+		s = revealTurn(commitCard(s, blue1), 0)
+		const [x] = of('BLUE', 2)
+		const n = takeUpgrade(s, x)
+		expect(n.turns[0]).toBeNull()
+		expect(n.removed).toContain(blue1)
+		expect(n.hand).toContain(x)
 	})
 })
