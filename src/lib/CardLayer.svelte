@@ -10,6 +10,7 @@
 	import { teamForSeat, colorHex, battlePatch } from '$lib/match';
 	import Card from '$lib/cards/Card.svelte';
 	import DeckView from '$lib/DeckView.svelte';
+	import CardBanner from '$lib/CardBanner.svelte';
 	import TurnSlot from '$lib/cards/TurnSlot.svelte';
 	import PlayerIcon from '$lib/PlayerIcon.svelte';
 	import { heroCards, heroName, heroTitle, heroStat } from '$lib/cards/deck';
@@ -453,6 +454,11 @@
 	function toggleRetract() { autoRetract = !autoRetract; writePref(PREF_RETRACT, autoRetract); handUp = false; }
 	function toggleSpread() { spreadHand = !spreadHand; writePref(PREF_SPREAD, spreadHand); }
 	let dockHand = readPref(PREF_DOCK, false);
+	// phone: the fan button turns the hand into a stack of banners (hand + ultimate);
+	// "hide" then tucks them against the right edge, only the coloured markers showing
+	const PREF_BANNERS = 'goa2-hand-banners';
+	let bannerHand = readPref(PREF_BANNERS, false);
+	function toggleBanners() { bannerHand = !bannerHand; writePref(PREF_BANNERS, bannerHand); handUp = false; }
 
 	// The dash is ONE fixed layout (DASH_W × DASH_H css px) on every screen and
 	// browser, scaled as a whole to the room between the left HUD and the window's
@@ -485,7 +491,7 @@
 	// tapping anywhere outside the hand tucks it away again
 	function onWindowDown(e: PointerEvent) {
 		const t = e.target as Element | null;
-		if (handUp && !t?.closest?.('.tray')) handUp = false;
+		if (handUp && !t?.closest?.('.tray, .bstack')) handUp = false;
 		if (discOpen && !t?.closest?.('.discwrap')) discOpen = null;
 		// token shelf: close on any outside click — except the click that drops a held token
 		if (radiusOpen && !t?.closest?.('.radwrap')) radiusOpen = false;
@@ -989,14 +995,28 @@
 	<!-- ───────── bottom: hand floats ABOVE the dashboard (unless docked) ───────── -->
 	{#if mine && mobile}
 		<!-- ───────── phone: hand tips above a compact dash ───────── -->
-		<div class="tray mob" class:retracted class:spread={spreadHand}>
-			{#each handOrdered as idx, k (idx)}
-				{@const f = fan(k, handOrdered.length)}
-				<button class="hc" style="--rot:{spreadHand ? 0 : f.rot}deg; --y:{spreadHand ? 0 : f.y}px" on:click={() => handCardClick(idx)}>
-					<Card heroId={mine.hero} card={heroCards(mine.hero)[idx]} />
-				</button>
-			{/each}
-		</div>
+		{#if bannerHand}
+			<!-- hand as banners (+ the ultimate and its level bar); hidden = tucked to the right edge, markers showing -->
+			<div class="bstack" class:tucked={retracted}>
+				{#each handOrdered as idx (idx)}
+					<CardBanner heroId={mine.hero} {idx} sel={selected === idx} on:click={() => handCardClick(idx)} />
+				{/each}
+				{#if myUlt >= 0}
+					<span class="bsgap"></span>
+					<CardBanner heroId={mine.hero} idx={myUlt} level={levelOf(mine)} unlocked={mine.ultimate} dim={!mine.ultimate && !retracted}
+						on:click={() => (retracted ? (handUp = true) : examineCard(mine.hero, myUlt))} />
+				{/if}
+			</div>
+		{:else}
+			<div class="tray mob" class:retracted>
+				{#each handOrdered as idx, k (idx)}
+					{@const f = fan(k, handOrdered.length)}
+					<button class="hc" style="--rot:{f.rot}deg; --y:{f.y}px" on:click={() => handCardClick(idx)}>
+						<Card heroId={mine.hero} card={heroCards(mine.hero)[idx]} />
+					</button>
+				{/each}
+			</div>
+		{/if}
 		<div class="mdash" class:ultdash={mine.ultimate} style={teamVars(myTeam)}>
 			<div class="mdl">
 				<div class="mdtop">
@@ -1043,10 +1063,10 @@
 						{#if autoRetract}<path d="M9 18.5l3 3 3-3" />{:else}<path d="M9 21.5l3-3 3 3" />{/if}
 					</svg>
 				</button>
-				<button class="mb" class:on={spreadHand} on:click={toggleSpread} aria-label="Fan / spread hand" title={spreadHand ? 'Spread — tap to fan' : 'Fanned — tap to spread'}>
+				<button class="mb" class:on={bannerHand} on:click={toggleBanners} aria-label="Fan / banner hand" title={bannerHand ? 'Banners — tap to fan the cards' : 'Fanned — tap for banners'}>
 					<svg viewBox="0 0 24 24" fill="rgba(9,13,22,.9)" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true">
-						{#if spreadHand}
-							<rect x="1.5" y="6" width="6.2" height="10" rx="1.2" /><rect x="8.9" y="6" width="6.2" height="10" rx="1.2" /><rect x="16.3" y="6" width="6.2" height="10" rx="1.2" />
+						{#if bannerHand}
+							<path d="M3 4.5h18v4H3z" /><path d="M3 10h18v4H3z" /><path d="M3 15.5h18v4H3z" /><path d="M7 4.5v15" fill="none" />
 						{:else}
 							<rect x="8.5" y="4" width="7" height="11" rx="1.3" transform="rotate(-22 12 21)" />
 							<rect x="8.5" y="4" width="7" height="11" rx="1.3" transform="rotate(22 12 21)" />
@@ -1910,6 +1930,12 @@
 	.mact .fxb.dur { padding: 0 6px; }
 	.mact .waithost { max-width: none; white-space: nowrap; font-size: .68rem; }
 	/* hand tips: fixed card size; hidden = just the tops peek above the dash */
+	/* phone banner hand: a stack on the right above the dash; tucked = slid right, only the markers peek out */
+	.bstack { --bw: clamp(230px, 72vw, 320px); position: absolute; right: 6px; bottom: 80px; z-index: 10; width: var(--bw); display: flex; flex-direction: column; gap: 3px;
+		transition: transform .28s cubic-bezier(.2,.8,.2,1); filter: drop-shadow(0 6px 14px rgba(0,0,0,.6)); }
+	.bstack :global(.bn) { --bh: clamp(34px, 5.2vh, 44px); }
+	.bstack.tucked { transform: translateX(calc(var(--bw) - clamp(34px, 5.2vh, 44px) * 1.4 + 4px)); }
+	.bsgap { height: 4px; }
 	.tray.mob { --cw: 62px; left: 0; right: 0; bottom: 72px; justify-content: center; }
 	.tray.mob.retracted { transform: translateY(calc(var(--cw) * 1.396 - 30px)); clip-path: inset(-800px -800px calc(var(--cw) * 1.396 - 30px) -800px); }
 
