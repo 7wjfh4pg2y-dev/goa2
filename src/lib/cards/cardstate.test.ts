@@ -21,6 +21,8 @@ import {
 	swapSource,
 	twinOf,
 	closeLevelPhase,
+	allowedMoves,
+	manualMove,
 	takeUpgrade,
 	levelOf,
 	TURNS_PER_ROUND
@@ -234,5 +236,41 @@ describe('level-up rules', () => {
 		expect(closeLevelPhase(rich(0)).coins).toBe(1)
 		const s = levelUp(rich(1), at('RED', 2)[0])
 		expect(closeLevelPhase(s).coins).toBe(0)
+	})
+})
+
+describe('manual moves', () => {
+	const H = 'arien'
+	const cards = heroCards(H)
+	const at = (color: string, level: number) => cards.map((c, i) => ({ c, i })).filter(({ c }) => c.color === color && (c.level ?? 1) === level && !c.handicapped).map(({ i }) => i)
+
+	it('Tier I only leaves the hand to Removed, and only comes back to the hand', () => {
+		let s = newPlayerCardState(H)
+		const [r1] = at('RED', 1)
+		expect(allowedMoves(s, r1)).toEqual(['removed'])
+		expect(manualMove(s, r1, 'upgrade')).toBe(s)
+		expect(manualMove(s, r1, 'deck')).toBe(s)
+		s = manualMove(s, r1, 'removed')
+		expect(s.removed).toContain(r1)
+		expect(allowedMoves(s, r1)).toEqual(['hand'])
+	})
+
+	it('Tier II moves between hand and upgrades only; sent to hand it keeps one card per colour', () => {
+		let s = newPlayerCardState(H)
+		const [a, b] = at('RED', 2)
+		expect(allowedMoves(s, a)).toEqual(['hand', 'upgrade'])
+		s = manualMove(s, a, 'hand')
+		expect(s.hand).toContain(a)
+		expect(s.upgrade).toContain(b)
+		expect(s.removed).toContain(at('RED', 1)[0])
+		expect(allowedMoves(s, a)).toEqual(['upgrade']) // held: no manual Remove / Deck
+		expect(manualMove(s, a, 'removed')).toBe(s)
+		expect(allowedMoves(s, b)).toEqual(['hand'])
+	})
+
+	it('basics and the ultimate never move', () => {
+		const s = newPlayerCardState(H)
+		expect(allowedMoves(s, cards.findIndex((c) => c.color === 'GOLD'))).toEqual([])
+		expect(allowedMoves(s, ultimateIndex(H))).toEqual([])
 	})
 })

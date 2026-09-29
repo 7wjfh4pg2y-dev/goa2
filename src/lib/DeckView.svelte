@@ -15,7 +15,7 @@
 	import { heroCards } from '$lib/cards/deck';
 	import { heroSplash, heroLogo, HERO_BY_ID } from '$lib/heroes';
 	import {
-		levelOf, levelCost, statDeltas, ultimateIndex, pickTier, tierIn, canPick, canAfford, mustLevel, swapSource, twinOf,
+		levelOf, levelCost, statDeltas, ultimateIndex, pickTier, tierIn, canPick, canAfford, mustLevel, swapSource, twinOf, allowedMoves,
 		MAX_LEVEL, type PlayerCardState, type CardZone, type StatKey
 	} from '$lib/cards/cardstate';
 
@@ -111,12 +111,12 @@
 	function ask(kind: 'take' | 'swap', idx: number) { confirm = { kind, idx }; sel = null; }
 	function doConfirm() { if (!confirm) return; (confirm.kind === 'take' ? onTake : onSwap)(confirm.idx); confirm = null; hov = null; }
 
-	// manual moves, in this order; the card's own zone is left out; basics never leave the hand
+	// manual moves allowed for this card (cardstate.allowedMoves), in this order
+	const MOVE_BTNS: Array<[CardZone, string, string, string]> = [['hand', '→ Hand', 'H', 'hand'], ['upgrade', '→ Upgrade', 'U', 'upg'], ['deck', '→ Deck', 'D', 'deck'], ['removed', '→ Remove', 'R', 'rem']];
 	$: moves = (i: number | null): Array<[CardZone, string, string, string]> => {
-		if (i == null || isBasic(i) || i === ult) return [];
-		const z = zoneOf(i);
-		const all: Array<[CardZone, string, string, string]> = [['hand', '→ Hand', 'H', 'hand'], ['upgrade', '→ Upgrade', 'U', 'upg'], ['deck', '→ Deck', 'D', 'deck'], ['removed', '→ Remove', 'R', 'rem']];
-		return all.filter(([to]) => !(to === 'hand' && z === 'held') && !(to === 'upgrade' && z === 'upgrade') && !(to === 'removed' && z === 'removed') && !(to === 'deck' && z === null));
+		if (i == null) return [];
+		const ok = allowedMoves(cs, i);
+		return MOVE_BTNS.filter(([to]) => ok.includes(to));
 	};
 	function onKey(e: KeyboardEvent) {
 		const t = e.target as HTMLElement | null;
@@ -284,7 +284,7 @@
 						{/each}
 					</div>
 				{:else if sel != null}
-					<p class="hint">{isBasic(sel) ? 'Basics always stay in your hand.' : 'Your ultimate is levelled into, not moved.'}</p>
+					<p class="hint">{isBasic(sel) ? 'Basics always stay in your hand.' : sel === ult ? 'Your ultimate is levelled into, not moved.' : 'Leaves your hand only by levelling up.'}</p>
 				{:else}
 					<p class="hint">Select a card to move it by hand</p>
 				{/if}

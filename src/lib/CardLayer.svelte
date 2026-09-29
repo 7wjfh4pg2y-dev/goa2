@@ -18,7 +18,7 @@
 	import { heroAvatar, heroLogo, heroSplash } from '$lib/heroes';
 	import { detectDuration, endOf, effectLabel, DUR_LABEL, type Effect, type EffectDur } from '$lib/effects';
 	import { HERO_KIT, COMPANIONS, MINES, statusFrom, toggleStatusMarker, tokenName, type ArmToken } from '$lib/tokens';
-	import { PASS, statDeltas, levelOf, levelCost, ultimateIndex, mustLevel, canPick, canAfford, swapSource, twinOf, type PlayerCardState, type StatKey, type CardZone } from '$lib/cards/cardstate';
+	import { PASS, statDeltas, levelOf, levelCost, ultimateIndex, mustLevel, canPick, canAfford, swapSource, twinOf, allowedMoves, type PlayerCardState, type StatKey, type CardZone } from '$lib/cards/cardstate';
 	import LevelConfirm from '$lib/LevelConfirm.svelte';
 
 	export let session: MatchSession;
@@ -997,10 +997,11 @@
 							{:else if battlePhase && swapSource(mine, deckSel) != null}
 								<button class="act tohand sm lvtake" on:click={() => (lvConfirm = { kind: 'swap', idx: deckSel! })}>Swap to this path</button>
 							{:else}
-							{#if selZone !== 'hand'}<button class="act tohand sm" on:click={() => moveTo(deckSel!, 'hand')}>→ Hand</button>{/if}
-							{#if selZone !== 'upgrade'}<button class="act sm" on:click={() => moveTo(deckSel!, 'upgrade')}>→ Upgrade</button>{/if}
-							{#if selInGrid && selZone !== null}<button class="act todeck sm" on:click={() => moveTo(deckSel!, 'deck')}>→ Deck</button>{/if}
-							{#if selZone !== 'removed'}<button class="act danger sm" on:click={() => moveTo(deckSel!, 'removed')}>→ Remove</button>{/if}
+							{@const ok = allowedMoves(mine, deckSel)}
+							{#if ok.includes('hand')}<button class="act tohand sm" on:click={() => moveTo(deckSel!, 'hand')}>→ Hand</button>{/if}
+							{#if ok.includes('upgrade')}<button class="act sm" on:click={() => moveTo(deckSel!, 'upgrade')}>→ Upgrade</button>{/if}
+							{#if ok.includes('deck')}<button class="act todeck sm" on:click={() => moveTo(deckSel!, 'deck')}>→ Deck</button>{/if}
+							{#if ok.includes('removed')}<button class="act danger sm" on:click={() => moveTo(deckSel!, 'removed')}>→ Remove</button>{/if}
 							{/if}
 							<button class="act ghost sm" on:click={() => (deckSel = null)}>Cancel</button>
 						</div>
