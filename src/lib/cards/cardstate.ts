@@ -384,15 +384,22 @@ export function allowedMoves(s: PlayerCardState, idx: number): CardZone[] {
 	return ['hand', 'upgrade']
 }
 
-/** Apply a manual move if it's allowed. A Tier II/III card sent to the hand keeps
- *  one card per colour: its twin goes to the upgrade area, the lower card is removed. */
+/** Apply a manual move if it's allowed, keeping one card per colour in hand:
+ *  - a Tier II/III sent to the hand: its twin goes to upgrades, the lower-tier card
+ *    of that colour is removed;
+ *  - a Tier II/III sent to upgrades: its twin comes to the hand instead (and the
+ *    lower-tier card is removed) — the other path of the same pick. */
 export function manualMove(s: PlayerCardState, idx: number, to: CardZone): PlayerCardState {
 	if (!allowedMoves(s, idx).includes(to)) return s
 	const lvl = heroCards(s.hero)[idx]?.level ?? 1
+	// the card may be sitting in a played slot / the discard / face down
+	const out = (x: PlayerCardState, i: number): PlayerCardState =>
+		({ ...x, discard: x.discard.filter((j) => j !== i), turns: x.turns.map((j) => (j === i ? null : j)), pending: x.pending === i ? null : x.pending })
 	if (to === 'hand' && lvl >= 2) return takeUpgrade(s, idx)
-	if (to === 'removed') {
-		// a Tier I leaving the hand may be sitting in a played slot / discard / face down
-		s = { ...s, discard: s.discard.filter((i) => i !== idx), turns: s.turns.map((i) => (i === idx ? null : i)), pending: s.pending === idx ? null : s.pending }
+	if (to === 'upgrade' && lvl >= 2) {
+		const next = moveCard(out(s, idx), idx, 'upgrade')
+		const tw = twinOf(s.hero, idx)
+		return tw >= 0 ? takeUpgrade(next, tw) : next
 	}
-	return moveCard(s, idx, to)
+	return moveCard(to === 'removed' ? out(s, idx) : s, idx, to)
 }

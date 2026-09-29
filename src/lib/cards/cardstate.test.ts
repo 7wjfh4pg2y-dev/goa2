@@ -268,6 +268,37 @@ describe('manual moves', () => {
 		expect(allowedMoves(s, b)).toEqual(['hand'])
 	})
 
+	it('sending a Tier II to upgrades brings its twin to hand and removes the Tier I', () => {
+		let s = newPlayerCardState(H)
+		const [a, b] = at('RED', 2)
+		s = manualMove(s, a, 'upgrade')
+		expect(s.upgrade).toContain(a)
+		expect(s.hand).toContain(b)
+		expect(s.removed).toContain(at('RED', 1)[0])
+		expect(s.hand).not.toContain(at('RED', 1)[0])
+		// and back: the held one goes up, the other path comes down
+		s = manualMove(s, b, 'upgrade')
+		expect(s.hand).toContain(a)
+		expect(s.upgrade).toContain(b)
+		expect(s.upgrade).not.toContain(a)
+	})
+
+	it('Tier III does the same against the Tier II', () => {
+		let s = newPlayerCardState(H)
+		const [r2] = at('RED', 2)
+		const [c, d] = at('RED', 3)
+		s = manualMove(s, r2, 'hand')
+		s = manualMove(s, c, 'hand')
+		expect(s.hand).toContain(c)
+		expect(s.upgrade).toContain(d)
+		expect(s.removed).toContain(r2)
+		expect(s.hand.filter((i) => cards[i].color === 'RED')).toEqual([c])
+		s = manualMove(s, c, 'upgrade')
+		expect(s.hand).toContain(d)
+		expect(s.upgrade).toContain(c)
+		expect(s.hand.filter((i) => cards[i].color === 'RED')).toEqual([d])
+	})
+
 	it('basics and the ultimate never move', () => {
 		const s = newPlayerCardState(H)
 		expect(allowedMoves(s, cards.findIndex((c) => c.color === 'GOLD'))).toEqual([])
