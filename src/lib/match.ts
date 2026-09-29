@@ -29,10 +29,10 @@ import {
 	revealPlayer,
 	endRoundAll,
 	levelUp,
+	manualMove,
 	swapPick,
 	closeLevelPhase,
 	addCoins,
-	moveCard,
 	levelOf,
 	type CardZone
 } from './cards/cardstate'
@@ -100,7 +100,7 @@ export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 	else if (req.kind === 'defend') next = discardCard(cs, req.idx)
 	else if (req.kind === 'undiscard') next = undiscard(cs, req.idx)
 	else if (req.kind === 'coins') next = addCoins(cs, req.delta)
-	else if (req.kind === 'cardmove') next = moveCard(cs, req.idx, req.to)
+	else if (req.kind === 'cardmove') next = manualMove(cs, req.idx, req.to)
 	else if (req.kind === 'ult') next = { ...cs, ultimate: req.on }
 	else if (req.kind === 'take') { if (!s.battlePhase) return {}; next = levelUp(cs, req.idx) }
 	else if (req.kind === 'swap') { if (!s.battlePhase) return {}; next = swapPick(cs, req.idx) }

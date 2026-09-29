@@ -366,3 +366,33 @@ export function closeLevelPhase(s: PlayerCardState): PlayerCardState {
 	const leveled = (s.roundPicks ?? []).length > 0
 	return { ...s, coins: leveled ? s.coins : s.coins + 1, roundPicks: [] }
 }
+
+/**
+ * Manual moves a card may make (the deck view's Hand / Upgrade / Deck / Remove):
+ * - basics and the ultimate never move;
+ * - Tier I: out of the hand only to Removed, and back to the hand;
+ * - Tier II / III: between the hand and the upgrade area (a held one is only
+ *   removed by levelling into the next tier — that's the level-up, not a move).
+ */
+export function allowedMoves(s: PlayerCardState, idx: number): CardZone[] {
+	const c = heroCards(s.hero)[idx]
+	if (!c || !isColor(c.color, ...COLOURS)) return []
+	const held = heldList(s).includes(idx)
+	if ((c.level ?? 1) === 1) return held ? ['removed'] : ['hand']
+	if (held) return ['upgrade']
+	if (s.upgrade.includes(idx)) return ['hand']
+	return ['hand', 'upgrade']
+}
+
+/** Apply a manual move if it's allowed. A Tier II/III card sent to the hand keeps
+ *  one card per colour: its twin goes to the upgrade area, the lower card is removed. */
+export function manualMove(s: PlayerCardState, idx: number, to: CardZone): PlayerCardState {
+	if (!allowedMoves(s, idx).includes(to)) return s
+	const lvl = heroCards(s.hero)[idx]?.level ?? 1
+	if (to === 'hand' && lvl >= 2) return takeUpgrade(s, idx)
+	if (to === 'removed') {
+		// a Tier I leaving the hand may be sitting in a played slot / discard / face down
+		s = { ...s, discard: s.discard.filter((i) => i !== idx), turns: s.turns.map((i) => (i === idx ? null : i)), pending: s.pending === idx ? null : s.pending }
+	}
+	return moveCard(s, idx, to)
+}
