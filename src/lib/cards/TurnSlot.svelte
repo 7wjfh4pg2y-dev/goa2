@@ -47,7 +47,7 @@
 	.slot { width: 100%; aspect-ratio: 3 / 4; border: none; padding: 0; background: none; display: block; perspective: 700px; }
 	.slot.btn { cursor: zoom-in; }
 	.slot.thru { pointer-events: none; }
-	.static :global(canvas) { display: block; width: 100%; border-radius: 6%; box-shadow: 0 3px 8px rgba(0, 0, 0, 0.5); }
+	.static :global(.cardface) { display: block; width: 100%; border-radius: 6%; box-shadow: 0 3px 8px rgba(0, 0, 0, 0.5); }
 	.slot.blank { display: grid; place-items: center; border: 1px dashed rgba(255, 255, 255, 0.14); border-radius: 5px;
 		background: rgba(255, 255, 255, 0.02); color: #3d4a5e; font-size: 0.62rem; font-weight: 700; }
 	.slot.blank.cur { border-color: rgba(239, 180, 106, 0.5); color: #8b9bb0; }
@@ -58,7 +58,7 @@
 	.flip.up { transform: rotateY(180deg); }
 	.face { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; border-radius: 6%; overflow: hidden; }
 	.face.front { transform: rotateY(180deg); }
-	.face.front :global(canvas) { display: block; width: 100%; border-radius: 6%; }
+	.face.front :global(.cardface) { display: block; width: 100%; border-radius: 6%; }
 	/* white card back with grey bands + hero emblem (matches the big overlay back) */
 	.back { display: flex; flex-direction: column;
 		background: repeating-linear-gradient(135deg, rgba(90, 70, 40, 0.04) 0 1px, transparent 1px 5px), radial-gradient(115% 78% at 50% 40%, #fdfcf8, #efe9db 62%, #ddd4c1 100%);
