@@ -438,7 +438,7 @@
 	.back .band.top::after { bottom: 0; } .back .band.bot::after { top: 0; }
 	.back .emblem { flex: 1; display: grid; place-items: center; }
 	.back .emblem img { width: 72%; filter: drop-shadow(0 2px 4px rgba(0,0,0,.4)); }
-	.iinfo { flex: none; height: 96px; box-sizing: border-box; overflow: hidden; display: flex; flex-direction: column; gap: 5px; padding: 8px 10px; border-radius: 10px; background: rgba(255,255,255,.035); border: 1px solid rgba(255,255,255,.08); box-shadow: inset 3px 0 0 var(--c); }
+	.iinfo { flex: none; height: 112px; box-sizing: border-box; overflow: hidden; display: flex; flex-direction: column; gap: 5px; padding: 8px 10px; border-radius: 10px; background: rgba(255,255,255,.035); border: 1px solid rgba(255,255,255,.08); box-shadow: inset 3px 0 0 var(--c); }
 	.in1 { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
 	.in1 b { font-weight: normal; font-size: 1rem; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 	.in1 em { flex: none; margin-left: auto; font-style: normal; font-size: .66rem; color: #93a3b8; }
@@ -450,9 +450,9 @@
 	.k { flex: none; width: 58px; font-style: normal; font-size: .6rem; text-align: center; padding: 1px 0; border-radius: 5px; letter-spacing: .06em; text-transform: uppercase; background: var(--tc, #ef7d22); color: #fff; }
 	.k.it { background: #3f7fe0; }
 	.k.rm { background: rgba(220,60,60,.35); color: #ffc9c9; }
-	.iact { flex: none; min-height: 40px; display: flex; flex-direction: column; justify-content: center; gap: 6px; }
+	.iact { flex: none; min-height: 30px; display: flex; flex-direction: column; justify-content: center; gap: 6px; }
 	.agrid { display: flex; gap: 5px; } .agrid .a { flex: 1; }
-	.a { height: 30px; padding: 0 6px; border-radius: 8px; border: 1px solid rgba(255,255,255,.2); background: rgba(255,255,255,.08); color: #e5e7eb; font-size: .72rem; display: flex; align-items: center; justify-content: center; gap: 5px; white-space: nowrap; cursor: pointer; }
+	.a { height: 24px; padding: 0 6px; border-radius: 7px; border: 1px solid rgba(255,255,255,.2); background: rgba(255,255,255,.08); color: #e5e7eb; font-size: .72rem; display: flex; align-items: center; justify-content: center; gap: 5px; white-space: nowrap; cursor: pointer; }
 	.a:hover { filter: brightness(1.15); }
 	.a.hand { background: var(--tc, #ef7d22); border-color: transparent; color: #fff; }
 	.a.upg { background: rgba(63,127,224,.22); border-color: rgba(63,127,224,.55); color: #cfe3ff; }
