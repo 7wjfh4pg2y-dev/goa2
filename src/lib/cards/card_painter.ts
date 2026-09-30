@@ -858,22 +858,33 @@ const cardImageModules = import.meta.glob("./images/cards/*/*.webp", { eager: tr
 let cardDescriptionIndent = 490
 let descriptionFontSizeAdjustment = 0
 
+// Frame parts load once, up front. Token / rune / marker / tie-breaker / life art
+// only ever appears as ::emoji:: inside card text, so those load on demand
+// (`loadImages`) — the first card no longer waits for ~40 unrelated images.
+const EMOJI_ONLY = /^(token_|rune_|marker_|tiebreaker_|life_counters)/
+const baseLoads = new Map<string, Promise<unknown>>()
+function loadBase(imageName: string): Promise<unknown> {
+  let p = baseLoads.get(imageName)
+  if (!p) {
+    const path = baseImageModules[`./images/${imageName}.png`]
+    if (path == null) return Promise.resolve()
+    const image = new Image()
+    image.src = path
+    images.set(imageName, image)
+    // resolve on error too, so one missing image can't stall every card forever
+    p = new Promise(resolve => { image.onload = resolve; image.onerror = resolve })
+    baseLoads.set(imageName, p)
+  }
+  return p
+}
 let preloaded: Promise<unknown> | null = null
 /** Load the frame parts once (every caller shares the same promise). */
 export function preloadImages() {
-  return (preloaded ??= Promise.all(
-    imageNames.map(async (imageName: string) => {
-      const path = baseImageModules[`./images/${imageName}.png`]
-      if (path == null) {
-        return
-      }
-      const image = new Image()
-      image.src = path
-      images.set(imageName, image)
-      // resolve on error too, so one missing frame part can't stall every card forever
-      await new Promise(resolve => { image.onload = resolve; image.onerror = resolve })
-    })
-  ))
+  return (preloaded ??= Promise.all(imageNames.filter((n) => !EMOJI_ONLY.test(n)).map(loadBase)))
+}
+/** Load specific images by name (e.g. the ::emoji:: a card's text uses). */
+export function loadImages(names: string[]) {
+  return Promise.all(names.map(loadBase))
 }
 
 export async function importCardImage(hero: string, card: string) {

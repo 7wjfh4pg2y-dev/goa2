@@ -1,18 +1,8 @@
 /** @type {import("tailwindcss").Config}*/
 const config = {
-	content: [
-		'./src/**/*.{html,js,svelte,ts}',
-		'./node_modules/flowbite-svelte/**/*.{html,js,svelte,ts}'
-	],
-
-	safelist: [
-		{
-			pattern: /top-.+/
-		},
-		{
-			pattern: /bg-.+/
-		}
-	],
+	// The app styles itself (scoped Svelte CSS) and uses no Tailwind utility classes;
+	// only the base layer (preflight + Flowbite's form resets) is kept, see app.postcss.
+	content: ['./src/**/*.{html,js,svelte,ts}'],
 
 	plugins: [require('flowbite/plugin')],
 
