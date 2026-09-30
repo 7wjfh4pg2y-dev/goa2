@@ -1,12 +1,13 @@
-// Card faces are painted ONCE per (hero, card, options) and shared as an image URL.
+// Card faces are painted ONCE per (hero, card, options) and shared.
 //
 // Painting a card (frame art + text layout on a 1192×1664 canvas) is the most
 // expensive thing the UI does, and the same card shows up in many places at once
-// (hand, dash, deck tree, inspector, previews, other players' boards). Every
-// <Card> used to own a full-size canvas (~8 MB each) and repaint on every mount —
-// e.g. on every hover in the deck view. Now the first request paints into a
-// scratch canvas, encodes it to a blob, and every <Card> for that face shows the
-// same <img> URL: one paint, one decode, a fraction of the memory.
+// (hand, dash, deck tree, inspector, previews, other players' boards). The first
+// request paints a full-resolution MASTER (kept as an uncompressed ImageBitmap —
+// no lossy encode, no slow PNG/WebP compression); every <Card> then just copies
+// the master into its own small canvas at the size it's shown (a ~1 ms drawImage).
+// A small LRU bounds memory; `prewarm` paints a whole deck up front (used on the
+// matchup splash, like a loading screen).
 import { images, importCardImage, loadImages, preloadImages, updateCanvas } from './card_painter'
 import { Color, Item, Modifier, Type, ValueSign } from './states'
 import { backgroundSlug, heroStat, type HeroCardJson } from './deck'
@@ -56,7 +57,9 @@ export function cardKey(heroId: string, card: HeroCardJson, extraSlotIndex: numb
 	return `${heroId}|${backgroundSlug(card, extraSlotIndex)}|${card.name ?? ''}|${showNumbers ? 1 : 0}`
 }
 
-async function paint(heroId: string, card: HeroCardJson, extraSlotIndex: number | null, showNumbers: boolean): Promise<string> {
+export type Master = ImageBitmap | HTMLCanvasElement
+
+async function paint(heroId: string, card: HeroCardJson, extraSlotIndex: number | null, showNumbers: boolean): Promise<Master> {
 	// frame parts + fonts, the ::emoji:: this card's text uses, and its art
 	const emoji = [...(card.description ?? '').matchAll(/::([a-z_]+)::/g)].map((m) => m[1])
 	const [, , bg] = await Promise.all([ready(), loadImages(emoji), art(heroId, backgroundSlug(card, extraSlotIndex))])
@@ -86,23 +89,53 @@ async function paint(heroId: string, card: HeroCardJson, extraSlotIndex: number 
 		showNumbers,
 		heroStat(heroId, 0), heroStat(heroId, 1), heroStat(heroId, 2), heroStat(heroId, 3)
 	)
-	// webp where the browser can encode it (Chromium/Firefox), PNG otherwise (Safari)
-	const blob = await new Promise<Blob | null>((r) => cv.toBlob(r, 'image/webp', 0.92))
-	if (!blob) throw new Error('card encode failed')
-	cv.width = cv.height = 0 // release the scratch canvas now
-	return URL.createObjectURL(blob)
+	// keep it as a bitmap (no encode); fall back to the canvas itself where unsupported
+	if (typeof createImageBitmap === 'function') {
+		try {
+			const bmp = await createImageBitmap(cv)
+			cv.width = cv.height = 0 // release the scratch canvas
+			return bmp
+		} catch { /* keep the canvas */ }
+	}
+	return cv
 }
 
-const faces = new Map<string, Promise<string>>()
+// most-recently-used masters; evicted ones stay alive while a <Card> still holds them
+const MAX_MASTERS = 32
+const masters = new Map<string, Promise<Master>>()
 
-/** The image URL for a card face, painted on first request and shared after that. */
-export function cardFace(heroId: string, card: HeroCardJson, extraSlotIndex: number | null = null, showNumbers = true): Promise<string> {
+/** The full-resolution master for a card face, painted on first request and shared after that. */
+export function cardMaster(heroId: string, card: HeroCardJson, extraSlotIndex: number | null = null, showNumbers = true): Promise<Master> {
 	const k = cardKey(heroId, card, extraSlotIndex, showNumbers)
-	let p = faces.get(k)
-	if (!p) {
-		p = paint(heroId, card, extraSlotIndex, showNumbers)
-		faces.set(k, p)
-		p.catch(() => faces.delete(k)) // let a later request retry
+	let p = masters.get(k)
+	if (p) {
+		masters.delete(k) // bump to most recent
+		masters.set(k, p)
+		return p
 	}
+	p = paint(heroId, card, extraSlotIndex, showNumbers)
+	masters.set(k, p)
+	p.catch(() => masters.delete(k)) // let a later request retry
+	while (masters.size > MAX_MASTERS) masters.delete(masters.keys().next().value as string)
 	return p
+}
+
+/** Download a set of heroes' card art ahead of time (network only — cheap). */
+export function preloadArt(heroIds: string[]) {
+	if (typeof document === 'undefined') return
+	void ready()
+	for (const h of heroIds) for (const k in cardArt) if (k.startsWith(`./images/cards/${h}/`)) { const i = new Image(); i.src = cardArt[k] }
+}
+
+/** Paint every card of a deck up front, one at a time (yielding between cards so
+ *  animations stay smooth). `onProgress(done, total)` after each card. */
+export async function prewarm(heroId: string, cards: HeroCardJson[], onProgress?: (done: number, total: number) => void) {
+	if (typeof document === 'undefined') return
+	let done = 0
+	onProgress?.(0, cards.length)
+	for (const c of cards) {
+		try { await cardMaster(heroId, c) } catch { /* painted again on demand */ }
+		onProgress?.(++done, cards.length)
+		await new Promise((r) => setTimeout(r, 0))
+	}
 }

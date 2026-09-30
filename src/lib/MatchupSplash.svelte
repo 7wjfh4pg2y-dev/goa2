@@ -3,7 +3,10 @@
 	// hangs as a cloth war banner (art up top, sigil + name, stats and roles on
 	// the cloth below). Orange hangs on the left, Blue on the right, a VS crest
 	// between. The host starts the game from here.
-	import { onDestroy } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
+	import { heroCards } from '$lib/cards/deck';
+	import { startingHand } from '$lib/cards/cardstate';
+	import { prewarm, preloadArt } from '$lib/cards/render';
 	import {
 		heroById, heroSplash, heroLogo, statIcon, traitIcon, starIcon,
 		STAT_LABELS, STAT_PIPS, TRAIT_LABELS, type Trait
@@ -21,6 +24,20 @@
 	let ready = false;
 	const readyTimer = setTimeout(() => (ready = true), 1900);
 	onDestroy(() => clearTimeout(readyTimer));
+
+	// loading screen: download everyone's card art and paint your whole deck now,
+	// so the board opens with every card ready
+	let prep = { done: 0, total: 0 };
+	onMount(() => {
+		preloadArt([...new Set(Object.values(picks).filter(Boolean))]);
+		const mine = picks[clientId];
+		if (mine) {
+			// your starting hand first (what the board shows immediately), then the rest of the deck
+			const all = heroCards(mine), first = new Set(startingHand(mine));
+			const order = [...first, ...all.map((_, i) => i).filter((i) => !first.has(i))].map((i) => all[i]).filter((c) => c && !c.handicapped);
+			prewarm(mine, order, (done, total) => (prep = { done, total }));
+		}
+	});
 
 	$: dense = Math.max(orange.length, blue.length) >= 3;
 	$: packed = Math.max(orange.length, blue.length) >= 4; // phones: 4–5 a side go most compact
@@ -94,6 +111,12 @@
 			<button class="begin" class:show={ready} disabled={!ready} on:click={onStart}>⚔ Begin the battle</button>
 		{:else}
 			<span class="wait" class:show={ready}>Waiting for the host to begin…</span>
+		{/if}
+		{#if prep.total}
+			<span class="prep" class:done={prep.done >= prep.total}>
+				{prep.done >= prep.total ? 'Your cards are ready ✓' : `Preparing your cards… ${prep.done}/${prep.total}`}
+				<i style="--p:{prep.done / prep.total}"></i>
+			</span>
 		{/if}
 	</div>
 </div>
@@ -187,6 +210,12 @@
 	.role span { font-family: 'Modesto Poster', serif; font-size: 0.6rem; letter-spacing: 0.02em; text-transform: uppercase; white-space: nowrap; }
 
 	.foot { position: relative; height: 92px; display: grid; place-items: center; }
+	/* card preparation progress (a small loading bar under the button) */
+	.prep { position: absolute; left: 50%; bottom: 4px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 4px;
+		font-family: 'Modesto Poster', serif; font-size: 0.72rem; letter-spacing: 0.06em; color: #b8a06a; white-space: nowrap; }
+	.prep i { width: 160px; height: 3px; border-radius: 2px; background: linear-gradient(90deg, #d8b56a calc(var(--p) * 100%), rgba(255,255,255,0.12) 0); }
+	.prep.done { color: #7fd99a; }
+	.prep.done i { opacity: 0; }
 	.begin { opacity: 0; transform: translateY(10px); transition: opacity 0.4s, transform 0.4s; padding: 0.9rem 2.4rem; border-radius: 14px; cursor: pointer;
 		font-family: 'Modesto Poster', serif; font-size: 1.35rem; letter-spacing: 0.06em; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.45);
 		background: linear-gradient(120deg, #ef7d22, #2f7fe6); border: 1px solid rgba(255,255,255,0.35); box-shadow: 0 10px 30px rgba(0,0,0,0.55), 0 0 26px rgba(120,120,200,0.35); }
