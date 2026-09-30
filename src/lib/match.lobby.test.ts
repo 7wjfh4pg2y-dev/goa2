@@ -49,7 +49,7 @@ vi.mock('./supabase', () => ({
 	supabase: { channel: (topic: string, config: any) => makeChannel(topic, config) }
 }));
 
-const { joinMatch, initialMatchState } = await import('./match');
+const { joinMatch, initialMatchState, nextHost } = await import('./match');
 
 describe('lobby: second player picks a colour', () => {
 	it('does not kick or close the joiner', () => {
@@ -89,5 +89,39 @@ describe('lobby: second player picks a colour', () => {
 		host.kick(joiner.clientId);
 		expect(get(joiner.kicked)).toBe(true);
 		expect(get(host.kicked)).toBe(false);
+	});
+});
+
+describe('host hand-over', () => {
+	const p = (id: string, seat: number) => ({ id, name: id, color: 'red', ready: false, seat });
+
+	it('picks the next seated player after the old host, wrapping round the table', () => {
+		const s = { ...initialMatchState({ players: 4 }), host: 'h', seatMap: { '1': { id: 'h', name: 'H' } } };
+		expect(nextHost(s, [p('a', 0), p('b', 2), p('c', 3)], 'h')).toBe('b');
+		expect(nextHost(s, [p('a', 0)], 'h')).toBe('a'); // wraps
+		expect(nextHost(s, [p('z', -1), p('y', -1)], 'h')).toBe('y'); // nobody seated → first spectator by id
+		expect(nextHost(s, [], 'h')).toBe(null);
+	});
+
+	it('hands host over only after the grace period, to exactly one player', async () => {
+		vi.useFakeTimers();
+		const host = joinMatch('ROOMH', { name: 'Host', color: 'spectator' }, { seed: initialMatchState({ players: 4 }) });
+		const a = joinMatch('ROOMH', { name: 'A', color: 'spectator' }, {});
+		const b = joinMatch('ROOMH', { name: 'B', color: 'spectator' }, {});
+		a.setSelf({ seat: 2 });
+		b.setSelf({ seat: 1 });
+		await vi.advanceTimersByTimeAsync(1000);
+		expect(get(a.state).host).toBe(host.clientId);
+
+		host.leave();
+		a.setSelf({ ready: true }); // a presence update so everyone sees the host gone
+		await vi.advanceTimersByTimeAsync(5000);
+		expect(get(a.state).host).toBe(host.clientId); // still inside the grace period (a refresh would come back)
+
+		await vi.advanceTimersByTimeAsync(7000);
+		expect(get(b.state).host).toBe(b.clientId); // seat 1 is next round the table
+		expect(get(a.state).host).toBe(b.clientId);
+		expect(get(b.state).log.at(-1)?.text).toContain('is now the host');
+		vi.useRealTimers();
 	});
 });
