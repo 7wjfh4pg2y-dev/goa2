@@ -861,7 +861,7 @@
 					{:else if iMustLevel}⬆ Level up! {levelOf(mine)} → {levelOf(mine) + 1} costs {levelCost(levelOf(mine))} · pick a glowing card
 					{:else if battlePhase && (mine.roundPicks ?? []).length}Levelled up · swap this round's pick until the round ends
 					{:else if battlePhase}Not enough coins · +1 pity coin at round end
-					{:else}Next level costs {levelCost(levelOf(mine))} · after the minion battle{/if}
+					{:else}Next level costs {levelCost(levelOf(mine))}{/if}
 				</div>
 				{#if mobile}
 					<div class="dktabs" role="tablist">
