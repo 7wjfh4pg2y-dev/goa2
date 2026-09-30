@@ -294,7 +294,7 @@
 
 			<div class="icard">
 				{#if focus != null}
-					<button class="icw" style="--c:{COL[cards[focus]?.color] ?? '#888'}" on:click={() => focus != null && onPreview(focus)} title="Open full size">{#key `${H}:${focus}`}<Card heroId={H} card={cards[focus]} />{/key}</button>
+					<button class="icw" style="--c:{COL[cards[focus]?.color] ?? '#888'}" on:click={() => focus != null && onPreview(focus)} title="Open full size"><Card heroId={H} card={cards[focus]} /></button>
 				{:else}
 					<div class="icw back"><span class="band top"></span><span class="emblem"><img src={heroLogo(H)} alt="" /></span><span class="band bot"></span></div>
 				{/if}
