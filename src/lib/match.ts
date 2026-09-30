@@ -104,7 +104,11 @@ export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 		return { cards: migrated, turn: s.turn + 1, radii: {}, pieces, effects: expireEffects(s.effects, s.round, s.turn), ...pushCheck({ ...s, pieces }) }
 	}
 
-	if (req.kind === 'defeatMinion' || req.kind === 'removeMinion') return minionOff(s, req.pid, req.piece, req.kind === 'defeatMinion')
+	if (req.kind === 'defeatMinion' || req.kind === 'removeMinion') {
+		// the moment a team's last minion (its heavy) leaves the battle zone, the other team pushes
+		const off = minionOff(s, req.pid, req.piece, req.kind === 'defeatMinion')
+		return off.pieces ? { ...off, ...pushCheck({ ...s, ...off }) } : off
+	}
 	if (req.kind === 'defeatHero') return defeatHero(s, req.pid, req.target, req.keepCard)
 	if (req.kind === 'respawn') return respawnHero(s, req.pid, req.hex)
 	if (req.kind === 'battleRemove' || req.kind === 'battleAuto') {
@@ -1091,7 +1095,7 @@ export function joinMatch(
 			note(req.pid, `took off a ${m?.team ?? ''} ${m?.role ?? ''} minion for the minion battle`.replace(/\s+/g, ' '))
 		}
 		if (req.kind === 'battleAuto' && patch.pieces) note(req.pid, 'let the game remove the rest of the minions (melee first, heavies last)')
-		if (req.kind === 'advance' || req.kind === 'battleRemove' || req.kind === 'battleAuto') for (const t of laneNotes(local, patch)) note(req.pid, t)
+		if (['advance', 'battleRemove', 'battleAuto', 'defeatMinion', 'removeMinion'].includes(req.kind)) for (const t of laneNotes(local, patch)) note(req.pid, t)
 		for (const pid in patch.cards ?? {}) {
 			const before = local.cards?.[pid], after = patch.cards![pid]
 			if (before && after && levelOf(after) > levelOf(before)) note(pid, `reached Level ${levelOf(after)} ⬆`)

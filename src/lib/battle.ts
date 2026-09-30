@@ -6,8 +6,9 @@
 // - Minion battle (end of round): each team counts its minions in the battle zone;
 //   the team with fewer removes the difference (their choice, heavies last).
 //   Removed minions give no coins.
-// - Push (end of every turn, and after the battle's removals): if exactly one team
-//   still has minions in the battle zone, it pushes: one wave counter comes off, every
+// - Push: the moment a team's last minion in the battle zone (its heavy — heavies go
+//   last) is defeated or removed — mid-turn or during the battle — the other team
+//   pushes (the end of each turn re-checks as a backstop): one wave counter comes off, every
 //   minion in the zone is removed, the zone moves one step towards the loser's throne
 //   and a fresh wave spawns on that zone's spawn points. Pushing past the last zone
 //   (into the throne) or taking the last wave counter wins the game.
