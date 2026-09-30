@@ -15,7 +15,7 @@
 	import { heroCards } from '$lib/cards/deck';
 	import { heroSplash, heroLogo, HERO_BY_ID } from '$lib/heroes';
 	import {
-		levelOf, levelCost, statDeltas, ultimateIndex, pickTier, tierIn, canPick, canAfford, mustLevel, swapSource, twinOf, allowedMoves,
+		levelOf, levelCost, statDeltas, ultimateIndex, pickTier, tierIn, canPick, canAfford, mustLevel, swapSource, twinOf, allowedMoves, pickedThisRound,
 		MAX_LEVEL, type PlayerCardState, type CardZone, type StatKey
 	} from '$lib/cards/cardstate';
 
@@ -96,9 +96,6 @@
 	let hov: number | null = null;
 	$: selZone = sel == null ? null : zoneOf(sel);
 	$: focus = hov ?? sel;
-	$: fState = focus != null && isTier(focus) ? state(focus) : null;
-	$: fTwin = focus != null ? twin(focus) : -1;
-	$: fOlder = focus != null && isTier(focus) ? heldOf(cards[focus].color) : undefined;
 	function over(i: number) { hov = i; }
 	function out() { hov = null; }
 	function act(fn: () => void) { fn(); sel = null; }
@@ -141,8 +138,15 @@
 			if (tierIn(cs, c.color) !== t - 1) return `Take ${NAME[c.color]} Tier ${ROM[t - 2]} first.`;
 			return `Level ${LV} → ${LV + 1} for ${need} coins.`;
 		}
-		if (z === 'removed') return 'Replaced in an earlier round — that level-up stays.';
+		if (z === 'removed') return allowedMoves(cs, i).includes('hand') ? 'Removed — send it back to your hand to undo that level-up.' : 'Replaced in an earlier round — that level-up stays.';
 		return 'Picked in an earlier round — that level-up stays.';
+	};
+	$: note = (i: number): string => {
+		if (i === ult && ultReady) return `Ready — unlock it from the ultimate tile for ${need} coins.`;
+		const s = isTier(i) ? state(i) : null;
+		if (s === 'cur') return pickedThisRound(cs, i) ? 'In your hand — picked this round, you can still change it.' : 'In your hand.';
+		if (s === 'item') return `Your item: +1 ${ITEM_NAME[itemOf(i)] ?? ''} — under your hero board.`;
+		return why(i);
 	};
 
 	// manual moves allowed for this card (cardstate.allowedMoves), in this order
@@ -293,38 +297,15 @@
 				{/if}
 			</div>
 
-			<div class="iinfo" style="--c:{focus != null ? COL[cards[focus]?.color] ?? '#888' : '#c79a4e'}">
-				{#if focus == null}
-					<div class="in1"><b>{hero?.name ?? H}'s deck</b></div>
-					<p class="note">Hover a card to read it · click to move it · double-click for full size</p>
-				{:else}
-					<div class="in1"><b>{cards[focus]?.name}</b><em>{sub(focus)}</em></div>
-					{#if fState === 'next' || fState === 'far'}
-						<ul class="gets" class:dim={fState === 'far'}>
-							<li><i class="k">Hand</i>{cards[focus]?.name}</li>
-							{#if fTwin >= 0 && itemOf(fTwin)}<li><i class="k it">Item</i>{@render itemIcon(fTwin)}+1 {ITEM_NAME[itemOf(fTwin)]} <small>from {cards[fTwin]?.name}</small></li>{/if}
-							{#if fOlder != null && fOlder !== focus}<li><i class="k rm">Removed</i>{cards[fOlder]?.name}</li>{/if}
-						</ul>
-						<p class="note">{why(focus)}</p>
-					{:else if fState === 'cur'}<p class="note">In your hand{picks.includes(focus) && levelPhase ? ' — picked this round, you can still swap it' : ''}.</p>
-					{:else if fState === 'item'}<p class="note">Your item: <b>+1 {ITEM_NAME[itemOf(focus)] ?? ''}</b> — it sits under your hero board.</p>
-					{:else if fState === 'past'}<p class="note">Removed — out of your hand, upgrades and deck.</p>
-					{:else if focus === ult}<p class="note">{why(ult)}</p>
-					{:else}<p class="note">Basic card — always in your hand.</p>{/if}
-				{/if}
-			</div>
-
 			<div class="iact">
-				{#if sel != null && moves(sel).length}
+				{#if sel != null && moves(sel).length && (hov == null || hov === sel)}
 					<div class="agrid">
 						{#each moves(sel) as [to, lbl, key, cls] (to)}
 							<button class="a {cls}" on:click={() => act(() => onMove(sel!, to))}>{lbl} <kbd>{key}</kbd></button>
 						{/each}
 					</div>
-				{:else if sel != null}
-					<p class="hint">{sel === ult && ultReady ? 'Unlock it from the ultimate tile.' : why(sel)}</p>
 				{:else}
-					<p class="hint">Select a card to move it by hand</p>
+					<p class="hint">{focus != null ? note(focus) : 'Hover a card to read it · click to move it · double-click for full size'}</p>
 				{/if}
 			</div>
 
@@ -438,21 +419,7 @@
 	.back .band.top::after { bottom: 0; } .back .band.bot::after { top: 0; }
 	.back .emblem { flex: 1; display: grid; place-items: center; }
 	.back .emblem img { width: 72%; filter: drop-shadow(0 2px 4px rgba(0,0,0,.4)); }
-	.iinfo { flex: none; min-height: 92px; display: flex; flex-direction: column; gap: 5px; padding: 8px 10px; border-radius: 10px; background: rgba(255,255,255,.035); border: 1px solid rgba(255,255,255,.08); box-shadow: inset 3px 0 0 var(--c); }
-	.in1 { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
-	.in1 b { font-weight: normal; font-size: 1rem; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-	.in1 em { flex: none; margin-left: auto; font-style: normal; font-size: .66rem; color: #93a3b8; }
-	.gets { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; font-size: .8rem; color: #e5e7eb; }
-	.gets.dim { opacity: .75; }
-	.gets li { display: flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap; }
-	.gets small { font-size: .64rem; color: #7c8aa0; overflow: hidden; text-overflow: ellipsis; }
-	.gets img { width: 18px; height: 14px; object-fit: contain; }
-	.k { flex: none; width: 58px; font-style: normal; font-size: .6rem; text-align: center; padding: 1px 0; border-radius: 5px; letter-spacing: .06em; text-transform: uppercase; background: var(--tc, #ef7d22); color: #fff; }
-	.k.it { background: #3f7fe0; }
-	.k.rm { background: rgba(220,60,60,.35); color: #ffc9c9; }
-	.note { margin: 0; font-size: .76rem; color: #93a3b8; }
-	.note b { font-weight: normal; color: #fff; }
-	.iact { flex: none; min-height: 36px; display: flex; flex-direction: column; justify-content: center; gap: 6px; }
+	.iact { flex: none; min-height: 40px; display: flex; flex-direction: column; justify-content: center; gap: 6px; }
 	.agrid { display: flex; gap: 5px; } .agrid .a { flex: 1; }
 	.a { height: 30px; padding: 0 6px; border-radius: 8px; border: 1px solid rgba(255,255,255,.2); background: rgba(255,255,255,.08); color: #e5e7eb; font-size: .72rem; display: flex; align-items: center; justify-content: center; gap: 5px; white-space: nowrap; cursor: pointer; }
 	.a:hover { filter: brightness(1.15); }
