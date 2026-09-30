@@ -351,6 +351,10 @@
 		);
 	}
 	$: myGrid = mine ? deckGrid(mine.hero) : [];
+	// phone grid is 3 wide: order each tier as R B G (variant A) then R B G (variant B),
+	// so every colour sits in its own column
+	const phoneCells = (grid: ReturnType<typeof deckGrid>) =>
+		grid.map((row) => [1, 2].flatMap((first) => GRID_COLORS.map((color) => row.find((c) => c.color === color && c.first === first)!)).filter(Boolean));
 	// basics never leave the hand — pin them to the right with a partition
 	const isBasic = (hero: string, idx: number) => ['GOLD', 'SILVER'].includes(heroCards(hero)[idx]?.color);
 	// phone Hand tab: one slot per colour (the card you currently hold in it); anything else goes in `extra`
@@ -938,7 +942,7 @@
 				{#if !mobile || deckTab === 'deck'}
 				<div class="dklabel">Upgrade deck — Tier II &amp; III <span class="ct">{deckCards(mine).length} in deck</span></div>
 				<div class="dkgrid">
-					{#each myGrid as row}
+					{#each phoneCells(myGrid) as row}
 						{#each row as cell (cell.color + cell.level + cell.first)}
 							{#if cell.idx >= 0}
 								{@const z = zoneOf(mine, cell.idx)}
@@ -1590,7 +1594,7 @@
 	.mob .ultslot { grid-column: span 1; }
 	.mob .dkgrid { grid-template-columns: repeat(3, 1fr); }
 	.mob .dkzones { grid-template-columns: 1fr; }
-	.mob .dkrow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+	.mob .dkrow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 	.mob .empty-note { grid-column: 1 / -1; padding: 16px 0; text-align: center; }
 	.mob .dkbadge { font-size: .6rem; }
 	.mob .dkbar { margin: auto -12px 0; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); gap: 6px; }
