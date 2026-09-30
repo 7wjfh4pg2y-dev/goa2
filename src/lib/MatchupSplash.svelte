@@ -119,6 +119,14 @@
 	.banners { display: flex; gap: 22px; }
 	.dense .banners { gap: 14px; }
 	.dense .field { gap: 18px; }
+	/* desktop/iPad: three columns (orange · VS · blue) with equal outer columns, so the
+	   VS crest sits dead centre whatever the team sizes — even with an empty side */
+	@media (min-width: 761px) {
+		.field { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: start; }
+		.side.orange { grid-column: 1; justify-self: end; }
+		.crest { grid-column: 2; }
+		.side.blue { grid-column: 3; justify-self: start; }
+	}
 
 	/* VS crest */
 	.crest { align-self: center; flex: none; margin-top: -40px; width: 120px; height: 120px; border-radius: 50%; display: grid; place-items: center;
