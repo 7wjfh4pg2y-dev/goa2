@@ -828,8 +828,36 @@ export function joinMatch(
 					})
 				}
 				players.set(list)
+				checkHost()
 			})
 	}
+
+	// Host hand-over. Only the host applies card actions and runs the draft/turn
+	// watchdogs, so a host whose browser drops would freeze the game. If the host is
+	// missing from presence for HOST_GRACE_MS (long enough to ride out a refresh or a
+	// short reconnect), the player `nextHost` names takes over. Skipped while we're
+	// offline ourselves (our presence view would be stale) and once the room is closed.
+	const HOST_GRACE_MS = 10000
+	let hostTimer: ReturnType<typeof setTimeout> | null = null
+	const hostMissing = () =>
+		!left && local.rev >= 0 && !!local.host && !local.closed && get(conn) === 'connected' &&
+		playerList.length > 0 && !playerList.some((p) => p.id === local.host)
+	function checkHost() {
+		if (!hostMissing()) { if (hostTimer) { clearTimeout(hostTimer); hostTimer = null } return }
+		if (hostTimer) return
+		hostTimer = setTimeout(() => {
+			hostTimer = null
+			if (!hostMissing()) return
+			const gone = local.host
+			if (nextHost(local, playerList, gone) !== clientId) { checkHost(); return } // someone else claims it
+			const who = Object.values(local.seatMap ?? {}).find((v) => v.id === gone)?.name ?? 'the host'
+			act(`is now the host (${who} disconnected)`, { host: clientId })
+		}, HOST_GRACE_MS)
+	}
+	// the host can also go missing through a state change (e.g. a stale snapshot) or come back
+	// while we're offline — re-check on those too (cheap; it only arms a timer)
+	state.subscribe(() => checkHost())
+	conn.subscribe(() => checkHost())
 
 	// JOIN flow only: probe a few times for a host. We must NEVER create a room —
 	// if someone is present we keep asking for their state until it arrives; if the
@@ -1079,6 +1107,7 @@ export function joinMatch(
 		if (graceTimer) clearTimeout(graceTimer)
 		if (trackTimer) clearTimeout(trackTimer)
 		if (stateTimer) clearTimeout(stateTimer)
+		if (hostTimer) clearTimeout(hostTimer)
 		clearWatchdog()
 		clearJoinDeadline()
 		left = true
@@ -1114,6 +1143,22 @@ export function adjustWaves(s: MatchState, delta: number): Partial<MatchState> {
 }
 
 /** A team wins a Push the Lane: flip one shared wave counter and record it. */
+/**
+ * Host hand-over: when the host has been gone a while, the next SEATED player after
+ * the host's seat takes over (wrapping round the table); with nobody seated, the
+ * first present spectator by id. Every client computes the same answer from the
+ * same presence list, so exactly one of them claims the role.
+ */
+export function nextHost(s: MatchState, present: Player[], departed: string): string | null {
+	const here = present.filter((p) => p.id !== departed)
+	if (!here.length) return null
+	const seatOf = Object.entries(s.seatMap ?? {}).find(([, v]) => v.id === departed)?.[0]
+	const from = seatOf != null ? Number(seatOf) : -1
+	const seated = here.filter((p) => p.seat >= 0 && p.seat < (s.seats || Infinity)).sort((a, b) => a.seat - b.seat)
+	if (seated.length) return (seated.find((p) => p.seat > from) ?? seated[0]).id
+	return [...here].sort((a, b) => (a.id < b.id ? -1 : 1))[0].id
+}
+
 export function pushLane(s: MatchState, winner: Team): Partial<MatchState> {
 	return { waves: Math.max(0, s.waves - 1), lastPush: winner }
 }
