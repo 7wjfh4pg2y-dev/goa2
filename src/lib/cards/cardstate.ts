@@ -397,18 +397,25 @@ const lift = (s: PlayerCardState, i: number): PlayerCardState => ({
 })
 
 /**
- * Manual moves a card may make (the deck view's Hand / Upgrade / Remove):
- * - basics and the ultimate never move;
+ * Manual moves a card may make (the deck view's Hand / Upgrade / Deck / Remove).
+ * Every level gained costs coins (`levelCost`); undoing one this round refunds it.
+ * - basics never move;
  * - Tier I: out of the hand only to Removed, and back to the hand;
- * - a removed card back to the hand = undo that colour's level-ups (only this round's);
- * - Tier II / III, not chosen yet: to the hand or to upgrades (in order: II after I,
- *   III once every colour is on II);
- * - Tier II / III chosen this round: swap between hand and upgrades; chosen in an
- *   earlier round: locked.
+ * - a removed card back to the hand = undo that colour's higher tiers (this round only);
+ * - Tier II / III not chosen yet: a level-up (paid, in order: II after I, III once
+ *   every colour is on II) — to the hand, or to upgrades (then its twin comes to hand);
+ * - Tier II / III chosen this round: swap hand ↔ upgrade (free), or back to the Deck
+ *   (undo — the lower card returns to hand, refunded); chosen earlier: locked;
+ * - the ultimate: unlock (level 7 → 8, all three Tier III, paid) / undo this round.
  */
 export function allowedMoves(s: PlayerCardState, idx: number): CardZone[] {
 	const c = heroCards(s.hero)[idx]
-	if (!c || !isColor(c.color, ...COLOURS)) return []
+	if (!c) return []
+	if (c.color === 'PURPLE') {
+		if (s.ultimate) return (s.roundPicks ?? []).includes(idx) ? ['deck'] : []
+		return canPick(s, idx) && canAfford(s) ? ['hand'] : []
+	}
+	if (!isColor(c.color, ...COLOURS)) return []
 	const t = c.level ?? 1
 	const held = heldList(s)
 	if (s.removed.includes(idx)) return chosenAbove(s, c.color, t).every((i) => pickedThisRound(s, i)) ? ['hand'] : []
@@ -417,49 +424,76 @@ export function allowedMoves(s: PlayerCardState, idx: number): CardZone[] {
 	const inPlay = (i: number) => i >= 0 && (held.includes(i) || s.upgrade.includes(i))
 	if (!inPlay(idx) && !inPlay(tw)) {
 		const inOrder = tierIn(s, c.color) === t - 1 && (t < 3 || COLOURS.every((col) => tierIn(s, col) >= 2))
-		return inOrder ? ['hand', 'upgrade'] : []
+		return inOrder && canAfford(s) ? ['hand', 'upgrade'] : []
 	}
-	if (!pickedThisRound(s, idx)) return []
-	return held.includes(idx) ? ['upgrade'] : s.upgrade.includes(idx) ? ['hand'] : []
+	if (!pickedThisRound(s, idx) || chosenAbove(s, c.color, t).some((i) => !pickedThisRound(s, i))) return []
+	return held.includes(idx) ? ['upgrade', 'deck'] : s.upgrade.includes(idx) ? ['hand', 'deck'] : []
 }
 
-/**
- * Apply a manual move if it's allowed, keeping one card per colour in hand:
- * - a Tier II/III to the hand: its twin goes to upgrades, the lower card is removed;
- * - a Tier II/III to upgrades: its twin comes to the hand instead (same pick, other path);
- * - a removed card back to the hand: the higher tiers of that colour (hand + upgrade)
- *   go back to the deck — that colour's level-ups this round are undone (coins refunded).
- */
+/** Undo a colour's tiers above `tier` (this round's choices): they go back to the deck,
+ *  the ultimate relocks if it no longer qualifies, and paid levels are refunded. */
+function undoAbove(s: PlayerCardState, color: string, tier: number): PlayerCardState {
+	const above = chosenAbove(s, color, tier)
+	let next: PlayerCardState = s
+	for (const i of above) next = moveCard(lift(next, i), i, 'deck')
+	let picks = (s.roundPicks ?? []).filter((p) => !above.includes(p))
+	const ult = ultimateIndex(s.hero)
+	if (next.ultimate && picks.includes(ult) && !COLOURS.every((col) => tierIn(next, col) >= 3)) {
+		next = { ...next, ultimate: false }
+		picks = picks.filter((p) => p !== ult)
+	}
+	return refund(s, { ...next, roundPicks: picks })
+}
+
+/** Give back the coins for the levels lost between `before` and `after` (only paid ones). */
+function refund(before: PlayerCardState, after: PlayerCardState): PlayerCardState {
+	let paid = before.roundPaid ?? 0, coins = after.coins
+	for (let L = levelOf(before) - 1; L >= levelOf(after) && paid > 0; L--, paid--) coins += levelCost(L)
+	return { ...after, coins, roundPaid: paid, level: levelOf(after) }
+}
+
+/** Pay for one level (the current level's cost) and remember the pick for this round. */
+function pay(before: PlayerCardState, after: PlayerCardState, pick: number): PlayerCardState {
+	return {
+		...after,
+		coins: before.coins - levelCost(levelOf(before)),
+		level: levelOf(after),
+		roundPicks: [...(before.roundPicks ?? []), pick],
+		roundPaid: (before.roundPaid ?? 0) + 1
+	}
+}
+
+/** Apply a manual move if it's allowed (see allowedMoves), one card per colour in hand. */
 export function manualMove(s: PlayerCardState, idx: number, to: CardZone): PlayerCardState {
 	if (!allowedMoves(s, idx).includes(to)) return s
 	const c = heroCards(s.hero)[idx]
-	const t = c?.level ?? 1
+	// the ultimate: unlock (paid) or undo this round's unlock (refunded)
+	if (c.color === 'PURPLE') {
+		if (to === 'hand') return pay(s, { ...s, ultimate: true }, idx)
+		return refund(s, { ...s, ultimate: false, roundPicks: (s.roundPicks ?? []).filter((p) => p !== idx) })
+	}
+	const t = c.level ?? 1
 	const tw = twinOf(s.hero, idx)
 	const picks = s.roundPicks ?? []
-	// undo: the higher tiers of this colour return to the deck
-	if (s.removed.includes(idx)) {
-		const above = chosenAbove(s, c.color, t)
-		let next: PlayerCardState = s
-		for (const i of above) next = moveCard(lift(next, i), i, 'deck')
-		next = { ...next, roundPicks: picks.filter((p) => !above.includes(p)) }
-		// refund the top levels that were paid for
-		let paid = s.roundPaid ?? 0, coins = next.coins
-		for (let L = levelOf(s) - 1; L >= levelOf(next) && paid > 0; L--, paid--) coins += levelCost(L)
-		next = { ...next, coins, roundPaid: paid }
-		next = moveCard(next, idx, 'hand')
-		return { ...next, level: levelOf(next) }
-	}
+	// a removed card back to the hand: undo the higher tiers of its colour
+	if (s.removed.includes(idx)) return moveCard(undoAbove(s, c.color, t), idx, 'hand')
 	if (t === 1) return moveCard(to === 'removed' ? lift(s, idx) : s, idx, to)
+	// this round's pick back to the deck: the card it replaced returns to the hand
+	if (to === 'deck') {
+		const lower = s.removed.find((i) => heroCards(s.hero)[i]?.color === c.color && (heroCards(s.hero)[i]?.level ?? 1) === t - 1)
+		const next = undoAbove(s, c.color, t - 1)
+		return lower != null ? moveCard(next, lower, 'hand') : next
+	}
 	const held = heldList(s)
-	// a pick made this round: swap to the other path
+	// a pick made this round: swap to the other path (free)
 	if (held.includes(tw) || (to === 'upgrade' && held.includes(idx))) {
 		const up = to === 'upgrade' ? idx : tw, down = to === 'upgrade' ? tw : idx
 		const next = moveCard(moveCard(lift(s, up), up, 'upgrade'), down, 'hand')
 		return { ...next, roundPicks: picks.map((p) => (p === up ? down : p)) }
 	}
-	// a fresh pick from the deck
+	// a fresh pick from the deck: a paid level-up
 	const pick = to === 'hand' ? idx : tw
 	let next = to === 'upgrade' ? moveCard(s, idx, 'upgrade') : s
 	next = pick >= 0 ? takeUpgrade(next, pick) : next
-	return { ...next, level: levelOf(next), roundPicks: pick >= 0 ? [...picks, pick] : picks }
+	return pay(s, next, pick)
 }

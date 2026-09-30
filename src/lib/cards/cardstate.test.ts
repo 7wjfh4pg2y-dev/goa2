@@ -246,7 +246,7 @@ describe('manual moves', () => {
 	const at = (color: string, level: number) => cards.map((c, i) => ({ c, i })).filter(({ c }) => c.color === color && (c.level ?? 1) === level && !c.handicapped).map(({ i }) => i)
 
 	it('Tier I only leaves the hand to Removed, and only comes back to the hand', () => {
-		let s = newPlayerCardState(H)
+		let s = { ...newPlayerCardState(H), coins: 50 }
 		const [r1] = at('RED', 1)
 		expect(allowedMoves(s, r1)).toEqual(['removed'])
 		expect(manualMove(s, r1, 'upgrade')).toBe(s)
@@ -257,20 +257,20 @@ describe('manual moves', () => {
 	})
 
 	it('Tier II moves between hand and upgrades only; sent to hand it keeps one card per colour', () => {
-		let s = newPlayerCardState(H)
+		let s = { ...newPlayerCardState(H), coins: 50 }
 		const [a, b] = at('RED', 2)
 		expect(allowedMoves(s, a)).toEqual(['hand', 'upgrade'])
 		s = manualMove(s, a, 'hand')
 		expect(s.hand).toContain(a)
 		expect(s.upgrade).toContain(b)
 		expect(s.removed).toContain(at('RED', 1)[0])
-		expect(allowedMoves(s, a)).toEqual(['upgrade']) // held: no manual Remove / Deck
+		expect(allowedMoves(s, a)).toEqual(['upgrade', 'deck']) // held: swap or undo, no manual Remove
 		expect(manualMove(s, a, 'removed')).toBe(s)
-		expect(allowedMoves(s, b)).toEqual(['hand'])
+		expect(allowedMoves(s, b)).toEqual(['hand', 'deck'])
 	})
 
 	it('sending a Tier II to upgrades brings its twin to hand and removes the Tier I', () => {
-		let s = newPlayerCardState(H)
+		let s = { ...newPlayerCardState(H), coins: 50 }
 		const [a, b] = at('RED', 2)
 		s = manualMove(s, a, 'upgrade')
 		expect(s.upgrade).toContain(a)
@@ -285,7 +285,7 @@ describe('manual moves', () => {
 	})
 
 	it('Tier III does the same against the Tier II', () => {
-		let s = newPlayerCardState(H)
+		let s = { ...newPlayerCardState(H), coins: 50 }
 		const [r2] = at('RED', 2)
 		const [c, d] = at('RED', 3)
 		s = manualMove(s, r2, 'hand')
@@ -304,7 +304,7 @@ describe('manual moves', () => {
 	})
 
 	it('a removed Tier I back to hand undoes that colour this round, then locks at round end', () => {
-		let s = newPlayerCardState(H)
+		let s = { ...newPlayerCardState(H), coins: 50 }
 		const [r1] = at('RED', 1)
 		const [a, b] = at('RED', 2)
 		s = manualMove(s, a, 'hand')
@@ -316,6 +316,7 @@ describe('manual moves', () => {
 		expect(undone.upgrade).not.toContain(b)
 		expect(undone.removed).not.toContain(r1)
 		expect(levelOf(undone)).toBe(1)
+		expect(undone.coins).toBe(50) // the level is refunded
 		// next round: the choice is locked — no undo, no swap
 		s = lockPicks(s)
 		expect(allowedMoves(s, r1)).toEqual([])
@@ -332,9 +333,56 @@ describe('manual moves', () => {
 		expect(levelOf(s)).toBe(1)
 	})
 
-	it('basics and the ultimate never move', () => {
+	it('every level-up costs coins; no coins, no pick', () => {
+		let s = { ...newPlayerCardState(H), coins: 2 }
+		expect(allowedMoves(s, at('RED', 2)[0])).toEqual(['hand', 'upgrade'])
+		s = manualMove(s, at('RED', 2)[0], 'hand') // 1 → 2 costs 1
+		expect(s.coins).toBe(1)
+		expect(allowedMoves(s, at('BLUE', 2)[0])).toEqual([]) // 2 → 3 costs 2
+	})
+
+	it('Deck undoes this round\'s pick so another colour can be picked, refunded', () => {
+		let s = { ...newPlayerCardState(H), coins: 1 }
+		const [a, b] = at('RED', 2)
+		s = manualMove(s, a, 'hand')
+		expect(s.coins).toBe(0)
+		s = manualMove(s, b, 'deck') // from the upgrade side works too
+		expect(s.coins).toBe(1)
+		expect(s.hand).toContain(at('RED', 1)[0])
+		expect(s.hand).not.toContain(a)
+		expect(s.upgrade).toEqual([])
+		expect(s.removed).toEqual([])
+		expect(levelOf(s)).toBe(1)
+		s = manualMove(s, at('BLUE', 2)[0], 'hand')
+		expect(s.hand).toContain(at('BLUE', 2)[0])
+		expect(s.coins).toBe(0)
+	})
+
+	it('the ultimate unlocks at level 7 for 7 coins, and can be undone this round', () => {
+		let s = { ...newPlayerCardState(H), coins: 1 + 2 + 3 + 4 + 5 + 6 + 7 }
+		for (const col of ['RED', 'BLUE', 'GREEN']) s = manualMove(s, at(col, 2)[0], 'hand')
+		for (const col of ['RED', 'BLUE', 'GREEN']) s = manualMove(s, at(col, 3)[0], 'hand')
+		expect(levelOf(s)).toBe(7)
+		expect(s.coins).toBe(7)
+		const ult = ultimateIndex(H)
+		expect(allowedMoves(s, ult)).toEqual(['hand'])
+		s = manualMove(s, ult, 'hand')
+		expect(s.ultimate).toBe(true)
+		expect(levelOf(s)).toBe(8)
+		expect(s.coins).toBe(0)
+		expect(s.hand).not.toContain(ult)
+		// undoing a Tier III this round relocks it and refunds both levels
+		const undone = manualMove(s, at('RED', 3)[0], 'deck')
+		expect(undone.ultimate).toBe(false)
+		expect(levelOf(undone)).toBe(6)
+		expect(undone.coins).toBe(7 + 6)
+		// after the round it's locked in
+		expect(allowedMoves(lockPicks(s), ult)).toEqual([])
+	})
+
+	it('basics never move', () => {
 		const s = newPlayerCardState(H)
 		expect(allowedMoves(s, cards.findIndex((c) => c.color === 'GOLD'))).toEqual([])
-		expect(allowedMoves(s, ultimateIndex(H))).toEqual([])
+		expect(allowedMoves(s, ultimateIndex(H))).toEqual([]) // not reachable yet
 	})
 })
