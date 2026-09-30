@@ -2,7 +2,7 @@ export function updateCanvas(
 	canvas: HTMLCanvasElement,
 	context: CanvasRenderingContext2D,
 	customEmoji: Array<[string, HTMLImageElement]>,
-	background: HTMLImageElement | undefined,
+	background: CanvasImageSource | undefined,
 	color: Color,
 	handicap: boolean,
 	extra: boolean,
@@ -34,7 +34,7 @@ export function updateCanvas(
 ): void {
 	clear(canvas, context);
 
-	if (background instanceof HTMLImageElement) {
+	if (background) {
 		context.drawImage(background, 0, 0, 1192, 1664);
 	}
 
@@ -858,8 +858,10 @@ const cardImageModules = import.meta.glob("./images/cards/*/*.webp", { eager: tr
 let cardDescriptionIndent = 490
 let descriptionFontSizeAdjustment = 0
 
+let preloaded: Promise<unknown> | null = null
+/** Load the frame parts once (every caller shares the same promise). */
 export function preloadImages() {
-  return Promise.all(
+  return (preloaded ??= Promise.all(
     imageNames.map(async (imageName: string) => {
       const path = baseImageModules[`./images/${imageName}.png`]
       if (path == null) {
@@ -868,9 +870,10 @@ export function preloadImages() {
       const image = new Image()
       image.src = path
       images.set(imageName, image)
-      await new Promise(resolve => image.onload = resolve)
+      // resolve on error too, so one missing frame part can't stall every card forever
+      await new Promise(resolve => { image.onload = resolve; image.onerror = resolve })
     })
-  )
+  ))
 }
 
 export async function importCardImage(hero: string, card: string) {

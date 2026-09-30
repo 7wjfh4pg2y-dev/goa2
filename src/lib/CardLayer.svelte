@@ -1431,7 +1431,7 @@
 	.trashw { position: absolute; inset: 18% 14% 18% 22%; color: rgba(255,255,255,.08); pointer-events: none; }
 	.trashw :global(svg) { width: 100%; height: 100%; }
 	.pdcard { position: relative; display: block; border-radius: 6%; overflow: hidden; box-shadow: 2px 2px 0 rgba(255,255,255,.18), 0 3px 8px rgba(0,0,0,.5); }
-	.pdcard :global(canvas) { display: block; width: 100%; }
+	.pdcard :global(.cardface) { display: block; width: 100%; }
 	.pdct { position: absolute; left: 50%; bottom: -7px; transform: translateX(-50%); min-width: 1rem; height: .95rem; padding: 0 4px; border-radius: 999px; display: grid; place-items: center;
 		background: linear-gradient(#2b3444, #171d27); border: 1px solid rgba(199,154,78,.6); color: #f0dcae; font-size: .55rem; font-weight: 900; font-variant-numeric: tabular-nums; }
 	/* initiative this turn (card + upgrades) */
@@ -1464,7 +1464,7 @@
 		background: linear-gradient(90deg, rgba(139,79,214,.34), rgba(139,79,214,.14)); border: 1px solid rgba(180,130,240,.55); }
 	.ultchip:hover { background: linear-gradient(90deg, rgba(139,79,214,.5), rgba(139,79,214,.22)); }
 	.ultchip-card { width: 34px; border-radius: 4px; overflow: hidden; flex: none; box-shadow: 0 0 0 1.5px #b482f0, 0 2px 6px rgba(0,0,0,.5); }
-	.ultchip-card :global(canvas) { display: block; width: 100%; border-radius: 4px; }
+	.ultchip-card :global(.cardface) { display: block; width: 100%; border-radius: 4px; }
 	.ultchip-tx { display: flex; flex-direction: column; line-height: 1.05; text-align: left; }
 	.ultchip-tx b { font-size: .6rem; letter-spacing: .06em; text-transform: uppercase; color: #cbb0f0; }
 	.ultchip-tx em { font-family: 'Modesto Poster', serif; font-style: normal; font-size: .82rem; color: #efe0ff; }
@@ -1496,7 +1496,7 @@
 	.dstack { position: absolute; inset: 0; z-index: 1; padding: 0; background: none; border: none; cursor: pointer; }
 	.dsk { position: absolute; top: 0; left: 0; width: 100%; border-radius: 6%; overflow: hidden; box-shadow: 0 3px 8px rgba(0,0,0,.55);
 		transform: translateX(calc((var(--i) - var(--n) + 1) * 6%)) rotate(calc((var(--i) - var(--n) + 1) * 3deg)); transform-origin: bottom left; z-index: var(--i); }
-	.dsk :global(canvas) { display: block; width: 100%; }
+	.dsk :global(.cardface) { display: block; width: 100%; }
 	.dstack:hover .dsk { filter: brightness(1.08); }
 	/* fanned-out discard (hover / tap) — click a card to preview it */
 	.discpop { position: absolute; z-index: 30; right: 0; bottom: calc(100% + 10px); display: flex; gap: 6px; padding: 8px; max-width: min(760px, 92vw); overflow-x: auto;
@@ -1505,13 +1505,13 @@
 	@keyframes popin { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 	@keyframes popinc { from { opacity: 0; transform: translate(-50%, 6px); } to { opacity: 1; transform: translateX(-50%); } }
 	.dpc { flex: none; width: 76px; padding: 0; background: none; border: none; cursor: zoom-in; border-radius: 6%; overflow: hidden; box-shadow: 0 3px 8px rgba(0,0,0,.55); transition: transform .12s; }
-	.dpc :global(canvas) { display: block; width: 100%; }
+	.dpc :global(.cardface) { display: block; width: 100%; }
 	.dpc:hover { transform: translateY(-4px); }
 	.removedrow { margin-top: 10px; padding: 7px 10px 9px; border-radius: 12px; background: rgba(12,18,32,.4); border: 1px solid rgba(255,255,255,.08); }
 	.removedrow .ilabel { margin: 0 0 6px; }
 	.rrow { display: flex; flex-wrap: wrap; gap: 6px; min-height: 30px; align-items: center; }
 	.rmini { width: 44px; padding: 0; background: none; border: none; cursor: zoom-in; border-radius: 4px; overflow: hidden; opacity: .85; box-shadow: 0 2px 5px rgba(0,0,0,.5); }
-	.rmini :global(canvas) { display: block; width: 100%; }
+	.rmini :global(.cardface) { display: block; width: 100%; }
 	.rmini:hover { opacity: 1; outline: 2px solid rgba(199,154,78,.6); }
 	.empty-note { color: #55637a; font-size: .8rem; padding: 4px; }
 
@@ -1531,7 +1531,7 @@
 	.dkcard { position: relative; width: 100%; padding: 0; background: none; border: none; cursor: pointer; border-radius: 6px; overflow: hidden; box-shadow: 0 3px 8px rgba(0,0,0,.5); transition: transform .12s; }
 	.dkcard.sm { width: 58px; }
 	.dkcard:hover { transform: translateY(-4px); z-index: 2; }
-	.dkcard :global(canvas) { display: block; width: 100%; border-radius: 6px; }
+	.dkcard :global(.cardface) { display: block; width: 100%; border-radius: 6px; }
 	.dkcard.sel { outline: 3px solid #efb46a; box-shadow: 0 0 0 3px rgba(239,180,106,.4), 0 6px 16px rgba(0,0,0,.6); }
 	.dkcard.empty { cursor: default; box-shadow: none; aspect-ratio: 1192 / 1664; border: 1px dashed rgba(255,255,255,.1); background: rgba(255,255,255,.02); }
 	.dkcard.empty:hover { transform: none; }
@@ -1552,9 +1552,9 @@
 	.dkgrid .dkcard.zhand { outline: 2px solid var(--tc, #ef7d22); }
 	.dkgrid .dkcard.zupg { outline: 2px solid #3f7fe0; }
 	.dkgrid .dkcard.zrem { outline: 2px solid rgba(150,160,175,.6); }
-	.dkgrid .dkcard.zhand :global(canvas), .dkgrid .dkcard.zupg :global(canvas) { filter: grayscale(.55) brightness(.5); }
-	.dkgrid .dkcard.zrem :global(canvas) { filter: grayscale(.9) brightness(.42); }
-	.dkgrid .dkcard.sel :global(canvas) { filter: none; }
+	.dkgrid .dkcard.zhand :global(.cardface), .dkgrid .dkcard.zupg :global(.cardface) { filter: grayscale(.55) brightness(.5); }
+	.dkgrid .dkcard.zrem :global(.cardface) { filter: grayscale(.9) brightness(.42); }
+	.dkgrid .dkcard.sel :global(.cardface) { filter: none; }
 	.dkbadge { position: absolute; left: 3px; bottom: 3px; right: 3px; font-size: .54rem; font-weight: 800; letter-spacing: .02em; text-align: center; padding: 2px 0; border-radius: 5px; }
 	.dkbadge.hand { background: var(--tc, #ef7d22); color: #fff; }
 	.dkbadge.upg { background: rgba(63,127,224,.92); color: #04122b; }
@@ -1610,24 +1610,24 @@
 	.hs-h { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 9px; font-size: .7rem; letter-spacing: .1em; text-transform: uppercase; color: #cbd5e1; }
 	.hs-h em { font-style: normal; font-size: .6rem; letter-spacing: .04em; text-transform: none; color: #7c8aa0; }
 	.hs-card { position: relative; display: block; width: 100%; padding: 0; background: none; border: none; cursor: pointer; border-radius: 6px; }
-	.hs-card :global(canvas) { display: block; width: 100%; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,.55); }
+	.hs-card :global(.cardface) { display: block; width: 100%; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,.55); }
 	.hs-pair { display: flex; justify-content: center; gap: 14px; }
 	.hs-pair .hs-card { width: min(112px, 29vw); cursor: zoom-in; }
-	.hs-card.basic.g :global(canvas) { box-shadow: 0 0 0 2px #e8b64a, 0 4px 12px rgba(0,0,0,.55); }
-	.hs-card.basic.s :global(canvas) { box-shadow: 0 0 0 2px #c6d0db, 0 4px 12px rgba(0,0,0,.55); }
+	.hs-card.basic.g :global(.cardface) { box-shadow: 0 0 0 2px #e8b64a, 0 4px 12px rgba(0,0,0,.55); }
+	.hs-card.basic.s :global(.cardface) { box-shadow: 0 0 0 2px #c6d0db, 0 4px 12px rgba(0,0,0,.55); }
 	.hs-tri { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; }
 	.hs-col { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; }
 	.hs-pill { font-size: .62rem; padding: 2px 8px; border-radius: 999px; white-space: nowrap; background: color-mix(in srgb, var(--c) 25%, transparent); border: 1px solid var(--c); color: #fff; }
-	.hs-card.col :global(canvas) { box-shadow: 0 0 0 2px var(--c), 0 4px 12px rgba(0,0,0,.55); }
-	.hs-card.sel :global(canvas) { box-shadow: 0 0 0 3px #efb46a, 0 0 14px rgba(239,180,106,.6); }
+	.hs-card.col :global(.cardface) { box-shadow: 0 0 0 2px var(--c), 0 4px 12px rgba(0,0,0,.55); }
+	.hs-card.sel :global(.cardface) { box-shadow: 0 0 0 3px #efb46a, 0 0 14px rgba(239,180,106,.6); }
 	.hs-empty { width: 100%; aspect-ratio: 1192 / 1664; display: grid; place-items: center; border-radius: 6px; border: 1px dashed color-mix(in srgb, var(--c) 50%, transparent); color: #55637a; }
 	.hs-extra { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 10px; }
 	.hs-ult { margin-top: auto; margin-bottom: 12px; display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 14px;
 		background: linear-gradient(90deg, rgba(120,60,190,.28), rgba(40,20,70,.4)); border: 1px solid rgba(165,110,230,.45); }
 	.hs-ult.on { border-color: rgba(200,160,255,.8); box-shadow: 0 0 18px rgba(165,110,230,.4); }
 	.hs-ultthumb { width: 58px; flex: none; padding: 0; background: none; border: none; cursor: zoom-in; border-radius: 5px; }
-	.hs-ultthumb :global(canvas) { display: block; width: 100%; border-radius: 5px; filter: grayscale(.8) brightness(.55); }
-	.hs-ult.on .hs-ultthumb :global(canvas) { filter: none; box-shadow: 0 0 0 2px #b482f0, 0 0 12px rgba(165,110,230,.7); }
+	.hs-ultthumb :global(.cardface) { display: block; width: 100%; border-radius: 5px; filter: grayscale(.8) brightness(.55); }
+	.hs-ult.on .hs-ultthumb :global(.cardface) { filter: none; box-shadow: 0 0 0 2px #b482f0, 0 0 12px rgba(165,110,230,.7); }
 	.hs-ultinfo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; font-size: .62rem; color: #b9a7d6; }
 	.hs-ultinfo b { font-weight: normal; font-size: .82rem; color: #efe0ff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 	.hs-lv { display: flex; gap: 3px; }
@@ -1647,8 +1647,8 @@
 	.lvtake img { height: 1.1em; width: auto; max-width: 1.5em; flex: none; object-fit: contain; }
 	.lvwrap { position: fixed; inset: 0; z-index: 45; }
 	/* upgrades lie upside down, like on the table (item symbol upright) */
-	.dkcard :global(canvas) { transition: transform .5s cubic-bezier(.3,.7,.2,1); }
-	.dkcard.zupg :global(canvas), .dkzone.upg .dkcard :global(canvas) { transform: rotate(180deg); }
+	.dkcard :global(.cardface) { transition: transform .5s cubic-bezier(.3,.7,.2,1); }
+	.dkcard.zupg :global(.cardface), .dkzone.upg .dkcard :global(.cardface) { transform: rotate(180deg); }
 	.deckstack.lvup, .mdeck.lvup { animation: deckpulse 1.4s ease-in-out infinite; border-radius: 6px; }
 	@keyframes deckpulse { 0%, 100% { box-shadow: 0 0 0 2px rgba(240,192,96,.5); } 50% { box-shadow: 0 0 0 2px #f0c060, 0 0 18px rgba(240,192,96,.9); } }
 	/* keep the bottom of the last row reachable above the sticky bar */
@@ -1689,7 +1689,7 @@
 	.cc-flip.skip { display: grid; place-items: center; border: 1.5px dashed rgba(255,255,255,.2); border-radius: 5%; color: #6b7a8d; font-size: 2rem; }
 	.cc-face { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; border-radius: 5%; overflow: hidden; }
 	.cc-face.cc-front { transform: rotateY(180deg); box-shadow: 0 0 0 2px var(--tint); }
-	.cc-face.cc-front :global(canvas) { display: block; width: 100%; border-radius: 5%; }
+	.cc-face.cc-front :global(.cardface) { display: block; width: 100%; border-radius: 5%; }
 	.cc-back { display: flex; flex-direction: column; box-shadow: 0 0 0 2px var(--tint);
 		background: repeating-linear-gradient(135deg, rgba(90,70,40,.04) 0 1px, transparent 1px 5px), radial-gradient(115% 78% at 50% 40%, #fdfcf8, #efe9db 62%, #ddd4c1 100%); }
 	.cc-back .band { position: relative; height: 13%; background: linear-gradient(180deg, #2c333f, #1a1f28); }
@@ -1737,7 +1737,7 @@
 	.fxb.dur { padding: 0 4px; font-size: .62rem; }
 	.fxb.dur.on { background: rgba(199,154,78,.34); border-color: rgba(230,190,110,.9); color: #fff; }
 	.fxb.x { padding: 0 6px; }
-	.bigcard :global(canvas) { border-radius: 4%; }
+	.bigcard :global(.cardface) { border-radius: 4%; }
 
 	/* centered preview of a picked hand card */
 	.pvscrim { position: fixed; inset: 0; z-index: 30; background: rgba(3,6,12,.55); backdrop-filter: blur(3px); }
@@ -1746,7 +1746,7 @@
 	.pvflip { position: relative; width: 100%; aspect-ratio: 1192 / 1664; transform-style: preserve-3d; transition: transform .46s cubic-bezier(.4,.15,.2,1); }
 	.pvflip.up { transform: rotateY(180deg); }
 	.pvface { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; border-radius: 3%; overflow: hidden; }
-	.pvface.front :global(canvas) { display: block; width: 100%; border-radius: 3%; }
+	.pvface.front :global(.cardface) { display: block; width: 100%; border-radius: 3%; }
 	.pvcard { box-shadow: 0 0 0 3px var(--glow), 0 0 44px var(--glow), 0 24px 60px rgba(0,0,0,.7); }
 	.pvface.back { transform: rotateY(180deg); display: flex; flex-direction: column; background: radial-gradient(115% 78% at 50% 40%, #fdfcf8, #efe9db 62%, #ddd4c1 100%); box-shadow: inset 0 0 0 1px rgba(120,95,55,.4); }
 	.pvface.back .band { position: relative; height: 13%; background: linear-gradient(180deg, #2c333f, #1a1f28); }
@@ -1829,10 +1829,10 @@
 	   out; the clip keeps the sunk part from showing in the gap under the dash */
 	.tray.retracted { transform: translateY(calc(var(--cw) * 1.396 + 6px * var(--uis, 1))); clip-path: inset(-800px -800px calc(var(--cw) * 1.396 - 30px * var(--uis, 1) - var(--dh, 70px)) -800px); }
 	.hc { width: var(--cw); margin: 0 calc(var(--cw) * -0.11); padding: 0; background: none; border: none; cursor: pointer; pointer-events: auto; transform-origin: bottom center; transform: translateY(var(--y)) rotate(var(--rot)); transition: transform .16s; }
-	.hc :global(canvas) { display: block; width: 100%; border-radius: 6%; box-shadow: 0 8px 18px rgba(0,0,0,.55); }
+	.hc :global(.cardface) { display: block; width: 100%; border-radius: 6%; box-shadow: 0 8px 18px rgba(0,0,0,.55); }
 	/* hovered / tapped card straightens and magnifies so its text is readable */
 	.hc:hover { transform: translateY(calc(var(--y) - 36px * var(--uis, 1))) rotate(0deg) scale(1.45); z-index: 5; }
-	.hc:hover :global(canvas) { box-shadow: 0 14px 34px rgba(0,0,0,.7); }
+	.hc:hover :global(.cardface) { box-shadow: 0 14px 34px rgba(0,0,0,.7); }
 	.tray.retracted .hc:hover { transform: translateY(var(--y)) rotate(var(--rot)); } /* the whole hand rises first */
 	/* spread layout: side by side, no overlap; shrink evenly if the hand is wide */
 	.tray.spread .hc { flex: 0 1 var(--cw); width: auto; min-width: 0; margin: 0 4px; }
@@ -1851,7 +1851,7 @@
 	/* persistent ultimate access on the dash (once unlocked) */
 	.ultmini { position: relative; width: 40px; padding: 0; background: none; border: none; cursor: zoom-in; border-radius: 5px; overflow: visible; flex: none;
 		box-shadow: 0 0 0 2px #b482f0, 0 0 12px rgba(165,110,230,.6), 0 3px 8px rgba(0,0,0,.55); transition: transform .12s; }
-	.ultmini :global(canvas) { display: block; width: 100%; border-radius: 5px; }
+	.ultmini :global(.cardface) { display: block; width: 100%; border-radius: 5px; }
 	.ultmini:hover { transform: translateY(-3px); }
 	.ultmini.locked { aspect-ratio: 1192 / 1664; display: grid; place-items: center; cursor: default; box-shadow: none; border: 1px dashed rgba(180,130,240,.28);
 		font-size: .5rem; font-weight: 900; letter-spacing: .08em; color: rgba(200,170,240,.3); }
@@ -1925,7 +1925,7 @@
 	.dockhint { background: none; border: none; cursor: pointer; font-size: .62rem; letter-spacing: .08em; text-transform: uppercase; color: rgba(255,255,255,.16); }
 	.dockhint:hover { color: rgba(240,220,174,.55); }
 	.dkh { flex: 0 1 36px; min-width: 0; padding: 0; background: none; border: none; cursor: pointer; border-radius: 4px; overflow: hidden; box-shadow: 0 2px 6px rgba(0,0,0,.55); transition: transform .12s; }
-	.dkh :global(canvas) { display: block; width: 100%; }
+	.dkh :global(.cardface) { display: block; width: 100%; }
 	.dkh:hover { transform: translateY(-3px); }
 	.dm-turns { display: flex; gap: 5px; align-items: center; }
 	/* each slot: a faint Roman numeral behind, the card (if any) on top */
@@ -1938,7 +1938,7 @@
 	.discstack:hover .disc-card { filter: brightness(1.06); }
 	.disc-card { position: absolute; left: 50%; top: 0; width: 38px; margin-left: -19px; border-radius: 4px; overflow: hidden;
 		box-shadow: 0 2px 5px rgba(0,0,0,.6); transform: translate(calc(var(--i) * 2.5px), calc(var(--i) * 2.5px)); z-index: var(--i); }
-	.disc-card :global(canvas) { display: block; width: 100%; border-radius: 4px; }
+	.disc-card :global(.cardface) { display: block; width: 100%; border-radius: 4px; }
 
 	/* zoomed: its own insets are in design px, so the real-px dash height is divided back */
 	.ppanel.withdash { bottom: calc(22px + var(--dh, 70px) / var(--uis, 1)); }
@@ -1996,7 +1996,7 @@
 	.msep { flex: none; width: 1px; height: 30px; margin: 0 1px; background: rgba(255,255,255,.14); }
 	.mdisc { height: 36px; display: grid; place-items: center; border: 1px dashed rgba(255,255,255,.2); border-radius: 4px; }
 	.mdstack { position: relative; width: 100%; padding: 0; background: none; border: none; cursor: pointer; }
-	.mdstack :global(canvas) { display: block; width: 100%; border-radius: 4px; }
+	.mdstack :global(.cardface) { display: block; width: 100%; border-radius: 4px; }
 	.mtrash { width: 14px; color: rgba(255,255,255,.25); display: grid; }
 	.mtrash :global(svg) { width: 100%; }
 	.mdeck { height: 36px; padding: 0; border-radius: 4px; cursor: pointer; display: grid; place-items: center; border: 1px solid rgba(120,95,55,.6);

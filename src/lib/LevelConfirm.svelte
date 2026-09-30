@@ -61,7 +61,7 @@
 	.lc { position: absolute; inset: 0; z-index: 30; display: grid; place-items: center; background: rgba(3,6,12,.72); backdrop-filter: blur(3px); border-radius: inherit; }
 	.box { display: flex; gap: 22px; align-items: center; padding: 20px 24px; border-radius: 16px; background: rgba(11,16,26,.97); border: 1px solid rgba(199,154,78,.6); box-shadow: 0 24px 70px rgba(0,0,0,.7); color: #e5e7eb; }
 	.cardw { width: 250px; flex: none; }
-	.cardw :global(canvas) { display: block; width: 100%; border-radius: 8px; box-shadow: 0 10px 26px rgba(0,0,0,.6); }
+	.cardw :global(.cardface) { display: block; width: 100%; border-radius: 8px; box-shadow: 0 10px 26px rgba(0,0,0,.6); }
 	.info { width: 300px; display: flex; flex-direction: column; gap: 10px; }
 	h3 { margin: 0; font-weight: normal; font-size: 1.5rem; color: #f6ead2; }
 	ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; font-size: .9rem; }
