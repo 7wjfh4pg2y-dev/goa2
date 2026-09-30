@@ -53,7 +53,7 @@ export type CardReq =
 	| { kind: 'swap'; pid: string; idx: number } // level-up phase: swap this round's pick for its twin (idx = the twin)
 	| { kind: 'defeatMinion'; pid: string; piece: string } // pid defeated an enemy minion: +2 coins (+4 heavy)
 	| { kind: 'removeMinion'; pid: string; piece: string } // a card effect removed a minion: no coins
-	| { kind: 'defeatHero'; pid: string; target: string } // pid defeated target's hero (coins, assists, life)
+	| { kind: 'defeatHero'; pid: string; target: string; keepCard?: boolean } // pid defeated target's hero (coins, assists, life); keepCard = their card this turn had already resolved
 	| { kind: 'respawn'; pid: string; hex: string } // a defeated hero comes back on a hex
 	| { kind: 'forcepass'; pid: string } // host: pass everyone not yet committed
 	| { kind: 'advance'; pid: string } // host: lock this turn's cards into their slots, go to next turn
@@ -99,7 +99,7 @@ export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 	}
 
 	if (req.kind === 'defeatMinion' || req.kind === 'removeMinion') return minionOff(s, req.pid, req.piece, req.kind === 'defeatMinion')
-	if (req.kind === 'defeatHero') return defeatHero(s, req.pid, req.target)
+	if (req.kind === 'defeatHero') return defeatHero(s, req.pid, req.target, req.keepCard)
 	if (req.kind === 'respawn') return respawnHero(s, req.pid, req.hex)
 
 	const cs = cards[req.pid]
@@ -1223,29 +1223,32 @@ export function heroDefeatSummary(s: MatchState, pid: string, target: string) {
 
 /** `pid` defeats `target`'s hero: +coins = its level (from the game, not the victim);
  *  every teammate of `pid` +assist coins = its level tier; the victim's team spends
- *  that tier in Life (+1 with the Bounty); markers on it come off; its face-down card
- *  is discarded; the hero leaves the board until it respawns. */
-export function defeatHero(s: MatchState, pid: string, target: string): Partial<MatchState> {
+ *  that tier in Life (+1 with the Bounty); markers on it come off; the card they
+ *  played this turn is discarded without effect — unless it had already resolved
+ *  (`keepCard`); their hand, played and discarded cards stay; the hero leaves the
+ *  board until it respawns. */
+export function defeatHero(s: MatchState, pid: string, target: string, keepCard = false): Partial<MatchState> {
 	const hero = s.pieces?.[target]
 	if (!hero || hero.kind !== 'hero' || pid === target) return {}
 	const sum = heroDefeatSummary(s, pid, target)
 	let cards = addCoinsTo(s.cards ?? {}, pid, sum.coins)
 	for (const a of sum.assists) cards = addCoinsTo(cards, a, sum.assist)
 	const v = cards[target]
-	if (v && v.pending != null && v.pending >= 0) cards = { ...cards, [target]: { ...v, discard: [...v.discard, v.pending], pending: null } }
+	if (!keepCard && v && v.pending != null && v.pending >= 0) cards = { ...cards, [target]: { ...v, discard: [...v.discard, v.pending], pending: null } }
 	const pieces: Record<string, Piece> = {}
 	for (const id in s.pieces) if (id !== target && s.pieces[id].attachedTo !== target) pieces[id] = s.pieces[id]
 	const life = sum.team ? { ...s.life, [sum.team]: Math.max(0, s.life[sum.team] - sum.lives) } : s.life
 	return { pieces, cards, life, defeated: { ...(s.defeated ?? {}), [target]: { round: s.round, turn: s.turn, piece: hero } } }
 }
 
-/** A defeated hero returns at the start of the next turn in which they play a card
- *  (i.e. a later turn, holding a card to play) — possibly in the next round. */
+/** A defeated hero returns at the start of the next turn in which they play a card:
+ *  a later turn (possibly the next round) once they've committed a card for it. */
 export function canRespawn(s: MatchState, pid: string): boolean {
 	const d = s.defeated?.[pid]
 	if (!d) return false
 	const later = s.round > d.round || (s.round === d.round && s.turn > d.turn)
-	return later && (s.cards?.[pid]?.hand.length ?? 0) > 0
+	const cs = s.cards?.[pid]
+	return later && !!cs && ((cs.pending != null && cs.pending >= 0) || cs.turns[s.turn - 1] != null)
 }
 
 export function respawnHero(s: MatchState, pid: string, hex: string): Partial<MatchState> {
