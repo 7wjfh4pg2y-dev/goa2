@@ -24,6 +24,7 @@ import {
 	allowedMoves,
 	manualMove,
 	lockPicks,
+	levelCost,
 	takeUpgrade,
 	levelOf,
 	TURNS_PER_ROUND
@@ -378,6 +379,44 @@ describe('manual moves', () => {
 		expect(undone.coins).toBe(7 + 6)
 		// after the round it's locked in
 		expect(allowedMoves(lockPicks(s), ult)).toEqual([])
+	})
+
+	it('costs follow the rules: level L → L+1 costs L', () => {
+		expect([1, 2, 3, 4, 5, 6, 7].map(levelCost)).toEqual([1, 2, 3, 4, 5, 6, 7])
+		let s = { ...newPlayerCardState(H), coins: 28 }
+		const order: Array<[string, number]> = [['RED', 2], ['BLUE', 2], ['GREEN', 2], ['RED', 3], ['BLUE', 3], ['GREEN', 3]]
+		for (const [col, tier] of order) {
+			const before = s.coins, lvl = levelOf(s)
+			s = manualMove(s, at(col, tier)[0], 'hand')
+			expect(before - s.coins).toBe(lvl)
+		}
+		expect(s.coins).toBe(28 - 21)
+	})
+
+	it('red 2a → Deck refunds the 1 coin, and it can buy blue instead', () => {
+		let s = { ...newPlayerCardState(H), coins: 1 }
+		const [a, b] = at('RED', 2)
+		s = manualMove(s, a, 'hand')
+		expect(s.upgrade).toEqual([b])
+		expect(s.coins).toBe(0)
+		s = manualMove(s, a, 'deck')
+		expect(s.coins).toBe(1)
+		expect(s.hand).not.toContain(a)
+		expect(s.upgrade).not.toContain(b)
+		s = manualMove(s, at('BLUE', 2)[0], 'hand')
+		expect(levelOf(s)).toBe(2)
+		expect(s.coins).toBe(0)
+	})
+
+	it('a Tier I card never goes to the deck', () => {
+		let s = { ...newPlayerCardState(H), coins: 50 }
+		const [r1] = at('RED', 1)
+		expect(allowedMoves(s, r1)).not.toContain('deck')
+		s = manualMove(s, at('RED', 2)[0], 'hand') // Tier I removed
+		expect(allowedMoves(s, r1)).not.toContain('deck')
+		s = manualMove(s, at('RED', 2)[0], 'deck') // undo: Tier I back in hand, not the deck
+		expect(s.hand).toContain(r1)
+		expect(manualMove(s, r1, 'deck')).toBe(s)
 	})
 
 	it('basics never move', () => {
