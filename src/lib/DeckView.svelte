@@ -143,18 +143,20 @@
 	const CGAP = 10, MID = 30, SP = 6, FOOT = 30, GY = 18, TITLE = 128, K = 0.82, R = 1192 / 1664, TH = DH - 2 * PAD;
 	$: TW = DW - 2 * PAD - INS - IGAP;
 	$: COLW = Math.floor((TW - 2 * CGAP) / 3);
-	$: F = Math.max(...COLS.map((c) => tierIn(cs, c))) - 1;
+	// each colour enlarges ITS current tier (the one it holds); every tier gets the same big size
 	$: rowW = [COLW - 2 * SP - TITLE, (COLW - MID - 2 * SP) / 2, (COLW - MID - 2 * SP) / 2];
 	$: AV = TH - 16 - 3 * FOOT - 2 * GY;
-	$: CWB = Math.floor(Math.min(rowW[F], (AV / (1 + 2 * K)) * R));
-	$: CWO = (r: number) => Math.floor(Math.min(rowW[r], K * CWB, ((AV - CWB / R) / 2) * R));
-	$: cw = [0, 1, 2].map((r) => (r === F ? CWB : CWO(r)));
-	$: ch = cw.map((w) => Math.round(w / R));
-	$: PT = Math.max(8, (TH - (ch[0] + ch[1] + ch[2] + 3 * FOOT + 2 * GY)) / 2);
-	$: tops = [PT, PT + ch[0] + FOOT + GY, PT + ch[0] + ch[1] + 2 * (FOOT + GY)];
-	$: xL = (r: number) => COLW / 2 - MID / 2 - cw[r] / 2;
-	$: xR = (r: number) => COLW / 2 + MID / 2 + cw[r] / 2;
-	$: x0 = SP + cw[0] / 2;
+	$: BIG = Math.floor(Math.min(rowW[1], (AV / (1 + 2 * K)) * R));
+	$: SMALL = Math.floor(K * BIG);
+	type Geo = { F: number; cw: number[]; ch: number[]; tops: number[]; x0: number; xL: (r: number) => number; xR: (r: number) => number };
+	$: geo = COLS.map((c): Geo => {
+		const F = tierIn(cs, c) - 1;
+		const cw = [0, 1, 2].map((r) => (r === F ? BIG : SMALL));
+		const ch = cw.map((w) => Math.round(w / R));
+		const PT = Math.max(8, (TH - (ch[0] + ch[1] + ch[2] + 3 * FOOT + 2 * GY)) / 2);
+		const tops = [PT, PT + ch[0] + FOOT + GY, PT + ch[0] + ch[1] + 2 * (FOOT + GY)];
+		return { F, cw, ch, tops, x0: SP + cw[0] / 2, xL: (r) => COLW / 2 - MID / 2 - cw[r] / 2, xR: (r) => COLW / 2 + MID / 2 + cw[r] / 2 };
+	});
 	$: xM = COLW / 2;
 	$: colX = (k: number) => k * (COLW + CGAP);
 	const elbow = (x1: number, y1: number, x2: number, y2: number) => { const my = (y1 + y2) / 2; return `M${x1} ${y1} V${my} H${x2} V${y2}`; };
@@ -164,15 +166,15 @@
 
 {#snippet itemIcon(i: number)}<img src={ic(`item_${itemOf(i).toLowerCase()}`)} alt="" />{/snippet}
 
-{#snippet node(i: number, r: number, x: number)}
+{#snippet node(i: number, r: number, x: number, g: Geo)}
 	{@const s = state(i)}
 	{@const tw = twin(i)}
 	{@const src = swapSource(cs, i)}
-	<div class="nd {s}" class:big={r === F} class:sel={i === sel} class:foc={i === hov} style="left:{x - cw[r] / 2}px; top:{tops[r]}px; width:{cw[r]}px">
+	<div class="nd {s}" class:big={r === g.F} class:sel={i === sel} class:foc={i === hov} style="left:{x - g.cw[r] / 2}px; top:{g.tops[r]}px; width:{g.cw[r]}px">
 		<button class="nd-card" on:click={() => pick(i)} on:dblclick={() => onPreview(i)} on:pointerenter={() => over(i)} on:pointerleave={out} title={cards[i]?.name}><Card heroId={H} card={cards[i]} /></button>
 		<div class="nd-foot">
 			{#if s === 'cur'}<span class="pill cur">In hand</span>
-			{:else if s === 'past'}<span class="pill past">Used</span>
+			{:else if s === 'past'}<span class="pill past">Removed</span>
 			{:else if s === 'item' && canSwapNow(i) && src != null}
 				<!-- this round's other path: swap it in, the pick becomes the item -->
 				<button class="take swap" on:click={() => ask('swap', i)} on:pointerenter={() => over(i)} on:pointerleave={out} title="Swap to this path — {cards[src]?.name} becomes your item">Swap{#if itemOf(src)}<span class="tsep"></span>+1 {@render itemIcon(src)}{ITEM_SHORT[itemOf(src)]}{/if}</button>
@@ -194,16 +196,17 @@
 			{#each COLS as c, k}
 				{@const L = tierIn(cs, c)}
 				{@const t = tr[c]}
+				{@const g = geo[k]}
 				{@const h = heldOf(c)}
 				{@const nextHere = nextTier === L + 1 && nextTier <= 3}
 				<div class="col" style="--c:{COL[c]}; left:{colX(k)}px; width:{COLW}px; height:{TH}px">
 					<svg width={COLW} height={TH} aria-hidden="true">
-						{#each t.II as ii, a}<path d={elbow(x0, tops[0] + ch[0] + FOOT - 6, a ? xR(1) : xL(1), tops[1])} class:lit={passed(ii)} class:open={L === 1 && nextTier === 2} />{/each}
-						{#each t.II as ii, a}{#each t.III as iii, b}<path d={elbow(a ? xR(1) : xL(1), tops[1] + ch[1] + FOOT - 6, b ? xR(2) : xL(2), tops[2])} class:lit={passed(ii) && passed(iii)} class:open={zoneOf(ii) === 'held' && nextTier === 3} />{/each}{/each}
+						{#each t.II as ii, a}<path d={elbow(g.x0, g.tops[0] + g.ch[0] + FOOT - 6, a ? g.xR(1) : g.xL(1), g.tops[1])} class:lit={passed(ii)} class:open={L === 1 && nextTier === 2} />{/each}
+						{#each t.II as ii, a}{#each t.III as iii, b}<path d={elbow(a ? g.xR(1) : g.xL(1), g.tops[1] + g.ch[1] + FOOT - 6, b ? g.xR(2) : g.xL(2), g.tops[2])} class:lit={passed(ii) && passed(iii)} class:open={zoneOf(ii) === 'held' && nextTier === 3} />{/each}{/each}
 					</svg>
 					<!-- Tier I on the left, the colour's title + status beside it -->
-					{#if t.I != null}{@render node(t.I, 0, x0)}{/if}
-					<div class="colh" style="left:{SP + cw[0] + 8}px; top:{tops[0]}px; right:{SP}px; height:{ch[0]}px">
+					{#if t.I != null}{@render node(t.I, 0, g.x0, g)}{/if}
+					<div class="colh" style="left:{SP + g.cw[0] + 8}px; top:{g.tops[0]}px; right:{SP}px; height:{g.ch[0]}px">
 						<b>{NAME[c]}</b>
 						<span class="ct">Tier {ROM[L - 1]} in hand</span>
 						{#if h != null}<span class="cn">{cards[h]?.name}</span>{/if}
@@ -211,10 +214,10 @@
 						{:else if nextHere}<span class="cnext">Next: a Tier {ROM[nextTier - 1]} · {LVS[nextTier - 1]}</span>
 						{:else if L >= 3}<span class="cdone">Path complete</span>{/if}
 					</div>
-					{#each t.II as i, a (i)}{@render node(i, 1, a ? xR(1) : xL(1))}{/each}
-					<span class="tb" class:lit={L >= 2} style="left:{xM}px; top:{tops[1] + ch[1] / 2}px" title="Tier II · {LVS[1]}">II</span>
-					{#each t.III as i, a (i)}{@render node(i, 2, a ? xR(2) : xL(2))}{/each}
-					<span class="tb" class:lit={L >= 3} style="left:{xM}px; top:{tops[2] + ch[2] / 2}px" title="Tier III · {LVS[2]}">III</span>
+					{#each t.II as i, a (i)}{@render node(i, 1, a ? g.xR(1) : g.xL(1), g)}{/each}
+					<span class="tb" class:lit={L >= 2} style="left:{xM}px; top:{g.tops[1] + g.ch[1] / 2}px" title="Tier II · {LVS[1]}">II</span>
+					{#each t.III as i, a (i)}{@render node(i, 2, a ? g.xR(2) : g.xL(2), g)}{/each}
+					<span class="tb" class:lit={L >= 3} style="left:{xM}px; top:{g.tops[2] + g.ch[2] / 2}px" title="Tier III · {LVS[2]}">III</span>
 				</div>
 			{/each}
 		</div>
@@ -270,7 +273,7 @@
 						{#if fState === 'far'}<p class="note">Tier {ROM[(cards[focus]?.level ?? 1) - 1]} · {LVS[(cards[focus]?.level ?? 1) - 1]}{(cards[focus]?.level ?? 1) === 3 ? ', once all three colours are on Tier II' : ''}</p>{/if}
 					{:else if fState === 'cur'}<p class="note">In your hand{picks.includes(focus) && levelPhase ? ' — picked this round, you can still swap it' : ''}.</p>
 					{:else if fState === 'item'}<p class="note">Your item: <b>+1 {ITEM_NAME[itemOf(focus)] ?? ''}</b> — it sits under your hero board.</p>
-					{:else if fState === 'past'}<p class="note">Removed — replaced by a higher tier.</p>
+					{:else if fState === 'past'}<p class="note">Removed — out of your hand, upgrades and deck.</p>
 					{:else if focus === ult}<p class="note">{cs.ultimate ? 'Active — a passive ability, not part of your hand.' : `Level 8, once all three colours are on Tier III · ${t3done} / 3`}</p>
 					{:else}<p class="note">Basic card — always in your hand.</p>{/if}
 				{/if}
@@ -335,9 +338,9 @@
 	.colh .cdone { align-self: flex-start; margin-top: 4px; font-size: .74rem; color: #d7c4f5; }
 	.tb { position: absolute; transform: translate(-50%, -50%); width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: .76rem; background: #0c0f16; border: 2px solid #4a4f5c; color: #8b93a6; z-index: 1; }
 	.tb.lit { border-color: #d9b25e; color: #fff1c9; box-shadow: 0 0 10px rgba(217,178,94,.55); }
-	.nd { position: absolute; display: flex; flex-direction: column; align-items: center; z-index: 2; transition: transform .12s; }
+	.nd { position: absolute; display: flex; flex-direction: column; align-items: center; z-index: 2; transition: transform .12s, left .3s ease, top .3s ease, width .3s ease; }
 	.nd-card { display: block; width: 100%; padding: 0; border: none; background: none; cursor: pointer; border-radius: 6px; }
-	.nd-card :global(canvas) { display: block; width: 100%; border-radius: 6px; box-shadow: 0 5px 14px rgba(0,0,0,.6); }
+	.nd-card :global(canvas) { display: block; width: 100%; border-radius: 6px; box-shadow: 0 5px 14px rgba(0,0,0,.6); transition: transform .5s cubic-bezier(.3,.7,.2,1), filter .3s; }
 	.nd:hover, .nd.foc { transform: translateY(-3px); z-index: 3; }
 	.nd-foot { height: 30px; display: flex; align-items: center; justify-content: center; gap: 6px; }
 	.pill { display: inline-flex; align-items: center; gap: 4px; font-size: .7rem; padding: 3px 10px; border-radius: 999px; white-space: nowrap; }
@@ -356,7 +359,8 @@
 	.take:hover { filter: brightness(1.12); }
 	.nd.cur :global(canvas) { box-shadow: 0 0 0 2px #d9b25e, 0 0 16px color-mix(in srgb, var(--c) 70%, transparent), 0 6px 14px rgba(0,0,0,.6); }
 	.nd.next :global(canvas) { box-shadow: 0 0 0 2px var(--c), 0 0 14px var(--c); }
-	.nd.item :global(canvas) { filter: saturate(.45) brightness(.55); box-shadow: 0 0 0 1px #3f7fe0; }
+	/* an upgrade is turned upside down, like on the table — only its item symbol (now upright) matters */
+	.nd.item :global(canvas) { transform: rotate(180deg); filter: saturate(.55) brightness(.7); box-shadow: 0 0 0 1px #3f7fe0; }
 	.nd.past :global(canvas) { filter: grayscale(1) brightness(.4); }
 	.nd.far :global(canvas) { filter: grayscale(.5) brightness(.55); }
 	.nd.foc :global(canvas) { filter: none; }

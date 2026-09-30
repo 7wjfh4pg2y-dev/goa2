@@ -40,6 +40,8 @@ export interface PlayerCardState {
 	/** Cards picked in this round's level-up phase: they can still be swapped for
 	 *  their twin until the round ends; cleared (= locked in) at the next round. */
 	roundPicks?: number[]
+	/** How many of this round's levels were paid for with coins (refunded if undone). */
+	roundPaid?: number
 }
 
 /** A place a card can live in a player's collection. */
@@ -337,7 +339,7 @@ export function levelUp(s: PlayerCardState, idx: number): PlayerCardState {
 	if (!canAfford(s) || !canPick(s, idx)) return s
 	const cost = levelCost(levelOf(s))
 	const next = heroCards(s.hero)[idx]?.color === 'PURPLE' ? { ...s, ultimate: true } : takeUpgrade(s, idx)
-	return { ...next, coins: s.coins - cost, level: levelOf(next), roundPicks: [...(s.roundPicks ?? []), idx] }
+	return { ...next, coins: s.coins - cost, level: levelOf(next), roundPicks: [...(s.roundPicks ?? []), idx], roundPaid: (s.roundPaid ?? 0) + 1 }
 }
 
 /** The pick (made this round, still held) whose twin is `idx`, if `idx` can be swapped in. */
@@ -364,42 +366,100 @@ export function swapPick(s: PlayerCardState, idx: number): PlayerCardState {
 /** Round end after the level-up phase: lock in this round's picks; no level-up = a pity coin. */
 export function closeLevelPhase(s: PlayerCardState): PlayerCardState {
 	const leveled = (s.roundPicks ?? []).length > 0
-	return { ...s, coins: leveled ? s.coins : s.coins + 1, roundPicks: [] }
+	return { ...s, coins: leveled ? s.coins : s.coins + 1, roundPicks: [], roundPaid: 0 }
 }
 
+/** Any round end: this round's choices lock in. */
+export function lockPicks(s: PlayerCardState): PlayerCardState {
+	return { ...s, roundPicks: [], roundPaid: 0 }
+}
+
+/** Was this card (or its twin) chosen this round? Such choices can still change. */
+export function pickedThisRound(s: PlayerCardState, idx: number): boolean {
+	return (s.roundPicks ?? []).some((p) => p === idx || twinOf(s.hero, p) === idx)
+}
+
+/** Higher-tier cards of a colour that are chosen (held or under the board as items). */
+function chosenAbove(s: PlayerCardState, color: string, tier: number): number[] {
+	const held = heldList(s)
+	return heroCards(s.hero)
+		.map((c, i) => ({ c, i }))
+		.filter(({ c, i }) => c.color === color && (c.level ?? 1) > tier && (held.includes(i) || s.upgrade.includes(i)))
+		.map(({ i }) => i)
+}
+
+/** Drop a card from every pile it may sit in (hand, played slot, discard, face down, zones). */
+const lift = (s: PlayerCardState, i: number): PlayerCardState => ({
+	...s,
+	discard: s.discard.filter((j) => j !== i),
+	turns: s.turns.map((j) => (j === i ? null : j)),
+	pending: s.pending === i ? null : s.pending
+})
+
 /**
- * Manual moves a card may make (the deck view's Hand / Upgrade / Deck / Remove):
+ * Manual moves a card may make (the deck view's Hand / Upgrade / Remove):
  * - basics and the ultimate never move;
  * - Tier I: out of the hand only to Removed, and back to the hand;
- * - Tier II / III: between the hand and the upgrade area (a held one is only
- *   removed by levelling into the next tier — that's the level-up, not a move).
+ * - a removed card back to the hand = undo that colour's level-ups (only this round's);
+ * - Tier II / III, not chosen yet: to the hand or to upgrades (in order: II after I,
+ *   III once every colour is on II);
+ * - Tier II / III chosen this round: swap between hand and upgrades; chosen in an
+ *   earlier round: locked.
  */
 export function allowedMoves(s: PlayerCardState, idx: number): CardZone[] {
 	const c = heroCards(s.hero)[idx]
 	if (!c || !isColor(c.color, ...COLOURS)) return []
-	const held = heldList(s).includes(idx)
-	if ((c.level ?? 1) === 1) return held ? ['removed'] : ['hand']
-	if (held) return ['upgrade']
-	if (s.upgrade.includes(idx)) return ['hand']
-	return ['hand', 'upgrade']
+	const t = c.level ?? 1
+	const held = heldList(s)
+	if (s.removed.includes(idx)) return chosenAbove(s, c.color, t).every((i) => pickedThisRound(s, i)) ? ['hand'] : []
+	if (t === 1) return held.includes(idx) ? ['removed'] : ['hand']
+	const tw = twinOf(s.hero, idx)
+	const inPlay = (i: number) => i >= 0 && (held.includes(i) || s.upgrade.includes(i))
+	if (!inPlay(idx) && !inPlay(tw)) {
+		const inOrder = tierIn(s, c.color) === t - 1 && (t < 3 || COLOURS.every((col) => tierIn(s, col) >= 2))
+		return inOrder ? ['hand', 'upgrade'] : []
+	}
+	if (!pickedThisRound(s, idx)) return []
+	return held.includes(idx) ? ['upgrade'] : s.upgrade.includes(idx) ? ['hand'] : []
 }
 
-/** Apply a manual move if it's allowed, keeping one card per colour in hand:
- *  - a Tier II/III sent to the hand: its twin goes to upgrades, the lower-tier card
- *    of that colour is removed;
- *  - a Tier II/III sent to upgrades: its twin comes to the hand instead (and the
- *    lower-tier card is removed) — the other path of the same pick. */
+/**
+ * Apply a manual move if it's allowed, keeping one card per colour in hand:
+ * - a Tier II/III to the hand: its twin goes to upgrades, the lower card is removed;
+ * - a Tier II/III to upgrades: its twin comes to the hand instead (same pick, other path);
+ * - a removed card back to the hand: the higher tiers of that colour (hand + upgrade)
+ *   go back to the deck — that colour's level-ups this round are undone (coins refunded).
+ */
 export function manualMove(s: PlayerCardState, idx: number, to: CardZone): PlayerCardState {
 	if (!allowedMoves(s, idx).includes(to)) return s
-	const lvl = heroCards(s.hero)[idx]?.level ?? 1
-	// the card may be sitting in a played slot / the discard / face down
-	const out = (x: PlayerCardState, i: number): PlayerCardState =>
-		({ ...x, discard: x.discard.filter((j) => j !== i), turns: x.turns.map((j) => (j === i ? null : j)), pending: x.pending === i ? null : x.pending })
-	if (to === 'hand' && lvl >= 2) return takeUpgrade(s, idx)
-	if (to === 'upgrade' && lvl >= 2) {
-		const next = moveCard(out(s, idx), idx, 'upgrade')
-		const tw = twinOf(s.hero, idx)
-		return tw >= 0 ? takeUpgrade(next, tw) : next
+	const c = heroCards(s.hero)[idx]
+	const t = c?.level ?? 1
+	const tw = twinOf(s.hero, idx)
+	const picks = s.roundPicks ?? []
+	// undo: the higher tiers of this colour return to the deck
+	if (s.removed.includes(idx)) {
+		const above = chosenAbove(s, c.color, t)
+		let next: PlayerCardState = s
+		for (const i of above) next = moveCard(lift(next, i), i, 'deck')
+		next = { ...next, roundPicks: picks.filter((p) => !above.includes(p)) }
+		// refund the top levels that were paid for
+		let paid = s.roundPaid ?? 0, coins = next.coins
+		for (let L = levelOf(s) - 1; L >= levelOf(next) && paid > 0; L--, paid--) coins += levelCost(L)
+		next = { ...next, coins, roundPaid: paid }
+		next = moveCard(next, idx, 'hand')
+		return { ...next, level: levelOf(next) }
 	}
-	return moveCard(to === 'removed' ? out(s, idx) : s, idx, to)
+	if (t === 1) return moveCard(to === 'removed' ? lift(s, idx) : s, idx, to)
+	const held = heldList(s)
+	// a pick made this round: swap to the other path
+	if (held.includes(tw) || (to === 'upgrade' && held.includes(idx))) {
+		const up = to === 'upgrade' ? idx : tw, down = to === 'upgrade' ? tw : idx
+		const next = moveCard(moveCard(lift(s, up), up, 'upgrade'), down, 'hand')
+		return { ...next, roundPicks: picks.map((p) => (p === up ? down : p)) }
+	}
+	// a fresh pick from the deck
+	const pick = to === 'hand' ? idx : tw
+	let next = to === 'upgrade' ? moveCard(s, idx, 'upgrade') : s
+	next = pick >= 0 ? takeUpgrade(next, pick) : next
+	return { ...next, level: levelOf(next), roundPicks: pick >= 0 ? [...picks, pick] : picks }
 }

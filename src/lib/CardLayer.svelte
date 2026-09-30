@@ -1624,6 +1624,9 @@
 	.lvtake { flex: 2 1 auto; white-space: nowrap; }
 	.lvtake img { width: 16px; height: 12px; object-fit: contain; vertical-align: middle; }
 	.lvwrap { position: fixed; inset: 0; z-index: 45; }
+	/* upgrades lie upside down, like on the table (item symbol upright) */
+	.dkcard :global(canvas) { transition: transform .5s cubic-bezier(.3,.7,.2,1); }
+	.dkcard.zupg :global(canvas), .dkzone.upg .dkcard :global(canvas) { transform: rotate(180deg); }
 	.deckstack.lvup, .mdeck.lvup { animation: deckpulse 1.4s ease-in-out infinite; border-radius: 6px; }
 	@keyframes deckpulse { 0%, 100% { box-shadow: 0 0 0 2px rgba(240,192,96,.5); } 50% { box-shadow: 0 0 0 2px #f0c060, 0 0 18px rgba(240,192,96,.9); } }
 	/* keep the bottom of the last row reachable above the sticky bar */
