@@ -99,7 +99,9 @@ describe('token supply, lifetime and removal', async () => {
 		pieces = { a: tk('a', 'token_rock'), b: tk('b', 'token_rock'), c: tk('c', 'token_rock', 'other') }
 		expect(T.tokensLeft(pieces, 'o', 'token_rock')).toBe(1) // another hero's rocks don't count
 		expect(T.tokensLeft({ g: tk('g', 'token_grenade') }, 'o', 'token_grenade')).toBe(0)
-		expect(T.tokensLeft({}, 'o', 'token_magma')).toBe(Infinity) // limit not known yet
+		expect(T.tokensLeft({}, 'o', 'token_magma')).toBe(4)
+		expect(T.tokensLeft({ f: tk('f', 'token_familiar') }, 'o', 'token_familiar')).toBe(0)
+		expect(T.tokensLeft({}, 'o', 'token_unknown')).toBe(Infinity) // no known limit
 	})
 
 	it('clears Glitch/Grenade at end of turn, the rest at end of round; zombies, trees, companions, runes stay', () => {

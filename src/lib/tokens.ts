@@ -116,8 +116,9 @@ const RULES: Record<string, { limit?: number; expires?: Expiry }> = {
 	token_totem: { limit: 1 },
 	companion: { limit: 1, expires: 'never' }, // Pyro / Turret stay between rounds
 	marker_poison: { limit: 1 },
-	marker_bounty: { limit: 1 }
-	// token_magma, token_familiar: limit not known yet → unlimited
+	marker_bounty: { limit: 1 },
+	token_magma: { limit: 4 },
+	token_familiar: { limit: 1 }
 }
 const rule = (t?: string) => (t?.startsWith('rune_') ? { limit: 1, expires: 'never' as Expiry } : (t && RULES[t]) || {})
 
