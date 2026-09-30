@@ -8,7 +8,7 @@
 	import { effectLabel } from '$lib/effects';
 	import lifeSplit from '$lib/images/life_split.png';
 	import { heroCards } from '$lib/cards/deck';
-	import { ultimateIndex } from '$lib/cards/cardstate';
+	import { ultimateIndex, allowedMoves } from '$lib/cards/cardstate';
 	import { uiLayout, layoutVars } from '$lib/layout';
 	import { placeToken, moveToken, effectiveHex, MINES, tokenName, type ArmToken } from '$lib/tokens';
 	import {
@@ -281,6 +281,8 @@
 	// top-bar ULT: locked until level 8, then opens your ultimate
 	$: myCs = $ms.cards?.[clientId];
 	$: myUltIdx = myCs ? ultimateIndex(myCs.hero) : -1;
+	// level 7 with all three Tier III and the coins: the top-bar button unlocks it
+	$: ultReady = !!myCs && myUltIdx >= 0 && allowedMoves(myCs, myUltIdx).includes('hand');
 	function coins(d: number) { session.cardAction({ kind: 'coins', pid: clientId, delta: d }); }
 	const FX_SHORT: Record<string, string> = { 'This turn': 'Turn', 'Next turn': 'Next', 'This round': 'Round' };
 	// "Active abilities" (☰ menu on phones, left HUD on desktop): one fixed row per hero (so the log never shifts),
@@ -461,8 +463,8 @@
 			<button class="mpill life" on:click={() => (lwOpen = true)} aria-label="Life"><b class="n2 lo">{$ms.life.orange}</b><img src={lifeSplit} alt="" /><b class="n2 lb">{$ms.life.blue}</b></button>
 			<!-- your ultimate fills the gap between life and gold: always previewable; purple pulse once unlocked -->
 			{#if myCs && myUltIdx >= 0}
-				<button class="mib ult" class:on={myCs.ultimate} on:click={() => myCs && cardLayer?.showCard(myCs.hero, myUltIdx)}
-					title={myCs.ultimate ? 'Your ultimate' : 'Ultimate — unlocks at level 8'} aria-label="Ultimate">{#if !myCs.ultimate}<span class="ulk">🔒</span>{/if}<span class="ul-long">Ultimate</span><span class="ul-short">ULT</span></button>
+				<button class="mib ult" class:on={myCs.ultimate} class:ready={ultReady} on:click={() => { if (!myCs) return; if (ultReady) cardLayer?.askUnlockUlt(); else cardLayer?.showCard(myCs.hero, myUltIdx); }}
+					title={myCs.ultimate ? 'Your ultimate' : ultReady ? 'Unlock your ultimate' : 'Ultimate — unlocks at level 8'} aria-label="Ultimate">{#if ultReady}<span class="ulk rdy">★</span>{:else if !myCs.ultimate}<span class="ulk">🔒</span>{/if}<span class="ul-long">Ultimate</span><span class="ul-short">ULT</span></button>
 			{:else}
 				<span class="msp"></span>
 			{/if}
@@ -958,6 +960,10 @@
 	.mib.ult .ul-short { display: none; font-size: 8.5px; }
 	@container (max-width: 58px) { .mib.ult .ul-long { display: none; } .mib.ult .ul-short { display: inline; } }
 	.mib.ult .ulk { position: absolute; top: -5px; right: -4px; font-size: 8px; filter: grayscale(1); }
+	/* ready to unlock: gold edge, pulsing — tap opens the unlock confirmation */
+	.mib.ult.ready { color: #f6e3b4; background: rgba(120, 60, 190, 0.28); border-color: #f0c060; animation: ultrdy 1.3s ease-in-out infinite; }
+	@keyframes ultrdy { 0%, 100% { box-shadow: 0 0 4px rgba(240, 192, 96, 0.5); } 50% { box-shadow: 0 0 14px rgba(240, 192, 96, 1); } }
+	.mib.ult .ulk.rdy { filter: none; color: #f0c060; font-size: 10px; }
 	/* unlocked: purple with the same breathing glow as the desktop dash */
 	.mib.ult.on { color: #fff; background: linear-gradient(160deg, #9a5ce6, #5b2aa0); border-color: rgba(210, 175, 255, 0.85); text-shadow: 0 0 6px rgba(255, 255, 255, 0.6);
 		animation: ultbtn 2.4s ease-in-out infinite; }
