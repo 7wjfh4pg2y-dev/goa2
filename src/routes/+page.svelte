@@ -36,21 +36,10 @@
 	import { HEROES } from '$lib/heroes';
 	import { initCards } from '$lib/cards/cardstate';
 	import HeroDraft from '$lib/HeroDraft.svelte';
-	import type GameViewT from '$lib/GameView.svelte';
+	import GameView from '$lib/GameView.svelte';
 
 	type Mode = 'landing' | 'choose' | 'admin' | 'adminhub' | 'menu' | 'create' | 'join' | 'lobby' | 'draft' | 'game';
 	let mode: Mode = 'landing';
-	// The board (GameView → cards, card painter, board canvas) is the heaviest part of
-	// the app, so it's split out of the landing bundle and fetched in the background
-	// as soon as you're in a room — it's ready by the time the game starts.
-	let GameView: typeof GameViewT | null = null;
-	let gameViewLoading = false;
-	function loadGameView() {
-		if (GameView || gameViewLoading || !browser) return;
-		gameViewLoading = true;
-		import('$lib/GameView.svelte').then((m) => (GameView = m.default)).catch(() => (gameViewLoading = false));
-	}
-	$: if (mode === 'lobby' || mode === 'draft' || mode === 'game') loadGameView();
 	let notice = '';
 
 	// admin
@@ -568,11 +557,7 @@
 		<HeroDraft {session} {state} {players} clientId={session.clientId} onLeave={leaveRoom} />
 	</div>
 {:else if mode === 'game' && session}
-	{#if GameView}
-		<svelte:component this={GameView} {session} ms={state} {players} clientId={session.clientId} {room} onLeave={leaveRoom} />
-	{:else}
-		<div class="gvload">Loading the board…</div>
-	{/if}
+	<GameView {session} ms={state} {players} clientId={session.clientId} {room} onLeave={leaveRoom} />
 	{#if seatNotice}<div class="seattoast">{seatNotice}</div>{/if}
 {:else}
 <div class="uiscale" style="--ui:{ui}">
@@ -1094,5 +1079,4 @@
 		.createform { gap: 7px; padding-top: 10px; padding-bottom: 10px; }
 		.createform .grid2, .createform .col { gap: 7px; }
 	}
-	.gvload { position: fixed; inset: 0; display: grid; place-items: center; font-family: 'Modesto Poster', serif; letter-spacing: 0.08em; color: #cbb488; }
 </style>
