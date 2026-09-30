@@ -23,6 +23,7 @@ import {
 	closeLevelPhase,
 	allowedMoves,
 	manualMove,
+	lockPicks,
 	takeUpgrade,
 	levelOf,
 	TURNS_PER_ROUND
@@ -288,6 +289,9 @@ describe('manual moves', () => {
 		const [r2] = at('RED', 2)
 		const [c, d] = at('RED', 3)
 		s = manualMove(s, r2, 'hand')
+		expect(manualMove(s, c, 'hand')).toBe(s) // no Tier III until every colour is on Tier II
+		s = manualMove(s, at('BLUE', 2)[0], 'hand')
+		s = manualMove(s, at('GREEN', 2)[0], 'hand')
 		s = manualMove(s, c, 'hand')
 		expect(s.hand).toContain(c)
 		expect(s.upgrade).toContain(d)
@@ -297,6 +301,35 @@ describe('manual moves', () => {
 		expect(s.hand).toContain(d)
 		expect(s.upgrade).toContain(c)
 		expect(s.hand.filter((i) => cards[i].color === 'RED')).toEqual([d])
+	})
+
+	it('a removed Tier I back to hand undoes that colour this round, then locks at round end', () => {
+		let s = newPlayerCardState(H)
+		const [r1] = at('RED', 1)
+		const [a, b] = at('RED', 2)
+		s = manualMove(s, a, 'hand')
+		expect(levelOf(s)).toBe(2)
+		expect(allowedMoves(s, r1)).toEqual(['hand'])
+		const undone = manualMove(s, r1, 'hand')
+		expect(undone.hand).toContain(r1)
+		expect(undone.hand).not.toContain(a)
+		expect(undone.upgrade).not.toContain(b)
+		expect(undone.removed).not.toContain(r1)
+		expect(levelOf(undone)).toBe(1)
+		// next round: the choice is locked — no undo, no swap
+		s = lockPicks(s)
+		expect(allowedMoves(s, r1)).toEqual([])
+		expect(allowedMoves(s, a)).toEqual([])
+		expect(allowedMoves(s, b)).toEqual([])
+	})
+
+	it('undoing a paid level-up refunds it', () => {
+		let s = { ...newPlayerCardState(H), coins: 5 }
+		s = levelUp(s, at('RED', 2)[0])
+		expect(s.coins).toBe(4)
+		s = manualMove(s, at('RED', 1)[0], 'hand')
+		expect(s.coins).toBe(5)
+		expect(levelOf(s)).toBe(1)
 	})
 
 	it('basics and the ultimate never move', () => {

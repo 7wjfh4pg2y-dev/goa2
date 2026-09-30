@@ -32,6 +32,7 @@ import {
 	manualMove,
 	swapPick,
 	closeLevelPhase,
+	lockPicks,
 	addCoins,
 	levelOf,
 	type CardZone
@@ -85,7 +86,7 @@ export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 			for (const id in s.pieces ?? {}) if (keepsThroughRound(s.pieces[id])) pieces[id] = s.pieces[id]
 			// the level-up phase closes with the round: picks lock in, no level-up = pity coin
 			let next = endRoundAll(migrated)
-			if (s.battlePhase) next = Object.fromEntries(Object.entries(next).map(([pid, c]) => [pid, closeLevelPhase(c)]))
+			next = Object.fromEntries(Object.entries(next).map(([pid, c]) => [pid, s.battlePhase ? closeLevelPhase(c) : lockPicks(c)]))
 			return { cards: next, round: s.round + 1, turn: 1, battlePhase: false, pieces, status: {}, radii: {}, effects: expireEffects(s.effects, s.round, s.turn) }
 		}
 		return { cards: migrated, turn: s.turn + 1, radii: {}, effects: expireEffects(s.effects, s.round, s.turn) }
