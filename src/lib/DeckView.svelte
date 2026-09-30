@@ -109,13 +109,22 @@
 	// level-up / swap confirmation
 	let confirm: { kind: 'take' | 'swap'; idx: number } | null = null;
 	function ask(kind: 'take' | 'swap', idx: number) { confirm = { kind, idx }; sel = null; }
-	function doConfirm() { if (!confirm) return; (confirm.kind === 'take' ? onTake : onSwap)(confirm.idx); confirm = null; hov = null; }
+	function doConfirm() {
+		if (!confirm) return;
+		// the ultimate unlocks through the (paid) manual move, so it works outside the level-up phase too
+		if (confirm.idx === ult) onMove(ult, 'hand');
+		else (confirm.kind === 'take' ? onTake : onSwap)(confirm.idx);
+		confirm = null; hov = null;
+	}
+	// level 7 with the coins for 8 (and all three Tier III): the ultimate can be unlocked now
+	$: ultReady = ult >= 0 && allowedMoves(cs, ult).includes('hand');
 
 	// manual moves allowed for this card (cardstate.allowedMoves), in this order
 	const MOVE_BTNS: Array<[CardZone, string, string, string]> = [['hand', '→ Hand', 'H', 'hand'], ['upgrade', '→ Upgrade', 'U', 'upg'], ['deck', '→ Deck', 'D', 'deck'], ['removed', '→ Remove', 'R', 'rem']];
 	$: moves = (i: number | null): Array<[CardZone, string, string, string]> => {
 		if (i == null) return [];
 		const ok = allowedMoves(cs, i);
+		if (i === ult) return ok.includes('deck') ? [['deck', '↺ Undo unlock', 'D', 'deck']] : [];
 		return MOVE_BTNS.filter(([to]) => ok.includes(to));
 	};
 	function onKey(e: KeyboardEvent) {
@@ -274,7 +283,7 @@
 					{:else if fState === 'cur'}<p class="note">In your hand{picks.includes(focus) && levelPhase ? ' — picked this round, you can still swap it' : ''}.</p>
 					{:else if fState === 'item'}<p class="note">Your item: <b>+1 {ITEM_NAME[itemOf(focus)] ?? ''}</b> — it sits under your hero board.</p>
 					{:else if fState === 'past'}<p class="note">Removed — out of your hand, upgrades and deck.</p>
-					{:else if focus === ult}<p class="note">{cs.ultimate ? 'Active — a passive ability, not part of your hand.' : `Level 8, once all three colours are on Tier III · ${t3done} / 3`}</p>
+					{:else if focus === ult}<p class="note">{cs.ultimate ? 'Active — a passive ability, not part of your hand.' : ultReady ? `Ready — unlock it for ${levelCost(LV)} coins.` : `Level 8, once all three colours are on Tier III · ${t3done} / 3`}</p>
 					{:else}<p class="note">Basic card — always in your hand.</p>{/if}
 				{/if}
 			</div>
@@ -287,7 +296,7 @@
 						{/each}
 					</div>
 				{:else if sel != null}
-					<p class="hint">{isBasic(sel) ? 'Basics always stay in your hand.' : sel === ult ? 'Your ultimate is levelled into, not moved.' : 'Leaves your hand only by levelling up.'}</p>
+					<p class="hint">{isBasic(sel) ? 'Basics always stay in your hand.' : sel === ult ? 'Unlock it from the ultimate tile at level 7.' : 'Locked in — chosen in an earlier round.'}</p>
 				{:else}
 					<p class="hint">Select a card to move it by hand</p>
 				{/if}
@@ -298,11 +307,11 @@
 					<button class="th" class:sel={i === sel} style="--c:{COL[cards[i].color]}" on:click={() => pick(i)} on:dblclick={() => onPreview(i)} on:pointerenter={() => over(i)} on:pointerleave={out} title={cards[i].name}><Card heroId={H} card={cards[i]} /></button>
 				{/each}
 				{#if ult >= 0}
-					<div class="ultp" class:on={cs.ultimate} class:ready={canTakeNow(ult)}>
+					<div class="ultp" class:on={cs.ultimate} class:ready={ultReady}>
 						<button class="th u" on:click={() => onPreview(ult)} on:pointerenter={() => over(ult)} on:pointerleave={out} title="Your ultimate"><Card heroId={H} card={cards[ult]} /></button>
 						<span class="uh">Tier IV · {cs.ultimate ? 'active' : `${t3done}/3`}</span>
-						<span class="seg">{#each Array(8) as _, k (k)}<i class:on={k < LV}></i>{/each}</span>
-						{#if canTakeNow(ult)}<button class="ubtn" on:click={() => ask('take', ult)}>Unlock ★</button>{/if}
+						<span class="seg">{#each Array(8) as _, k (k)}<i class:on={k < LV || (k === 7 && ultReady)} class:rdy={k === 7 && ultReady}></i>{/each}</span>
+						{#if ultReady}<button class="ubtn" on:click={() => ask('take', ult)}>Unlock ★</button>{/if}
 					</div>
 				{/if}
 			</div>
@@ -442,5 +451,7 @@
 	.ubtn { padding: 3px 10px; border-radius: 7px; border: 1px solid rgba(210,175,255,.8); background: linear-gradient(180deg, #9a5ce6, #5b2aa0); color: #fff; cursor: pointer; font-size: .7rem; }
 	.seg { display: inline-flex; align-items: center; gap: 2px; }
 	.seg i { width: 9px; height: 7px; background: rgba(255,255,255,.12); transform: skewX(-18deg); border-radius: 1px; }
+	.seg i.rdy { animation: rdy 1.2s ease-in-out infinite; }
+	@keyframes rdy { 50% { filter: brightness(1.6); box-shadow: 0 0 10px rgba(212,168,255,1); } }
 	.seg i.on { background: linear-gradient(180deg, #d4a8ff, #8a4fd6); box-shadow: 0 0 5px rgba(180,130,240,.8); }
 </style>

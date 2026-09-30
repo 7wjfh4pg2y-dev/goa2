@@ -155,7 +155,11 @@
 	// phone level-up / swap confirmation
 	let lvConfirm: { kind: 'take' | 'swap'; idx: number } | null = null;
 	function confirmLevel() {
-		if (lvConfirm && mine) session.cardAction({ kind: lvConfirm.kind, pid: clientId, idx: lvConfirm.idx });
+		if (lvConfirm && mine) {
+			// the ultimate unlocks through the paid manual move (works outside the level-up phase too)
+			if (lvConfirm.idx === myUlt) moveTo(myUlt, 'hand');
+			else session.cardAction({ kind: lvConfirm.kind, pid: clientId, idx: lvConfirm.idx });
+		}
 		lvConfirm = null; deckSel = null;
 	}
 	const canTakeNow = (cs: PlayerCardState, i: number) => battlePhase && canAfford(cs) && canPick(cs, i);
@@ -902,16 +906,19 @@
 							{/if}
 						</div>
 						{#if myUlt >= 0}
+							{@const ultReady = allowedMoves(mine, myUlt).includes('hand')}
 							<div class="hs-ult" class:on={mine.ultimate}>
 								<button class="hs-ultthumb" on:click={() => examineCard(dh, myUlt)} title="Tap to preview your ultimate"><Card heroId={dh} card={heroCards(dh)[myUlt]} /></button>
 								<div class="hs-ultinfo">
 									<b>Ultimate · {heroCards(dh)[myUlt]?.name}</b>
-									<div class="hs-lv">{#each Array(8) as _, k (k)}<i class:on={k < levelOf(mine)}></i>{/each}</div>
+									<div class="hs-lv">{#each Array(8) as _, k (k)}<i class:on={k < levelOf(mine) || (k === 7 && ultReady)} class:rdy={k === 7 && ultReady}></i>{/each}</div>
 									<span>{mine.ultimate ? 'Unlocked · tap to read' : 'Unlocks at level 8 · tap to preview'}</span>
 								</div>
-								{#if mine.ultimate}
+								{#if mine.ultimate && allowedMoves(mine, myUlt).includes('deck')}
+									<button class="act ghost sm" on:click={() => moveTo(myUlt, 'deck')}>↺ Undo</button>
+								{:else if mine.ultimate}
 									<span class="hs-seal">★</span>
-								{:else if canTakeNow(mine, myUlt)}
+								{:else if allowedMoves(mine, myUlt).includes('hand')}
 									<button class="act sm ultbtn" on:click={() => (lvConfirm = { kind: 'take', idx: myUlt })}>Unlock ★</button>
 								{:else}
 									<span class="hs-seal">🔒</span>
@@ -1613,6 +1620,8 @@
 	.hs-lv { display: flex; gap: 3px; }
 	.hs-lv i { flex: 1; height: 6px; border-radius: 3px; background: rgba(255,255,255,.12); }
 	.hs-lv i.on { background: #b482f0; box-shadow: 0 0 5px rgba(180,130,240,.7); }
+	.hs-lv i.rdy { animation: hsrdy 1.2s ease-in-out infinite; }
+	@keyframes hsrdy { 50% { filter: brightness(1.6); box-shadow: 0 0 10px rgba(212,168,255,1); } }
 	.hs-seal { font-size: 1.1rem; }
 	/* level-up phase */
 	.dklv { display: flex; align-items: center; gap: 6px; margin: 0 0 8px; padding: 6px 10px; border-radius: 9px; font-size: .74rem; color: #93a3b8; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08); }
