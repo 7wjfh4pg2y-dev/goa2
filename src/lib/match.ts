@@ -13,7 +13,7 @@
 // broken by `updatedAt`) wins. For a handful of players nudging a shared
 // tracker this is robust and easy to reason about.
 
-import { tokenExpiry, sweepTokens } from './tokens'
+import { tokenExpiry, sweepTokens, statusFrom } from './tokens'
 import { expireEffects, type Effect } from './effects'
 import { get, writable, type Readable } from 'svelte/store'
 import { supabase } from './supabase'
@@ -51,6 +51,10 @@ export type CardReq =
 	| { kind: 'ult'; pid: string; on: boolean } // unlock / relock the ultimate (level 8)
 	| { kind: 'take'; pid: string; idx: number } // level-up pick (level-up phase only, pays coins): card → hand, twin → item, older card → removed
 	| { kind: 'swap'; pid: string; idx: number } // level-up phase: swap this round's pick for its twin (idx = the twin)
+	| { kind: 'defeatMinion'; pid: string; piece: string } // pid defeated an enemy minion: +2 coins (+4 heavy)
+	| { kind: 'removeMinion'; pid: string; piece: string } // a card effect removed a minion: no coins
+	| { kind: 'defeatHero'; pid: string; target: string } // pid defeated target's hero (coins, assists, life)
+	| { kind: 'respawn'; pid: string; hex: string } // a defeated hero comes back on a hex
 	| { kind: 'forcepass'; pid: string } // host: pass everyone not yet committed
 	| { kind: 'advance'; pid: string } // host: lock this turn's cards into their slots, go to next turn
 
@@ -93,6 +97,10 @@ export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 		// end of turn: Glitch / Grenade tokens leave play (tokens.ts)
 		return { cards: migrated, turn: s.turn + 1, radii: {}, pieces: sweepTokens(s.pieces ?? {}, 'turn'), effects: expireEffects(s.effects, s.round, s.turn) }
 	}
+
+	if (req.kind === 'defeatMinion' || req.kind === 'removeMinion') return minionOff(s, req.pid, req.piece, req.kind === 'defeatMinion')
+	if (req.kind === 'defeatHero') return defeatHero(s, req.pid, req.target)
+	if (req.kind === 'respawn') return respawnHero(s, req.pid, req.hex)
 
 	const cs = cards[req.pid]
 	if (!cs) return {}
@@ -206,6 +214,8 @@ export interface MatchState {
 	waves: number // SHARED wave counters remaining; game ends when it hits 0
 	lastPush: Team | null // team that won the most recent Push the Lane
 	life: Record<Team, number> // per-team Life counters remaining; 0 = that team loses
+	/** heroes currently off the board after a defeat: when, and their piece (to respawn it) */
+	defeated?: Record<string, { round: number; turn: number; piece: Piece }>
 	lifeMax: number // starting Life per team (how many tokens to display)
 	lifeTok: Record<Team, boolean[]> // per-token full(true)/spent(false); count of trues = life
 	wavesMax: number // starting wave tokens (14 on a two-lane map)
@@ -1050,6 +1060,18 @@ export function joinMatch(
 			const coins = patch.cards?.[req.pid]?.coins ?? 0
 			note(req.pid, `money ${req.delta > 0 ? '+' : '−'}${Math.abs(req.delta)} → ${coins}`)
 		}
+		if (req.kind === 'defeatMinion' || req.kind === 'removeMinion') {
+			const m = local.pieces?.[req.piece]
+			const what = `a ${m?.team ?? ''} ${m?.role ?? ''} minion`.replace(/\s+/g, ' ')
+			note(req.pid, req.kind === 'defeatMinion' ? `defeated ${what} (+${minionCoins(m?.role)} coins)` : `removed ${what} (no coins)`)
+		}
+		if (req.kind === 'defeatHero') {
+			const d = heroDefeatSummary(local, req.pid, req.target)
+			const assist = d.assists.length ? ` · ${d.assists.map(nameOf).join(', ')} +${d.assist} assist` : ''
+			const team = d.team ? `${d.team[0].toUpperCase()}${d.team.slice(1)}` : 'Their team'
+			note(req.pid, `defeated ${nameOf(req.target)} (Lv ${d.level}) — +${d.coins} coins${assist} · ${team} loses ${d.lives} life${d.bounty ? ' (Bounty +1)' : ''}`)
+		}
+		if (req.kind === 'respawn') note(req.pid, 'respawned ⤴')
 		for (const pid in patch.cards ?? {}) {
 			const before = local.cards?.[pid], after = patch.cards![pid]
 			if (before && after && levelOf(after) > levelOf(before)) note(pid, `reached Level ${levelOf(after)} ⬆`)
@@ -1159,6 +1181,79 @@ export function nextHost(s: MatchState, present: Player[], departed: string): st
 	const seated = here.filter((p) => p.seat >= 0 && p.seat < (s.seats || Infinity)).sort((a, b) => a.seat - b.seat)
 	if (seated.length) return (seated.find((p) => p.seat > from) ?? seated[0]).id
 	return [...here].sort((a, b) => (a.id < b.id ? -1 : 1))[0].id
+}
+
+// ── defeating & removing units ────────────────────────────────────────────────
+// Whoever presses Defeat is the one who defeated it and gets the reward.
+/** Coins for defeating a minion. (Removing one by a card effect gives none.) */
+export const minionCoins = (role?: string) => (role === 'heavy' ? 4 : 2)
+/** Level tier: Life counters a defeated hero's team spends, and each assist's coins. */
+export const lifeTier = (level: number) => (level <= 3 ? 1 : level <= 6 ? 2 : 3)
+
+/** A player's team: from their hero piece (on the board or waiting to respawn), else their seat. */
+export function teamOf(s: MatchState, pid: string): Team | null {
+	const t = s.pieces?.[pid]?.team ?? s.defeated?.[pid]?.piece.team
+	if (t === 'orange' || t === 'blue') return t
+	const seat = Object.entries(s.seatMap ?? {}).find(([, v]) => v.id === pid)?.[0]
+	return seat != null ? teamForSeat(Number(seat), s.seats) : null
+}
+const addCoinsTo = (cards: Record<string, PlayerCardState>, pid: string, n: number) =>
+	cards[pid] ? { ...cards, [pid]: { ...cards[pid], coins: cards[pid].coins + n } } : cards
+
+/** A minion leaves play: defeated (the presser gains its coins) or removed (no coins). */
+export function minionOff(s: MatchState, pid: string, pieceId: string, defeated: boolean): Partial<MatchState> {
+	const m = s.pieces?.[pieceId]
+	if (!m || m.kind !== 'minion') return {}
+	const pieces = { ...s.pieces }
+	delete pieces[pieceId]
+	if (!defeated) return { pieces }
+	return { pieces, cards: addCoinsTo(s.cards ?? {}, pid, minionCoins(m.role)) }
+}
+
+/** What a hero defeat pays out (for the confirm dialog and the log). */
+export function heroDefeatSummary(s: MatchState, pid: string, target: string) {
+	const cs = s.cards?.[target]
+	const level = cs ? levelOf(cs) : 1
+	const tier = lifeTier(level)
+	const bounty = !!statusFrom(s.pieces ?? {})[target]?.bounty
+	const team = teamOf(s, pid)
+	const assists = Object.keys(s.cards ?? {}).filter((id) => id !== pid && id !== target && team && teamOf(s, id) === team)
+	return { level, coins: level, assist: tier, assists, lives: tier + (bounty ? 1 : 0), bounty, team: teamOf(s, target) }
+}
+
+/** `pid` defeats `target`'s hero: +coins = its level (from the game, not the victim);
+ *  every teammate of `pid` +assist coins = its level tier; the victim's team spends
+ *  that tier in Life (+1 with the Bounty); markers on it come off; its face-down card
+ *  is discarded; the hero leaves the board until it respawns. */
+export function defeatHero(s: MatchState, pid: string, target: string): Partial<MatchState> {
+	const hero = s.pieces?.[target]
+	if (!hero || hero.kind !== 'hero' || pid === target) return {}
+	const sum = heroDefeatSummary(s, pid, target)
+	let cards = addCoinsTo(s.cards ?? {}, pid, sum.coins)
+	for (const a of sum.assists) cards = addCoinsTo(cards, a, sum.assist)
+	const v = cards[target]
+	if (v && v.pending != null && v.pending >= 0) cards = { ...cards, [target]: { ...v, discard: [...v.discard, v.pending], pending: null } }
+	const pieces: Record<string, Piece> = {}
+	for (const id in s.pieces) if (id !== target && s.pieces[id].attachedTo !== target) pieces[id] = s.pieces[id]
+	const life = sum.team ? { ...s.life, [sum.team]: Math.max(0, s.life[sum.team] - sum.lives) } : s.life
+	return { pieces, cards, life, defeated: { ...(s.defeated ?? {}), [target]: { round: s.round, turn: s.turn, piece: hero } } }
+}
+
+/** A defeated hero returns at the start of the next turn in which they play a card
+ *  (i.e. a later turn, holding a card to play) — possibly in the next round. */
+export function canRespawn(s: MatchState, pid: string): boolean {
+	const d = s.defeated?.[pid]
+	if (!d) return false
+	const later = s.round > d.round || (s.round === d.round && s.turn > d.turn)
+	return later && (s.cards?.[pid]?.hand.length ?? 0) > 0
+}
+
+export function respawnHero(s: MatchState, pid: string, hex: string): Partial<MatchState> {
+	const d = s.defeated?.[pid]
+	if (!d || !canRespawn(s, pid)) return {}
+	const defeated = { ...s.defeated }
+	delete defeated[pid]
+	return { pieces: { ...s.pieces, [pid]: { ...d.piece, hex } }, defeated }
 }
 
 export function pushLane(s: MatchState, winner: Team): Partial<MatchState> {
