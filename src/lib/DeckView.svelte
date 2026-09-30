@@ -119,6 +119,32 @@
 	// level 7 with the coins for 8 (and all three Tier III): the ultimate can be unlocked now
 	$: ultReady = ult >= 0 && allowedMoves(cs, ult).includes('hand');
 
+	// one plain message per card saying what it takes to level into it (or why it can't move)
+	$: need = levelCost(LV);
+	$: broke = cs.coins < need;
+	$: noMoney = `Not enough money — level ${LV} → ${LV + 1} costs ${need} (you have ${cs.coins}).`;
+	$: allII = COLS.every((c) => tierIn(cs, c) >= 2);
+	$: why = (i: number): string => {
+		if (isBasic(i)) return 'Basics always stay in your hand.';
+		if (i === ult) {
+			if (cs.ultimate) return picks.includes(ult) ? 'Unlocked this round — you can still undo it.' : 'Active — a passive ability, not part of your hand.';
+			if (t3done < 3) return `Unlocks at level 7, once all three colours are on Tier III (${t3done}/3).`;
+			return broke ? noMoney : `Ready — unlock it for ${need} coins.`;
+		}
+		const c = cards[i];
+		if (!c || !isTier(i)) return '';
+		const t = c.level ?? 1, z = zoneOf(i), tw = twin(i);
+		const fresh = z === null && (tw < 0 || zoneOf(tw) === null);
+		if (fresh) {
+			if (t === 3 && !allII) return broke ? `${noMoney} Level all three colours to Tier II first.` : 'Level all three colours to Tier II first.';
+			if (broke) return noMoney;
+			if (tierIn(cs, c.color) !== t - 1) return `Take ${NAME[c.color]} Tier ${ROM[t - 2]} first.`;
+			return `Level ${LV} → ${LV + 1} for ${need} coins.`;
+		}
+		if (z === 'removed') return 'Replaced in an earlier round — that level-up stays.';
+		return 'Picked in an earlier round — that level-up stays.';
+	};
+
 	// manual moves allowed for this card (cardstate.allowedMoves), in this order
 	const MOVE_BTNS: Array<[CardZone, string, string, string]> = [['hand', '→ Hand', 'H', 'hand'], ['upgrade', '→ Upgrade', 'U', 'upg'], ['deck', '→ Deck', 'D', 'deck'], ['removed', '→ Remove', 'R', 'rem']];
 	$: moves = (i: number | null): Array<[CardZone, string, string, string]> => {
@@ -279,11 +305,11 @@
 							{#if fTwin >= 0 && itemOf(fTwin)}<li><i class="k it">Item</i>{@render itemIcon(fTwin)}+1 {ITEM_NAME[itemOf(fTwin)]} <small>from {cards[fTwin]?.name}</small></li>{/if}
 							{#if fOlder != null && fOlder !== focus}<li><i class="k rm">Removed</i>{cards[fOlder]?.name}</li>{/if}
 						</ul>
-						{#if fState === 'far'}<p class="note">Tier {ROM[(cards[focus]?.level ?? 1) - 1]} · {LVS[(cards[focus]?.level ?? 1) - 1]}{(cards[focus]?.level ?? 1) === 3 ? ', once all three colours are on Tier II' : ''}</p>{/if}
+						<p class="note">{why(focus)}</p>
 					{:else if fState === 'cur'}<p class="note">In your hand{picks.includes(focus) && levelPhase ? ' — picked this round, you can still swap it' : ''}.</p>
 					{:else if fState === 'item'}<p class="note">Your item: <b>+1 {ITEM_NAME[itemOf(focus)] ?? ''}</b> — it sits under your hero board.</p>
 					{:else if fState === 'past'}<p class="note">Removed — out of your hand, upgrades and deck.</p>
-					{:else if focus === ult}<p class="note">{cs.ultimate ? 'Active — a passive ability, not part of your hand.' : ultReady ? `Ready — unlock it for ${levelCost(LV)} coins.` : `Level 8, once all three colours are on Tier III · ${t3done} / 3`}</p>
+					{:else if focus === ult}<p class="note">{why(ult)}</p>
 					{:else}<p class="note">Basic card — always in your hand.</p>{/if}
 				{/if}
 			</div>
@@ -296,7 +322,7 @@
 						{/each}
 					</div>
 				{:else if sel != null}
-					<p class="hint">{isBasic(sel) ? 'Basics always stay in your hand.' : sel === ult ? 'Unlock it from the ultimate tile at level 7.' : 'Locked in — chosen in an earlier round.'}</p>
+					<p class="hint">{sel === ult && ultReady ? 'Unlock it from the ultimate tile.' : why(sel)}</p>
 				{:else}
 					<p class="hint">Select a card to move it by hand</p>
 				{/if}
