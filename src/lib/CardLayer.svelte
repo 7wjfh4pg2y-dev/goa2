@@ -205,7 +205,7 @@
 	// local player
 	$: mine = cards[clientId] ?? null;
 	$: myReady = mine?.pending != null;
-	$: canCommit = !!mine && !myReady && !revealed;
+	$: canCommit = !!mine && !myReady && !revealed && !battlePhase; // no playing cards between the battle and the next round
 	let selected: number | null = null; // card being previewed (centered)
 	let previewSrc: 'hand' | 'discard' = 'hand'; // where the previewed card came from
 	let committing = false; // preview flip animation on commit
@@ -592,15 +592,21 @@
 				{/each}
 				<button class="fxb x" on:click={() => (fxStage = 'ask')} title="Back">✕</button>
 			</span>
-		{:else if revealed && iAmHost}
-			{#if !isFinalTurn}
-				<button class="act primary" on:click={onAdvanceTurn}>Next turn →</button>
-			{:else if !battlePhase}
-				<button class="act primary" on:click={startBattle}>Minion Battle</button>
-			{:else if levelWaiting.length}
+		{:else if battlePhase && iAmHost}
+			<!-- after the battle every card is back in hand (nothing is "revealed" any more),
+			     so the level-up phase gets its own branch: the host moves on to the next round -->
+			{#if levelWaiting.length}
 				<span class="waithost" title="Level-ups are forced while a hero can afford them">Waiting for {levelWaiting.map((p) => p.name).join(', ')} to level up…</span>
 			{:else}
 				<button class="act primary" on:click={onAdvanceTurn}>Next round →</button>
+			{/if}
+		{:else if battlePhase}
+			<span class="waithost">Waiting for host…</span>
+		{:else if revealed && iAmHost}
+			{#if !isFinalTurn}
+				<button class="act primary" on:click={onAdvanceTurn}>Next turn →</button>
+			{:else}
+				<button class="act primary" on:click={startBattle}>Minion Battle</button>
 			{/if}
 		{:else if revealed}
 			<span class="waithost">Waiting for host…</span>
