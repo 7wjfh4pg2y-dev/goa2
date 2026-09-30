@@ -1600,7 +1600,8 @@
 	.mob .dkbar { margin: auto -12px 0; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); gap: 6px; }
 	.mob .dkbar .dksel { flex: 1 1 100%; margin: 0; }
 	.mob .dkacts { flex: 1 1 100%; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 5px; }
-	.mob .dkbar .act { min-width: 0; padding: .62rem .1rem; font-size: clamp(.6rem, 2.9vw, .76rem); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	/* one fixed height for every button, icons sized to the text, so nothing grows or shrinks */
+	.mob .dkbar .act { min-width: 0; height: 40px; box-sizing: border-box; padding: 0 .1rem; display: inline-flex; align-items: center; justify-content: center; gap: 3px; line-height: 1; font-size: clamp(.6rem, 2.9vw, .76rem); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 	/* phone Hand tab: shelves */
 	.hshelves { flex: 1 0 auto; display: flex; flex-direction: column; gap: 12px; padding-top: 12px; }
 	.hshelf { padding: 10px; border-radius: 14px; background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.08); }
@@ -1641,7 +1642,7 @@
 	.dklv.hot b { color: #1a1206; }
 	.dkcard.zpick { box-shadow: 0 0 0 2px #f0c060, 0 0 14px rgba(240,192,96,.7); }
 	.lvtake { flex: 2 1 auto; white-space: nowrap; }
-	.lvtake img { width: 16px; height: 12px; object-fit: contain; vertical-align: middle; }
+	.lvtake img { height: 1.1em; width: auto; max-width: 1.5em; flex: none; object-fit: contain; }
 	.lvwrap { position: fixed; inset: 0; z-index: 45; }
 	/* upgrades lie upside down, like on the table (item symbol upright) */
 	.dkcard :global(canvas) { transition: transform .5s cubic-bezier(.3,.7,.2,1); }
