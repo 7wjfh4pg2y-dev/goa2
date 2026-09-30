@@ -15,7 +15,7 @@
 
 import { tokenExpiry, sweepTokens, statusFrom } from './tokens'
 import { expireEffects, type Effect } from './effects'
-import { startBattle, pushCheck, battleRemove, battleAuto, laneNotes, type Battle } from './battle'
+import { startBattle, pushCheck, battleRemove, battleAuto, laneNotes, heavyImmune, type Battle } from './battle'
 import { get, writable, type Readable } from 'svelte/store'
 import { supabase } from './supabase'
 import { tabClientId } from './identity'
@@ -106,6 +106,8 @@ export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 
 	if (req.kind === 'defeatMinion' || req.kind === 'removeMinion') {
 		// the moment a team's last minion (its heavy) leaves the battle zone, the other team pushes
+		// an immune heavy can't be touched (the host can still override for card exceptions)
+		if (heavyImmune(s, req.piece) && req.pid !== s.host) return {}
 		const off = minionOff(s, req.pid, req.piece, req.kind === 'defeatMinion')
 		return off.pieces ? { ...off, ...pushCheck({ ...s, ...off }) } : off
 	}

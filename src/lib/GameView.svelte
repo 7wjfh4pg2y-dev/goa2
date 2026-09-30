@@ -6,7 +6,7 @@
 	import { heroById, heroLogo } from '$lib/heroes';
 	import { zoneName } from '$lib/zones';
 	import { effectLabel } from '$lib/effects';
-	import { battleZone, canBattleRemove, pushLane, laneNotes } from '$lib/battle';
+	import { battleZone, canBattleRemove, pushLane, laneNotes, heavyImmune } from '$lib/battle';
 	import lifeSplit from '$lib/images/life_split.png';
 	import { heroCards } from '$lib/cards/deck';
 	import { ultimateIndex, allowedMoves } from '$lib/cards/cardstate';
@@ -117,7 +117,10 @@
 		letter: p.token === 'companion' ? (p.label?.[0] ?? '?').toUpperCase() : undefined,
 		sym: p.hero ? heroLogo(p.hero) : undefined,
 		label: p.hero ? (heroById(p.hero)?.name?.[0]?.toUpperCase() ?? '?') : (p.label ?? ''),
-		color: p.color ? colorHex(p.color) : undefined
+		color: p.color ? colorHex(p.color) : undefined,
+		// heavies are immune while another minion of theirs stands in the battle zone (host can override)
+		immune: p.role === 'heavy' && heavyImmune($ms, p.id) ? true : undefined,
+		locked: p.role === 'heavy' && !iAmHost && heavyImmune($ms, p.id) ? true : undefined
 	}));
 
 	let board: BoardCanvas;
@@ -135,6 +138,7 @@
 	$: battle = $ms.battle ?? null;
 	$: battleMarks = battle ? Object.values($ms.pieces ?? {}).filter((p) => canBattleRemove($ms, p.id)).map((p) => ({ hex: p.hex, r: 0, color: '#ef4444' })) : [];
 	$: iChooseBattle = !!battle && (iAmHost || (iPlay && myTeam === battle.loser));
+	$: selImmune = !!selPiece && selPiece.role === 'heavy' && heavyImmune($ms, selPiece.id);
 	$: canBattleSel = !!selPiece && iChooseBattle && canBattleRemove($ms, selPiece.id);
 	function battleTakeSel() {
 		if (!selPiece) return;
@@ -162,6 +166,7 @@
 
 	function move(id: string, hex: string) {
 		const p = $ms.pieces[id];
+		if (heavyImmune($ms, id) && !iAmHost) return; // immune heavy: stays put
 		const label = p?.hero ? heroById(p.hero)?.name ?? 'a piece' : 'a piece';
 		if (p?.kind === 'token') {
 			session.act(`moved ${p.token ? tokenName(p.token) : 'a token'} → ${zoneName($ms.map, hex)}`, { pieces: moveToken($ms.pieces, id, hex) });
@@ -475,9 +480,10 @@
 			{#if canFlip}
 				<button class="pieflip" on:click={flipMine}>{selPiece.faceDown ? 'Flip — reveal' : 'Flip face down'}</button>
 			{/if}
-			{#if canDefeatSel}<button class="piedefeat" on:click={defeatSel}>Defeat{#if selPiece.kind === 'minion'} +{minionCoins(selPiece.role)}{/if}</button>{/if}
+			{#if selImmune}<span class="pieimm" title="Heavy minions can't be moved, defeated or removed while another minion of their team is in the battle zone{iAmHost ? ' — as host you can still override for card exceptions' : ''}">🛡 Immune</span>{/if}
+			{#if canDefeatSel && (!selImmune || iAmHost)}<button class="piedefeat" on:click={defeatSel}>Defeat{#if selPiece.kind === 'minion'} +{minionCoins(selPiece.role)}{/if}</button>{/if}
 			{#if canBattleSel}<button class="piedefeat" on:click={battleTakeSel}>Remove for the battle</button>{/if}
-			{#if canRemoveSel && selPiece.kind !== 'hero'}<button class="piedel" on:click={openRemove}>Remove</button>{/if}
+			{#if canRemoveSel && selPiece.kind !== 'hero' && (!selImmune || iAmHost)}<button class="piedel" on:click={openRemove}>Remove</button>{/if}
 		</div>
 	{/if}
 
@@ -922,6 +928,7 @@
 	.pushb { font: inherit; font-size: 0.64rem; padding: 2px 7px; border-radius: 999px; cursor: pointer; background: transparent; color: #e5e7eb; border: 1px solid rgba(255, 255, 255, 0.2); white-space: nowrap; }
 	.pushb.orange { border-color: rgba(239, 125, 34, 0.6); } .pushb.blue { border-color: rgba(47, 127, 230, 0.6); }
 	.pushb.arm { background: rgba(220, 60, 60, 0.35); border-color: rgba(239, 68, 68, 0.8); color: #fff; }
+	.pieimm { font-size: 0.72rem; color: #f0c86a; border: 1px solid rgba(240, 200, 106, 0.5); border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
 	.placehint.battle { border-color: rgba(239, 68, 68, 0.6); padding-left: 16px; }
 	.placehint.battle b { font-weight: normal; } .placehint .to { color: #ffb27a; } .placehint .tb { color: #8cc0ff; }
 	.placehint.won { padding: 8px 20px; font-size: 1rem; border-color: rgba(240, 200, 120, 0.9); color: #ffe7a8; box-shadow: 0 0 30px rgba(240, 200, 120, .35), 0 8px 24px rgba(0,0,0,.5); }

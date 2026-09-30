@@ -15,7 +15,7 @@
 	export let rotation = 0; // base orientation in degrees (e.g. 180 so your base sits at the bottom)
 
 	export let pieces: Array<{ id: string; hex: string; team: string; role?: string; label?: string; color?: string; token?: string; sym?: string; hero?: string; letter?: string;
-		attachTo?: string; mine?: 'down' | 'up'; peek?: string }> = [];
+		attachTo?: string; mine?: 'down' | 'up'; peek?: string; immune?: boolean; locked?: boolean }> = [];
 	// holding something to place (minion / token): every tap reports its hex, pieces
 	// aren't picked up, and a hex with a hero on it is still a valid target
 	export let placing = false;
@@ -239,7 +239,9 @@
 	// while holding something: where the pointer is, and the (on-board) hex under it
 	let hoverPt = { x: 0, y: 0 };
 	let hoverHex: string | null = null;
-	$: carryId = dragId ?? selected;
+	// a locked piece (an immune heavy minion) can be selected but never carried
+	const isLocked = (id: string | null) => !!id && !!pieces.find((q) => q.id === id)?.locked;
+	$: carryId = dragId ?? (selected && !pieces.find((q) => q.id === selected)?.locked ? selected : null);
 	$: ghostPiece = placing ? placeGhost : carryId ? pieces.find((q) => q.id === carryId) ?? null : null;
 	$: if (!ghostPiece) hoverHex = null;
 	function trackHover(clientX: number, clientY: number) {
@@ -286,7 +288,7 @@
 		if (!moved) {
 			if (Math.hypot(e.clientX - downC.x, e.clientY - downC.y) < DRAG_THRESHOLD) return;
 			moved = true;
-			if (pressId && onMovePiece) { dragId = pressId; panning = false; } // grab the token
+			if (pressId && onMovePiece && !isLocked(pressId)) { dragId = pressId; panning = false; } // grab the token
 		}
 		if (dragId) {
 			const pt = toChild(e.clientX, e.clientY);
@@ -329,7 +331,7 @@
 			const pt = toChild(e.clientX, e.clientY);
 			const hex = hexAt(pt.x, pt.y);
 			const from = pieces.find((q) => q.id === selected)?.hex;
-			if (hex && hex !== from) onMovePiece(selected, hex); // off the board → stays where it was
+			if (hex && hex !== from && !isLocked(selected)) onMovePiece(selected, hex); // off the board → stays where it was
 			selected = null;
 			return;
 		}
@@ -427,6 +429,12 @@
 			<image href={minionToken(p.team, p.role)} x={c.x - size * 0.7} y={c.y - size * 0.7} width={size * 1.4} height={size * 1.4} preserveAspectRatio="xMidYMid meet" pointer-events="none"
 				transform={minionRot(p, c.x, c.y, rotEff, teamSpawnDir)} />
 			<circle cx={c.x} cy={c.y} r={size * 0.66} fill="transparent" stroke={sel ? '#fde047' : pieceColor(p.team)} stroke-width={size * 0.14} />
+			{#if p.immune}
+				<!-- immune heavy: a small shield on the rim -->
+				<g transform="translate({c.x + size * 0.5} {c.y - size * 0.52}) scale({size / 100})" pointer-events="none">
+					<path d="M0 -26 L22 -18 V2 C22 16 11 25 0 30 C-11 25 -22 16 -22 2 V-18 Z" fill="#f0c86a" stroke="#1b1206" stroke-width="5" stroke-linejoin="round" />
+				</g>
+			{/if}
 		{:else}
 			<!-- hero piece = the player icon: face portrait, team ring, player-colour outer ring -->
 			{@const R = size * 0.68}

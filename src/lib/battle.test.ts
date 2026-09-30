@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { applyCardReq, battlePatch, placeMinions, spendTokens, type MatchState, type Piece } from './match'
-import { LANE, battleResult, canBattleRemove, inZone, pushLane, spawnWave, zoneMinions } from './battle'
+import { LANE, battleResult, canBattleRemove, heavyImmune, inZone, pushLane, spawnWave, zoneMinions } from './battle'
 import { zoneTable } from './zones'
 import map from './maps/forgotten_island.json'
 import type { GameMap } from './maps'
@@ -104,6 +104,19 @@ describe('the minion lane', () => {
 		expect(r.lastPush).toBe('orange')
 		// not the last one → no push
 		expect(applyCardReq(game(), { kind: 'defeatMinion', pid: 'O', piece: zoneMinions(game(), 'blue')[0].id }).lastPush).toBeUndefined()
+	})
+
+	it('a heavy is immune while another minion of its team is in the zone', () => {
+		const s = game()
+		const heavy = zoneMinions(s, 'blue').find((m) => m.role === 'heavy')!
+		expect(heavyImmune(s, heavy.id)).toBe(true)
+		expect(applyCardReq(s, { kind: 'defeatMinion', pid: 'O', piece: heavy.id })).toEqual({})
+		expect(applyCardReq(s, { kind: 'removeMinion', pid: 'O', piece: heavy.id })).toEqual({})
+		expect(applyCardReq(s, { kind: 'defeatMinion', pid: 'H', piece: heavy.id }).pieces).toBeDefined() // host override
+		const alone = drop(s, 5, 'blue', 'melee')
+		const lone = drop(alone, 1, 'blue', 'ranged')
+		expect(heavyImmune(lone, heavy.id)).toBe(false)
+		expect(applyCardReq(lone, { kind: 'defeatMinion', pid: 'O', piece: heavy.id }).lastPush).toBe('orange')
 	})
 
 	it('pushing past the last zone, or taking the last wave, wins', () => {
