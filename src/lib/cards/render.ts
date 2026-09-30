@@ -7,7 +7,7 @@
 // e.g. on every hover in the deck view. Now the first request paints into a
 // scratch canvas, encodes it to a blob, and every <Card> for that face shows the
 // same <img> URL: one paint, one decode, a fraction of the memory.
-import { images, importCardImage, preloadImages, updateCanvas } from './card_painter'
+import { images, importCardImage, loadImages, preloadImages, updateCanvas } from './card_painter'
 import { Color, Item, Modifier, Type, ValueSign } from './states'
 import { backgroundSlug, heroStat, type HeroCardJson } from './deck'
 
@@ -57,8 +57,9 @@ export function cardKey(heroId: string, card: HeroCardJson, extraSlotIndex: numb
 }
 
 async function paint(heroId: string, card: HeroCardJson, extraSlotIndex: number | null, showNumbers: boolean): Promise<string> {
-	await ready()
-	const bg = await art(heroId, backgroundSlug(card, extraSlotIndex))
+	// frame parts + fonts, the ::emoji:: this card's text uses, and its art
+	const emoji = [...(card.description ?? '').matchAll(/::([a-z_]+)::/g)].map((m) => m[1])
+	const [, , bg] = await Promise.all([ready(), loadImages(emoji), art(heroId, backgroundSlug(card, extraSlotIndex))])
 	const cv = document.createElement('canvas')
 	cv.width = CARD_W
 	cv.height = CARD_H
