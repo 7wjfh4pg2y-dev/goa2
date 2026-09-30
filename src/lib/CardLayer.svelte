@@ -8,6 +8,7 @@
 	import type { Readable } from 'svelte/store';
 	import type { MatchSession, MatchState, Player } from '$lib/match';
 	import { teamForSeat, colorHex, battlePatch } from '$lib/match';
+	import { battleResult, battleText, laneNotes } from '$lib/battle';
 	import Card from '$lib/cards/Card.svelte';
 	import DeckView from '$lib/DeckView.svelte';
 	import { uiLayout, layoutVars } from '$lib/layout';
@@ -140,11 +141,15 @@
 		if (live && !countTick) { countNow = Date.now(); countTick = setInterval(() => (countNow = Date.now()), 100); }
 		else if (!live && countTick) { clearInterval(countTick); countTick = null; }
 	}
-	// end-of-round flow: turn 4 → Minion Battle (manual, no rules yet) → Next round
+	// end-of-round flow: turn 4 → Minion Battle (battle.ts) → level-ups → Next round
 	$: isFinalTurn = $ms.turn >= 4;
 	$: battlePhase = $ms.battlePhase ?? false;
 	// the battle hands every card back (like a round end) so players can level up / swap now
-	function startBattle() { session.act('the minion battle begins — cards return to hand', battlePatch($ms)); }
+	// it also runs the end-of-turn push check and counts the battle zone (battle.ts)
+	function startBattle() {
+		const patch = battlePatch($ms);
+		session.act([...laneNotes($ms, patch), battleText(battleResult({ ...$ms, ...patch })), 'cards return to hand'].join(' · '), patch);
+	}
 	// then the level-up phase: forced while you can afford it (the deck opens by
 	// itself), and the host's "Next round" waits until everyone present is done
 	$: levelWaiting = battlePhase ? seatedWithCards.filter((p) => mustLevel(cards[p.id])) : [];
@@ -605,7 +610,9 @@
 		{:else if battlePhase && iAmHost}
 			<!-- after the battle every card is back in hand (nothing is "revealed" any more),
 			     so the level-up phase gets its own branch: the host moves on to the next round -->
-			{#if levelWaiting.length}
+			{#if $ms.battle?.remove}
+				<span class="waithost">Waiting for {$ms.battle.loser === 'orange' ? 'Orange' : 'Blue'} to remove {$ms.battle.remove} minion{$ms.battle.remove === 1 ? '' : 's'}…</span>
+			{:else if levelWaiting.length}
 				<span class="waithost" title="Level-ups are forced while a hero can afford them">Waiting for {levelWaiting.map((p) => p.name).join(', ')} to level up…</span>
 			{:else}
 				<button class="act primary" on:click={onAdvanceTurn}>Next round →</button>

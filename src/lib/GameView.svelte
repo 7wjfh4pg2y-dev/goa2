@@ -6,6 +6,7 @@
 	import { heroById, heroLogo } from '$lib/heroes';
 	import { zoneName } from '$lib/zones';
 	import { effectLabel } from '$lib/effects';
+	import { battleZone, canBattleRemove, pushLane, laneNotes } from '$lib/battle';
 	import lifeSplit from '$lib/images/life_split.png';
 	import { heroCards } from '$lib/cards/deck';
 	import { ultimateIndex, allowedMoves } from '$lib/cards/cardstate';
@@ -124,10 +125,34 @@
 	// every lingering card effect in play (switched on from a played card)
 	$: activeFx = $ms.effects ?? [];
 	// area radii (set from each player's dash): centred on that player's hero, in their colour
-	$: areas = Object.entries($ms.radii ?? {}).flatMap(([pid, r]) => {
+	$: areas = [...Object.entries($ms.radii ?? {}).flatMap(([pid, r]) => {
 		const hero = $ms.pieces?.[pid];
 		return hero && r > 0 ? [{ hex: hero.hex, r, color: colorHex(hero.color ?? '') }] : [];
-	});
+	}), ...battleMarks];
+
+	// ── minion battle / lane (battle.ts) ──
+	// the minions the battle's loser may take off glow red on the board
+	$: battle = $ms.battle ?? null;
+	$: battleMarks = battle ? Object.values($ms.pieces ?? {}).filter((p) => canBattleRemove($ms, p.id)).map((p) => ({ hex: p.hex, r: 0, color: '#ef4444' })) : [];
+	$: iChooseBattle = !!battle && (iAmHost || (iPlay && myTeam === battle.loser));
+	$: canBattleSel = !!selPiece && iChooseBattle && canBattleRemove($ms, selPiece.id);
+	function battleTakeSel() {
+		if (!selPiece) return;
+		const id = selPiece.id;
+		board?.release();
+		session.cardAction({ kind: 'battleRemove', pid: clientId, piece: id });
+	}
+	const battleAutoAll = () => session.cardAction({ kind: 'battleAuto', pid: clientId });
+	// host override (edge cases): push the lane by hand — tap once to arm, again to confirm
+	let pushArm: Team | null = null;
+	let pushArmT: ReturnType<typeof setTimeout> | null = null;
+	function manualPush(t: Team) {
+		if (pushArm !== t) { pushArm = t; if (pushArmT) clearTimeout(pushArmT); pushArmT = setTimeout(() => (pushArm = null), 3000); return; }
+		pushArm = null;
+		const patch = pushLane($ms, t);
+		session.act(laneNotes($ms, patch).join(' · ') + ' (by hand)', patch);
+	}
+	const cap = (t: string) => t[0].toUpperCase() + t.slice(1);
 
 	// gear/star throne hexes, so the board can draw them and heroes/minions spawn there
 	$: thrones = [
@@ -389,10 +414,31 @@
 	});
 </script>
 
+<!-- battle zone + host push override (desktop HUD and the phone waves sheet) -->
+{#snippet laneCtl()}
+	<div class="lane">
+		<span class="bz" title="Battle zone — the minion battle is fought here; a push moves it one zone towards the loser's throne">⚔ {battleZone($ms)}</span>
+		{#if iAmHost && !$ms.wonBy}
+			<span class="pushes">
+				{#each ['orange', 'blue'] as t}
+					<button class="pushb {t}" class:arm={pushArm === t} on:click={() => manualPush(t as Team)} title="Host override: {cap(t)} pushes the lane">{pushArm === t ? 'Confirm?' : `${cap(t)} push`}</button>
+				{/each}
+			</span>
+		{/if}
+	</div>
+{/snippet}
+
 <svelte:window on:keydown={(e) => { if (e.key !== 'Escape') return; if (confirmLeave) confirmLeave = false; else { pendingSpawn = null; pendingToken = null; } }} on:pointerdown={(e) => { viewsOutside(e); }} bind:innerWidth={gvw} bind:innerHeight={gvh} />
 
 <div class="gamewrap" class:mob={mobile} class:dashfull={!mobile && lay.underHud} style={mobile ? '' : layoutVars(lay)}>
-	{#if myDefeat && !pendingRespawn && !pendingToken}
+	{#if $ms.wonBy}
+		<div class="placehint won">🏆 {cap($ms.wonBy.team)} wins — {$ms.wonBy.reason}</div>
+	{:else if battle && !pendingToken && !pendingRespawn && !(mobile && pendingSpawn)}
+		<div class="placehint battle">
+			<span>⚔ Minion battle · <b class="to">Orange {battle.orange}</b> : <b class="tb">{battle.blue} Blue</b> — {cap(battle.loser ?? '')} removes {battle.remove} more{#if iChooseBattle} · tap a red minion{/if}</span>
+			{#if iChooseBattle}<button class="spcancel" on:click={battleAutoAll} title="Melee first, heavies last">Let the game choose</button>{/if}
+		</div>
+	{:else if myDefeat && !pendingRespawn && !pendingToken}
 		<div class="placehint defeat">
 			{#if iCanRespawn}
 				<span>You were defeated — back in the fight</span>
@@ -430,6 +476,7 @@
 				<button class="pieflip" on:click={flipMine}>{selPiece.faceDown ? 'Flip — reveal' : 'Flip face down'}</button>
 			{/if}
 			{#if canDefeatSel}<button class="piedefeat" on:click={defeatSel}>Defeat{#if selPiece.kind === 'minion'} +{minionCoins(selPiece.role)}{/if}</button>{/if}
+			{#if canBattleSel}<button class="piedefeat" on:click={battleTakeSel}>Remove for the battle</button>{/if}
 			{#if canRemoveSel && selPiece.kind !== 'hero'}<button class="piedel" on:click={openRemove}>Remove</button>{/if}
 		</div>
 	{/if}
@@ -648,7 +695,8 @@
 				on:pointerdown={sheetDown} on:pointermove={sheetMove} on:pointerup={sheetUp} on:pointercancel={sheetUp} on:click|capture={sheetClick} role="presentation">
 				<span class="grab"></span>
 				<div class="lsec"><div class="lh"><span>Waves</span><b>{$ms.waves} / {($ms.waveTok ?? []).length}</b></div>
-					<div class="lg w">{#each $ms.waveTok ?? [] as full, i}<button class="wtok" class:dep={!full} class:flip={flips[`w${i}`]} style="background-image:url({waveIcon})" on:click={() => toggleWave(i)} aria-label="Wave token"></button>{/each}</div></div>
+					<div class="lg w">{#each $ms.waveTok ?? [] as full, i}<button class="wtok" class:dep={!full} class:flip={flips[`w${i}`]} style="background-image:url({waveIcon})" on:click={() => toggleWave(i)} aria-label="Wave token"></button>{/each}</div>
+					{@render laneCtl()}</div>
 				{#each ['orange', 'blue'] as t}
 					<div class="lsec"><div class="lh {t}"><span>{t === 'orange' ? 'Orange' : 'Blue'} life</span><b>{$ms.life[t as Team]} / {lifeMax}</b></div>
 						<div class="lg">{#each $ms.lifeTok?.[t as Team] ?? [] as full, i}<button class="ltok" class:dep={!full} class:flip={flips[`l${t}${i}`]} style="background-image:url({lifeArt(t as Team, full ? 'front' : 'back')})" on:click={() => toggleLife(t as Team, i)} aria-label="Life token"></button>{/each}</div></div>
@@ -686,6 +734,7 @@
 						title="Wave token — click to spend / restore"></button>
 				{/each}
 			</div>
+			{@render laneCtl()}
 		</div>
 
 		<!-- team Life: one token per starting Life; each toggles full ↔ spent -->
@@ -867,6 +916,15 @@
 	.dkeep { display: flex; align-items: center; gap: 8px; margin: -6px 0 14px; font-size: 0.8rem; color: #cbd5e1; cursor: pointer; }
 	.dkeep input { accent-color: #e2a64a; }
 	.placehint.defeat { border-color: rgba(239, 68, 68, 0.6); color: #ffc9c2; }
+	.lane { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 6px; font-size: 0.72rem; color: #d7c79c; }
+	.lane .bz { white-space: nowrap; }
+	.pushes { display: flex; gap: 4px; }
+	.pushb { font: inherit; font-size: 0.64rem; padding: 2px 7px; border-radius: 999px; cursor: pointer; background: transparent; color: #e5e7eb; border: 1px solid rgba(255, 255, 255, 0.2); white-space: nowrap; }
+	.pushb.orange { border-color: rgba(239, 125, 34, 0.6); } .pushb.blue { border-color: rgba(47, 127, 230, 0.6); }
+	.pushb.arm { background: rgba(220, 60, 60, 0.35); border-color: rgba(239, 68, 68, 0.8); color: #fff; }
+	.placehint.battle { border-color: rgba(239, 68, 68, 0.6); padding-left: 16px; }
+	.placehint.battle b { font-weight: normal; } .placehint .to { color: #ffb27a; } .placehint .tb { color: #8cc0ff; }
+	.placehint.won { padding: 8px 20px; font-size: 1rem; border-color: rgba(240, 200, 120, 0.9); color: #ffe7a8; box-shadow: 0 0 30px rgba(240, 200, 120, .35), 0 8px 24px rgba(0,0,0,.5); }
 	.spcancel.go { background: linear-gradient(180deg, #e2a64a, #b8781f); color: #1a1206; border-color: #fbe7b0; }
 	/* Remove menu: one button per reason, the plain Remove last */
 	.ropts { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 14px; }

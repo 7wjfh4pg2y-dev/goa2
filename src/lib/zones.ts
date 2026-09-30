@@ -52,3 +52,17 @@ export function zoneName(map: GameMap | null | undefined, hex: string): string {
 	const kind = z === 'forest' ? 'Jungle' : z === 'beach' ? 'Beach' : 'Lane';
 	return `${side} ${kind}`;
 }
+
+/** Every hex's zone name (as `zoneName`), computed once per map object. */
+const tables = new WeakMap<object, Record<string, string>>();
+export function zoneTable(map: GameMap | null | undefined): Record<string, string> {
+	if (!map) return {};
+	let t = tables.get(map);
+	if (!t) {
+		t = {};
+		for (const id in map.cells ?? {}) t[id] = zoneName(map, id);
+		tables.set(map, t);
+	}
+	return t;
+}
+export { cube as hexCube, dist as cubeDist };

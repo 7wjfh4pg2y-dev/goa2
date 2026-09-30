@@ -15,6 +15,7 @@
 
 import { tokenExpiry, sweepTokens, statusFrom } from './tokens'
 import { expireEffects, type Effect } from './effects'
+import { startBattle, pushCheck, battleRemove, battleAuto, laneNotes, type Battle } from './battle'
 import { get, writable, type Readable } from 'svelte/store'
 import { supabase } from './supabase'
 import { tabClientId } from './identity'
@@ -55,6 +56,8 @@ export type CardReq =
 	| { kind: 'removeMinion'; pid: string; piece: string } // a card effect removed a minion: no coins
 	| { kind: 'defeatHero'; pid: string; target: string; keepCard?: boolean } // pid defeated target's hero (coins, assists, life); keepCard = their card this turn had already resolved
 	| { kind: 'respawn'; pid: string; hex: string } // a defeated hero comes back on a hex
+	| { kind: 'battleRemove'; pid: string; piece: string } // the minion battle's loser takes a minion off
+	| { kind: 'battleAuto'; pid: string } // …or lets the game choose the rest
 	| { kind: 'forcepass'; pid: string } // host: pass everyone not yet committed
 	| { kind: 'advance'; pid: string } // host: lock this turn's cards into their slots, go to next turn
 
@@ -66,7 +69,8 @@ export function battlePatch(s: MatchState): Partial<MatchState> {
 	const cards = s.cards ?? {}
 	const migrated: Record<string, PlayerCardState> = {}
 	for (const pid in cards) migrated[pid] = revealPlayer(cards[pid], s.turn - 1)
-	return { battlePhase: true, cards: endRoundAll(migrated) }
+	// the end-of-turn push check, then the battle count (battle.ts)
+	return { battlePhase: true, cards: endRoundAll(migrated), ...startBattle(s) }
 }
 
 /** Apply a card instruction to the shared state, returning the patch to broadcast. */
@@ -92,15 +96,22 @@ export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 			// the level-up phase closes with the round: picks lock in, no level-up = pity coin
 			let next = endRoundAll(migrated)
 			next = Object.fromEntries(Object.entries(next).map(([pid, c]) => [pid, s.battlePhase ? closeLevelPhase(c) : lockPicks(c)]))
-			return { cards: next, round: s.round + 1, turn: 1, battlePhase: false, pieces, status: {}, radii: {}, effects: expireEffects(s.effects, s.round, s.turn) }
+			return { cards: next, round: s.round + 1, turn: 1, battlePhase: false, battle: null, pieces, status: {}, radii: {}, effects: expireEffects(s.effects, s.round, s.turn) }
 		}
-		// end of turn: Glitch / Grenade tokens leave play (tokens.ts)
-		return { cards: migrated, turn: s.turn + 1, radii: {}, pieces: sweepTokens(s.pieces ?? {}, 'turn'), effects: expireEffects(s.effects, s.round, s.turn) }
+		// end of turn: Glitch / Grenade tokens leave play (tokens.ts), then a team with
+		// no minions left in the battle zone gets pushed (battle.ts)
+		const pieces = sweepTokens(s.pieces ?? {}, 'turn')
+		return { cards: migrated, turn: s.turn + 1, radii: {}, pieces, effects: expireEffects(s.effects, s.round, s.turn), ...pushCheck({ ...s, pieces }) }
 	}
 
 	if (req.kind === 'defeatMinion' || req.kind === 'removeMinion') return minionOff(s, req.pid, req.piece, req.kind === 'defeatMinion')
 	if (req.kind === 'defeatHero') return defeatHero(s, req.pid, req.target, req.keepCard)
 	if (req.kind === 'respawn') return respawnHero(s, req.pid, req.hex)
+	if (req.kind === 'battleRemove' || req.kind === 'battleAuto') {
+		// the losing team's players (or the host) choose
+		if (!s.battle?.loser || (req.pid !== s.host && teamOf(s, req.pid) !== s.battle.loser)) return {}
+		return req.kind === 'battleAuto' ? battleAuto(s) : battleRemove(s, req.piece)
+	}
 
 	const cs = cards[req.pid]
 	if (!cs) return {}
@@ -229,6 +240,9 @@ export interface MatchState {
 	cardPhase?: 'planning' | 'resolving' // planning = commit/ready; resolving = act in initiative order
 	resolved?: string[] // playerIds who have confirmed their action done this turn
 	battlePhase?: boolean // turn 4 revealed → minion battle pending (before advancing the round)
+	lane?: number // battle zone: index into LANE (battle.ts) — 0 Orange Beach, 1 Center, 2 Blue Beach
+	battle?: Battle | null // minion battle in progress: the loser still has minions to take off
+	wonBy?: { team: Team; reason: string } | null // a push won the game (throne / last wave)
 	// synced 3-2-1 pre-reveal countdown: epoch ms when cards flip face-up. Set by
 	// the host the moment every seated player has committed; cleared if anyone
 	// uncommits (so the count restarts from 3 when they all commit again).
@@ -1072,6 +1086,12 @@ export function joinMatch(
 			note(req.pid, `defeated ${nameOf(req.target)} (Lv ${d.level}) — +${d.coins} coins${assist} · ${team} loses ${d.lives} life${d.bounty ? ' (Bounty +1)' : ''}`)
 		}
 		if (req.kind === 'respawn') note(req.pid, 'respawned ⤴')
+		if (req.kind === 'battleRemove' && patch.pieces) {
+			const m = local.pieces?.[req.piece]
+			note(req.pid, `took off a ${m?.team ?? ''} ${m?.role ?? ''} minion for the minion battle`.replace(/\s+/g, ' '))
+		}
+		if (req.kind === 'battleAuto' && patch.pieces) note(req.pid, 'let the game remove the rest of the minions (melee first, heavies last)')
+		if (req.kind === 'advance' || req.kind === 'battleRemove' || req.kind === 'battleAuto') for (const t of laneNotes(local, patch)) note(req.pid, t)
 		for (const pid in patch.cards ?? {}) {
 			const before = local.cards?.[pid], after = patch.cards![pid]
 			if (before && after && levelOf(after) > levelOf(before)) note(pid, `reached Level ${levelOf(after)} ⬆`)
@@ -1166,7 +1186,6 @@ export function adjustWaves(s: MatchState, delta: number): Partial<MatchState> {
 	return { waves: Math.max(0, s.waves + delta) }
 }
 
-/** A team wins a Push the Lane: flip one shared wave counter and record it. */
 /**
  * Host hand-over: when the host has been gone a while, the next SEATED player after
  * the host's seat takes over (wrapping round the table); with nobody seated, the
@@ -1238,7 +1257,15 @@ export function defeatHero(s: MatchState, pid: string, target: string, keepCard 
 	const pieces: Record<string, Piece> = {}
 	for (const id in s.pieces) if (id !== target && s.pieces[id].attachedTo !== target) pieces[id] = s.pieces[id]
 	const life = sum.team ? { ...s.life, [sum.team]: Math.max(0, s.life[sum.team] - sum.lives) } : s.life
-	return { pieces, cards, life, defeated: { ...(s.defeated ?? {}), [target]: { round: s.round, turn: s.turn, piece: hero } } }
+	const lifeTok = sum.team && s.lifeTok ? { ...s.lifeTok, [sum.team]: spendTokens(s.lifeTok[sum.team] ?? [], sum.lives) } : s.lifeTok
+	return { pieces, cards, life, lifeTok, defeated: { ...(s.defeated ?? {}), [target]: { round: s.round, turn: s.turn, piece: hero } } }
+}
+
+/** Flip the last `n` full tokens to spent (the HUD draws the token row). */
+export function spendTokens(tok: boolean[], n: number): boolean[] {
+	const out = [...tok]
+	for (let i = out.length - 1; i >= 0 && n > 0; i--) if (out[i]) { out[i] = false; n-- }
+	return out
 }
 
 /** A defeated hero returns at the start of the next turn in which they play a card:
@@ -1259,9 +1286,6 @@ export function respawnHero(s: MatchState, pid: string, hex: string): Partial<Ma
 	return { pieces: { ...s.pieces, [pid]: { ...d.piece, hex } }, defeated }
 }
 
-export function pushLane(s: MatchState, winner: Team): Partial<MatchState> {
-	return { waves: Math.max(0, s.waves - 1), lastPush: winner }
-}
 
 /** Adjust a team's Life counters (they lose these when their heroes are defeated). */
 export function adjustLife(s: MatchState, team: Team, delta: number): Partial<MatchState> {
@@ -1270,6 +1294,7 @@ export function adjustLife(s: MatchState, team: Team, delta: number): Partial<Ma
 
 /** Whichever end condition has triggered, or null while play continues. */
 export function winner(s: MatchState): { team: Team; reason: string } | null {
+	if (s.wonBy) return s.wonBy
 	if (s.life.orange <= 0) return { team: 'blue', reason: 'Orange ran out of Life counters' }
 	if (s.life.blue <= 0) return { team: 'orange', reason: 'Blue ran out of Life counters' }
 	if (s.waves <= 0 && s.lastPush) return { team: s.lastPush, reason: 'Won the final Push' }
