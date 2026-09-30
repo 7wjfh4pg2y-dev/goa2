@@ -92,6 +92,20 @@ describe('the minion lane', () => {
 		expect(applyCardReq(game(), { kind: 'advance', pid: 'H' }).lastPush).toBeUndefined()
 	})
 
+	it('defeating (or removing) a team\'s last minion in the zone pushes at once, mid-turn', () => {
+		const s = drop(game(), 5, 'blue') // blue down to its last minion
+		const last = zoneMinions(s, 'blue')
+		expect(last).toHaveLength(1)
+		const p = applyCardReq(s, { kind: 'defeatMinion', pid: 'O', piece: last[0].id })
+		expect(p.lastPush).toBe('orange')
+		expect(p.lane).toBe(2)
+		expect(p.turn).toBeUndefined() // no turn change needed
+		const r = applyCardReq(s, { kind: 'removeMinion', pid: 'O', piece: last[0].id })
+		expect(r.lastPush).toBe('orange')
+		// not the last one → no push
+		expect(applyCardReq(game(), { kind: 'defeatMinion', pid: 'O', piece: zoneMinions(game(), 'blue')[0].id }).lastPush).toBeUndefined()
+	})
+
 	it('pushing past the last zone, or taking the last wave, wins', () => {
 		expect(pushLane(game({ lane: 0 } as Partial<MatchState>), 'blue').wonBy).toEqual({ team: 'blue', reason: 'pushed into the Orange throne' })
 		const last = game({ waves: 1, waveTok: [true, false, false] } as Partial<MatchState>)
