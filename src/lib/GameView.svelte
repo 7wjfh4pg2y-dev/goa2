@@ -230,7 +230,10 @@
 		if (!selPieceId || mobile) { tipPos = null; return; }
 		const loop = () => {
 			const p = selPieceId ? board?.clientPos(selPieceId) : null;
-			tipPos = p ? { x: p.x, y: p.y - p.r - 8 } : null;
+			// only touch the toolbar when the piece actually moved (not 60 re-renders a second)
+			const x = p ? Math.round(p.x) : null, y = p ? Math.round(p.y - p.r - 8) : null;
+			if (x == null || y == null) { if (tipPos) tipPos = null; }
+			else if (!tipPos || tipPos.x !== x || tipPos.y !== y) tipPos = { x, y };
 			if (selPieceId) tipRaf = requestAnimationFrame(loop);
 		};
 		loop();
