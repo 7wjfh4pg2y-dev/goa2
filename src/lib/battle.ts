@@ -58,11 +58,19 @@ export function battleResult(s: Pick<MatchState, 'map' | 'lane' | 'pieces'>): Ba
 	return { ...c, loser, remove }
 }
 
+/** Heavy minions are immune — can't be moved, defeated, removed or otherwise touched —
+ *  while any other minion of their team stands in the battle zone. */
+export function heavyImmune(s: Pick<MatchState, 'map' | 'lane' | 'pieces'>, pieceId: string): boolean {
+	const p = s.pieces?.[pieceId]
+	if (!p || p.kind !== 'minion' || p.role !== 'heavy' || !inZone(s, p.hex)) return false
+	return zoneMinions(s, p.team as Team).some((m) => m.id !== p.id)
+}
+
 /** Can this minion be taken off for the battle? (the loser's, in the zone, heavies last) */
 export function canBattleRemove(s: MatchState, pieceId: string): boolean {
 	const b = s.battle, p = s.pieces?.[pieceId]
 	if (!b || !b.loser || b.remove <= 0 || !p || p.kind !== 'minion' || p.team !== b.loser || !inZone(s, p.hex)) return false
-	return p.role !== 'heavy' || zoneMinions(s, b.loser).every((m) => m.role === 'heavy')
+	return !heavyImmune(s, pieceId)
 }
 
 /** Which minion the game takes off when asked to choose: melee, then ranged, then heavy. */
