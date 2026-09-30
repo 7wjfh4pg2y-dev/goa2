@@ -273,6 +273,8 @@
 	function endFx(e: Effect) { session.act(`${e.name} — effect ended`, { effects: effects.filter((x) => x.id !== e.id) }); }
 	// the left HUD's effects list opens a card through here
 	export function showCard(hid: string, idx: number, pid?: string, list?: ExCard[]) { examine = { hid, idx, pid, list }; }
+	// phone top bar: the Ultimate button opens the unlock confirmation once it's affordable
+	export function askUnlockUlt() { if (mine && myUlt >= 0) lvConfirm = { kind: 'take', idx: myUlt }; }
 
 	// discard piles (dash + boards): hover (mouse) or tap to fan out every card;
 	// click one to preview it (your own open in the hand preview, so you can recover)
