@@ -411,7 +411,7 @@
 	.money { flex: none; display: flex; align-items: center; gap: 5px; padding: 4px 9px; border-radius: 8px; border: 1px solid rgba(232,182,74,.5); background: rgba(232,182,74,.12); }
 	.money b { font-weight: normal; font-size: 1.1rem; color: #fbe7b0; }
 	.coin { width: 16px; height: 16px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff3c4, #e8b64a 45%, #9a6a18); box-shadow: 0 0 0 1px #6b4a10; }
-	.lvbar { flex: none; padding: 7px 10px; border-radius: 9px; font-size: .74rem; line-height: 1.25; text-align: center; color: #93a3b8; background: rgba(255,255,255,.035); border: 1px solid rgba(255,255,255,.08); }
+	.lvbar { flex: none; padding: 2px 8px; border-radius: 7px; font-size: .62rem; line-height: 1.2; text-align: center; color: #93a3b8; background: rgba(255,255,255,.035); border: 1px solid rgba(255,255,255,.08); }
 	.lvbar.hot { color: #1a1206; background: linear-gradient(180deg, #f0c060, #c98a26); border-color: #fbe7b0; animation: lvpulse 1.6s ease-in-out infinite; }
 	@keyframes lvpulse { 0%, 100% { box-shadow: 0 0 6px rgba(240,192,96,.35); } 50% { box-shadow: 0 0 18px rgba(240,192,96,.8); } }
 	.lvbar.done { color: #cfe3ff; border-color: rgba(63,127,224,.5); background: rgba(63,127,224,.14); }
