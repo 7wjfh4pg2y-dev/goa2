@@ -13,6 +13,7 @@
 // broken by `updatedAt`) wins. For a handful of players nudging a shared
 // tracker this is robust and easy to reason about.
 
+import { tokenExpiry, sweepTokens } from './tokens'
 import { expireEffects, type Effect } from './effects'
 import { get, writable, type Readable } from 'svelte/store'
 import { supabase } from './supabase'
@@ -89,7 +90,8 @@ export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 			next = Object.fromEntries(Object.entries(next).map(([pid, c]) => [pid, s.battlePhase ? closeLevelPhase(c) : lockPicks(c)]))
 			return { cards: next, round: s.round + 1, turn: 1, battlePhase: false, pieces, status: {}, radii: {}, effects: expireEffects(s.effects, s.round, s.turn) }
 		}
-		return { cards: migrated, turn: s.turn + 1, radii: {}, effects: expireEffects(s.effects, s.round, s.turn) }
+		// end of turn: Glitch / Grenade tokens leave play (tokens.ts)
+		return { cards: migrated, turn: s.turn + 1, radii: {}, pieces: sweepTokens(s.pieces ?? {}, 'turn'), effects: expireEffects(s.effects, s.round, s.turn) }
 	}
 
 	const cs = cards[req.pid]
@@ -273,7 +275,7 @@ export interface Piece {
  *  Widget's Pyro, Snorri's runes). Everything else token-like is wiped. */
 export function keepsThroughRound(p: Piece): boolean {
 	if (p.kind !== 'token') return true // heroes and minions are units, not tokens
-	return p.token === 'companion' || p.token === 'token_tree' || !!p.token?.startsWith('rune_')
+	return tokenExpiry(p.token) === 'never' // trees, zombies, Pyro/Turret, runes (tokens.ts)
 }
 
 /** Hex id "c_r" → pixel-ish centre (size factored out; only used for centroids). */

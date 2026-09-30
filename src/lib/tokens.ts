@@ -94,3 +94,99 @@ export function toggleStatusMarker(pieces: Record<string, Piece>, key: 'poison' 
 
 /** A token picked off the shelf, waiting for a hex (drives the held-token cursor). */
 export type ArmToken = { token: string; img?: string; letter?: string; label?: string; color?: string; team: Team | 'neutral'; owner: string }
+
+// ── supply + lifetime ─────────────────────────────────────────────────────────
+// Every token is a limited supply per hero, and most leave play on their own:
+// 'turn' = cleared when the turn ends (the card says "End of turn: remove…"),
+// 'round' = the default — cleared at the end of the round, 'never' = stays until
+// removed (the card says "not removed at the end of round", or it isn't a token).
+export type Expiry = 'turn' | 'round' | 'never'
+const RULES: Record<string, { limit?: number; expires?: Expiry }> = {
+	token_zombie: { limit: 4, expires: 'never' }, // Awaken!: not removed at the end of round
+	token_glitch: { limit: 3, expires: 'turn' }, // End of turn: remove all Glitch tokens
+	token_illusion: { limit: 3 },
+	token_ice: { limit: 3 },
+	token_barrier: { limit: 3 },
+	token_blast: { limit: 2 },
+	token_dud: { limit: 2 },
+	token_smoke_bomb: { limit: 1 },
+	token_grenade: { limit: 1, expires: 'turn' }, // End of turn: … remove the Grenade token
+	token_rock: { limit: 3 },
+	token_tree: { limit: 3, expires: 'never' }, // Mystic Saplings: not removed at the end of round
+	token_totem: { limit: 1 },
+	companion: { limit: 1, expires: 'never' }, // Pyro / Turret stay between rounds
+	marker_poison: { limit: 1 },
+	marker_bounty: { limit: 1 }
+	// token_magma, token_familiar: limit not known yet → unlimited
+}
+const rule = (t?: string) => (t?.startsWith('rune_') ? { limit: 1, expires: 'never' as Expiry } : (t && RULES[t]) || {})
+
+/** When this token leaves play by itself. */
+export const tokenExpiry = (t?: string): Expiry => rule(t).expires ?? 'round'
+/** How many of this token one hero has (undefined = no known limit). */
+export const tokenLimit = (t?: string): number | undefined => rule(t).limit
+
+/** How many of `token` its owner can still place (Infinity when there's no limit). */
+export function tokensLeft(pieces: Record<string, Piece>, owner: string, token: string): number {
+	const lim = tokenLimit(token)
+	if (lim == null) return Infinity
+	const used = Object.values(pieces).filter((p) => p.kind === 'token' && p.owner === owner && p.token === token).length
+	return Math.max(0, lim - used)
+}
+
+/** Clear the tokens that expire at this point ('turn' → end of turn, 'round' → end of round). */
+export function sweepTokens(pieces: Record<string, Piece>, at: 'turn' | 'round'): Record<string, Piece> {
+	const out: Record<string, Piece> = {}
+	for (const id in pieces) {
+		const p = pieces[id]
+		const exp = p.kind === 'token' ? tokenExpiry(p.token) : 'never'
+		if (exp === 'turn' || (at === 'round' && exp === 'round')) continue
+		out[id] = p
+	}
+	return out
+}
+
+// ── removing a token by hand ─────────────────────────────────────────────────
+// The Remove menu offers the reasons the cards give for taking a token out of play,
+// so the log says what happened (and a mine reveals itself when it goes off).
+export type RemovalOption = { id: string; label: string; hint?: string; needsHero?: boolean }
+
+export function removalOptions(p: Piece): RemovalOption[] {
+	const plain: RemovalOption = { id: 'remove', label: 'Remove' }
+	if (p.kind === 'minion') return [{ id: 'remove', label: 'Remove minion' }]
+	const t = p.token
+	if (t && MINES.has(t)) return [{ id: 'trigger', label: 'An enemy hero moved through it', hint: 'reveals it — a Blast makes them discard', needsHero: true }, plain]
+	if (t === 'token_tree') return [{ id: 'use', label: 'Use the Tree', hint: 'e.g. retrieve a discarded card' }, plain]
+	if (t === 'token_zombie') return [{ id: 'use', label: 'Use the Zombie', hint: '+1 Attack' }, plain]
+	if (t === 'token_totem') return [{ id: 'use', label: 'Save a minion', hint: 'the Totem is removed instead' }, plain]
+	if (t === 'marker_bounty') return [{ id: 'toowner', label: 'Give it to Bain', hint: 'Close Call' }, { id: 'remove', label: 'Retrieve it', hint: 'Narrow Escape' }]
+	return [plain]
+}
+
+/** Apply a removal choice. `toowner` moves the marker onto its owner's hero instead. */
+export function applyRemoval(pieces: Record<string, Piece>, id: string, choice: string): Record<string, Piece> {
+	const p = pieces[id]
+	if (!p) return pieces
+	const next = { ...pieces }
+	if (choice === 'toowner' && p.owner && next[p.owner]?.kind === 'hero') {
+		next[id] = { ...p, hex: next[p.owner].hex, attachedTo: p.owner }
+		return next
+	}
+	delete next[id]
+	return next
+}
+
+/** The activity-log line for a removal (hero = the enemy hero who set off a mine). */
+export function removalLog(p: Piece, choice: string, hero?: string): string {
+	const name = p.kind === 'minion' ? `a ${p.team} ${p.role} minion` : p.token === 'companion' ? (p.label ?? 'companion') : tokenName(p.token ?? '')
+	if (choice === 'trigger') {
+		const who = hero ?? 'An enemy hero'
+		return p.token === 'token_blast' ? `set off a mine — 💥 Blast! ${who} discards a card, if able` : `set off a mine — a Dud (${who} is unharmed)`
+	}
+	if (choice === 'use') return p.token === 'token_totem' ? 'removed the Totem to save a minion' : p.token === 'token_zombie' ? 'used a Zombie (+1 Attack)' : `used a ${name}`
+	if (choice === 'toowner') return 'took the Bounty marker (Close Call)'
+	return `removed ${p.faceDown ? 'a mine' : name}`
+}
+
+/** Tokens are removed by their owner or the host; minions by anyone. */
+export const canRemove = (p: Piece, me: string, isHost: boolean) => p.kind !== 'token' || isHost || p.owner === me
