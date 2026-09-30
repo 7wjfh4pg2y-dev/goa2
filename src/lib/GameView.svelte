@@ -224,6 +224,7 @@
 	$: iPlay = !!$ms.cards?.[clientId];
 	$: canDefeatSel = !!selPiece && iPlay && !!myTeam && (selPiece.kind === 'minion' || selPiece.kind === 'hero') && selPiece.team !== myTeam;
 	let confirmDefeat = false;
+	let keepCard = false; // their card this turn had already resolved before the defeat
 	$: defeatSum = actPiece?.kind === 'hero' ? heroDefeatSummary($ms, clientId, actPiece.id) : null;
 	function defeatSel() {
 		if (!selPiece) return;
@@ -233,11 +234,11 @@
 		if (p.kind === 'minion') {
 			session.cardAction({ kind: 'defeatMinion', pid: clientId, piece: p.id });
 			actId = null; selPieceId = null;
-		} else confirmDefeat = true;
+		} else { keepCard = false; confirmDefeat = true; }
 	}
 	function doDefeatHero() {
 		if (!actPiece) return;
-		session.cardAction({ kind: 'defeatHero', pid: clientId, target: actPiece.id });
+		session.cardAction({ kind: 'defeatHero', pid: clientId, target: actPiece.id, keepCard });
 		confirmDefeat = false; actId = null; selPieceId = null;
 	}
 	const playerName = (id: string) => $players.find((p) => p.id === id)?.name ?? 'A player';
@@ -397,7 +398,7 @@
 				<span>You were defeated — back in the fight</span>
 				<button class="spcancel go" on:click={() => { cancelPlace(); pendingRespawn = true; }}>⤴ Respawn</button>
 			{:else}
-				<span>Defeated — you return at the start of your next turn with a card to play</span>
+				<span>Defeated — play a card on your next turn to respawn</span>
 			{/if}
 		</div>
 	{/if}
@@ -441,8 +442,10 @@
 					<li><b>You</b> gain {defeatSum.coins} coin{defeatSum.coins === 1 ? "" : "s"} <small>(their level)</small></li>
 					{#each defeatSum.assists as a (a)}<li><b>{playerName(a)}</b> gains {defeatSum.assist} assist coin{defeatSum.assist > 1 ? 's' : ''}</li>{/each}
 					<li><b>{defeatSum.team === 'orange' ? 'Orange' : 'Blue'}</b> loses {defeatSum.lives} life{defeatSum.bounty ? ' (+1 Bounty)' : ''}</li>
-					<li>Their face-down card is discarded; they return at the start of their next turn.</li>
+					<li>{keepCard ? 'The card they played this turn stays (it already resolved).' : 'The card they played this turn is discarded without effect.'} Their hand stays.</li>
+					<li>They respawn when they play a card on a later turn.</li>
 				</ul>
+				<label class="dkeep"><input type="checkbox" bind:checked={keepCard} /> Their card this turn already resolved — keep it</label>
 				<div class="mrow">
 					<button class="mcancel" on:click={() => (confirmDefeat = false)}>Cancel</button>
 					<button class="mleave" on:click={doDefeatHero}>Defeat</button>
@@ -861,6 +864,8 @@
 	.dsum { margin: 4px 0 16px; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 5px; font-size: 0.9rem; color: #cbd5e1; }
 	.dsum b { font-weight: normal; color: #fff; }
 	.dsum small { color: #93a3b8; }
+	.dkeep { display: flex; align-items: center; gap: 8px; margin: -6px 0 14px; font-size: 0.8rem; color: #cbd5e1; cursor: pointer; }
+	.dkeep input { accent-color: #e2a64a; }
 	.placehint.defeat { border-color: rgba(239, 68, 68, 0.6); color: #ffc9c2; }
 	.spcancel.go { background: linear-gradient(180deg, #e2a64a, #b8781f); color: #1a1206; border-color: #fbe7b0; }
 	/* Remove menu: one button per reason, the plain Remove last */

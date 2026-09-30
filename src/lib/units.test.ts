@@ -57,17 +57,28 @@ describe('defeating and removing units', () => {
 		expect(p.pieces!.bnty).toBeUndefined()
 	})
 
-	it('respawns at the start of a later turn in which they have a card to play', () => {
+	it('keeps the hand; keeps this turn\'s card only if it had already resolved', () => {
+		const s = game()
+		const p = applyCardReq(s, { kind: 'defeatHero', pid: 'A', target: 'B' })
+		expect(p.cards!.B.hand).toEqual(s.cards!.B.hand)
+		const kept = applyCardReq(s, { kind: 'defeatHero', pid: 'A', target: 'B', keepCard: true })
+		expect(kept.cards!.B.pending).toBe(4)
+		expect(kept.cards!.B.discard).not.toContain(4)
+	})
+
+	it('respawns in a later turn once they play a card (possibly next round)', () => {
 		let s = { ...game() }
 		s = { ...s, ...applyCardReq(s, { kind: 'defeatHero', pid: 'A', target: 'B' }) } as MatchState
 		expect(canRespawn(s, 'B')).toBe(false) // same turn
 		expect(applyCardReq(s, { kind: 'respawn', pid: 'B', hex: '9_9' })).toEqual({})
 		s = { ...s, turn: 3 }
+		expect(canRespawn(s, 'B')).toBe(false) // next turn, but no card played yet
+		s = { ...s, cards: { ...s.cards, B: { ...s.cards!.B, pending: s.cards!.B.hand[0] } } } as MatchState
 		expect(canRespawn(s, 'B')).toBe(true)
 		const back = applyCardReq(s, { kind: 'respawn', pid: 'B', hex: '9_9' })
 		expect(back.pieces!.B).toMatchObject({ kind: 'hero', team: 'blue', hex: '9_9' })
 		expect(back.defeated!.B).toBeUndefined()
-		// no card to play this turn → wait (possibly until the next round)
-		expect(canRespawn({ ...s, cards: { ...s.cards, B: { ...s.cards!.B, hand: [] } } } as MatchState, 'B')).toBe(false)
+		// passed / nothing to play this turn → wait (possibly until the next round)
+		expect(canRespawn({ ...s, cards: { ...s.cards, B: { ...s.cards!.B, pending: -1 } } } as MatchState, 'B')).toBe(false)
 	})
 })
