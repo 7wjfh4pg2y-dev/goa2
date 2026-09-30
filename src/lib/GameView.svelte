@@ -10,7 +10,7 @@
 	import { heroCards } from '$lib/cards/deck';
 	import { ultimateIndex, allowedMoves } from '$lib/cards/cardstate';
 	import { uiLayout, layoutVars } from '$lib/layout';
-	import { placeToken, moveToken, effectiveHex, MINES, tokenName, type ArmToken } from '$lib/tokens';
+	import { placeToken, moveToken, effectiveHex, MINES, tokenName, tokensLeft, removalOptions, applyRemoval, removalLog, canRemove, type ArmToken, type RemovalOption } from '$lib/tokens';
 	import {
 		colorHex, movePiece, teamForSeat, throneHex,
 		type MatchState, type Player, type MatchSession, type Team, type ConnStatus
@@ -175,6 +175,8 @@
 	function onBoardHex(hex: string) {
 		if (pendingToken) {
 			const t = pendingToken;
+			const unique = t.token.startsWith('marker_') || t.token.startsWith('rune_'); // placing again moves it
+			if (!unique && tokensLeft($ms.pieces ?? {}, t.owner, t.token) <= 0) { pendingToken = null; return; }
 			const id = `tok_${t.owner}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 5)}`;
 			const pieces = placeToken($ms.pieces, { id, hex, team: t.team, token: t.token, owner: t.owner, label: t.label, color: t.color });
 			const what = t.token === 'companion' ? `deployed ${t.label}` : MINES.has(t.token) ? 'laid a mine' : `placed ${tokenName(t.token)}`;
@@ -201,14 +203,19 @@
 		selPieceId = pc ? id : null;
 	}
 	$: selPiece = selPieceId ? $ms.pieces[selPieceId] : null;
-	let confirmDelete = false;
-	function doDelete() {
+	// Remove menu: the reasons the cards give for taking a token out of play (tokens.ts)
+	let removing = false;
+	let pickHeroFor: RemovalOption | null = null; // a mine going off: which enemy hero set it off
+	$: canRemoveSel = !!selPiece && canRemove(selPiece, clientId, iAmHost);
+	$: removeOpts = selPiece ? removalOptions(selPiece) : [];
+	$: enemyHeroes = selPiece ? Object.values($ms.pieces ?? {}).filter((p) => p.kind === 'hero' && p.team !== selPiece?.team) : [];
+	function openRemove() { board?.release(); pickHeroFor = null; removing = true; }
+	function doRemove(opt: RemovalOption, heroPieceId?: string) {
 		if (!selPiece) return;
-		const next = { ...$ms.pieces };
-		delete next[selPiece.id];
-		const what = selPiece.role ? `${selPiece.team} ${selPiece.role} minion` : (selPiece.token ? (selPiece.faceDown ? 'a mine' : tokenName(selPiece.token)) : 'a piece');
-		session.act(`removed ${what}`, { pieces: next });
-		confirmDelete = false; selPieceId = null;
+		if (opt.needsHero && !heroPieceId) { pickHeroFor = opt; return; }
+		const heroName = heroPieceId ? heroById($ms.pieces[heroPieceId]?.hero ?? '')?.name : undefined;
+		session.act(removalLog(selPiece, opt.id, heroName), { pieces: applyRemoval($ms.pieces, selPiece.id, opt.id) });
+		removing = false; pickHeroFor = null; selPieceId = null;
 		board?.release();
 	}
 	// Min's mines: flip to reveal Blast / Dud (or back face down)
@@ -364,19 +371,32 @@
 			{#if canFlip}
 				<button class="pieflip" on:click={flipMine}>{selPiece.faceDown ? 'Flip — reveal' : 'Flip face down'}</button>
 			{/if}
-			<button class="piedel" on:click={() => { board?.release(); confirmDelete = true; }}>Delete</button>
+			{#if canRemoveSel}<button class="piedel" on:click={openRemove}>Remove</button>{/if}
 		</div>
 	{/if}
 
-	{#if confirmDelete && selPiece}
-		<div class="modal-scrim" on:click={() => (confirmDelete = false)} on:keydown={() => {}} role="presentation">
+	{#if removing && selPiece}
+		<div class="modal-scrim" on:click={() => (removing = false)} on:keydown={() => {}} role="presentation">
 			<div class="modal" on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" tabindex="-1">
-				<h3>Delete this {selPiece.role ? 'minion' : 'token'}?</h3>
-				<p>This removes the {selLabel} from the board.</p>
-				<div class="mrow">
-					<button class="mcancel" on:click={() => (confirmDelete = false)}>Cancel</button>
-					<button class="mleave" on:click={doDelete}>Delete</button>
-				</div>
+				{#if pickHeroFor}
+					<h3>Who moved through it?</h3>
+					<p>The mine is revealed and removed. A Blast makes that hero discard a card, if able.</p>
+					<div class="ropts">
+						{#each enemyHeroes as h (h.id)}
+							<button class="ropt" on:click={() => pickHeroFor && doRemove(pickHeroFor, h.id)}>{heroById(h.hero ?? '')?.name ?? 'Hero'}</button>
+						{/each}
+						{#if !enemyHeroes.length}<p class="rnone">No enemy heroes on the board.</p>{/if}
+					</div>
+					<div class="mrow"><button class="mcancel" on:click={() => (pickHeroFor = null)}>Back</button></div>
+				{:else}
+					<h3>Remove the {selLabel}?</h3>
+					<div class="ropts">
+						{#each removeOpts as o (o.id)}
+							<button class="ropt" class:plain={o.id === 'remove'} on:click={() => doRemove(o)}><b>{o.label}</b>{#if o.hint}<small>{o.hint}</small>{/if}</button>
+						{/each}
+					</div>
+					<div class="mrow"><button class="mcancel" on:click={() => (removing = false)}>Cancel</button></div>
+				{/if}
 			</div>
 		</div>
 	{/if}
@@ -760,6 +780,16 @@
 	.modal-scrim { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; background: rgba(3, 8, 14, 0.6); backdrop-filter: blur(3px); }
 	.modal { width: min(360px, 90vw); background: rgba(12, 18, 32, 0.92); border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 16px; padding: 20px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6); }
 	.modal h3 { font-family: 'Modesto Poster', serif; font-size: 1.4rem; margin: 0 0 6px; }
+	/* Remove menu: one button per reason, the plain Remove last */
+	.ropts { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 14px; }
+	.ropt { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 9px 12px; border-radius: 10px; cursor: pointer; text-align: left; font: inherit;
+		color: #f6ead2; background: rgba(199, 154, 78, 0.16); border: 1px solid rgba(199, 154, 78, 0.5); }
+	.ropt:hover { background: rgba(199, 154, 78, 0.3); }
+	.ropt b { font-weight: normal; font-size: 0.95rem; }
+	.ropt small { font-size: 0.7rem; color: #cbb488; }
+	.ropt.plain { color: #ffb4b4; background: rgba(220, 60, 60, 0.16); border-color: rgba(239, 68, 68, 0.45); }
+	.ropt.plain:hover { background: rgba(220, 60, 60, 0.3); }
+	.rnone { font-size: 0.8rem; color: #93a3b8; }
 	.modal p { margin: 0 0 16px; color: #cbd5e1; font-size: 0.9rem; line-height: 1.45; }
 	.mrow { display: flex; gap: 10px; justify-content: flex-end; }
 	.mcancel, .mleave { border-radius: 10px; padding: 0.5rem 1.1rem; cursor: pointer; font-weight: 700; border: 1px solid transparent; }

@@ -17,7 +17,7 @@
 	import { heroCards, heroName, heroTitle, heroStat } from '$lib/cards/deck';
 	import { heroAvatar, heroLogo, heroSplash } from '$lib/heroes';
 	import { detectDuration, endOf, effectLabel, DUR_LABEL, type Effect, type EffectDur } from '$lib/effects';
-	import { HERO_KIT, COMPANIONS, MINES, statusFrom, toggleStatusMarker, tokenName, type ArmToken } from '$lib/tokens';
+	import { HERO_KIT, COMPANIONS, MINES, statusFrom, toggleStatusMarker, tokenName, tokensLeft, type ArmToken } from '$lib/tokens';
 	import { PASS, statDeltas, levelOf, levelCost, ultimateIndex, mustLevel, canPick, canAfford, swapSource, twinOf, allowedMoves, type PlayerCardState, type StatKey, type CardZone } from '$lib/cards/cardstate';
 	import LevelConfirm from '$lib/LevelConfirm.svelte';
 
@@ -440,6 +440,8 @@
 			arm: { token: tk, img: icon(tk), color: myColor, team: myTeam ?? 'neutral', owner: clientId } };
 	});
 	$: myTokenCount = Object.values($ms.pieces ?? {}).filter((p) => p.kind === 'token' && p.owner === clientId).length;
+	// supply left per token (a marker/rune placed again just moves, so it never runs out)
+	$: leftOf = (tk: string) => (tk.startsWith('marker_') || tk.startsWith('rune_') ? Infinity : tokensLeft($ms.pieces ?? {}, clientId, tk));
 	// the shelf stays open while you place (so you can drop several, one at a time);
 	// clicking anywhere else closes it
 	function armToken(it: ShelfItem) { onArmToken(it.arm); }
@@ -573,8 +575,10 @@
 				<div class="toklbl">Tokens and Markers</div>
 				<div class="tokgrid">
 					{#each shelf as it (it.key)}
-						<button class="tok {it.cls}" on:click={() => armToken(it)} title={it.title}>
+						{@const left = leftOf(it.key)}
+						<button class="tok {it.cls}" class:out={left === 0} disabled={left === 0} on:click={() => armToken(it)} title={left === 0 ? `${it.title} — all in play` : it.title}>
 							{#if it.letter}<span class="ltrdisc" style="--pc:{colorHex(myColor)}">{it.letter}</span>{:else}<img src={it.img} alt="" />{/if}{#if it.label}<span class="toktag">{it.label}</span>{/if}
+							{#if left !== Infinity}<span class="tokleft">{left}</span>{/if}
 						</button>
 					{/each}
 				</div>
@@ -1899,6 +1903,10 @@
 	.toklbl { font-size: .56rem; letter-spacing: .1em; text-transform: uppercase; font-weight: 800; color: #b8a06a; margin: 2px 2px 5px; }
 	.toklbl + .tokgrid { margin-bottom: 8px; }
 	.tokgrid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
+	/* supply left: a small count on each token; empty = greyed out */
+	.tok { position: relative; }
+	.tokleft { position: absolute; right: 2px; bottom: 1px; min-width: 14px; height: 14px; padding: 0 3px; box-sizing: border-box; border-radius: 7px; font-size: 10px; line-height: 14px; text-align: center; color: #fff; background: rgba(0,0,0,.72); border: 1px solid rgba(255,255,255,.3); }
+	.tok.out { opacity: .35; cursor: not-allowed; filter: grayscale(1); }
 	.tok { padding: 4px; border-radius: 8px; cursor: pointer; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.1); display: grid; place-items: center; }
 	.tok:hover { background: rgba(199,154,78,.2); border-color: rgba(199,154,78,.5); }
 	.tok img { width: 100%; aspect-ratio: 1; object-fit: contain; }
