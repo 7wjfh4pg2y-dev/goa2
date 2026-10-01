@@ -27,13 +27,14 @@
 	}
 
 	// a hero falls (sample heroes / players)
-	const names: Record<string, string> = { a: 'Zara', b: 'Priya', c: 'Mo', d: 'Sam' };
+	const names: Record<string, string> = { a: 'Zara', b: 'Priya', c: 'Mo', d: 'Sam' }; // a, c orange · b, d blue
 	const cards = { a: { hero: 'arien' }, b: { hero: 'brogan' }, c: { hero: 'xargatha' }, d: { hero: 'trinkets' } } as unknown as Record<string, PlayerCardState>;
 	const art = import.meta.glob('/src/lib/cards/images/life_counter_*.png', { eager: true, import: 'default' }) as Record<string, string>;
 	const lifeArt = (t: Team, side: 'front' | 'back') => art[`/src/lib/cards/images/life_counter_${t}_${side}.png`] ?? '';
 	let kill: DefeatNews | null = null;
 	function defeat(victim: string, by: string, team: Team, coins: number, assists: string[], lives: number) {
 		kill = { id: id('d'), victim, by, coins, assist: lives, assists, lives, team, at: Date.now() };
+		// (the demo has no board: the splash reads each hero from `cards`)
 	}
 
 	let turnSplash: TurnSplash;
@@ -71,9 +72,12 @@
 	</section>
 	<section>
 		<h2>Hero defeated</h2>
+		<p class="note">Orange: Zara (Arien), Mo (Xargatha) · Blue: Priya (Brogan), Sam (Trinkets)</p>
 		<div class="row">
-			<button class="b" on:click={() => defeat('a', 'c', 'orange', 3, ['d'], 1)}>Mo (Xargatha) defeats Zara (Arien)</button>
-			<button class="o" on:click={() => defeat('d', 'b', 'blue', 6, ['a'], 2)}>Priya (Brogan) defeats Sam (Trinkets)</button>
+			<button class="b" on:click={() => defeat('a', 'b', 'orange', 3, ['d'], 1)}>Priya kills Zara</button>
+			<button class="o" on:click={() => defeat('b', 'a', 'blue', 4, ['c'], 2)}>Zara kills Priya</button>
+			<button class="o" on:click={() => defeat('b', 'c', 'blue', 4, ['a'], 2)}>Mo kills Priya</button>
+			<button class="b" on:click={() => defeat('c', 'd', 'orange', 7, ['b'], 3)}>Sam kills Mo</button>
 		</div>
 	</section>
 	<section>
@@ -101,6 +105,7 @@
 	button.o { background: #ef7d22; border-color: transparent; color: #fff; }
 	button.b { background: #2f7fe6; border-color: transparent; color: #fff; }
 	button.t { background: #7a4292; border-color: transparent; color: #fff; }
+	.note { margin: -2px 0 10px; text-align: center; font-size: .78rem; color: #cbd5e1; }
 	.custom label { display: flex; align-items: center; gap: 6px; font-size: .9rem; }
 	.custom input { width: 56px; padding: 6px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, .2); background: rgba(0, 0, 0, .35); color: #fff; font: inherit; }
 </style>
