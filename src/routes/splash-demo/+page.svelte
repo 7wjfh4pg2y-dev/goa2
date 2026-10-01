@@ -9,6 +9,7 @@
 	import type { BattleNews, DefeatNews, Team } from '$lib/match';
 	import type { PushNews } from '$lib/battle';
 	import type { PlayerCardState } from '$lib/cards/cardstate';
+	import type { GameStatsData } from '$lib/GameStats.svelte';
 
 	let w = 1440;
 	$: mobile = w <= 760;
@@ -45,6 +46,24 @@
 	let turnSplash: TurnSplash;
 	let levelSplash: LevelSplash;
 	let round = 2, turn = 1;
+	// sample battle report (mockup data)
+	const P = (id: string, name: string, color: string, hero: string, team: Team, level: number, kills: number, deaths: number, assists: number, minions: number, coins: number) =>
+		({ id, name, color, hero, team, level, kills, deaths, assists, minions, coins });
+	const sample: GameStatsData = {
+		rounds: 6, minutes: 156,
+		players: [
+			P('a', 'Zaheen', '#dc2626', 'arien', 'orange', 7, 4, 2, 5, 9, 31), P('c', 'Mo', '#14b8a6', 'xargatha', 'orange', 6, 2, 3, 6, 14, 27),
+			P('e', 'Anas', '#eab308', 'brogan', 'orange', 8, 5, 1, 3, 6, 38), P('g', 'Lee', '#f472b6', 'wasp', 'orange', 5, 1, 4, 4, 7, 22),
+			P('b', 'Priya', '#22d3ee', 'rowenna', 'blue', 7, 3, 3, 5, 11, 30), P('d', 'Sam', '#84cc16', 'trinkets', 'blue', 6, 2, 2, 4, 16, 29),
+			P('f', 'Jo', '#a855f7', 'misa', 'blue', 7, 4, 3, 2, 5, 33), P('h', 'Kit', '#f8fafc', 'wuk', 'blue', 5, 1, 2, 6, 8, 21)
+		],
+		tide: [1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0],
+		falls: [
+			{ turn: 2, team: 'blue', who: 'Kit (Wuk)' }, { turn: 5, team: 'blue', who: 'Sam (Trinkets)' }, { turn: 9, team: 'orange', who: 'Lee (Wasp)' },
+			{ turn: 12, team: 'orange', who: 'Mo (Xargatha)' }, { turn: 13, team: 'orange', who: 'Lee (Wasp)' }, { turn: 17, team: 'blue', who: 'Jo (Misa)' },
+			{ turn: 19, team: 'blue', who: 'Priya (Rowenna)' }, { turn: 21, team: 'orange', who: 'Zaheen (Arien)' }, { turn: 22, team: 'blue', who: 'Jo (Misa)' }
+		]
+	};
 </script>
 
 <svelte:window bind:innerWidth={w} />
@@ -119,7 +138,7 @@
 <TurnSplash bind:this={turnSplash} {mobile} />
 <LevelSplash bind:this={levelSplash} {mobile} />
 {#if won}
-	{#key won}<VictorySplash round={5} team={won.team} reason={won.reason} myTeam={me} {mobile} onClose={() => (won = null)} />{/key}
+	{#key won}<VictorySplash round={6} team={won.team} reason={won.reason} myTeam={me} {mobile} stats={sample} onClose={() => (won = null)} />{/key}
 {/if}
 
 <style>
