@@ -38,7 +38,6 @@
 			<div class="band">
 				<div class="side o"><span class="front"></span></div>
 				<div class="side b"></div>
-				<div class="streaks"></div>
 				<div class="impact"></div>
 			</div>
 			<div class="txt title">
@@ -73,11 +72,6 @@
 		91% { transform: translateY(-50%) skewY(-3deg) translateX(0); opacity: 1; filter: blur(0); }
 		100% { transform: translateY(-50%) skewY(-3deg) translateX(105%); opacity: .3; filter: blur(6px); }
 	}
-	.streaks { position: absolute; inset: 0; opacity: .45; mix-blend-mode: screen;
-		background: repeating-linear-gradient(180deg, transparent 0 10px, rgba(255, 255, 255, .08) 10px 11px, transparent 11px 25px, rgba(255, 255, 255, .14) 25px 26px),
-			repeating-linear-gradient(90deg, transparent 0 130px, rgba(255, 255, 255, .1) 130px 240px, transparent 240px 400px);
-		animation: race .4s linear infinite; }
-	@keyframes race { to { background-position: 0 0, -400px 0; } }
 
 	/* the two armies: each a colour wall; orange's leading edge is the battle front */
 	.side { position: absolute; top: 0; bottom: 0; }
