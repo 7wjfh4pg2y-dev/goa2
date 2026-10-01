@@ -264,19 +264,25 @@
 	$: iPlay = !!$ms.cards?.[clientId];
 	$: canDefeatSel = !!selPiece && iPlay && !!myTeam && (selPiece.kind === 'minion' || selPiece.kind === 'hero') && selPiece.team !== myTeam;
 	// a small confirm takes the toolbar's place, right above the piece: attack a hero / remove a minion
-	let confirmKind: 'attack' | 'remove' | null = null;
+	let confirmKind: 'attack' | 'defeat' | 'remove' | null = null;
 	$: if (confirmKind && !actPiece) confirmKind = null;
-	$: attackSum = confirmKind === 'attack' && actPiece ? heroDefeatSummary($ms, clientId, actPiece.id) : null;
+	$: attackSum = (confirmKind === 'attack' || confirmKind === 'defeat') && actPiece ? heroDefeatSummary($ms, clientId, actPiece.id) : null;
 	function defeatSel() {
 		if (!selPiece) return;
 		const p = selPiece;
 		board?.release();
 		if (p.kind === 'minion') { session.cardAction({ kind: 'defeatMinion', pid: clientId, piece: p.id }); selPieceId = null; }
 	}
-	function attackSel() {
+	// a hero can be attacked (they may defend) or simply defeated (a discard-or-die effect,
+	// anything that isn't an attack) — same rewards and splash either way
+	function attackSel(kind: 'attack' | 'defeat' = 'attack') {
 		if (!selPiece) return;
-		actId = selPiece.id; confirmKind = 'attack';
+		actId = selPiece.id; confirmKind = kind;
 		board?.release();
+	}
+	function doDefeatHero() {
+		if (actPiece) session.cardAction({ kind: 'defeatHero', pid: clientId, target: actPiece.id });
+		closeConfirm();
 	}
 	function doAttack() {
 		if (actPiece) session.cardAction({ kind: 'attack', pid: clientId, target: actPiece.id });
@@ -521,13 +527,14 @@
 	<!-- selected minion/token: offer delete (heroes aren't deletable) -->
 	{#if confirmKind && actPiece}
 		<div class="pietool confirm" class:anchored={!!tipPos} style={tipPos ? `left:${tipPos.x / lay.s}px; top:${tipPos.y / lay.s}px` : ''}>
-			{#if confirmKind === 'attack' && attackSum}
-				<span class="pietxt">Attack {whoOf(actPiece.id)}?</span>
+			{#if (confirmKind === 'attack' || confirmKind === 'defeat') && attackSum}
+				<span class="pietxt">{confirmKind === 'attack' ? 'Attack' : 'Defeat'} {whoOf(actPiece.id)}?</span>
 				<span class="rw" title="You get {attackSum.coins}{attackSum.assists.length ? `, each teammate ${attackSum.assist} assist` : ''}">
 					<span class="gc sm"></span><b>{attackSum.coins}</b>{#if attackSum.assists.length}<i>/</i><span class="gc sm"></span><b>{attackSum.assist}</b>{/if}
 				</span>
 				<span class="rw" title="{cap(attackSum.team ?? '')} loses {attackSum.lives} life"><img class="lt" src={lifeArt((attackSum.team ?? 'orange') as Team, 'back')} alt="" /><b>{attackSum.lives}</b></span>
-				<button class="piedefeat" on:click={doAttack}>⚔ Attack</button>
+				{#if confirmKind === 'attack'}<button class="piedefeat" on:click={doAttack}>⚔ Attack</button>
+				{:else}<button class="piedefeat" on:click={doDefeatHero}>☠ Defeat</button>{/if}
 			{:else}
 				<span class="pietxt nc">Remove <b style:color={actPiece.team === 'blue' ? '#6aa8ff' : '#ff9a4a'}>{cap(actPiece.role ?? '')} Minion</b></span>
 				<button class="piedel" on:click={doRemoveMinion}>Remove</button>
@@ -542,7 +549,8 @@
 			{/if}
 			{#if selImmune}<span class="pieimm" title="Heavy minions can't be moved, defeated or removed while another minion of their team is in the battle zone{iAmHost ? ' — as host you can still override for card exceptions' : ''}">🛡 Immune</span>{/if}
 			{#if canDefeatSel && selPiece.kind === 'hero'}
-				<button class="piedefeat" on:click={attackSel} disabled={!!attacks[selPiece.id]}>{attacks[selPiece.id] ? 'Under attack…' : '⚔ Attack'}</button>
+				<button class="piedefeat" on:click={() => attackSel('attack')} disabled={!!attacks[selPiece.id]}>{attacks[selPiece.id] ? 'Under attack…' : '⚔ Attack'}</button>
+				<button class="piedel" on:click={() => attackSel('defeat')} title="Not an attack (e.g. a discard-or-die effect): defeat them outright — same rewards">☠ Defeat</button>
 			{:else if canDefeatSel && (!selImmune || iAmHost)}
 				<button class="piedefeat" on:click={defeatSel}>Defeat <span class="gc sm"></span>{minionCoins(selPiece.role)}</button>
 			{/if}
