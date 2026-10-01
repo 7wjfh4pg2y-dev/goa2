@@ -15,7 +15,7 @@
 
 import { tokenExpiry, sweepTokens, statusFrom } from './tokens'
 import { expireEffects, type Effect } from './effects'
-import { startBattle, pushCheck, battleRemove, battleAuto, laneNotes, heavyImmune, type Battle } from './battle'
+import { startBattle, pushCheck, battleRemove, battleAuto, battleResult, laneNotes, heavyImmune, type Battle } from './battle'
 import { get, writable, type Readable } from 'svelte/store'
 import { supabase } from './supabase'
 import { tabClientId } from './identity'
@@ -76,8 +76,11 @@ export function battlePatch(s: MatchState): Partial<MatchState> {
 	const cards = s.cards ?? {}
 	const migrated: Record<string, PlayerCardState> = {}
 	for (const pid in cards) migrated[pid] = revealPlayer(cards[pid], s.turn - 1)
-	// the end-of-turn push check, then the battle count (battle.ts)
-	return { battlePhase: true, cards: endRoundAll(migrated), ...startBattle(s) }
+	// the end-of-turn push check, then the battle count (battle.ts); the news drives the splash
+	const fight = startBattle(s)
+	const b = battleResult({ ...s, ...fight })
+	const battleNews: BattleNews = { id: `b_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`, ...b, at: Date.now() }
+	return { battlePhase: true, cards: endRoundAll(migrated), ...fight, battleNews }
 }
 
 /** Apply a card instruction to the shared state, returning the patch to broadcast. */
@@ -262,6 +265,8 @@ export interface MatchState {
 	wonBy?: { team: Team; reason: string } | null // a push won the game (throne / last wave)
 	/** heroes under attack, keyed by the defender: who attacks, and whether they chose to defend */
 	attacks?: Record<string, { by: string; defending: boolean; at: number }>
+	/** the latest minion battle — every client plays the battle splash when `id` changes */
+	battleNews?: BattleNews | null
 	/** the latest hero defeat — every client plays the defeat splash when `id` changes */
 	lastDefeat?: DefeatNews | null
 	/** game start: heroes not yet placed — each player puts theirs on a base spawn point */
@@ -1260,6 +1265,15 @@ export function minionOff(s: MatchState, pid: string, pieceId: string, defeated:
 	delete pieces[pieceId]
 	if (!defeated) return { pieces }
 	return { pieces, cards: addCoinsTo(s.cards ?? {}, pid, minionCoins(m.role)) }
+}
+
+export interface BattleNews {
+	id: string
+	orange: number
+	blue: number
+	loser: Team | null // null = deadlock
+	remove: number
+	at: number
 }
 
 export interface DefeatNews {

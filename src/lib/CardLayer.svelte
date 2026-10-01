@@ -22,7 +22,6 @@
 	import { PASS, statDeltas, levelOf, levelCost, ultimateIndex, mustLevel, canPick, canAfford, swapSource, twinOf, allowedMoves, type PlayerCardState, type StatKey, type CardZone } from '$lib/cards/cardstate';
 	import LevelConfirm from '$lib/LevelConfirm.svelte';
 	import TurnSplash from '$lib/TurnSplash.svelte';
-	import { browser } from '$app/environment';
 
 	export let session: MatchSession;
 	export let ms: Readable<MatchState>;
@@ -180,19 +179,8 @@
 	}
 	const canTakeNow = (cs: PlayerCardState, i: number) => battlePhase && canAfford(cs) && canPick(cs, i);
 
-	// a splash for every new turn / new round (TurnSplash). Look: ?splash=blade|crest|clash
-	// in the URL picks one and remembers it on this device (until we settle on one).
+	// a splash (the crest) for every new turn / new round
 	let turnSplash: TurnSplash;
-	const SPLASHES = ['blade', 'crest', 'clash'] as const;
-	let splashLook: (typeof SPLASHES)[number] = 'blade';
-	if (browser) {
-		try {
-			const q = new URLSearchParams(location.search).get('splash');
-			if (q && (SPLASHES as readonly string[]).includes(q)) localStorage.setItem('goa2-splash', q);
-			const v = localStorage.getItem('goa2-splash');
-			if (v && (SPLASHES as readonly string[]).includes(v)) splashLook = v as typeof splashLook;
-		} catch { /* private mode */ }
-	}
 	let lastRT: string | null = null;
 	$: watchTurn($ms.round, $ms.turn);
 	function watchTurn(r: number, t: number) {
@@ -1395,7 +1383,7 @@
 	{/if}
 
 	<!-- ───────── new turn / new round splash ───────── -->
-	<TurnSplash bind:this={turnSplash} variant={splashLook} {mobile} />
+	<TurnSplash bind:this={turnSplash} {mobile} />
 
 	<!-- ───────── dramatic simultaneous reveal ───────── -->
 	{#if curtain}

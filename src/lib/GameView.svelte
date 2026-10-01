@@ -4,6 +4,7 @@
 	import BoardCanvas from '$lib/BoardCanvas.svelte';
 	import CardLayer from '$lib/CardLayer.svelte';
 	import DefeatSplash from '$lib/DefeatSplash.svelte';
+	import BattleSplash from '$lib/BattleSplash.svelte';
 	import { heroById, heroLogo } from '$lib/heroes';
 	import { zoneName } from '$lib/zones';
 	import { effectLabel } from '$lib/effects';
@@ -138,7 +139,13 @@
 
 	// ── minion battle / lane (battle.ts) ──
 	// the minions the battle's loser may take off glow red on the board
-	$: battle = $ms.battle ?? null;
+	// the minion battle splash plays first; the removal step shows once it has slashed away
+	let battleDoneId: string | null = $ms.battleNews?.id ?? null; // joining mid-game: no replay
+	$: battleNews = $ms.battleNews ?? null;
+	$: battleSplashing = !!battleNews && battleNews.id !== battleDoneId && Date.now() - battleNews.at < 15000;
+	$: armBattleFallback(battleSplashing ? battleNews?.id ?? null : null);
+	function armBattleFallback(id: string | null) { if (id) setTimeout(() => (battleDoneId = id), 5000); } // if the splash never reports back
+	$: battle = battleSplashing ? null : $ms.battle ?? null;
 	$: battleMarks = battle ? Object.values($ms.pieces ?? {}).filter((p) => canBattleRemove($ms, p.id)).map((p) => ({ hex: p.hex, r: 0, color: '#ef4444' })) : [];
 	$: iChooseBattle = !!battle && (iAmHost || (iPlay && myTeam === battle.loser));
 	$: selImmune = !!selPiece && selPiece.role === 'heavy' && heavyImmune($ms, selPiece.id);
@@ -520,6 +527,7 @@
 			<button class="spcancel" on:click={cancelPlace}>Cancel</button>
 		</div>
 	{/if}
+	<BattleSplash news={battleNews} {mobile} onDone={() => (battleDoneId = battleNews?.id ?? null)} />
 	<DefeatSplash news={$ms.lastDefeat ?? null} pieces={$ms.pieces} cards={$ms.cards ?? {}} defeated={$ms.defeated ?? {}} names={(id) => playerName(id)} {lifeArt} {mobile} />
 	<div class="ocean"></div>
 	<!-- on a phone the board sits between the top bar + player strip and the dash -->
