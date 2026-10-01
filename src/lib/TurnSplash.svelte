@@ -3,6 +3,7 @@
 	// played sit face-up, dimmed and stamped ✓; this turn's card flips face-up, slams bigger
 	// and glows. A new round flips all four back over in a sweep. Never blocks the board.
 	import { onDestroy } from 'svelte';
+	import logo from '$lib/images/goa-logo.png';
 
 	export let mobile = false;
 
@@ -32,7 +33,7 @@
 				<div class="row">
 					{#each [1, 2, 3, 4] as n (n)}
 						<div class="slot" class:done={!isRound && n < t} class:now={!isRound && n === t} class:wipe={isRound && n > 1} class:first={isRound && n === 1} style="--i:{n}">
-							<div class="face back"><span class="sym">✦</span></div>
+							<div class="face back"><img class="sym" src={logo} alt="" /></div>
 							<div class="face front"><span class="rn">{ROMAN[n]}</span></div>
 							{#if !isRound && n < t}<span class="stamp">✓</span>{/if}
 						</div>
@@ -61,7 +62,8 @@
 	@keyframes slotIn { from { opacity: 0; translate: 0 -120px; rotate: -8deg; } to { opacity: 1; translate: 0 0; rotate: 0deg; } }
 	.face { position: absolute; inset: 0; border-radius: 12px; display: grid; place-items: center; box-shadow: 0 10px 26px rgba(0, 0, 0, .65); }
 	.back { background: radial-gradient(circle at 50% 40%, #2a1d44, #120c22); border: 2px solid rgba(217, 168, 69, .55); }
-	.back .sym { color: rgba(217, 168, 69, .5); font-size: 2rem; }
+	/* the card back: the Guards of Atlantis crest */
+	.back .sym { width: 78%; height: auto; filter: drop-shadow(0 3px 6px rgba(0, 0, 0, .6)); }
 	.front { background: linear-gradient(170deg, #fff1cf, #e9c27a 55%, #b9832f); border: 3px solid #ffe3a0; opacity: 0; }
 	.front .rn { font-size: 3.4rem; color: #3b2508; text-shadow: 0 2px 0 rgba(255, 255, 255, .4); }
 	/* done turns sit face-up but dimmed and stamped */

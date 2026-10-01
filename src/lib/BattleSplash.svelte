@@ -1,9 +1,9 @@
 <script lang="ts">
 	// MINION BATTLE — drawn from the viewer's side: YOUR team charges in from the right
 	// (your base is bottom-right), the enemy from the left. They collide in the middle and
-	// the winner shoves straight through,
-	// clean off the band ("Titans win — Atlanteans remove 2"). A tie grinds back and forth,
-	// locks up and recoils over a purple glow: DEADLOCK. Played by every client from the shared `battleNews` (match.ts); the
+	// struggle back and forth — then the winner breaks through and shoves the loser clean off
+	// the band ("Titans win — Atlanteans remove 2"). A tie grinds the same way, locks up and
+	// recoils over a purple glow: DEADLOCK. Played by every client from the shared `battleNews` (match.ts); the
 	// removal step on the board waits until the slash has gone (`onDone`).
 	import { teamName } from '$lib/teams';
 	import { onDestroy } from 'svelte';
@@ -14,7 +14,7 @@
 	export let onDone: () => void = () => {};
 	export let myTeam: Team = 'blue'; // the viewer's team sits on the right (spectators: blue)
 
-	const TIE_MS = 4300, WIN_MS = 3400;
+	const TIE_MS = 4300, WIN_MS = 4300;
 	let seen = news?.id ?? null; // joining mid-game: don't replay an old battle
 	let shown: BattleNews | null = null;
 	let timer: ReturnType<typeof setTimeout> | null = null;
@@ -89,18 +89,18 @@
 		animation: front var(--T) linear both; }
 	@keyframes front { 0%, 13% { opacity: 0; } 15% { opacity: 1; } 62% { opacity: 1; } 70%, 100% { opacity: .0; } }
 
-	/* WIN (3.4 s): charge in (7–18%) · slam together · the winner shoves straight through (24–40%) */
-	.lwin, .rwin { --T: 3.4s; }
+	/* WIN (4.3 s): charge in (6–15%) · slam · the struggle (grind back and forth, 15–50%) ·
+	   the winner breaks through and shoves the loser clean off (50–64%) */
 	.lwin .side.l, .rwin .side.r { animation: win var(--T) cubic-bezier(.3, .8, .3, 1) both; }
 	.lwin .side.r, .rwin .side.l { animation: lose var(--T) cubic-bezier(.3, .8, .3, 1) both; }
-	@keyframes win  { 0%, 7% { width: 0; } 18% { width: 50%; } 21% { width: 47%; } 24% { width: 50%; } 40%, 100% { width: 100%; } }
-	@keyframes lose { 0%, 7% { width: 0; } 18% { width: 50%; } 21% { width: 53%; } 24% { width: 50%; } 40%, 100% { width: 0; } }
+	@keyframes win  { 0%, 6% { width: 0; } 15% { width: 50%; } 20% { width: 46%; } 26% { width: 54%; } 32% { width: 47%; } 38% { width: 53%; } 44% { width: 48%; } 50% { width: 51%; } 64%, 100% { width: 100%; } }
+	@keyframes lose { 0%, 6% { width: 0; } 15% { width: 50%; } 20% { width: 54%; } 26% { width: 46%; } 32% { width: 53%; } 38% { width: 47%; } 44% { width: 52%; } 50% { width: 49%; } 64%, 100% { width: 0; } }
 	.lwin .front, .rwin .front { animation: frontW var(--T) linear both; }
-	@keyframes frontW { 0%, 16% { opacity: 0; } 18%, 38% { opacity: 1; } 44%, 100% { opacity: 0; } }
+	@keyframes frontW { 0%, 13% { opacity: 0; } 15%, 60% { opacity: 1; } 66%, 100% { opacity: 0; } }
 	.lwin .impact, .rwin .impact { animation: impactW var(--T) ease-out both; }
-	@keyframes impactW { 0%, 17% { opacity: 0; } 19% { opacity: .9; } 26% { opacity: 0; } 38% { opacity: 0; } 40.5% { opacity: .55; } 48%, 100% { opacity: 0; } }
+	@keyframes impactW { 0%, 14% { opacity: 0; } 15.5% { opacity: .9; } 22% { opacity: 0; } 50% { opacity: 0; } 52.5% { opacity: .6; } 58%, 100% { opacity: 0; } }
 	.lwin .band, .rwin .band { animation: band var(--T) cubic-bezier(.16, .9, .2, 1) both, shakeW var(--T) linear both; }
-	@keyframes shakeW { 0%, 18% { translate: 0 0; } 19% { translate: 7px -3px; } 20% { translate: -5px 2px; } 21% { translate: 3px 0; } 22%, 39% { translate: 0 0; } 40.5% { translate: 9px -2px; } 41.5% { translate: -6px 3px; } 42.5% { translate: 2px 0; } 43.5%, 100% { translate: 0 0; } }
+	@keyframes shakeW { 0%, 15% { translate: 0 0; } 16% { translate: 6px -3px; } 17% { translate: -5px 2px; } 18% { translate: 3px 0; } 19%, 51% { translate: 0 0; } 52% { translate: 9px -2px; } 53% { translate: -6px 3px; } 54% { translate: 2px 0; } 55%, 100% { translate: 0 0; } }
 
 	/* DEADLOCK (4.3 s): they grind back and forth, lock up, and both recoil — the gap glows purple */
 	.tie .band { background: radial-gradient(ellipse at center, #b07ad6 0%, #7a4292 38%, #3b1f52 75%, #1c1028 100%);
@@ -119,8 +119,6 @@
 	.txt { position: absolute; display: flex; flex-direction: column; align-items: center; gap: 2px; zoom: var(--uis, 1); transform: skewY(-3deg);
 		color: #f6ead2; text-align: center; text-shadow: 0 3px 0 rgba(0, 0, 0, .65), 0 0 24px rgba(0, 0, 0, .95), 0 0 50px rgba(0, 0, 0, .8); }
 	.title { animation: title var(--T) ease both; }
-	.lwin .title, .rwin .title { animation-name: titleW; }
-	@keyframes titleW { 0%, 16% { opacity: 0; transform: skewY(-3deg) scale(1.8); filter: blur(4px); } 21% { opacity: 1; transform: skewY(-3deg) scale(1); filter: blur(0); } 36% { opacity: 1; } 41%, 100% { opacity: 0; transform: skewY(-3deg) scale(.9); } }
 	@keyframes title { 0%, 13% { opacity: 0; transform: skewY(-3deg) scale(1.8); filter: blur(4px); } 18% { opacity: 1; transform: skewY(-3deg) scale(1); filter: blur(0); } 46% { opacity: 1; } 52%, 100% { opacity: 0; transform: skewY(-3deg) scale(.9); } }
 	.kick { font-size: .95rem; letter-spacing: .45em; text-transform: uppercase; color: #ecd9a8; }
 	.score { display: flex; align-items: center; gap: 18px; font-size: 4rem; line-height: 1; }
@@ -128,7 +126,7 @@
 	.score i { font-style: normal; font-size: .5em; color: #f6ead2; }
 	.result { animation: result var(--T) ease both; }
 	.lwin .result, .rwin .result { animation-name: resultW; }
-	@keyframes resultW { 0%, 40% { opacity: 0; transform: skewY(-3deg) scale(1.9); filter: blur(5px); } 46% { opacity: 1; transform: skewY(-3deg) scale(1); filter: blur(0); } 90% { opacity: 1; } 100% { opacity: 0; } }
+	@keyframes resultW { 0%, 60% { opacity: 0; transform: skewY(-3deg) scale(1.9); filter: blur(5px); } 66% { opacity: 1; transform: skewY(-3deg) scale(1); filter: blur(0); } 90% { opacity: 1; } 100% { opacity: 0; } }
 	@keyframes result { 0%, 58% { opacity: 0; transform: skewY(-3deg) scale(1.9); filter: blur(5px); } 63% { opacity: 1; transform: skewY(-3deg) scale(1); filter: blur(0); } 90% { opacity: 1; } 100% { opacity: 0; } }
 	.big { font-size: 4.4rem; line-height: 1; letter-spacing: .03em; text-transform: uppercase; }
 	.lwin .win { color: #fff; text-shadow: 0 3px 0 color-mix(in srgb, var(--l) 45%, #000), 0 0 30px var(--l), 0 0 60px rgba(0, 0, 0, .8); }
