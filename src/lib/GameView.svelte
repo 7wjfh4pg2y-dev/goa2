@@ -199,7 +199,6 @@
 	}
 	$: roster = Object.keys($ms.cards ?? {}).map((pid) => ({ pid, hero: $ms.cards?.[pid]?.hero ?? '', name: playerName(pid), team: teamOf($ms, pid) }));
 	$: winRoster = $ms.wonBy ? roster.filter((h) => h.team === $ms.wonBy?.team) : [];
-	$: loseRoster = $ms.wonBy ? roster.filter((h) => h.team && h.team !== $ms.wonBy?.team) : [];
 
 	// gear/star throne hexes, so the board can draw them and heroes/minions spawn there
 	$: thrones = [
@@ -571,8 +570,8 @@
 		</div>
 	{/if}
 	{#if $ms.wonBy && !victoryClosed && !victoryHold}
-		<VictorySplash team={$ms.wonBy.team} reason={$ms.wonBy.reason} winners={winRoster} losers={loseRoster}
-			myTeam={mySeat >= 0 && mySeat < $ms.seats ? myTeam : null} me={clientId} {mobile} onClose={() => (victoryClosed = true)}
+		<VictorySplash team={$ms.wonBy.team} reason={$ms.wonBy.reason} winners={winRoster}
+			myTeam={mySeat >= 0 && mySeat < $ms.seats ? myTeam : null} {mobile} onClose={() => (victoryClosed = true)}
 			life={$ms.life} waves={$ms.waves} round={$ms.round} />
 	{/if}
 	{#if askLifeEnd && lifeOut}
