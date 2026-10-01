@@ -19,7 +19,7 @@
 	import { uiLayout, layoutVars } from '$lib/layout';
 	import { placeToken, moveToken, effectiveHex, MINES, tokenName, tokensLeft, removalOptions, applyRemoval, removalLog, canRemove, type ArmToken, type RemovalOption } from '$lib/tokens';
 	import {
-		colorHex, movePiece, teamForSeat, throneHex, minionCoins, heroDefeatSummary, canRespawn, freeSpawns, teamOf,
+		colorHex, movePiece, teamForSeat, throneHex, minionCoins, heroDefeatSummary, canRespawn, freeSpawns, teamOf, clearAround,
 		type MatchState, type Player, type MatchSession, type Team, type ConnStatus
 	} from '$lib/match';
 
@@ -308,7 +308,7 @@
 	$: iPlay = !!$ms.cards?.[clientId];
 	$: canDefeatSel = !!selPiece && iPlay && !!myTeam && (selPiece.kind === 'minion' || selPiece.kind === 'hero') && selPiece.team !== myTeam;
 	// a small confirm takes the toolbar's place, right above the piece: attack a hero / remove a minion
-	let confirmKind: 'attack' | 'defeat' | 'remove' | null = null;
+	let confirmKind: 'attack' | 'defeat' | 'remove' | 'selfremove' | null = null;
 	$: if (confirmKind && !actPiece) confirmKind = null;
 	$: attackSum = (confirmKind === 'attack' || confirmKind === 'defeat') && actPiece ? heroDefeatSummary($ms, clientId, actPiece.id) : null;
 	function defeatSel() {
@@ -333,6 +333,20 @@
 		closeConfirm();
 	}
 	function closeConfirm() { confirmKind = null; actId = null; selPieceId = null; }
+	// your OWN hero: take it off the board (a card effect), say who defeated you (they get the
+	// reward, their teammates the assists), or Clear after an attack card (enemy tokens next to you)
+	$: ownHeroSel = !!selPiece && selPiece.kind === 'hero' && selPiece.id === clientId;
+	$: ownCs = $ms.cards?.[clientId];
+	$: ownCardIdx = ownCs ? (ownCs.turns?.[$ms.turn - 1] ?? ownCs.pending) : null;
+	$: ownAttack = !!ownCs && ownCardIdx != null && ownCardIdx >= 0 && heroCards(ownCs.hero)[ownCardIdx]?.primaryAction === 'ATTACK';
+	$: clearCount = ownHeroSel && ownAttack ? clearAround($ms, clientId).removed.length : 0;
+	let pickKiller = false;
+	$: killers = pickKiller ? Object.keys($ms.cards ?? {}).filter((id) => id !== clientId && teamOf($ms, id) && teamOf($ms, id) !== teamOf($ms, clientId)) : [];
+	function selfRemoveAsk() { if (!selPiece) return; actId = selPiece.id; confirmKind = 'selfremove'; board?.release(); }
+	function doSelfRemove() { session.cardAction({ kind: 'removeHero', pid: clientId }); closeConfirm(); }
+	function selfDefeatAsk() { board?.release(); pickKiller = true; }
+	function selfDefeat(killer: string) { session.cardAction({ kind: 'defeatHero', pid: killer, target: clientId }); pickKiller = false; selPieceId = null; }
+	function doClear() { board?.release(); session.cardAction({ kind: 'clearAround', pid: clientId }); selPieceId = null; }
 	// attacks in flight (match.ts): the defender answers, the attacker waits
 	$: attacks = $ms.attacks ?? {};
 	$: incoming = attacks[clientId] && !attacks[clientId].defending ? attacks[clientId] : null;
@@ -612,13 +626,16 @@
 				<span class="rw" title="The {teamName(attackSum.team)} lose {attackSum.lives} Life"><img class="lt" src={lifeArt((attackSum.team ?? 'orange') as Team, 'back')} alt="" /><b>{attackSum.lives}</b></span>
 				{#if confirmKind === 'attack'}<button class="piedefeat" on:click={doAttack}>⚔ Attack</button>
 				{:else}<button class="piedefeat" on:click={doDefeatHero}>☠ Defeat</button>{/if}
+			{:else if confirmKind === 'selfremove'}
+				<span class="pietxt nc">Take your hero off the board? <small class="pienote">Back with your next card</small></span>
+				<button class="piedel" on:click={doSelfRemove}>Remove</button>
 			{:else}
 				<span class="pietxt nc">Remove <b style:color={teamText(actPiece)}>{cap(actPiece.role ?? '')} Minion</b></span>
 				<button class="piedel" on:click={doRemoveMinion}>Remove</button>
 			{/if}
 			<button class="piex" on:click={closeConfirm} aria-label="Cancel">✕</button>
 		</div>
-	{:else if selPiece && (selPiece.role || selPiece.token || (selPiece.kind === 'hero' && canDefeatSel))}
+	{:else if selPiece && (selPiece.role || selPiece.token || (selPiece.kind === 'hero' && (canDefeatSel || ownHeroSel)))}
 		<div class="pietool" class:anchored={!!tipPos} style={tipPos ? `left:${tipPos.x / lay.s}px; top:${tipPos.y / lay.s}px` : ''}>
 			<span class="pietxt" style:color={teamText(selPiece)}>{selLabel}</span>
 			{#if canFlip}
@@ -631,8 +648,30 @@
 			{:else if canDefeatSel && (!selImmune || iAmHost)}
 				<button class="piedefeat" on:click={defeatSel}>Defeat <span class="gc sm"></span>{minionCoins(selPiece.role)}</button>
 			{/if}
+			{#if ownHeroSel}
+				{#if ownAttack}<button class="piedefeat" on:click={doClear} disabled={!clearCount} title="After an attack card: every enemy token next to you leaves the board">Clear{clearCount ? ` (${clearCount})` : ''}</button>{/if}
+				<button class="piedel" on:click={selfRemoveAsk} title="A card effect takes your hero off the board — no rewards; back with your next card">Remove</button>
+				<button class="piedel" on:click={selfDefeatAsk} title="You were defeated (not by an Attack): choose who gets the reward">☠ Defeat</button>
+			{/if}
 			{#if canBattleSel}<button class="piedefeat" on:click={battleTakeSel}>Remove for the battle</button>{/if}
 			{#if canRemoveSel && selPiece.kind !== 'hero' && (!selImmune || iAmHost)}<button class="piedel" on:click={openRemove}>Remove</button>{/if}
+		</div>
+	{/if}
+
+	{#if pickKiller}
+		<div class="modal-scrim" on:click={() => (pickKiller = false)} on:keydown={() => {}} role="presentation">
+			<div class="modal" on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" tabindex="-1">
+				<h3>Who defeated you?</h3>
+				<p>They get the reward, their teammates the assist coins, and you respawn as usual.</p>
+				<div class="ropts">
+					{#each killers as k (k)}
+						{@const sum = heroDefeatSummary($ms, k, clientId)}
+						<button class="ropt" on:click={() => selfDefeat(k)}><b style:color={teamText({ kind: 'hero', team: teamOf($ms, k) ?? '' })}>{whoOf(k)}</b><small>+{sum.coins} coins{sum.assists.length ? ` · teammates +${sum.assist}` : ''} · the {teamName(sum.team)} lose {sum.lives} Life</small></button>
+					{/each}
+					{#if !killers.length}<p class="rnone">No enemy heroes in the game.</p>{/if}
+				</div>
+				<div class="mrow"><button class="mcancel" on:click={() => (pickKiller = false)}>Cancel</button></div>
+			</div>
 		</div>
 	{/if}
 
@@ -1044,6 +1083,7 @@
 	.pushb.orange { border-color: rgba(239, 125, 34, 0.6); } .pushb.blue { border-color: rgba(47, 127, 230, 0.6); }
 	.pushb.arm { background: rgba(220, 60, 60, 0.35); border-color: rgba(239, 68, 68, 0.8); color: #fff; }
 	.pietool.confirm { gap: 8px; }
+	.pienote { display: block; font-size: .68rem; font-weight: 600; color: #94a3b8; text-transform: none; }
 	.pietxt.nc { text-transform: none; } .pietxt.nc b { font-weight: inherit; }
 	.rw { display: inline-flex; align-items: center; gap: 3px; font-size: 0.82rem; color: #f6ead2; white-space: nowrap; }
 	.rw b { font-weight: normal; } .rw i { font-style: normal; color: #8592a6; margin: 0 2px; }

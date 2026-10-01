@@ -77,6 +77,29 @@ describe('defeating and removing units', () => {
 		expect(p.pieces!.other).toBeDefined()
 	})
 
+	it('taking your own hero off the board: no rewards, tokens stay, back with the next card', () => {
+		const s = game()
+		s.pieces!.tree = { id: 'tree', hex: '7_7', team: 'blue', kind: 'token', token: 'token_tree', owner: 'B' }
+		const p = applyCardReq(s, { kind: 'removeHero', pid: 'B' })
+		expect(p.pieces!.B).toBeUndefined()
+		expect(p.pieces!.tree).toBeDefined()
+		expect(p.defeated!.B).toMatchObject({ round: 1, turn: 2 })
+		expect(p.life).toBeUndefined()
+		expect(p.cards).toBeUndefined()
+	})
+
+	it('Clear: the enemy tokens next to your hero leave the board (not friends, not further away, not the Turret)', () => {
+		const s = game() // A stands on 1_1
+		const tok = (id: string, hex: string, owner: string, extra: Partial<Piece> = {}): Piece => ({ id, hex, team: 'blue', kind: 'token', token: 'token_rock', owner, ...extra })
+		s.pieces = { ...s.pieces, near: tok('near', '2_1', 'B'), far: tok('far', '3_1', 'B'), mine: tok('mine', '0_1', 'C'), turret: tok('turret', '0_1', 'D', { token: 'companion', label: 'Turret' }) }
+		const p = applyCardReq(s, { kind: 'clearAround', pid: 'A' })
+		expect(p.pieces!.near).toBeUndefined()
+		expect(p.pieces!.far).toBeDefined()
+		expect(p.pieces!.mine).toBeDefined()
+		expect(p.pieces!.turret).toBeDefined()
+		expect(applyCardReq({ ...s, pieces: p.pieces! } as MatchState, { kind: 'clearAround', pid: 'A' })).toEqual({}) // nothing left to clear
+	})
+
 	it('respawns in a later turn once they play a card (possibly next round)', () => {
 		let s = { ...game() }
 		s = { ...s, ...applyCardReq(s, { kind: 'defeatHero', pid: 'A', target: 'B' }) } as MatchState
