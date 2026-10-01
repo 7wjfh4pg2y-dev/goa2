@@ -430,10 +430,8 @@
 				transform={minionRot(p, c.x, c.y, rotEff, teamSpawnDir)} />
 			<circle cx={c.x} cy={c.y} r={size * 0.66} fill="transparent" stroke={sel ? '#fde047' : pieceColor(p.team)} stroke-width={size * 0.14} />
 			{#if p.immune}
-				<!-- immune heavy: a small shield on the rim -->
-				<g transform="translate({c.x + size * 0.5} {c.y - size * 0.52}) scale({size / 100})" pointer-events="none">
-					<path d="M0 -26 L22 -18 V2 C22 16 11 25 0 30 C-11 25 -22 16 -22 2 V-18 Z" fill="#f0c86a" stroke="#1b1206" stroke-width="5" stroke-linejoin="round" />
-				</g>
+				<!-- immune heavy: the same shield as the toolbar's Immune chip, on the rim -->
+				<text x={c.x + size * 0.5} y={c.y - size * 0.5} text-anchor="middle" dominant-baseline="central" font-size={size * 0.62} pointer-events="none" style="filter:drop-shadow(0 1px 2px rgba(0,0,0,.7))">🛡️</text>
 			{/if}
 		{:else}
 			<!-- hero piece = the player icon: face portrait, team ring, player-colour outer ring -->
