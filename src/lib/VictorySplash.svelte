@@ -7,11 +7,15 @@
 	//    the winners' beats and glows, the losers' shakes and cracks to its broken back
 	// Then two gold rules draw out, the title tracks in between them, and ONE line below
 	// says how: "Titans ran out of Life Tokens" / "Atlanteans pushed into the Titan Throne" /
-	// "Titans won the Final Push". (Names / numbers belong on a post-game stats screen.)
+	// "Titans won the Final Push". (Names / numbers belong on the battle report.)
+	// With `stats`, the card then glides up into the header of the battle report (GameStats)
+	// after a few seconds, or straight away from the "Battle report" button.
 	import type { Team } from '$lib/match';
 	import { teamName } from '$lib/teams';
 	import tieOrange from '$lib/images/tiebreaker_orange.png';
 	import tieBlue from '$lib/images/tiebreaker_blue.png';
+	import { onDestroy, onMount } from 'svelte';
+	import GameStats, { type GameStatsData } from '$lib/GameStats.svelte';
 
 	export let team: Team; // the winning team
 	export let reason = '';
@@ -19,6 +23,13 @@
 	export let round = 1;
 	export let mobile = false;
 	export let onClose: () => void = () => {};
+	export let stats: GameStatsData | null = null;
+
+	const REPORT_AFTER = 5500;
+	let report = false;
+	let timer: ReturnType<typeof setTimeout> | null = null;
+	onMount(() => { if (stats) timer = setTimeout(() => (report = true), REPORT_AFTER); });
+	onDestroy(() => { if (timer) clearTimeout(timer); });
 
 	const EMBLEM: Record<Team, string> = { orange: tieOrange, blue: tieBlue };
 	const lifeImgs = import.meta.glob('./cards/images/life_counter_*.png', { eager: true, import: 'default' }) as Record<string, string>;
@@ -34,7 +45,7 @@
 	$: enemy = (mine === 'orange' ? 'blue' : 'orange') as Team;
 </script>
 
-<div class="vs" class:lost class:mob={mobile} class:hearts={byLife} style="--wc:{C[team]}; --wl:{L[team]}" role="dialog" aria-label="Game over">
+<div class="vs" class:lost class:mob={mobile} class:hearts={byLife} class:report style="--wc:{C[team]}; --wl:{L[team]}" role="dialog" aria-label="Game over">
 	<div class="bg"></div>
 	<div class="col">
 		<div class="sign">
@@ -63,7 +74,13 @@
 		<span class="rule"></span>
 		<span class="why">{line}</span>
 	</div>
-	<div class="foot"><button class="close" on:click={onClose}>View the board</button></div>
+	{#if report && stats}
+		<div class="rep"><GameStats data={stats} {myTeam} winner={team} {mobile} /></div>
+	{/if}
+	<div class="foot">
+		{#if stats && !report}<button class="close alt" on:click={() => (report = true)}>Battle report</button>{/if}
+		<button class="close" on:click={onClose}>View the board</button>
+	</div>
 </div>
 
 <style>
@@ -72,7 +89,15 @@
 	.bg { position: absolute; inset: 0; animation: fade .5s ease both; background: radial-gradient(70% 60% at 50% 45%, rgba(14, 14, 20, .95), rgba(2, 2, 4, .99)); }
 	/* one centred column; zoom scales it (percent insets are untouched by zoom) */
 	.col { position: absolute; left: 50%; top: 46%; translate: -50% -50%; zoom: var(--z); display: flex; flex-direction: column; align-items: center; gap: 12px; width: max-content; max-width: calc(96vw / var(--z)); }
-	.sign { height: 170px; display: grid; place-items: center; margin-bottom: 4px; }
+	.sign { height: 170px; display: grid; place-items: center; margin-bottom: 4px; transition: height .8s cubic-bezier(.6, 0, .2, 1), opacity .5s ease, margin .8s ease; }
+	/* the battle report: the title card glides up and shrinks into its header */
+	.col { transform-origin: 50% 0; transition: top .9s cubic-bezier(.6, 0, .2, 1), translate .9s cubic-bezier(.6, 0, .2, 1), scale .9s cubic-bezier(.6, 0, .2, 1); }
+	.report .col { top: 2.5%; translate: -50% 0; scale: .5; }
+	.report .sign { height: 0; opacity: 0; margin: 0; }
+	.report .bg { background: radial-gradient(80% 70% at 50% 40%, rgba(12, 14, 22, .98), rgba(2, 2, 4, 1)); }
+	.rep { position: absolute; left: 0; right: 0; margin: 0 auto; top: 16%; bottom: 12%; zoom: var(--uis, 1); width: 1180px; max-width: calc(96vw / var(--uis, 1));
+		overflow: auto; scrollbar-width: thin; animation: up .7s ease .45s both; }
+	.mob .rep { zoom: .85; top: 11%; width: calc(100vw / .85 - 20px); max-width: none; }
 	.kick { font-size: .9rem; letter-spacing: .5em; text-transform: uppercase; color: var(--wl); animation: fade .6s ease var(--td) both; }
 	.rule { width: 560px; max-width: calc(88vw / var(--z)); height: 2px; background: linear-gradient(90deg, transparent, #d9a845 20%, #ffe3a0 50%, #d9a845 80%, transparent);
 		animation: draw .9s cubic-bezier(.3, .8, .3, 1) calc(var(--td) + .1s) both; }
@@ -82,7 +107,9 @@
 		filter: drop-shadow(0 4px 0 rgba(0, 0, 0, .65)); animation: track 1.2s cubic-bezier(.2, .7, .2, 1) calc(var(--td) + .3s) both; }
 	.lost .ttl { background: linear-gradient(180deg, #f1f2f4 8%, #a3a9b3 50%, #4b5059 92%); -webkit-background-clip: text; background-clip: text; }
 	.why { font-size: 1.35rem; letter-spacing: .1em; color: #f0dcae; text-align: center; animation: up .5s ease calc(var(--td) + .9s) both; }
-	.foot { position: absolute; left: 0; right: 0; bottom: 5vh; display: grid; place-items: center; z-index: 5; }
+	.foot { position: absolute; left: 0; right: 0; bottom: 5vh; display: flex; justify-content: center; gap: 12px; z-index: 5; }
+	.report .foot { bottom: 3vh; }
+	.close.alt { background: rgba(12, 18, 32, .7); }
 	.close { font: inherit; font-size: 1.05rem; padding: .7rem 2rem; border-radius: 12px; cursor: pointer; color: #fff; letter-spacing: .05em; zoom: var(--uis, 1);
 		background: color-mix(in srgb, var(--wc) 70%, #000); border: 1px solid rgba(255, 255, 255, .3); box-shadow: 0 8px 24px rgba(0, 0, 0, .5); animation: up .5s ease calc(var(--td) + 1.3s) both; }
 	.close:hover { filter: brightness(1.12); }
