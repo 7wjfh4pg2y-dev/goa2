@@ -955,7 +955,7 @@
 					<button class="ix" on:click={() => { deckOpen = false; deckSel = null; }}>✕</button>
 				</div>
 				<div class="dklv" class:hot={iMustLevel}>
-					<span class="dkcoin"></span><b>{mine.coins}</b>
+					<span class="coin lg" title="Coins">{mine.coins}</span>
 					{#if levelOf(mine) >= 8}Max level — ultimate active
 					{:else if iMustLevel}⬆ Level up! {levelOf(mine)} → {levelOf(mine) + 1} costs {levelCost(levelOf(mine))} · pick a glowing card
 					{:else if levelPhase && (mine.roundPicks ?? []).length}Levelled up · swap this round's pick until the round ends
@@ -1727,10 +1727,9 @@
 	.hs-seal { font-size: 1.1rem; }
 	/* level-up phase */
 	.dklv { display: flex; align-items: center; gap: 6px; margin: 0 0 8px; padding: 6px 10px; border-radius: 9px; font-size: .74rem; color: #93a3b8; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08); }
-	.dklv b { color: #fbe7b0; margin-right: 6px; }
-	.dkcoin { width: 14px; height: 14px; flex: none; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff3c4, #e8b64a 45%, #9a6a18); box-shadow: 0 0 0 1px #6b4a10; }
+	.dklv .coin { flex: none; margin-right: 4px; }
 	.dklv.hot { color: #1a1206; background: linear-gradient(180deg, #f0c060, #c98a26); border-color: #fbe7b0; }
-	.dklv.hot b { color: #1a1206; }
+	.dklv.hot .coin { border-color: #6b4a10; }
 	.dkcard.zpick { box-shadow: 0 0 0 2px #f0c060, 0 0 14px rgba(240,192,96,.7); }
 	.lvtake { flex: 2 1 auto; white-space: nowrap; }
 	.lvtake img { height: 1.1em; width: auto; max-width: 1.5em; flex: none; object-fit: contain; }

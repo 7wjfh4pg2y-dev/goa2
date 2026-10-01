@@ -269,7 +269,7 @@
 			<div class="ih">
 				<div class="por"><img src={heroSplash(H)} alt="" /></div>
 				<div class="hn">{hero?.name ?? H}<em>{hero?.title ?? ''}</em></div>
-				<div class="money" title="Coins"><i class="coin"></i><b>{cs.coins}</b></div>
+				<span class="money" title="Coins">{cs.coins}</span>
 				<div class="lvl"><span>Level</span><b>{LV}</b></div>
 				<button class="ix" on:click={onClose} aria-label="Close deck">✕</button>
 			</div>
@@ -408,9 +408,10 @@
 	.por img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 20%; }
 	.hn { flex: 1; min-width: 0; font-size: 1.15rem; color: #f6ead2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 	.hn em { display: block; font-style: normal; font-size: .62rem; color: #8b93a6; }
-	.money { flex: none; display: flex; align-items: center; gap: 5px; padding: 4px 9px; border-radius: 8px; border: 1px solid rgba(232,182,74,.5); background: rgba(232,182,74,.12); }
-	.money b { font-weight: normal; font-size: 1.1rem; color: #fbe7b0; }
-	.coin { width: 16px; height: 16px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff3c4, #e8b64a 45%, #9a6a18); box-shadow: 0 0 0 1px #6b4a10; }
+	/* the same gold coin as the rest of the game: the number sits on the coin */
+	.money { flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 2.3rem; height: 2rem; padding: 0 7px; border-radius: 999px;
+		background: linear-gradient(#f2d072, #c99a3e); color: #3a2a10; font-size: 1.05rem; font-variant-numeric: tabular-nums;
+		border: 1px solid rgba(0,0,0,.3); box-shadow: inset 0 1px 0 rgba(255,255,255,.45); }
 	.lvbar { flex: none; padding: 2px 8px; border-radius: 7px; font-size: .62rem; line-height: 1.2; text-align: center; color: #93a3b8; background: rgba(255,255,255,.035); border: 1px solid rgba(255,255,255,.08); }
 	.lvbar.hot { color: #1a1206; background: linear-gradient(180deg, #f0c060, #c98a26); border-color: #fbe7b0; animation: lvpulse 1.6s ease-in-out infinite; }
 	@keyframes lvpulse { 0%, 100% { box-shadow: 0 0 6px rgba(240,192,96,.35); } 50% { box-shadow: 0 0 18px rgba(240,192,96,.8); } }
