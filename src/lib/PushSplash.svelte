@@ -92,7 +92,13 @@
 	@keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 	@keyframes out { 0%, 86% { opacity: 1; } 100% { opacity: 0; } }
 
-	.mob .band { height: 140px; zoom: 1; } .mob .txt { zoom: 1; }
-	.mob .big { font-size: 2.2rem; } .mob.won .big { font-size: 2.6rem; } .mob .sub { font-size: .78rem; } .mob .kick { font-size: .72rem; }
+	/* phones: the title always fits one line, a px arrow head (a % one is too blunt on a
+	   narrow band), and the chevron loop matches the smaller chevron spacing (48 + 30 px) */
+	.mob .band { height: 150px; zoom: 1; clip-path: polygon(0 0, calc(100% - 46px) 0, 100% 50%, calc(100% - 46px) 100%, 0 100%, 28px 50%); }
+	.mob .txt { zoom: 1; padding: 0 10px; }
+	.mob .big { font-size: min(2.2rem, 7vw); white-space: nowrap; } .mob.won .big { font-size: min(2.6rem, 7.6vw); }
+	.mob .sub { font-size: .74rem; letter-spacing: .04em; } .mob .kick { font-size: .7rem; letter-spacing: .3em; }
+	.mob .chevs { gap: 30px; animation-name: streamM; }
 	.mob .chevs i { width: 48px; height: 48px; border-width: 11px; }
+	@keyframes streamM { from { translate: -78px 0; } to { translate: 0 0; } }
 </style>
