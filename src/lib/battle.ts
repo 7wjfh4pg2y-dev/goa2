@@ -12,6 +12,7 @@
 //   minion in the zone is removed, the zone moves one step towards the loser's throne
 //   and a fresh wave spawns on that zone's spawn points. Pushing past the last zone
 //   (into the throne) or taking the last wave counter wins the game.
+import { teamName, teamAdj, placeName } from './teams'
 import type { GameMap } from './maps'
 import type { MatchState, Piece, Team } from './match'
 import { zoneTable, hexCube, cubeDist } from './zones'
@@ -39,7 +40,6 @@ export interface Battle {
 }
 
 const other = (t: Team): Team => (t === 'orange' ? 'blue' : 'orange')
-const cap = (t: string) => t[0].toUpperCase() + t.slice(1)
 
 export const laneOf = (s: Pick<MatchState, 'lane'>) => Math.max(0, Math.min(LANE.length - 1, s.lane ?? START_LANE))
 export const battleZone = (s: Pick<MatchState, 'lane'>) => LANE[laneOf(s)]
@@ -141,11 +141,11 @@ export function pushLane(s: MatchState, winner: Team): Partial<MatchState> {
 	})
 	const patch: Partial<MatchState> = { waves, waveTok, lastPush: winner, pieces, battle: null }
 	if (lane < 0 || lane >= LANE.length) {
-		const reason = `pushed into the ${cap(loser)} throne`
+		const reason = `pushed into the ${teamAdj(loser)} Throne`
 		return { ...patch, wonBy: { team: winner, reason }, pushNews: news(null, reason) }
 	}
 	patch.lane = lane
-	if (waves <= 0) return { ...patch, wonBy: { team: winner, reason: 'won the final push' }, pushNews: news(null, 'won the final push') }
+	if (waves <= 0) return { ...patch, wonBy: { team: winner, reason: 'won the Final Push' }, pushNews: news(null, 'won the Final Push') }
 	patch.pieces = { ...pieces, ...spawnWave(s.map, LANE[lane], pieces, `${s.round}_${s.turn}_${waves}`) }
 	patch.pushNews = news(LANE[lane], null)
 	return patch
@@ -197,12 +197,12 @@ export function laneNotes(before: MatchState, patch: Partial<MatchState>): strin
 	const out: string[] = []
 	const after = { ...before, ...patch }
 	if (patch.lastPush && (patch.waves ?? before.waves) < before.waves) {
-		const w = cap(patch.lastPush)
+		const w = teamName(patch.lastPush)
 		out.push(after.wonBy ? `${w} pushed the lane · waves ${before.waves} → ${after.waves}`
-			: `${w} pushed the lane · waves ${before.waves} → ${after.waves} · battle zone → ${battleZone(after)}, new minions`)
+			: `${w} pushed the lane · waves ${before.waves} → ${after.waves} · battle zone → ${placeName(battleZone(after))}, new minions`)
 	}
-	if (after.wonBy && !before.wonBy) out.push(`🏆 ${cap(after.wonBy.team)} wins — ${after.wonBy.reason}`)
+	if (after.wonBy && !before.wonBy) out.push(`🏆 ${teamName(after.wonBy.team)} win — ${after.wonBy.reason}`)
 	return out
 }
 export const battleText = (b: Battle) =>
-	`minion battle — Orange ${b.orange} : ${b.blue} Blue` + (b.loser && b.remove ? ` · ${cap(b.loser)} removes ${b.remove}` : ' · no minions removed')
+	`minion battle — Atlanteans ${b.orange} : ${b.blue} Titans` + (b.loser && b.remove ? ` · ${teamName(b.loser)} remove ${b.remove}` : ' · no minions removed')

@@ -5,6 +5,7 @@
 	// cards are considered revealed and flip face-up simultaneously on every client
 	// — nothing to desync. Committing/advancing route through the host (single
 	// writer for the card map). Advancing locks the turn's cards into their slots.
+	import { teamName } from '$lib/teams';
 	import type { Readable } from 'svelte/store';
 	import type { MatchSession, MatchState, Player } from '$lib/match';
 	import { teamForSeat, colorHex, battlePatch, canRespawn } from '$lib/match';
@@ -61,7 +62,7 @@
 	$: others = seated.filter((p) => p.id !== clientId);
 	$: dense = others.length > 6;
 	$: teamTint = (p: Player) => (teamForSeat(p.seat, $ms.seats) === 'orange' ? ORANGE : BLUE);
-	$: teamName = (p: Player) => (teamForSeat(p.seat, $ms.seats) === 'orange' ? 'Orange' : 'Blue');
+	$: seatTeamName = (p: Player) => teamName(teamForSeat(p.seat, $ms.seats));
 	$: firstBlueId = others.find((p) => teamForSeat(p.seat, $ms.seats) === 'blue')?.id ?? '';
 	// team hue as CSS vars: --tc hex, --tcr base rgb, --tcl light rgb (for highlights)
 	const TEAM_VARS: Record<'orange' | 'blue', string> = {
@@ -647,7 +648,7 @@
 			<!-- after the battle every card is back in hand (nothing is "revealed" any more),
 			     so the level-up phase gets its own branch: the host moves on to the next round -->
 			{#if $ms.battle?.remove}
-				<span class="waithost">Waiting for {$ms.battle.loser === 'orange' ? 'Orange' : 'Blue'} to remove {$ms.battle.remove} minion{$ms.battle.remove === 1 ? '' : 's'}…</span>
+				<span class="waithost">Waiting for the {teamName($ms.battle.loser)} to remove {$ms.battle.remove} minion{$ms.battle.remove === 1 ? '' : 's'}…</span>
 			{:else if levelWaiting.length}
 				<span class="waithost" title="Level-ups are forced while a hero can afford them">Waiting for {levelWaiting.map((p) => p.name).join(', ')} to level up…</span>
 			{:else}
@@ -780,7 +781,7 @@
 					<PlayerIcon hero={oh} team={pTeam(ovPlayer)} color={colorHex(ovPlayer.color)} size="3rem" ult={cs.ultimate} />
 					<div class="mtitle">
 						<div class="mnm">{ovPlayer.name} · {heroName(oh)}</div>
-						<div class="mtt" style="color:{teamTint(ovPlayer)}">{heroTitle(oh)} · {teamName(ovPlayer)} · Lv {levelOf(cs)}</div>
+						<div class="mtt" style="color:{teamTint(ovPlayer)}">{heroTitle(oh)} · {seatTeamName(ovPlayer)} · Lv {levelOf(cs)}</div>
 					</div>
 					{#if cs.ultimate && ultimateIndex(oh) >= 0}
 						<button class="ultchip" on:click={() => examineCard(oh, ultimateIndex(oh))} title="Ultimate — click to enlarge">

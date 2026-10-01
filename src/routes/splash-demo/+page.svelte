@@ -24,7 +24,7 @@
 	// the wave advances
 	let push: PushNews | null = null;
 	function pushed(winner: Team, to: string | null, won: string | null = null) {
-		push = { id: id('p'), winner, from: 'Center', to, wavesBefore: 5, wavesAfter: won === 'won the final push' ? 0 : 4, won, at: Date.now() };
+		push = { id: id('p'), winner, from: 'Center', to, wavesBefore: 5, wavesAfter: won === 'won the Final Push' ? 0 : 4, won, at: Date.now() };
 	}
 
 	// a hero falls (sample heroes / players)
@@ -40,7 +40,6 @@
 
 	// game over
 	let won: { team: Team; reason: string } | null = null;
-	const roster = (t: Team) => (t === 'orange' ? ['a', 'c'] : ['b', 'd']).map((pid) => ({ pid, hero: (cards[pid] as unknown as { hero: string }).hero, name: names[pid] }));
 	let me: Team = 'orange'; // whose eyes we watch through: your team sits on the right
 	let turnSplash: TurnSplash;
 	let round = 2, turn = 1;
@@ -53,36 +52,36 @@
 	<h1>Splash demo</h1>
 	<div class="row view">
 		<span>View as</span>
-		<button class="o" class:off={me !== 'orange'} on:click={() => (me = 'orange')}>Orange player</button>
-		<button class="b" class:off={me !== 'blue'} on:click={() => (me = 'blue')}>Blue player</button>
+		<button class="o" class:off={me !== 'orange'} on:click={() => (me = 'orange')}>Atlantean player</button>
+		<button class="b" class:off={me !== 'blue'} on:click={() => (me = 'blue')}>Titan player</button>
 	</div>
 	<section>
 		<h2>Minion battle</h2>
 		<div class="row">
-			<button class="o" on:click={() => battle(6, 3)}>Orange wins (6 : 3)</button>
-			<button class="b" on:click={() => battle(4, 6)}>Blue wins (4 : 6)</button>
+			<button class="o" on:click={() => battle(6, 3)}>Atlanteans win (6 : 3)</button>
+			<button class="b" on:click={() => battle(4, 6)}>Titans win (4 : 6)</button>
 			<button class="t" on:click={() => battle(5, 5)}>Deadlock (5 : 5)</button>
 		</div>
 		<div class="row custom">
-			<label>Orange <input type="number" min="0" max="12" bind:value={orange} /></label>
-			<label>Blue <input type="number" min="0" max="12" bind:value={blue} /></label>
+			<label>Atlanteans <input type="number" min="0" max="12" bind:value={orange} /></label>
+			<label>Titans <input type="number" min="0" max="12" bind:value={blue} /></label>
 			<button on:click={() => battle(orange, blue)}>Play</button>
 		</div>
 	</section>
 	<section>
 		<h2>The wave advances</h2>
 		<div class="row">
-			<button class="o" on:click={() => pushed('orange', 'Blue Beach')}>Orange pushes</button>
-			<button class="b" on:click={() => pushed('blue', 'Orange Beach')}>Blue pushes</button>
+			<button class="o" on:click={() => pushed('orange', 'Blue Beach')}>Atlanteans push</button>
+			<button class="b" on:click={() => pushed('blue', 'Orange Beach')}>Titans push</button>
 		</div>
 		<div class="row">
-			<button class="o" on:click={() => pushed('orange', null, 'pushed into the Blue throne')}>Orange: the throne falls</button>
-			<button class="b" on:click={() => pushed('blue', null, 'won the final push')}>Blue: final push</button>
+			<button class="o" on:click={() => pushed('orange', null, 'pushed into the Titan Throne')}>Atlanteans: the throne falls</button>
+			<button class="b" on:click={() => pushed('blue', null, 'won the Final Push')}>Titans: final push</button>
 		</div>
 	</section>
 	<section>
 		<h2>Hero defeated</h2>
-		<p class="note">Orange: Zaheen (Arien), Mo (Xargatha) · Blue: Priya (Brogan), Sam (Trinkets)</p>
+		<p class="note">Atlanteans: Zaheen (Arien), Mo (Xargatha) · Titans: Priya (Brogan), Sam (Trinkets)</p>
 		<div class="row">
 			<button class="b" on:click={() => defeat('a', 'b', 'orange', 3, ['d'], 1)}>Priya kills Zaheen</button>
 			<button class="o" on:click={() => defeat('b', 'a', 'blue', 4, ['c'], 2)}>Zaheen kills Priya</button>
@@ -93,9 +92,9 @@
 	<section>
 		<h2>Game over</h2>
 		<div class="row">
-			<button class="o" on:click={() => (won = { team: 'orange', reason: 'Blue ran out of Life' })}>Orange wins (life)</button>
-			<button class="b" on:click={() => (won = { team: 'blue', reason: 'pushed into the Orange throne' })}>Blue wins (throne)</button>
-			<button class="o" on:click={() => (won = { team: 'orange', reason: 'won the final push' })}>Orange wins (final push)</button>
+			<button class="o" on:click={() => (won = { team: 'orange', reason: 'Titans ran out of Life Tokens' })}>Atlanteans win (life)</button>
+			<button class="b" on:click={() => (won = { team: 'blue', reason: 'pushed into the Atlantean Throne' })}>Titans win (throne)</button>
+			<button class="o" on:click={() => (won = { team: 'orange', reason: 'won the Final Push' })}>Atlanteans win (final push)</button>
 		</div>
 	</section>
 	<section>
@@ -112,7 +111,7 @@
 <DefeatSplash news={kill} {cards} names={(i) => names[i] ?? i} {lifeArt} {mobile} myTeam={me} />
 <TurnSplash bind:this={turnSplash} {mobile} />
 {#if won}
-	{#key won}<VictorySplash life={won.team === 'orange' ? { orange: 4, blue: 0 } : { orange: 2, blue: 5 }} waves={3} round={5} team={won.team} reason={won.reason} winners={roster(won.team)} myTeam={me} {mobile} onClose={() => (won = null)} />{/key}
+	{#key won}<VictorySplash round={5} team={won.team} reason={won.reason} myTeam={me} {mobile} onClose={() => (won = null)} />{/key}
 {/if}
 
 <style>
