@@ -40,6 +40,8 @@
 	let me: Team = 'orange'; // whose eyes we watch through: your team sits on the right
 	let turnSplash: TurnSplash;
 	let round = 2, turn = 1;
+	let look: 'slots' | 'dial' | 'banner' | 'crest' = 'slots';
+	const LOOKS = [['slots', 'Turn cards'], ['dial', 'War clock'], ['banner', 'Banner'], ['crest', 'Crest (current)']] as const;
 </script>
 
 <svelte:window bind:innerWidth={w} />
@@ -88,6 +90,9 @@
 	</section>
 	<section>
 		<h2>Turn / round</h2>
+		<div class="row looks">
+			{#each LOOKS as [k, name] (k)}<button class:sel={look === k} on:click={() => (look = k)}>{name}</button>{/each}
+		</div>
 		<div class="row">
 			<button on:click={() => { turn = turn % 4 + 1; turnSplash.play('turn', round, turn); }}>Next turn</button>
 			<button on:click={() => { round += 1; turn = 1; turnSplash.play('round', round, 1); }}>Next round</button>
@@ -98,7 +103,7 @@
 <BattleSplash {news} {mobile} myTeam={me} />
 <PushSplash news={push} {mobile} myTeam={me} />
 <DefeatSplash news={kill} {cards} names={(i) => names[i] ?? i} {lifeArt} {mobile} myTeam={me} />
-<TurnSplash bind:this={turnSplash} {mobile} />
+<TurnSplash bind:this={turnSplash} {mobile} variant={look} />
 
 <style>
 	.page { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 16px; box-sizing: border-box; color: #f6ead2; }
@@ -113,6 +118,7 @@
 	button.t { background: #7a4292; border-color: transparent; color: #fff; }
 	.view { align-items: center; gap: 10px; font-size: .9rem; color: #e3cf9c; }
 	button.off { opacity: .4; }
+	.looks button.sel { background: #d9a845; color: #1a1206; border-color: transparent; }
 	.note { margin: -2px 0 10px; text-align: center; font-size: .78rem; color: #cbd5e1; }
 	.custom label { display: flex; align-items: center; gap: 6px; font-size: .9rem; }
 	.custom input { width: 56px; padding: 6px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, .2); background: rgba(0, 0, 0, .35); color: #fff; font: inherit; }
