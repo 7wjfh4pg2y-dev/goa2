@@ -42,7 +42,6 @@
 {#if shown}
 	<div class="ds" class:mob={mobile} style="--vc:{TEAM[vTeam]}; --kc:{TEAM[kTeam]}" aria-live="polite">
 		<div class="band">
-			<div class="streaks"></div>
 			{#if vHero}<img class="art victim" src={heroSplash(vHero)} alt="" />{/if}
 			{#if kHero}<img class="art killer" src={heroSplash(kHero)} alt="" />{/if}
 			<div class="flash"></div>
@@ -68,11 +67,6 @@
 		border-top: 3px solid color-mix(in srgb, var(--kc) 70%, #fff); border-bottom: 3px solid color-mix(in srgb, var(--vc) 70%, #fff);
 		box-shadow: 0 0 60px rgba(0, 0, 0, 0.8), 0 0 40px color-mix(in srgb, var(--kc) 40%, transparent);
 		animation: strike 3.6s cubic-bezier(.16, .9, .2, 1) forwards; }
-	/* speed lines racing across */
-	.streaks { position: absolute; inset: 0; opacity: .55; mix-blend-mode: screen;
-		background: repeating-linear-gradient(180deg, transparent 0 9px, rgba(255, 255, 255, .07) 9px 10px, transparent 10px 23px, rgba(255, 255, 255, .13) 23px 24px),
-			repeating-linear-gradient(90deg, transparent 0 140px, rgba(255, 255, 255, .12) 140px 260px, transparent 260px 420px);
-		animation: race .5s linear infinite; }
 	.art { position: absolute; top: 50%; height: 175%; transform: translateY(-50%) skewY(4deg); object-fit: cover; pointer-events: none; }
 	.art.victim { left: 6%; width: 34%; filter: grayscale(.85) brightness(.7) contrast(1.1); opacity: .75;
 		mask-image: linear-gradient(90deg, transparent, #000 25%, #000 60%, transparent); -webkit-mask-image: linear-gradient(90deg, transparent, #000 25%, #000 60%, transparent);
@@ -102,7 +96,6 @@
 		88% { transform: translateY(-50%) skewY(-4deg) translateX(0); opacity: 1; filter: blur(0); }
 		100% { transform: translateY(-50%) skewY(-4deg) translateX(105%); opacity: .2; filter: blur(6px); }
 	}
-	@keyframes race { to { background-position: 0 0, -420px 0; } }
 	@keyframes slideL { from { translate: -60px 0; } to { translate: 20px 0; } }
 	@keyframes slideR { from { translate: 60px 0; } to { translate: -20px 0; } }
 	@keyframes flash { 0% { opacity: .55; } 100% { opacity: 0; } }
