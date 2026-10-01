@@ -15,7 +15,7 @@
 	export let rotation = 0; // base orientation in degrees (e.g. 180 so your base sits at the bottom)
 
 	export let pieces: Array<{ id: string; hex: string; team: string; role?: string; label?: string; color?: string; token?: string; sym?: string; hero?: string; letter?: string;
-		attachTo?: string; mine?: 'down' | 'up'; peek?: string; immune?: boolean; locked?: boolean }> = [];
+		attachTo?: string; mine?: 'down' | 'up'; peek?: string; immune?: boolean; locked?: boolean; name?: string; nameColor?: string }> = [];
 	// holding something to place (minion / token): every tap reports its hex, pieces
 	// aren't picked up, and a hex with a hero on it is still a valid target
 	export let placing = false;
@@ -275,7 +275,19 @@
 		p0 = toUser(e.clientX, e.clientY); pan0 = { x: panX, y: panY };
 		downC = { x: e.clientX, y: e.clientY };
 	}
+	// mouse hover over a piece: its name floats above it
+	let hoverName: { text: string; color: string; x: number; y: number } | null = null;
+	function trackName(e: PointerEvent) {
+		if (e.pointerType !== 'mouse' || dragId || placing) { hoverName = null; return; }
+		const id = (e.target as Element)?.closest?.('[data-piece]')?.getAttribute('data-piece');
+		const p = id && id !== selected ? pieces.find((q) => q.id === id) : null;
+		const pos = p?.name ? clientPos(p.id) : null;
+		if (!p?.name || !pos) { hoverName = null; return; }
+		const r = wrapEl.getBoundingClientRect();
+		hoverName = { text: p.name, color: p.nameColor ?? '#f1f5f9', x: pos.x - r.left, y: pos.y - pos.r - r.top };
+	}
 	function move(e: PointerEvent) {
+		trackName(e);
 		if (activePointers.has(e.pointerId)) activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
 		// pinch: zoom around the midpoint of the two fingers
 		if (pinch && activePointers.size >= 2) {
@@ -430,8 +442,11 @@
 				transform={minionRot(p, c.x, c.y, rotEff, teamSpawnDir)} />
 			<circle cx={c.x} cy={c.y} r={size * 0.66} fill="transparent" stroke={sel ? '#fde047' : pieceColor(p.team)} stroke-width={size * 0.14} />
 			{#if p.immune}
-				<!-- immune heavy: the same shield as the toolbar's Immune chip, on the rim -->
-				<text x={c.x + size * 0.5} y={c.y - size * 0.5} text-anchor="middle" dominant-baseline="central" font-size={size * 0.62} pointer-events="none" style="filter:drop-shadow(0 1px 2px rgba(0,0,0,.7))">🛡️</text>
+				<!-- immune heavy: a silver shield with gold trim on the rim (same as the toolbar chip) -->
+				<g transform="translate({c.x + size * 0.5} {c.y - size * 0.52}) scale({size / 150}) translate(-50 -50)" pointer-events="none" style="filter:drop-shadow(0 1px 2px rgba(0,0,0,.75))">
+					<path d="M50 6 L88 18 V46 C88 70 70 86 50 95 C30 86 12 70 12 46 V18 Z" fill="url(#shield-silver)" stroke="#d9a845" stroke-width="8" stroke-linejoin="round" />
+					<path d="M50 20 V82 M26 40 H74" stroke="#d9a845" stroke-width="5" stroke-linecap="round" opacity=".85" />
+				</g>
 			{/if}
 		{:else}
 			<!-- hero piece = the player icon: face portrait, team ring, player-colour outer ring -->
@@ -459,13 +474,14 @@
 	on:pointermove={move}
 	on:pointerup={up}
 	on:pointercancel={up}
-	on:pointerleave={() => { if (!dragId) hoverHex = null; }}
+	on:pointerleave={() => { if (!dragId) hoverHex = null; hoverName = null; }}
 	class:holding={!!ghostPiece}
 	role="img"
 	aria-label={map.name ? `Game board: ${map.name}` : 'Game board'}
 >
 	<svg viewBox={vb} preserveAspectRatio="xMidYMid meet" bind:this={svgEl}>
 		<defs>
+			<linearGradient id="shield-silver" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff" /><stop offset=".45" stop-color="#cfd5dc" /><stop offset="1" stop-color="#7d8792" /></linearGradient>
 			<linearGradient id="mine-bone" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4ecd9" /><stop offset="1" stop-color="#c7b894" /></linearGradient>
 			<radialGradient id="mine-shade"><stop offset=".55" stop-color="#000" stop-opacity="0" /><stop offset="1" stop-color="#000" stop-opacity=".42" /></radialGradient>
 			<!-- skull & crossbones for face-down mines (100×100 design space) -->
@@ -559,9 +575,12 @@
 			{/if}
 		</g>
 	</svg>
+	{#if hoverName}<div class="pname" style="left:{hoverName.x}px; top:{hoverName.y}px; color:{hoverName.color}">{hoverName.text}</div>{/if}
 </div>
 
 <style>
+	.pname { position: absolute; transform: translate(-50%, calc(-100% - 4px)); pointer-events: none; white-space: nowrap; z-index: 3;
+		padding: 2px 9px; border-radius: 999px; font-size: .78rem; background: rgba(9, 13, 22, .88); border: 1px solid rgba(255, 255, 255, .16); box-shadow: 0 4px 12px rgba(0,0,0,.45); text-transform: capitalize; }
 	.board-wrap { position: absolute; inset: 0; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
 	.board-wrap :global(image) { -webkit-user-drag: none; user-select: none; }
 	.board-wrap.interactive { cursor: grab; }

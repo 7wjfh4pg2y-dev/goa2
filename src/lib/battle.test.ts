@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { applyCardReq, battlePatch, placeMinions, spendTokens, type MatchState, type Piece } from './match'
+import { applyCardReq, battlePatch, placeMinions, spendTokens, extraSpawns, heroSpawns, type MatchState, type Piece } from './match'
 import { LANE, battleResult, canBattleRemove, heavyImmune, inZone, pushLane, spawnWave, zoneMinions } from './battle'
 import { zoneTable } from './zones'
 import map from './maps/forgotten_island.json'
@@ -131,6 +131,13 @@ describe('the minion lane', () => {
 		expect(w).toHaveLength(12)
 		expect(w.some((p) => p.hex === '9_10')).toBe(false)
 		expect(new Set(w.map((p) => p.hex)).size).toBe(12)
+	})
+
+	it('8+ players: the two base hexes between the spawn points open up', () => {
+		expect(extraSpawns(M, 'orange')).toEqual(['4_2', '6_2'])
+		expect(extraSpawns(M, 'blue')).toEqual(['12_16', '14_16'])
+		expect(heroSpawns({ map: M, seats: 6 }, 'orange')).toHaveLength(3)
+		expect(heroSpawns({ map: M, seats: 8 }, 'orange')).toHaveLength(5)
 	})
 
 	it('life tokens flip with a hero defeat', () => {
