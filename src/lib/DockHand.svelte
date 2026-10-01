@@ -2,13 +2,15 @@
 	// The hand, docked in the desktop dash, as a RIBBON RACK: every card is a small hanging
 	// spell ribbon (Gydion's spell-mark art, one per card colour) with its action icon and
 	// value stamped on the cloth. Hover a ribbon → its full Runeterra-style banner pops up
-	// above the dash; ▲ fans the whole hand out as a stack of banners. Click → preview.
+	// above the dash. The dash's auto-hide toggle decides the rest: OFF (show always) keeps
+	// the whole hand up as a stack of banners — previewing / committing never drops it.
 	import CardBanner from '$lib/CardBanner.svelte';
 	import { heroCards } from '$lib/cards/deck';
 
 	export let heroId: string;
 	export let hand: number[] = [];
 	export let onPick: (idx: number) => void = () => {};
+	export let fanned = false; // the hand stays up as banners (auto-hide off)
 
 	const icons = import.meta.glob('./cards/images/*.png', { eager: true, import: 'default' }) as Record<string, string>;
 	const ic = (n: string) => icons[`./cards/images/${n}.png`] ?? '';
@@ -18,8 +20,7 @@
 	const act = (c?: C) => (c?.primaryAction ? ic(`${c.primaryAction.toLowerCase()}_${(c.color ?? 'gold').toLowerCase()}`) : '');
 
 	let hover: number | null = null;
-	let fanned = false;
-	function pick(i: number) { fanned = false; hover = null; onPick(i); }
+	function pick(i: number) { hover = null; onPick(i); }
 </script>
 
 <div class="rack" on:mouseleave={() => (hover = null)} role="group" aria-label="Your hand">
@@ -35,9 +36,8 @@
 			</button>
 		{/each}
 	</div>
-	<button class="fan" class:on={fanned} on:click={() => { fanned = !fanned; hover = null; }} title={fanned ? 'Close' : 'Show your hand as banners'} aria-label="Show hand as banners">{fanned ? '▼' : '▲'}</button>
 
-	<!-- one card's banner on hover / the whole hand when fanned: above the dash -->
+	<!-- one card's banner on hover / the whole hand when it stays up: above the dash -->
 	{#if fanned}
 		<div class="pop stack">
 			{#each hand as i (i)}<div class="bw"><CardBanner {heroId} idx={i} on:click={() => pick(i)} /></div>{/each}
@@ -58,9 +58,6 @@
 	.val { position: absolute; left: 0; right: 0; bottom: 31px; height: 20px; display: grid; place-items: center; pointer-events: none; }
 	.val img { grid-area: 1 / 1; width: 19px; height: 17px; object-fit: contain; filter: drop-shadow(0 1px 1px #000); }
 	.val b { grid-area: 1 / 1; position: relative; font-weight: normal; font-size: .82rem; line-height: 1; color: #fff; -webkit-text-stroke: 2.5px #10131a; paint-order: stroke fill; }
-	.fan { flex: none; width: 16px; align-self: center; height: 40px; padding: 0; border-radius: 6px; cursor: pointer; font-size: .55rem; color: #e3cf9c;
-		background: rgba(255, 255, 255, .06); border: 1px solid rgba(255, 255, 255, .14); }
-	.fan:hover, .fan.on { background: rgba(217, 168, 69, .25); border-color: rgba(217, 168, 69, .6); }
 	.pop { position: absolute; right: 0; bottom: calc(100% + 14px); width: 270px; display: flex; flex-direction: column; gap: 4px; z-index: 30; }
 	.pop.one { pointer-events: none; }
 	.bw { filter: drop-shadow(0 6px 14px rgba(0, 0, 0, .6)); animation: up .16s ease-out both; }
