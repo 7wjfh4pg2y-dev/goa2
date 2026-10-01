@@ -565,7 +565,7 @@
 			{#if canFlip}
 				<button class="pieflip" on:click={flipMine}>{selPiece.faceDown ? 'Flip — reveal' : 'Flip face down'}</button>
 			{/if}
-			{#if selImmune}<span class="pieimm" title="Heavy minions can't be moved, defeated or removed while another minion of their team is in the battle zone{iAmHost ? ' — as host you can still override for card exceptions' : ''}"><svg class="shd" viewBox="0 0 100 100" aria-hidden="true"><defs><linearGradient id="shd-s" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" /><stop offset=".45" stop-color="#cfd5dc" /><stop offset="1" stop-color="#7d8792" /></linearGradient></defs><path d="M50 6 L88 18 V46 C88 70 70 86 50 95 C30 86 12 70 12 46 V18 Z" fill="url(#shd-s)" stroke="#d9a845" stroke-width="8" stroke-linejoin="round" /><path d="M50 20 V82 M26 40 H74" stroke="#d9a845" stroke-width="5" stroke-linecap="round" opacity=".85" /></svg>Immune</span>{/if}
+			{#if selImmune}<span class="pieimm" title="Heavy minions can't be moved, defeated or removed while another minion of their team is in the battle zone{iAmHost ? ' — as host you can still override for card exceptions' : ''}">Immune</span>{/if}
 			{#if canDefeatSel && selPiece.kind === 'hero'}
 				<button class="piedefeat" on:click={() => attackSel('attack')} disabled={!!attacks[selPiece.id]}>{attacks[selPiece.id] ? 'Under attack…' : '⚔ Attack'}</button>
 				<button class="piedel" on:click={() => attackSel('defeat')} title="Not an attack (e.g. a discard-or-die effect): defeat them outright — same rewards">☠ Defeat</button>
@@ -1002,8 +1002,8 @@
 	.ab.yes { background: var(--tc); color: #fff; }
 	.ab.no { background: rgba(220, 60, 60, 0.3); border-color: rgba(239, 68, 68, 0.7); color: #ffc9c2; }
 	@keyframes atkpulse { 50% { box-shadow: 0 0 40px rgba(239, 68, 68, 0.6), 0 10px 28px rgba(0,0,0,.6); } }
-	.pieimm .shd { width: 14px; height: 14px; vertical-align: -2px; margin-right: 4px; }
-	.pieimm { font-size: 0.72rem; color: #e6e9ee; border: 1px solid rgba(217, 168, 69, 0.6); border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
+	.pieimm { font-size: 0.76rem; color: #2a2f38; padding: 4px 13px; border-radius: 999px; white-space: nowrap; letter-spacing: .04em; text-shadow: 0 1px 0 rgba(255,255,255,.6);
+		background: linear-gradient(180deg, #ffffff, #d4d9df 48%, #a3acb7); border: 2px solid #d9a845; box-shadow: 0 0 0 1px #6b4a10, 0 2px 6px rgba(0,0,0,.45), inset 0 1px 0 #fff; }
 	.placehint.battle { border-color: rgba(239, 68, 68, 0.6); padding-left: 16px; }
 	.placehint.battle b { font-weight: normal; } .placehint .to { color: #ffb27a; } .placehint .tb { color: #8cc0ff; }
 	.placehint.won { padding: 8px 20px; font-size: 1rem; border-color: rgba(240, 200, 120, 0.9); color: #ffe7a8; box-shadow: 0 0 30px rgba(240, 200, 120, .35), 0 8px 24px rgba(0,0,0,.5); }

@@ -22,6 +22,7 @@
 	import { PASS, statDeltas, levelOf, levelCost, ultimateIndex, mustLevel, canPick, canAfford, swapSource, twinOf, allowedMoves, type PlayerCardState, type StatKey, type CardZone } from '$lib/cards/cardstate';
 	import LevelConfirm from '$lib/LevelConfirm.svelte';
 	import TurnSplash from '$lib/TurnSplash.svelte';
+	import DockHand from '$lib/DockHand.svelte';
 
 	export let session: MatchSession;
 	export let ms: Readable<MatchState>;
@@ -624,7 +625,7 @@
 		{#if iCanRespawn}
 			<button class="act tohand" style={teamVars(myTeam)} on:click={onRespawn}>⤴ Respawn</button>
 		{:else if iMustEnter}
-			<button class="act tohand" style={teamVars(myTeam)} on:click={onEnter}>⤴ Spawn hero</button>
+			<button class="act tohand spawnglow" style={teamVars(myTeam)} on:click={onEnter}>⤴ Spawn hero</button>
 		{:else if iDefending}
 			<button class="act tohand" style={teamVars(myTeam)} on:click={() => answerAttack('defended')} title="You defended (discard your defence card first)">🛡 Defended</button>
 			<button class="act takeback" on:click={() => answerAttack('defeated')}>Defeated</button>
@@ -1363,9 +1364,7 @@
 				<!-- docked-hand well: always reserved, so docking / undocking shifts nothing -->
 				<div class="dockhand" class:empty={!dockHand}>
 					{#if dockHand}
-						{#each handOrdered as idx (idx)}
-							<button class="dkh" on:click={() => preview(idx)} title={heroCards(mine.hero)[idx]?.name}><Card heroId={mine.hero} card={heroCards(mine.hero)[idx]} /></button>
-						{/each}
+						<DockHand heroId={mine.hero} hand={handOrdered} onPick={(i) => preview(i)} />
 					{:else}
 						<button class="dockhint" on:click={toggleDock} title="Dock your hand here">Dock hand here</button>
 					{/if}
@@ -1768,6 +1767,12 @@
 	.fxdur.on { background: rgba(199,154,78,.32); border-color: rgba(230,190,110,.85); color: #fff; }
 	.fxgo { padding: 5px 14px; border-radius: 8px; cursor: pointer; font-size: .78rem; color: #1a0f06; background: linear-gradient(180deg, #f3d08a, #d4a64a); border: 1px solid #fbe7b0; }
 	.fxdisc { padding: 5px 16px; border-radius: 8px; cursor: pointer; font-size: .78rem; color: #fff; background: linear-gradient(180deg, #e0463c, #a82620); border: 1px solid rgba(255,170,160,.7); }
+	/* the very first step of the game: impossible to miss */
+	.act.spawnglow { animation: spawnglow 1.4s ease-in-out infinite; position: relative; }
+	@keyframes spawnglow {
+		0%, 100% { box-shadow: 0 3px 0 rgb(var(--tcr, 239 125 34) / .55), 0 0 6px 1px rgb(var(--tcr, 239 125 34) / .5); transform: scale(1); filter: brightness(1); }
+		50% { box-shadow: 0 3px 0 rgb(var(--tcr, 239 125 34) / .55), 0 0 22px 8px rgb(var(--tcr, 239 125 34) / .85), 0 0 4px 2px #fff8; transform: scale(1.06); filter: brightness(1.15); }
+	}
 	.act.discard { color: #fff; background: linear-gradient(180deg, #e0463c, #a82620); border-color: rgba(255,170,160,.7); box-shadow: 0 3px 0 #6e1812; }
 	.fxend { padding: 5px 12px; border-radius: 8px; cursor: pointer; font-size: .74rem; color: #ffc9c2; background: rgba(220,60,60,.2); border: 1px solid rgba(239,68,68,.5); }
 	/* a played card with a live effect: glows in its player's colour + duration badge */
@@ -1971,13 +1976,10 @@
 	.dm-slot .roman.trash { padding: 9px 7px 9px 11px; }
 	.dm-slot .roman.trash :global(svg) { width: 100%; height: 100%; }
 	/* docked hand: small separate cards inside the dash, at the far right */
-	.dockhand { flex: 1; min-width: 0; height: 58px; display: flex; align-items: flex-end; justify-content: center; gap: 4px; overflow: hidden; padding: 4px 6px 2px; border-radius: 9px; box-sizing: border-box; }
+	.dockhand { flex: 1; min-width: 0; height: 58px; display: flex; align-items: flex-end; justify-content: center; gap: 4px; padding: 0 2px; border-radius: 9px; box-sizing: border-box; }
 	.dockhand.empty { align-items: center; border: 1px dashed rgba(255,255,255,.07); }
 	.dockhint { background: none; border: none; cursor: pointer; font-size: .62rem; letter-spacing: .08em; text-transform: uppercase; color: rgba(255,255,255,.16); }
 	.dockhint:hover { color: rgba(240,220,174,.55); }
-	.dkh { flex: 0 1 36px; min-width: 0; padding: 0; background: none; border: none; cursor: pointer; border-radius: 4px; overflow: hidden; box-shadow: 0 2px 6px rgba(0,0,0,.55); transition: transform .12s; }
-	.dkh :global(.cardface) { display: block; width: 100%; }
-	.dkh:hover { transform: translateY(-3px); }
 	.dm-turns { display: flex; gap: 5px; align-items: center; }
 	/* each slot: a faint Roman numeral behind, the card (if any) on top */
 	.dm-slot { position: relative; width: 42px; height: 56px; display: grid; place-items: center; }
