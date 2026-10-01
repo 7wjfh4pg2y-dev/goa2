@@ -37,8 +37,10 @@ import {
 	lockPicks,
 	addCoins,
 	levelOf,
+	statDeltas,
 	type CardZone
 } from './cards/cardstate'
+import { heroCards } from './cards/deck'
 
 /** A per-player card instruction, applied authoritatively by the host. */
 export type CardReq =
@@ -54,7 +56,10 @@ export type CardReq =
 	| { kind: 'swap'; pid: string; idx: number } // level-up phase: swap this round's pick for its twin (idx = the twin)
 	| { kind: 'defeatMinion'; pid: string; piece: string } // pid defeated an enemy minion: +2 coins (+4 heavy)
 	| { kind: 'removeMinion'; pid: string; piece: string } // a card effect removed a minion: no coins
-	| { kind: 'defeatHero'; pid: string; target: string; keepCard?: boolean } // pid defeated target's hero (coins, assists, life); keepCard = their card this turn had already resolved
+	| { kind: 'defeatHero'; pid: string; target: string; keepCard?: boolean } // pid defeated target's hero (coins, assists, life); keepCard = their card this turn had already resolved (default: worked out from initiative)
+	| { kind: 'attack'; pid: string; target: string } // pid attacks target's hero → the defender is asked "Defend?"
+	| { kind: 'attackResolve'; pid: string; target: string; result: 'defend' | 'defended' | 'defeated' | 'cancel' } // the defender's answer (or the host's); the attacker may cancel
+	| { kind: 'spawn'; pid: string; hex: string } // game start: place your hero on one of your base's spawn points
 	| { kind: 'respawn'; pid: string; hex: string } // a defeated hero comes back on a hex
 	| { kind: 'battleRemove'; pid: string; piece: string } // the minion battle's loser takes a minion off
 	| { kind: 'battleAuto'; pid: string } // …or lets the game choose the rest
@@ -96,12 +101,12 @@ export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 			// the level-up phase closes with the round: picks lock in, no level-up = pity coin
 			let next = endRoundAll(migrated)
 			next = Object.fromEntries(Object.entries(next).map(([pid, c]) => [pid, s.battlePhase ? closeLevelPhase(c) : lockPicks(c)]))
-			return { cards: next, round: s.round + 1, turn: 1, battlePhase: false, battle: null, pieces, status: {}, radii: {}, effects: expireEffects(s.effects, s.round, s.turn) }
+			return { cards: next, round: s.round + 1, turn: 1, battlePhase: false, battle: null, attacks: {}, pieces, status: {}, radii: {}, effects: expireEffects(s.effects, s.round, s.turn) }
 		}
 		// end of turn: Glitch / Grenade tokens leave play (tokens.ts), then a team with
 		// no minions left in the battle zone gets pushed (battle.ts)
 		const pieces = sweepTokens(s.pieces ?? {}, 'turn')
-		return { cards: migrated, turn: s.turn + 1, radii: {}, pieces, effects: expireEffects(s.effects, s.round, s.turn), ...pushCheck({ ...s, pieces }) }
+		return { cards: migrated, turn: s.turn + 1, radii: {}, attacks: {}, pieces, effects: expireEffects(s.effects, s.round, s.turn), ...pushCheck({ ...s, pieces }) }
 	}
 
 	if (req.kind === 'defeatMinion' || req.kind === 'removeMinion') {
@@ -113,6 +118,9 @@ export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 	}
 	if (req.kind === 'defeatHero') return defeatHero(s, req.pid, req.target, req.keepCard)
 	if (req.kind === 'respawn') return respawnHero(s, req.pid, req.hex)
+	if (req.kind === 'spawn') return spawnHero(s, req.pid, req.hex)
+	if (req.kind === 'attack') return startAttack(s, req.pid, req.target)
+	if (req.kind === 'attackResolve') return resolveAttack(s, req.pid, req.target, req.result)
 	if (req.kind === 'battleRemove' || req.kind === 'battleAuto') {
 		// the losing team's players (or the host) choose
 		if (!s.battle?.loser || (req.pid !== s.host && teamOf(s, req.pid) !== s.battle.loser)) return {}
@@ -249,6 +257,12 @@ export interface MatchState {
 	lane?: number // battle zone: index into LANE (battle.ts) — 0 Orange Beach, 1 Center, 2 Blue Beach
 	battle?: Battle | null // minion battle in progress: the loser still has minions to take off
 	wonBy?: { team: Team; reason: string } | null // a push won the game (throne / last wave)
+	/** heroes under attack, keyed by the defender: who attacks, and whether they chose to defend */
+	attacks?: Record<string, { by: string; defending: boolean; at: number }>
+	/** the latest hero defeat — every client plays the defeat splash when `id` changes */
+	lastDefeat?: DefeatNews | null
+	/** game start: heroes not yet placed — each player puts theirs on a base spawn point */
+	toSpawn?: Record<string, Piece>
 	// synced 3-2-1 pre-reveal countdown: epoch ms when cards flip face-up. Set by
 	// the host the moment every seated player has committed; cleared if anyone
 	// uncommits (so the count restarts from 3 when they all commit again).
@@ -388,6 +402,9 @@ export function transferSeat(s: MatchState, from: string, to: string, toName: st
 	}
 	const seatMap = { ...(s.seatMap ?? {}) }; seatMap[String(seat)] = { id: to, name: toName }
 	const patch: Partial<MatchState> = { cards, pieces, seatMap }
+	// a hero still waiting to enter, or knocked out, follows its seat too
+	if (s.toSpawn?.[from]) { const t = { ...s.toSpawn, [to]: { ...s.toSpawn[from], id: to } }; delete t[from]; patch.toSpawn = t }
+	if (s.defeated?.[from]) { const d = { ...s.defeated, [to]: { ...s.defeated[from], piece: { ...s.defeated[from].piece, id: to } } }; delete d[from]; patch.defeated = d }
 	if (draft) patch.draft = draft
 	if (s.host === from) patch.host = to // the departed player was host → hand it over too
 	return patch
@@ -1085,13 +1102,20 @@ export function joinMatch(
 			const what = `a ${m?.team ?? ''} ${m?.role ?? ''} minion`.replace(/\s+/g, ' ')
 			note(req.pid, req.kind === 'defeatMinion' ? `defeated ${what} (+${minionCoins(m?.role)} coins)` : `removed ${what} (no coins)`)
 		}
-		if (req.kind === 'defeatHero') {
-			const d = heroDefeatSummary(local, req.pid, req.target)
-			const assist = d.assists.length ? ` · ${d.assists.map(nameOf).join(', ')} +${d.assist} assist` : ''
-			const team = d.team ? `${d.team[0].toUpperCase()}${d.team.slice(1)}` : 'Their team'
-			note(req.pid, `defeated ${nameOf(req.target)} (Lv ${d.level}) — +${d.coins} coins${assist} · ${team} loses ${d.lives} life${d.bounty ? ' (Bounty +1)' : ''}`)
+		if (req.kind === 'respawn' && patch.pieces) note(req.pid, 'respawned ⤴')
+		if (req.kind === 'spawn' && patch.pieces) note(req.pid, 'entered the battlefield')
+		if (req.kind === 'attack' && patch.attacks) note(req.pid, `attacks ${nameOf(req.target)}!`)
+		if (req.kind === 'attackResolve' && (patch.attacks || patch.lastDefeat)) {
+			const by = local.attacks?.[req.target]?.by ?? ''
+			if (req.result === 'defend') note(req.target, `defends against ${nameOf(by)}…`)
+			else if (req.result === 'defended') note(req.target, `held off ${nameOf(by)}'s attack 🛡`)
+			else if (req.result === 'cancel') note(req.pid, `called off the attack on ${nameOf(req.target)}`)
 		}
-		if (req.kind === 'respawn') note(req.pid, 'respawned ⤴')
+		if (patch.lastDefeat && patch.lastDefeat.id !== local.lastDefeat?.id) {
+			const d = patch.lastDefeat
+			const assist = d.assists.length ? ` · ${d.assists.map(nameOf).join(', ')} +${d.assist} assist` : ''
+			note(d.by, `defeated ${nameOf(d.victim)} — +${d.coins} coins${assist} · ${d.team === 'orange' ? 'Orange' : 'Blue'} −${d.lives} life`)
+		}
 		if (req.kind === 'battleRemove' && patch.pieces) {
 			const m = local.pieces?.[req.piece]
 			note(req.pid, `took off a ${m?.team ?? ''} ${m?.role ?? ''} minion for the minion battle`.replace(/\s+/g, ' '))
@@ -1235,6 +1259,35 @@ export function minionOff(s: MatchState, pid: string, pieceId: string, defeated:
 	return { pieces, cards: addCoinsTo(s.cards ?? {}, pid, minionCoins(m.role)) }
 }
 
+export interface DefeatNews {
+	id: string
+	victim: string // playerId
+	by: string // playerId
+	coins: number
+	assist: number
+	assists: string[]
+	lives: number
+	team: Team | null // the victim's team
+	at: number
+}
+
+/** The initiative of the card a player has out this turn (card + initiative items), or null. */
+export function cardInitiative(s: MatchState, pid: string): number | null {
+	const cs = s.cards?.[pid]
+	const idx = cs?.pending
+	if (!cs || idx == null || idx < 0) return null
+	const v = heroCards(cs.hero)[idx]?.initiative
+	return v == null ? null : v + (statDeltas(cs).init ?? 0)
+}
+/** Has `target`'s card this turn already resolved while `attacker` acts? Higher initiative
+ *  goes first (ties: the team showing on the tie-breaker coin). No card out → no. */
+export function cardResolved(s: MatchState, attacker: string, target: string): boolean {
+	const a = cardInitiative(s, attacker), t = cardInitiative(s, target)
+	if (a == null || t == null) return false
+	if (t !== a) return t > a
+	return teamOf(s, target) === s.tieBreaker
+}
+
 /** What a hero defeat pays out (for the confirm dialog and the log). */
 export function heroDefeatSummary(s: MatchState, pid: string, target: string) {
 	const cs = s.cards?.[target]
@@ -1252,10 +1305,11 @@ export function heroDefeatSummary(s: MatchState, pid: string, target: string) {
  *  played this turn is discarded without effect — unless it had already resolved
  *  (`keepCard`); their hand, played and discarded cards stay; the hero leaves the
  *  board until it respawns. */
-export function defeatHero(s: MatchState, pid: string, target: string, keepCard = false): Partial<MatchState> {
+export function defeatHero(s: MatchState, pid: string, target: string, keepCard?: boolean): Partial<MatchState> {
 	const hero = s.pieces?.[target]
 	if (!hero || hero.kind !== 'hero' || pid === target) return {}
 	const sum = heroDefeatSummary(s, pid, target)
+	keepCard ??= cardResolved(s, pid, target)
 	let cards = addCoinsTo(s.cards ?? {}, pid, sum.coins)
 	for (const a of sum.assists) cards = addCoinsTo(cards, a, sum.assist)
 	const v = cards[target]
@@ -1264,7 +1318,13 @@ export function defeatHero(s: MatchState, pid: string, target: string, keepCard 
 	for (const id in s.pieces) if (id !== target && s.pieces[id].attachedTo !== target) pieces[id] = s.pieces[id]
 	const life = sum.team ? { ...s.life, [sum.team]: Math.max(0, s.life[sum.team] - sum.lives) } : s.life
 	const lifeTok = sum.team && s.lifeTok ? { ...s.lifeTok, [sum.team]: spendTokens(s.lifeTok[sum.team] ?? [], sum.lives) } : s.lifeTok
-	return { pieces, cards, life, lifeTok, defeated: { ...(s.defeated ?? {}), [target]: { round: s.round, turn: s.turn, piece: hero } } }
+	const attacks = { ...(s.attacks ?? {}) }
+	delete attacks[target]
+	const lastDefeat: DefeatNews = {
+		id: `d_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+		victim: target, by: pid, coins: sum.coins, assist: sum.assist, assists: sum.assists, lives: sum.lives, team: sum.team, at: Date.now()
+	}
+	return { pieces, cards, life, lifeTok, attacks, lastDefeat, defeated: { ...(s.defeated ?? {}), [target]: { round: s.round, turn: s.turn, piece: hero } } }
 }
 
 /** Flip the last `n` full tokens to spent (the HUD draws the token row). */
@@ -1284,9 +1344,49 @@ export function canRespawn(s: MatchState, pid: string): boolean {
 	return later && !!cs && ((cs.pending != null && cs.pending >= 0) || cs.turns[s.turn - 1] != null)
 }
 
+/** Free spawn points for a team: its base's spawn hexes with nothing standing on them.
+ *  (A map without marked spawn points → [] = anywhere goes.) */
+export function freeSpawns(s: MatchState, team: Team): string[] {
+	const taken = new Set(Object.values(s.pieces ?? {}).filter((p) => !p.attachedTo).map((p) => p.hex))
+	return throneHexes(s.map, team).filter((h) => !taken.has(h))
+}
+const spawnOk = (s: MatchState, team: Team, hex: string) => !throneHexes(s.map, team).length || freeSpawns(s, team).includes(hex)
+
+/** Game start: put your hero on one of your base's free spawn points. */
+export function spawnHero(s: MatchState, pid: string, hex: string): Partial<MatchState> {
+	const piece = s.toSpawn?.[pid]
+	if (!piece || !spawnOk(s, piece.team as Team, hex)) return {}
+	const toSpawn = { ...s.toSpawn }
+	delete toSpawn[pid]
+	return { pieces: { ...s.pieces, [pid]: { ...piece, hex } }, toSpawn }
+}
+
+/** Seated players (present ones) whose hero still has to be placed — the game waits for them. */
+export const waitingToSpawn = (s: MatchState, present: string[]) => present.filter((id) => !!s.toSpawn?.[id])
+
+// ── attacks on heroes: attacker → "Defend?" → defended / defeated ──────────
+export function startAttack(s: MatchState, pid: string, target: string): Partial<MatchState> {
+	const hero = s.pieces?.[target]
+	if (!hero || hero.kind !== 'hero' || pid === target || s.attacks?.[target]) return {}
+	const a = teamOf(s, pid)
+	if (!a || a === teamOf(s, target)) return {}
+	return { attacks: { ...(s.attacks ?? {}), [target]: { by: pid, defending: false, at: Date.now() } } }
+}
+export function resolveAttack(s: MatchState, pid: string, target: string, result: 'defend' | 'defended' | 'defeated' | 'cancel'): Partial<MatchState> {
+	const at = s.attacks?.[target]
+	if (!at) return {}
+	const isHost = pid === s.host
+	if (result === 'cancel' ? pid !== at.by && !isHost : pid !== target && !isHost) return {}
+	const attacks = { ...s.attacks }
+	if (result === 'defend') return { attacks: { ...attacks, [target]: { ...at, defending: true } } }
+	if (result === 'defeated') return defeatHero(s, at.by, target)
+	delete attacks[target]
+	return { attacks }
+}
+
 export function respawnHero(s: MatchState, pid: string, hex: string): Partial<MatchState> {
 	const d = s.defeated?.[pid]
-	if (!d || !canRespawn(s, pid)) return {}
+	if (!d || !canRespawn(s, pid) || !spawnOk(s, d.piece.team as Team, hex)) return {}
 	const defeated = { ...s.defeated }
 	delete defeated[pid]
 	return { pieces: { ...s.pieces, [pid]: { ...d.piece, hex } }, defeated }

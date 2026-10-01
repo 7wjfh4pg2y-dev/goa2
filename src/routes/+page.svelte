@@ -210,11 +210,13 @@
 	$: if (mode === 'lobby' && $state.draft && !$state.started && !coinShown) mode = 'draft';
 	$: if ((mode === 'lobby' || mode === 'draft') && $state.started && !coinShown) mode = 'game';
 	$: if ((mode === 'lobby' || mode === 'draft' || mode === 'game') && $state.closed) bail('The host closed the game.');
-	// host places hero tokens once, when the board first appears
-	$: if (mode === 'game' && iAmHost && session && $state.draft && !Object.keys($state.pieces).length) {
+	// host sets the board up once, when it first appears: the minions stand ready and
+	// every hero waits off the board until its player places it on a base spawn point
+	$: if (mode === 'game' && iAmHost && session && $state.draft && !Object.keys($state.pieces).length && !$state.toSpawn) {
 		const s = get(state);
 		session.update({
-			pieces: { ...placeMinions(s), ...placeHeroes(s, get(players)) },
+			pieces: placeMinions(s),
+			toSpawn: placeHeroes(s, get(players)),
 			cards: initCards(s.draft?.picks ?? {}),
 			// keep owners recorded at draft start (someone may be mid-reconnect)
 			seatMap: { ...(s.seatMap ?? {}), ...buildSeatMap(get(players), s.seats) }

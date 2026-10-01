@@ -7,7 +7,7 @@
 	// writer for the card map). Advancing locks the turn's cards into their slots.
 	import type { Readable } from 'svelte/store';
 	import type { MatchSession, MatchState, Player } from '$lib/match';
-	import { teamForSeat, colorHex, battlePatch } from '$lib/match';
+	import { teamForSeat, colorHex, battlePatch, canRespawn } from '$lib/match';
 	import { battleResult, battleText, laneNotes } from '$lib/battle';
 	import Card from '$lib/cards/Card.svelte';
 	import DeckView from '$lib/DeckView.svelte';
@@ -30,6 +30,8 @@
 	export let previewId: string | null = null; // set by the board to open a player's overlay
 	export let onArmToken: (t: ArmToken) => void = () => {}; // pick a token off the shelf → place it on a hex
 	export let holdingToken = false; // a shelf token is in hand, waiting for its hex
+	export let onRespawn: () => void = () => {}; // defeated hero: pick a spawn point to come back on
+	export let onEnter: () => void = () => {}; // game start: pick a spawn point for your hero
 	export let mobile = false; // phone layout (set by GameView at ≤760px wide): strip + compact dash
 
 	const ORANGE = '#ef7d22';
@@ -92,6 +94,13 @@
 
 	$: iAmHost = $ms.host === clientId;
 	$: turnIdx = $ms.turn - 1;
+	// the temp action slot, most urgent first: respawn · enter the board · defend
+	$: iCanRespawn = !!$ms.defeated?.[clientId] && canRespawn($ms, clientId);
+	$: iMustEnter = !!$ms.toSpawn?.[clientId];
+	$: spawnWaiting = seated.filter((p) => $ms.toSpawn?.[p.id]);
+	$: myAttack = $ms.attacks?.[clientId] ?? null;
+	$: iDefending = !!myAttack?.defending;
+	const answerAttack = (result: 'defended' | 'defeated') => session.cardAction({ kind: 'attackResolve', pid: clientId, target: clientId, result });
 	$: seatedWithCards = seated.filter((p) => cards[p.id]);
 	// reveal layout: 1–2 players share one row; more split by team — your team on
 	// top (orange when spectating), the other team underneath
@@ -210,7 +219,7 @@
 	// local player
 	$: mine = cards[clientId] ?? null;
 	$: myReady = mine?.pending != null;
-	$: canCommit = !!mine && !myReady && !revealed && !battlePhase; // no playing cards between the battle and the next round
+	$: canCommit = !!mine && !myReady && !revealed && !battlePhase && !spawnWaiting.length; // no playing cards between the battle and the next round, or before every hero is on the board
 	let selected: number | null = null; // card being previewed (centered)
 	let previewSrc: 'hand' | 'discard' = 'hand'; // where the previewed card came from
 	let committing = false; // preview flip animation on commit
@@ -596,6 +605,16 @@
 	</div>
 {/snippet}
 {#snippet actionBody()}
+		{#if iCanRespawn}
+			<button class="act tohand" style={teamVars(myTeam)} on:click={onRespawn}>⤴ Respawn</button>
+		{:else if iMustEnter}
+			<button class="act tohand" style={teamVars(myTeam)} on:click={onEnter}>⤴ Spawn hero</button>
+		{:else if iDefending}
+			<button class="act tohand" style={teamVars(myTeam)} on:click={() => answerAttack('defended')} title="You defended (discard your defence card first)">🛡 Defended</button>
+			<button class="act takeback" on:click={() => answerAttack('defeated')}>Defeated</button>
+		{:else if spawnWaiting.length}
+			<span class="waithost">Waiting for {spawnWaiting.map((p) => p.name).join(', ')} to spawn…</span>
+		{:else}
 
 		{#if fxAsking && fxStage === 'ask'}
 			<span class="fxq">Activate effect?</span>
@@ -629,6 +648,7 @@
 			<span class="waithost">Waiting for host…</span>
 		{:else if myReady}
 			<button class="act takeback" on:click={takeBack}>↩ Take back</button>
+		{/if}
 		{/if}
 {/snippet}
 
@@ -1068,6 +1088,8 @@
 			{:else if canCommit}
 				<button class="act primary" on:click={() => commit(selected!)}>Commit · Turn {$ms.turn}</button>
 				<button class="act danger" on:click={() => defend(selected!)}>Defend (discard)</button>
+			{:else if iDefending && mine?.hand.includes(selected!)}
+				<button class="act danger" on:click={() => defend(selected!)}>Discard to defend</button>
 			{/if}
 			<button class="act" on:click={closePreview}>Close</button>
 		</div>

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { applyCardReq, canRespawn, lifeTier, type MatchState, type Piece } from './match'
+import { applyCardReq, canRespawn, lifeTier, cardInitiative, cardResolved, type MatchState, type Piece } from './match'
 import { newPlayerCardState } from './cards/cardstate'
 
 // A (orange) + C (orange, A's teammate) vs B (blue, level 3) and D (blue)
@@ -80,5 +80,50 @@ describe('defeating and removing units', () => {
 		expect(back.defeated!.B).toBeUndefined()
 		// passed / nothing to play this turn → wait (possibly until the next round)
 		expect(canRespawn({ ...s, cards: { ...s.cards, B: { ...s.cards!.B, pending: -1 } } } as MatchState, 'B')).toBe(false)
+	})
+})
+
+describe('attacking heroes', () => {
+	const g = () => ({ ...game(), host: 'H' }) as MatchState
+	it('attack → the defender says no → defeated (rewards dealt, news for the splash)', () => {
+		let s = g()
+		const a = applyCardReq(s, { kind: 'attack', pid: 'A', target: 'B' })
+		expect(a.attacks!.B).toMatchObject({ by: 'A', defending: false })
+		expect(applyCardReq(s, { kind: 'attack', pid: 'A', target: 'C' })).toEqual({}) // own team
+		s = { ...s, ...a }
+		expect(applyCardReq(s, { kind: 'attackResolve', pid: 'D', target: 'B', result: 'defeated' })).toEqual({}) // not theirs to answer
+		const d = applyCardReq(s, { kind: 'attackResolve', pid: 'B', target: 'B', result: 'defeated' })
+		expect(d.pieces!.B).toBeUndefined()
+		expect(d.cards!.A.coins).toBe(8)
+		expect(d.attacks!.B).toBeUndefined()
+		expect(d.lastDefeat).toMatchObject({ victim: 'B', by: 'A', coins: 3, assist: 1, assists: ['C'], lives: 1, team: 'blue' })
+	})
+	it('defend → defended ends the attack with no rewards; the attacker can call it off', () => {
+		let s = { ...g(), ...applyCardReq(g(), { kind: 'attack', pid: 'A', target: 'B' }) } as MatchState
+		s = { ...s, ...applyCardReq(s, { kind: 'attackResolve', pid: 'B', target: 'B', result: 'defend' }) }
+		expect(s.attacks!.B.defending).toBe(true)
+		const ok = applyCardReq(s, { kind: 'attackResolve', pid: 'B', target: 'B', result: 'defended' })
+		expect(ok.attacks).toEqual({})
+		expect(ok.cards).toBeUndefined()
+		expect(applyCardReq(s, { kind: 'attackResolve', pid: 'A', target: 'B', result: 'cancel' }).attacks).toEqual({})
+	})
+	it('the defender\'s card stays if it already resolved (higher initiative than the attacker\'s)', () => {
+		const s = g()
+		// B (pending 4) vs A playing a card with lower / higher initiative
+		const cards = (aIdx: number) => ({ ...s, cards: { ...s.cards, A: { ...s.cards!.A, pending: aIdx } } }) as MatchState
+		const initB = cardInitiative(s, 'B')!
+		const lower = [0, 1, 2, 3, 5, 6, 7, 8].find((i) => (cardInitiative(cards(i), 'A') ?? 99) < initB)
+		if (lower != null) expect(cardResolved(cards(lower), 'A', 'B')).toBe(true)
+		expect(cardResolved(s, 'A', 'B')).toBe(false) // attacker has no card out
+	})
+})
+
+describe('entering the board', () => {
+	it('a hero waiting at game start is placed on a hex; respawn works the same way', () => {
+		const s = { ...game(), toSpawn: { E: { id: 'E', hex: '', team: 'orange', kind: 'hero', hero: 'arien' } } } as unknown as MatchState
+		const p = applyCardReq(s, { kind: 'spawn', pid: 'E', hex: '2_2' })
+		expect(p.pieces!.E.hex).toBe('2_2')
+		expect(p.toSpawn).toEqual({})
+		expect(applyCardReq(s, { kind: 'spawn', pid: 'A', hex: '2_2' })).toEqual({}) // already on the board
 	})
 })

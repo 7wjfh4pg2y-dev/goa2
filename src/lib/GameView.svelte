@@ -3,6 +3,7 @@
 	import type { Readable } from 'svelte/store';
 	import BoardCanvas from '$lib/BoardCanvas.svelte';
 	import CardLayer from '$lib/CardLayer.svelte';
+	import DefeatSplash from '$lib/DefeatSplash.svelte';
 	import { heroById, heroLogo } from '$lib/heroes';
 	import { zoneName } from '$lib/zones';
 	import { effectLabel } from '$lib/effects';
@@ -13,7 +14,7 @@
 	import { uiLayout, layoutVars } from '$lib/layout';
 	import { placeToken, moveToken, effectiveHex, MINES, tokenName, tokensLeft, removalOptions, applyRemoval, removalLog, canRemove, type ArmToken, type RemovalOption } from '$lib/tokens';
 	import {
-		colorHex, movePiece, teamForSeat, throneHex, minionCoins, heroDefeatSummary, canRespawn,
+		colorHex, movePiece, teamForSeat, throneHex, minionCoins, heroDefeatSummary, canRespawn, freeSpawns,
 		type MatchState, type Player, type MatchSession, type Team, type ConnStatus
 	} from '$lib/match';
 
@@ -131,7 +132,7 @@
 	$: areas = [...Object.entries($ms.radii ?? {}).flatMap(([pid, r]) => {
 		const hero = $ms.pieces?.[pid];
 		return hero && r > 0 ? [{ hex: hero.hex, r, color: colorHex(hero.color ?? '') }] : [];
-	}), ...battleMarks];
+	}), ...battleMarks, ...spawnMarks];
 
 	// ── minion battle / lane (battle.ts) ──
 	// the minions the battle's loser may take off glow red on the board
@@ -190,15 +191,21 @@
 	function armToken(t: ArmToken) { pendingSpawn = null; pendingRespawn = false; pendingToken = t; selPieceId = null; }
 	$: if (pendingSpawn) pendingToken = null;
 	// a defeated hero coming back: tap a hex (a spawn point) to place yourself
+	// (or, at the start of the game, entering it for the first time)
 	let pendingRespawn = false;
 	$: myDefeat = $ms.defeated?.[clientId];
 	$: iCanRespawn = !!myDefeat && canRespawn($ms, clientId);
-	$: if (!myDefeat) pendingRespawn = false;
+	$: myEntry = $ms.toSpawn?.[clientId] ?? null;
+	$: heroToPlace = myDefeat?.piece ?? myEntry;
+	$: if (!heroToPlace) pendingRespawn = false;
 	$: placing = !!pendingSpawn || !!pendingToken || pendingRespawn;
+	function placeMyHero() { cancelPlace(); selPieceId = null; actId = null; pendingRespawn = true; }
+	// the free spawn points of your base light up while you place your hero
+	$: spawnMarks = pendingRespawn && heroToPlace ? freeSpawns($ms, heroToPlace.team as Team).map((hex) => ({ hex, r: 0, color: '#fff3a8' })) : [];
 	// what's held, drawn by the board as a see-through ghost under the cursor
-	$: placeGhost = pendingRespawn && myDefeat
-		? { id: '__ghost', hex: '', team: myDefeat.piece.team, hero: myDefeat.piece.hero, sym: heroLogo(myDefeat.piece.hero ?? ''),
-			label: heroById(myDefeat.piece.hero ?? '')?.name?.[0]?.toUpperCase() ?? '?', color: myDefeat.piece.color ? colorHex(myDefeat.piece.color) : undefined }
+	$: placeGhost = pendingRespawn && heroToPlace
+		? { id: '__ghost', hex: '', team: heroToPlace.team, hero: heroToPlace.hero, sym: heroLogo(heroToPlace.hero ?? ''),
+			label: heroById(heroToPlace.hero ?? '')?.name?.[0]?.toUpperCase() ?? '?', color: heroToPlace.color ? colorHex(heroToPlace.color) : undefined }
 		: pendingSpawn
 		? { id: '__ghost', hex: '', team: pendingSpawn.team, role: pendingSpawn.role }
 		: pendingToken
@@ -212,7 +219,10 @@
 	// board hex tapped while holding something: drop it right there
 	function onBoardHex(hex: string) {
 		if (pendingRespawn) {
-			session.cardAction({ kind: 'respawn', pid: clientId, hex });
+			// only your base's free spawn points take a hero (a map without them: anywhere)
+			const team = heroToPlace?.team as Team | undefined;
+			if (team && throneHexesOf(team).length && !freeSpawns($ms, team).includes(hex)) return;
+			session.cardAction(myDefeat ? { kind: 'respawn', pid: clientId, hex } : { kind: 'spawn', pid: clientId, hex });
 			pendingRespawn = false;
 			return;
 		}
@@ -253,24 +263,35 @@
 	// Defeat: whoever presses it defeated the unit and collects the reward (match.ts rules)
 	$: iPlay = !!$ms.cards?.[clientId];
 	$: canDefeatSel = !!selPiece && iPlay && !!myTeam && (selPiece.kind === 'minion' || selPiece.kind === 'hero') && selPiece.team !== myTeam;
-	let confirmDefeat = false;
-	let keepCard = false; // their card this turn had already resolved before the defeat
-	$: defeatSum = actPiece?.kind === 'hero' ? heroDefeatSummary($ms, clientId, actPiece.id) : null;
+	// a small confirm takes the toolbar's place, right above the piece: attack a hero / remove a minion
+	let confirmKind: 'attack' | 'remove' | null = null;
+	$: if (confirmKind && !actPiece) confirmKind = null;
+	$: attackSum = confirmKind === 'attack' && actPiece ? heroDefeatSummary($ms, clientId, actPiece.id) : null;
 	function defeatSel() {
 		if (!selPiece) return;
 		const p = selPiece;
-		actId = p.id;
 		board?.release();
-		if (p.kind === 'minion') {
-			session.cardAction({ kind: 'defeatMinion', pid: clientId, piece: p.id });
-			actId = null; selPieceId = null;
-		} else { keepCard = false; confirmDefeat = true; }
+		if (p.kind === 'minion') { session.cardAction({ kind: 'defeatMinion', pid: clientId, piece: p.id }); selPieceId = null; }
 	}
-	function doDefeatHero() {
-		if (!actPiece) return;
-		session.cardAction({ kind: 'defeatHero', pid: clientId, target: actPiece.id, keepCard });
-		confirmDefeat = false; actId = null; selPieceId = null;
+	function attackSel() {
+		if (!selPiece) return;
+		actId = selPiece.id; confirmKind = 'attack';
+		board?.release();
 	}
+	function doAttack() {
+		if (actPiece) session.cardAction({ kind: 'attack', pid: clientId, target: actPiece.id });
+		closeConfirm();
+	}
+	function closeConfirm() { confirmKind = null; actId = null; selPieceId = null; }
+	// attacks in flight (match.ts): the defender answers, the attacker waits
+	$: attacks = $ms.attacks ?? {};
+	$: incoming = attacks[clientId] && !attacks[clientId].defending ? attacks[clientId] : null;
+	$: outgoing = Object.entries(attacks).filter(([, a]) => a.by === clientId);
+	$: hostWatch = iAmHost ? Object.entries(attacks).filter(([t, a]) => a.by !== clientId && t !== clientId && !$players.some((p) => p.id === t)) : [];
+	const answer = (target: string, result: 'defend' | 'defended' | 'defeated' | 'cancel') => session.cardAction({ kind: 'attackResolve', pid: clientId, target, result });
+	const heroOf = (pid: string) => heroById($ms.pieces?.[pid]?.hero ?? $ms.cards?.[pid]?.hero ?? '')?.name ?? 'A hero';
+	const whoOf = (pid: string) => `${heroOf(pid)} (${playerName(pid)})`;
+	const throneHexesOf = (t: Team) => freeSpawns({ ...$ms, pieces: {} }, t);
 	const playerName = (id: string) => $players.find((p) => p.id === id)?.name ?? 'A player';
 
 	// Remove menu: the reasons the cards give for taking a token out of play (tokens.ts)
@@ -279,7 +300,15 @@
 	$: canRemoveSel = !!selPiece && canRemove(selPiece, clientId, iAmHost);
 	$: removeOpts = actPiece ? removalOptions(actPiece) : [];
 	$: enemyHeroes = actPiece ? Object.values($ms.pieces ?? {}).filter((p) => p.kind === 'hero' && p.team !== actPiece?.team) : [];
-	function openRemove() { actId = selPiece?.id ?? null; board?.release(); pickHeroFor = null; removing = true; }
+	function openRemove() {
+		actId = selPiece?.id ?? null; board?.release(); pickHeroFor = null;
+		// a minion just needs a quick yes; tokens get the menu of reasons
+		if (actId && $ms.pieces[actId]?.kind === 'minion') confirmKind = 'remove'; else removing = true;
+	}
+	function doRemoveMinion() {
+		if (actPiece) session.cardAction({ kind: 'removeMinion', pid: clientId, piece: actPiece.id });
+		closeConfirm();
+	}
 	function doRemove(opt: RemovalOption, heroPieceId?: string) {
 		const selPiece = actPiece;
 		if (!selPiece) return;
@@ -308,18 +337,19 @@
 	function trackTip() {
 		if (typeof window === 'undefined') return;
 		cancelAnimationFrame(tipRaf);
-		if (!selPieceId || mobile) { tipPos = null; return; }
+		if (!tipId || mobile) { tipPos = null; return; }
 		const loop = () => {
-			const p = selPieceId ? board?.clientPos(selPieceId) : null;
+			const p = tipId ? board?.clientPos(tipId) : null;
 			// only touch the toolbar when the piece actually moved (not 60 re-renders a second)
 			const x = p ? Math.round(p.x) : null, y = p ? Math.round(p.y - p.r - 8) : null;
 			if (x == null || y == null) { if (tipPos) tipPos = null; }
 			else if (!tipPos || tipPos.x !== x || tipPos.y !== y) tipPos = { x, y };
-			if (selPieceId) tipRaf = requestAnimationFrame(loop);
+			if (tipId) tipRaf = requestAnimationFrame(loop);
 		};
 		loop();
 	}
-	$: selPieceId, mobile, trackTip();
+	$: tipId = actId && confirmKind ? actId : selPieceId;
+	$: tipId, mobile, trackTip();
 	onDestroy(() => { if (typeof window !== 'undefined') cancelAnimationFrame(tipRaf); });
 	const labelOf = (p: typeof selPiece) => !p ? '' : p.kind === 'hero' ? `${heroById(p.hero ?? '')?.name ?? 'Hero'} (${playerName(p.id)})`
 		: p.role ? `${p.team} ${p.role} minion`
@@ -443,20 +473,34 @@
 			<span>⚔ Minion battle · <b class="to">Orange {battle.orange}</b> : <b class="tb">{battle.blue} Blue</b> — {cap(battle.loser ?? '')} removes {battle.remove} more{#if iChooseBattle} · tap a red minion{/if}</span>
 			{#if iChooseBattle}<button class="spcancel" on:click={battleAutoAll} title="Melee first, heavies last">Let the game choose</button>{/if}
 		</div>
-	{:else if myDefeat && !pendingRespawn && !pendingToken}
-		<div class="placehint defeat">
-			{#if iCanRespawn}
-				<span>You were defeated — back in the fight</span>
-				<button class="spcancel go" on:click={() => { cancelPlace(); pendingRespawn = true; }}>⤴ Respawn</button>
-			{:else}
-				<span>Defeated — play a card on your next turn to respawn</span>
-			{/if}
+	{:else if (outgoing.length || hostWatch.length) && !pendingToken && !pendingRespawn}
+		<div class="placehint atk">
+			{#each outgoing as [t, a] (t)}
+				<span>⚔ {a.defending ? `${whoOf(t)} is defending…` : `Waiting for ${whoOf(t)} to answer…`}</span>
+				<button class="spcancel" on:click={() => answer(t, 'cancel')}>Call off</button>
+			{/each}
+			{#each hostWatch as [t, a] (t)}
+				<span>⚔ {heroOf(a.by)} attacks {whoOf(t)} (away)</span>
+				<button class="spcancel" on:click={() => answer(t, 'defended')}>Defended</button>
+				<button class="spcancel red" on:click={() => answer(t, 'defeated')}>Defeated</button>
+			{/each}
+		</div>
+	{:else if myDefeat && !iCanRespawn && !pendingRespawn && !pendingToken}
+		<div class="placehint defeat"><span>Defeated — play a card on your next turn to respawn</span></div>
+	{/if}
+	{#if incoming}
+		<div class="atkask" role="alertdialog" aria-label="You are being attacked">
+			<span><b>{whoOf(incoming.by)}</b> is attacking. Defend?</span>
+			<span class="atkbtns">
+				<button class="ab yes" style:--tc={myTeam === 'blue' ? '#2f7fe6' : '#ef7d22'} on:click={() => answer(clientId, 'defend')}>Yes</button>
+				<button class="ab no" on:click={() => answer(clientId, 'defeated')}>No</button>
+			</span>
 		</div>
 	{/if}
 	{#if pendingToken || pendingRespawn || (mobile && pendingSpawn)}
 		<div class="placehint">
 			{#if pendingRespawn}
-				<span>Tap a spawn point to place your hero</span>
+				<span>Tap a glowing spawn point in your base</span>
 			{:else if pendingToken}
 				<span>Tap a hex to place {pendingToken.token === 'companion' ? pendingToken.label : tokenName(pendingToken.token)}{MINES.has(pendingToken.token) ? ' (face down)' : ''}</span>
 			{:else if pendingSpawn}
@@ -465,45 +509,45 @@
 			<button class="spcancel" on:click={cancelPlace}>Cancel</button>
 		</div>
 	{/if}
+	<DefeatSplash news={$ms.lastDefeat ?? null} pieces={$ms.pieces} cards={$ms.cards ?? {}} defeated={$ms.defeated ?? {}} names={(id) => playerName(id)} {lifeArt} {mobile} />
 	<div class="ocean"></div>
 	<!-- on a phone the board sits between the top bar + player strip and the dash -->
 	<div class="boardarea" class:mob={mobile}>
 	<BoardCanvas bind:this={board} map={$ms.map ?? {}} rotation={orientation} interactive={true} {placing} {placeGhost} holdColor={myHoldColor} onCancelPlace={cancelPlace} {areas} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} />
 	</div>
 
-	<CardLayer bind:this={cardLayer} {mobile} {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} onArmToken={armToken} holdingToken={!!pendingToken} bind:previewId />
+	<CardLayer bind:this={cardLayer} {mobile} {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} onRespawn={placeMyHero} onEnter={placeMyHero} onArmToken={armToken} holdingToken={!!pendingToken} bind:previewId />
 
 	<!-- selected minion/token: offer delete (heroes aren't deletable) -->
-	{#if selPiece && (selPiece.role || selPiece.token || (selPiece.kind === 'hero' && canDefeatSel))}
+	{#if confirmKind && actPiece}
+		<div class="pietool confirm" class:anchored={!!tipPos} style={tipPos ? `left:${tipPos.x / lay.s}px; top:${tipPos.y / lay.s}px` : ''}>
+			{#if confirmKind === 'attack' && attackSum}
+				<span class="pietxt">Attack {whoOf(actPiece.id)}?</span>
+				<span class="rw" title="You get {attackSum.coins}{attackSum.assists.length ? `, each teammate ${attackSum.assist} assist` : ''}">
+					<span class="gc sm"></span><b>{attackSum.coins}</b>{#if attackSum.assists.length}<i>/</i><span class="gc sm"></span><b>{attackSum.assist}</b>{/if}
+				</span>
+				<span class="rw" title="{cap(attackSum.team ?? '')} loses {attackSum.lives} life"><img class="lt" src={lifeArt((attackSum.team ?? 'orange') as Team, 'back')} alt="" /><b>{attackSum.lives}</b></span>
+				<button class="piedefeat" on:click={doAttack}>⚔ Attack</button>
+			{:else}
+				<span class="pietxt nc">Remove <b style:color={actPiece.team === 'blue' ? '#6aa8ff' : '#ff9a4a'}>{cap(actPiece.role ?? '')} Minion</b></span>
+				<button class="piedel" on:click={doRemoveMinion}>Remove</button>
+			{/if}
+			<button class="piex" on:click={closeConfirm} aria-label="Cancel">✕</button>
+		</div>
+	{:else if selPiece && (selPiece.role || selPiece.token || (selPiece.kind === 'hero' && canDefeatSel))}
 		<div class="pietool" class:anchored={!!tipPos} style={tipPos ? `left:${tipPos.x / lay.s}px; top:${tipPos.y / lay.s}px` : ''}>
 			<span class="pietxt">{selLabel}</span>
 			{#if canFlip}
 				<button class="pieflip" on:click={flipMine}>{selPiece.faceDown ? 'Flip — reveal' : 'Flip face down'}</button>
 			{/if}
 			{#if selImmune}<span class="pieimm" title="Heavy minions can't be moved, defeated or removed while another minion of their team is in the battle zone{iAmHost ? ' — as host you can still override for card exceptions' : ''}">🛡 Immune</span>{/if}
-			{#if canDefeatSel && (!selImmune || iAmHost)}<button class="piedefeat" on:click={defeatSel}>Defeat{#if selPiece.kind === 'minion'} +{minionCoins(selPiece.role)}{/if}</button>{/if}
+			{#if canDefeatSel && selPiece.kind === 'hero'}
+				<button class="piedefeat" on:click={attackSel} disabled={!!attacks[selPiece.id]}>{attacks[selPiece.id] ? 'Under attack…' : '⚔ Attack'}</button>
+			{:else if canDefeatSel && (!selImmune || iAmHost)}
+				<button class="piedefeat" on:click={defeatSel}>Defeat <span class="gc sm"></span>{minionCoins(selPiece.role)}</button>
+			{/if}
 			{#if canBattleSel}<button class="piedefeat" on:click={battleTakeSel}>Remove for the battle</button>{/if}
 			{#if canRemoveSel && selPiece.kind !== 'hero' && (!selImmune || iAmHost)}<button class="piedel" on:click={openRemove}>Remove</button>{/if}
-		</div>
-	{/if}
-
-	{#if confirmDefeat && actPiece && defeatSum}
-		<div class="modal-scrim" on:click={() => (confirmDefeat = false)} on:keydown={() => {}} role="presentation">
-			<div class="modal" on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" tabindex="-1">
-				<h3>Defeat {actLabel}?</h3>
-				<ul class="dsum">
-					<li><b>You</b> gain {defeatSum.coins} coin{defeatSum.coins === 1 ? "" : "s"} <small>(their level)</small></li>
-					{#each defeatSum.assists as a (a)}<li><b>{playerName(a)}</b> gains {defeatSum.assist} assist coin{defeatSum.assist > 1 ? 's' : ''}</li>{/each}
-					<li><b>{defeatSum.team === 'orange' ? 'Orange' : 'Blue'}</b> loses {defeatSum.lives} life{defeatSum.bounty ? ' (+1 Bounty)' : ''}</li>
-					<li>{keepCard ? 'The card they played this turn stays (it already resolved).' : 'The card they played this turn is discarded without effect.'} Their hand stays.</li>
-					<li>They respawn when they play a card on a later turn.</li>
-				</ul>
-				<label class="dkeep"><input type="checkbox" bind:checked={keepCard} /> Their card this turn already resolved — keep it</label>
-				<div class="mrow">
-					<button class="mcancel" on:click={() => (confirmDefeat = false)}>Cancel</button>
-					<button class="mleave" on:click={doDefeatHero}>Defeat</button>
-				</div>
-			</div>
 		</div>
 	{/if}
 
@@ -914,20 +958,34 @@
 	.modal-scrim { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; background: rgba(3, 8, 14, 0.6); backdrop-filter: blur(3px); }
 	.modal { width: min(360px, 90vw); background: rgba(12, 18, 32, 0.92); border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 16px; padding: 20px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6); }
 	.modal h3 { font-family: 'Modesto Poster', serif; font-size: 1.4rem; margin: 0 0 6px; }
-	.piedefeat { border: 1px solid rgba(240, 200, 120, 0.6); background: linear-gradient(180deg, #e2a64a, #b8781f); color: #1a1206; border-radius: 999px; padding: 4px 12px; font-weight: 700; cursor: pointer; font-size: 0.76rem; }
+	.piedefeat:disabled { opacity: .55; cursor: default; }
+	.piedefeat { display: inline-flex; align-items: center; gap: 4px; border: 1px solid rgba(240, 200, 120, 0.6); background: linear-gradient(180deg, #e2a64a, #b8781f); color: #1a1206; border-radius: 999px; padding: 4px 12px; font-weight: 700; cursor: pointer; font-size: 0.76rem; }
 	.piedefeat:hover { filter: brightness(1.1); }
-	.dsum { margin: 4px 0 16px; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 5px; font-size: 0.9rem; color: #cbd5e1; }
-	.dsum b { font-weight: normal; color: #fff; }
-	.dsum small { color: #93a3b8; }
-	.dkeep { display: flex; align-items: center; gap: 8px; margin: -6px 0 14px; font-size: 0.8rem; color: #cbd5e1; cursor: pointer; }
-	.dkeep input { accent-color: #e2a64a; }
 	.placehint.defeat { border-color: rgba(239, 68, 68, 0.6); color: #ffc9c2; }
-	.lane { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 6px; font-size: 0.72rem; color: #d7c79c; }
+	.lane { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 6px; margin-top: 6px; font-size: 0.72rem; color: #d7c79c; }
 	.lane .bz { white-space: nowrap; }
 	.pushes { display: flex; gap: 4px; }
 	.pushb { font: inherit; font-size: 0.64rem; padding: 2px 7px; border-radius: 999px; cursor: pointer; background: transparent; color: #e5e7eb; border: 1px solid rgba(255, 255, 255, 0.2); white-space: nowrap; }
 	.pushb.orange { border-color: rgba(239, 125, 34, 0.6); } .pushb.blue { border-color: rgba(47, 127, 230, 0.6); }
 	.pushb.arm { background: rgba(220, 60, 60, 0.35); border-color: rgba(239, 68, 68, 0.8); color: #fff; }
+	.pietool.confirm { gap: 8px; }
+	.pietxt.nc { text-transform: none; } .pietxt.nc b { font-weight: inherit; }
+	.rw { display: inline-flex; align-items: center; gap: 3px; font-size: 0.82rem; color: #f6ead2; white-space: nowrap; }
+	.rw b { font-weight: normal; } .rw i { font-style: normal; color: #8592a6; margin: 0 2px; }
+	.rw .lt { width: 18px; height: 18px; object-fit: contain; }
+	.gc.sm { width: 13px; height: 13px; border-width: 1px; vertical-align: -2px; margin-right: 2px; }
+	.piex { border: none; background: transparent; color: #9aa4b2; cursor: pointer; font-size: 0.85rem; padding: 2px 4px; }
+	.piex:hover { color: #fff; }
+	.placehint.atk { border-color: rgba(239, 68, 68, 0.6); flex-wrap: wrap; justify-content: center; }
+	.spcancel.red { border-color: rgba(239, 68, 68, 0.7); color: #ffb4b4; }
+	.atkask { position: absolute; top: 64px; left: 50%; transform: translateX(-50%); z-index: 12; display: flex; align-items: center; gap: 12px; padding: 8px 10px 8px 16px; border-radius: 12px;
+		background: rgba(30, 8, 8, 0.94); border: 1px solid rgba(239, 68, 68, 0.75); color: #ffe1dc; font-size: 0.9rem; box-shadow: 0 0 26px rgba(239, 68, 68, 0.35), 0 10px 28px rgba(0,0,0,.6); animation: atkpulse 1.2s ease-in-out infinite; }
+	.atkask b { font-weight: normal; color: #fff; }
+	.atkbtns { display: flex; gap: 6px; }
+	.ab { font: inherit; border-radius: 8px; padding: 5px 16px; cursor: pointer; border: 1px solid transparent; }
+	.ab.yes { background: var(--tc); color: #fff; }
+	.ab.no { background: rgba(220, 60, 60, 0.3); border-color: rgba(239, 68, 68, 0.7); color: #ffc9c2; }
+	@keyframes atkpulse { 50% { box-shadow: 0 0 40px rgba(239, 68, 68, 0.6), 0 10px 28px rgba(0,0,0,.6); } }
 	.pieimm { font-size: 0.72rem; color: #f0c86a; border: 1px solid rgba(240, 200, 106, 0.5); border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
 	.placehint.battle { border-color: rgba(239, 68, 68, 0.6); padding-left: 16px; }
 	.placehint.battle b { font-weight: normal; } .placehint .to { color: #ffb27a; } .placehint .tb { color: #8cc0ff; }
@@ -1002,7 +1060,7 @@
 	/* zoomed as a whole; its insets are design px, so the real-px dash is divided back */
 	.gamewrap:not(.mob) .hud { zoom: var(--uis, 1); }
 	.gamewrap.dashfull .hud { bottom: calc(22px + var(--dh, 70px) / var(--uis, 1)); }
-	.gamewrap:not(.mob) :is(.modal, .managepanel, .pietool, .placehint) { zoom: var(--uis, 1); }
+	.gamewrap:not(.mob) :is(.modal, .managepanel, .pietool, .placehint, .atkask) { zoom: var(--uis, 1); }
 	.hud .mapname { font-family: 'Modesto Poster', serif; font-size: 1.02rem; letter-spacing: 0.03em; color: #f6ead2; text-align: center; }
 
 	.fxlist { gap: 3px; }
@@ -1110,6 +1168,8 @@
 	.boardarea { position: absolute; inset: 0; }
 	.boardarea.mob { top: 116px; bottom: 106px; }
 	.gamewrap.mob .pietool, .gamewrap.mob .placehint { top: 124px; max-width: 94vw; }
+	.gamewrap.mob .pietool { top: 172px; }
+	.gamewrap.mob .atkask { top: 220px; max-width: 94vw; font-size: 0.8rem; }
 	/* phone toolbar: everything stays inside the pill — the label gives way first */
 	.gamewrap.mob .pietool { gap: 6px; padding: 5px 6px 5px 10px; box-sizing: border-box; }
 	.gamewrap.mob .pietxt { min-width: 0; flex: 1 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.72rem; }
