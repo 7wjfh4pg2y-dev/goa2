@@ -1,5 +1,6 @@
 <script lang="ts">
-	// A hero falls: a fast horizontal strike across the screen for everyone —
+	// A hero falls: a fast horizontal strike across the screen for everyone (orange art
+	// always on the left, blue on the right; the fallen hero greyed out) —
 	// "Victim (Player) is defeated by Hero (Player)", with what it paid out below.
 	// Driven by the shared `lastDefeat` news (match.ts); it never blocks the board.
 	import { onDestroy } from 'svelte';
@@ -37,13 +38,17 @@
 	$: kTeam = (vTeam === 'orange' ? 'blue' : 'orange') as Team;
 	$: vHero = shown ? heroOf(shown.victim) : '';
 	$: kHero = shown ? heroOf(shown.by) : '';
+	// sides are fixed like the lane splashes: orange on the left, blue on the right —
+	// the victim greyed out, the killer in full colour; the strike comes from the killer's side
+	$: leftHero = vTeam === 'orange' ? vHero : kHero;
+	$: rightHero = vTeam === 'orange' ? kHero : vHero;
 </script>
 
 {#if shown}
-	<div class="ds" class:mob={mobile} style="--vc:{TEAM[vTeam]}; --kc:{TEAM[kTeam]}" aria-live="polite">
+	<div class="ds" class:mob={mobile} class:fromR={kTeam === 'blue'} style="--vc:{TEAM[vTeam]}; --kc:{TEAM[kTeam]}" aria-live="polite">
 		<div class="band">
-			{#if vHero}<img class="art victim" src={heroSplash(vHero)} alt="" />{/if}
-			{#if kHero}<img class="art killer" src={heroSplash(kHero)} alt="" />{/if}
+			{#if leftHero}<img class="art left" class:dead={vTeam === 'orange'} src={heroSplash(leftHero)} alt="" />{/if}
+			{#if rightHero}<img class="art right" class:dead={vTeam === 'blue'} src={heroSplash(rightHero)} alt="" />{/if}
 			<div class="flash"></div>
 			<div class="txt">
 				<div class="l1"><span class="vh">{heroById(vHero)?.name ?? 'A hero'}</span> <small>({names(shown.victim)})</small></div>
@@ -63,17 +68,17 @@
 	.ds { position: fixed; inset: 0; z-index: 60; pointer-events: none; overflow: hidden; }
 	.band { position: absolute; left: -12%; width: 124%; top: 50%; height: 230px; zoom: var(--uis, 1);
 		transform: translateY(-50%) skewY(-4deg); overflow: hidden;
-		background: linear-gradient(90deg, color-mix(in srgb, var(--vc) 55%, #05070c) 0%, #070a12 38%, #070a12 62%, color-mix(in srgb, var(--kc) 55%, #05070c) 100%);
+		background: linear-gradient(90deg, color-mix(in srgb, #ef7d22 55%, #05070c) 0%, #070a12 38%, #070a12 62%, color-mix(in srgb, #2f7fe6 55%, #05070c) 100%);
 		border-top: 3px solid color-mix(in srgb, var(--kc) 70%, #fff); border-bottom: 3px solid color-mix(in srgb, var(--vc) 70%, #fff);
 		box-shadow: 0 0 60px rgba(0, 0, 0, 0.8), 0 0 40px color-mix(in srgb, var(--kc) 40%, transparent);
 		animation: strike 3.6s cubic-bezier(.16, .9, .2, 1) forwards; }
 	.art { position: absolute; top: 50%; height: 175%; transform: translateY(-50%) skewY(4deg); object-fit: cover; pointer-events: none; }
-	.art.victim { left: 6%; width: 34%; filter: grayscale(.85) brightness(.7) contrast(1.1); opacity: .75;
-		mask-image: linear-gradient(90deg, transparent, #000 25%, #000 60%, transparent); -webkit-mask-image: linear-gradient(90deg, transparent, #000 25%, #000 60%, transparent);
+	.art.left { left: 6%; width: 34%; mask-image: linear-gradient(90deg, transparent, #000 25%, #000 60%, transparent); -webkit-mask-image: linear-gradient(90deg, transparent, #000 25%, #000 60%, transparent);
 		animation: slideL 3.6s cubic-bezier(.16, .9, .2, 1) forwards; }
-	.art.killer { right: 6%; width: 34%; filter: saturate(1.2) brightness(.95); opacity: .85;
-		mask-image: linear-gradient(270deg, transparent, #000 25%, #000 60%, transparent); -webkit-mask-image: linear-gradient(270deg, transparent, #000 25%, #000 60%, transparent);
+	.art.right { right: 6%; width: 34%; mask-image: linear-gradient(270deg, transparent, #000 25%, #000 60%, transparent); -webkit-mask-image: linear-gradient(270deg, transparent, #000 25%, #000 60%, transparent);
 		animation: slideR 3.6s cubic-bezier(.16, .9, .2, 1) forwards; }
+	.art { filter: saturate(1.2) brightness(.95); opacity: .85; }
+	.art.dead { filter: grayscale(.85) brightness(.7) contrast(1.1); opacity: .75; }
 	.flash { position: absolute; inset: 0; background: #fff; opacity: 0; animation: flash .5s ease-out .18s; }
 	.txt { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
 		transform: skewY(4deg); color: #f6ead2; text-align: center; text-shadow: 0 3px 0 rgba(0, 0, 0, .6), 0 0 22px rgba(0, 0, 0, .9); }
@@ -95,6 +100,15 @@
 		12% { transform: translateY(-50%) skewY(-4deg) translateX(0); }
 		88% { transform: translateY(-50%) skewY(-4deg) translateX(0); opacity: 1; filter: blur(0); }
 		100% { transform: translateY(-50%) skewY(-4deg) translateX(105%); opacity: .2; filter: blur(6px); }
+	}
+	/* a blue killer strikes from the right */
+	.fromR .band { animation-name: strikeR; }
+	@keyframes strikeR {
+		0% { transform: translateY(-50%) skewY(-4deg) translateX(105%); filter: blur(6px); }
+		9% { transform: translateY(-50%) skewY(-4deg) translateX(-1.5%); filter: blur(0); }
+		12% { transform: translateY(-50%) skewY(-4deg) translateX(0); }
+		88% { transform: translateY(-50%) skewY(-4deg) translateX(0); opacity: 1; filter: blur(0); }
+		100% { transform: translateY(-50%) skewY(-4deg) translateX(-105%); opacity: .2; filter: blur(6px); }
 	}
 	@keyframes slideL { from { translate: -60px 0; } to { translate: 20px 0; } }
 	@keyframes slideR { from { translate: 60px 0; } to { translate: -20px 0; } }
