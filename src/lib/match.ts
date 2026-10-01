@@ -295,6 +295,8 @@ export interface MatchState {
 	seatRequests?: Array<{ id: string; name: string; seat: number; at: number }>
 	seats: number // number of player seats the game is set up for (excl. spectators)
 	host: string // clientId of the host (the creator)
+	creator?: string // clientId of whoever created the room — takes the host role back whenever they're here
+	hostEpoch?: number // bumps on every host change, so a stale snapshot can never undo one
 	draftSystem: DraftSystem // how heroes are selected
 	draftStars: number[] // allowed hero complexity levels (1–4)
 	draft: DraftState | null // live hero-draft state once Begin starts it
@@ -744,6 +746,8 @@ export interface MatchSession {
 	status: Readable<ConnStatus>
 	leave: () => void
 	clientId: string
+	/** The host's clock as seen from here (for host-timed things like the reveal countdown). */
+	hostNow: () => number
 }
 
 /**
@@ -773,7 +777,7 @@ export function joinMatch(
 	let local: MatchState = start
 	state.subscribe((v) => (local = v))
 
-	if (creating) start.host = clientId
+	if (creating) { start.host = clientId; start.creator = clientId; start.hostEpoch = 0 }
 	let me: Player = { id: clientId, name: self.name, color: self.color, ready: false, seat: -1 }
 	let graceTimer: ReturnType<typeof setTimeout> | null = null
 	const kicked = writable(false)
@@ -818,14 +822,33 @@ export function joinMatch(
 	let left = false
 	const JOIN_DEADLINE_MS = 8000
 
+	// the host's clock, as seen from here: timed things the host sets (the reveal
+	// countdown) run on it, so a device whose clock is off doesn't stall or rush.
+	// sample = host time at send − our time at receipt = skew − delay; the max of
+	// recent samples is the best estimate (delay only ever makes a sample smaller)
+	let skews: number[] = []
+	let hostSkew = 0
+	const hostNow = () => Date.now() + (local.host === clientId ? 0 : hostSkew)
 	const applyRemote = (incoming: MatchState) => {
+		if (incoming.updatedBy && incoming.updatedBy === incoming.host && incoming.updatedBy !== clientId && incoming.updatedAt) {
+			skews = [...skews, incoming.updatedAt - Date.now()].slice(-24)
+			hostSkew = Math.max(...skews)
+		}
+		// the host role only ever moves forward: a snapshot from someone who hadn't seen
+		// the latest hand-over yet must not drag it back
+		const newerHost = (incoming.hostEpoch ?? 0) > (local.hostEpoch ?? 0)
+		const olderHost = (incoming.hostEpoch ?? 0) < (local.hostEpoch ?? 0)
 		// last-write-wins: accept strictly newer revisions, break ties on time
 		if (
 			incoming.rev > local.rev ||
 			(incoming.rev === local.rev && incoming.updatedAt > local.updatedAt)
 		) {
-			recordHistory(local, incoming)
-			state.set(incoming)
+			const next = olderHost ? { ...incoming, host: local.host, hostEpoch: local.hostEpoch, creator: local.creator ?? incoming.creator } : incoming
+			recordHistory(local, next)
+			state.set(next)
+		} else if (newerHost) {
+			// an older snapshot overall, but it carries a newer hand-over: keep that part
+			state.set({ ...local, host: incoming.host, hostEpoch: incoming.hostEpoch })
 		}
 	}
 
@@ -903,12 +926,21 @@ export function joinMatch(
 	// missing from presence for HOST_GRACE_MS (long enough to ride out a refresh or a
 	// short reconnect), the player `nextHost` names takes over. Skipped while we're
 	// offline ourselves (our presence view would be stale) and once the room is closed.
-	const HOST_GRACE_MS = 10000
+	const HOST_GRACE_MS = 15000
+	const RECLAIM_MS = 4000
 	let hostTimer: ReturnType<typeof setTimeout> | null = null
-	const hostMissing = () =>
-		!left && local.rev >= 0 && !!local.host && !local.closed && get(conn) === 'connected' &&
-		playerList.length > 0 && !playerList.some((p) => p.id === local.host)
+	let reclaimTimer: ReturnType<typeof setTimeout> | null = null
+	const live = () => !left && local.rev >= 0 && !!local.host && !local.closed && get(conn) === 'connected'
+	const hostMissing = () => live() && playerList.length > 0 && !playerList.some((p) => p.id === local.host)
+	// the room's creator is the host whenever they're here: after a dropout (or a role that
+	// wandered off while they were away) they take it back once they've been present a moment
+	const shouldReclaim = () =>
+		live() && local.creator === clientId && local.host !== clientId && playerList.some((p) => p.id === clientId)
+	const claimHost = (text: string) => act(text, { host: clientId, hostEpoch: (local.hostEpoch ?? 0) + 1 })
 	function checkHost() {
+		if (shouldReclaim()) {
+			if (!reclaimTimer) reclaimTimer = setTimeout(() => { reclaimTimer = null; if (shouldReclaim()) claimHost('is the host again') }, RECLAIM_MS)
+		} else if (reclaimTimer) { clearTimeout(reclaimTimer); reclaimTimer = null }
 		if (!hostMissing()) { if (hostTimer) { clearTimeout(hostTimer); hostTimer = null } return }
 		if (hostTimer) return
 		hostTimer = setTimeout(() => {
@@ -917,7 +949,7 @@ export function joinMatch(
 			const gone = local.host
 			if (nextHost(local, playerList, gone) !== clientId) { checkHost(); return } // someone else claims it
 			const who = Object.values(local.seatMap ?? {}).find((v) => v.id === gone)?.name ?? 'the host'
-			act(`is now the host (${who} disconnected)`, { host: clientId })
+			claimHost(`is now the host (${who} disconnected)`)
 		}, HOST_GRACE_MS)
 	}
 	// the host can also go missing through a state change (e.g. a stale snapshot) or come back
@@ -1042,7 +1074,7 @@ export function joinMatch(
 		canUndo.set(undoStack.length > 0)
 		if (!snap) return
 		undoing = true // don't let this restore re-enter the history
-		update({ ...snap })
+		update({ ...snap, host: local.host, hostEpoch: local.hostEpoch, creator: local.creator })
 		undoing = false
 	}
 
@@ -1205,7 +1237,7 @@ export function joinMatch(
 		void dropChannel(channel)
 	}
 
-	return { state, players, update, act, setSelf, cardAction, kick, flipJoin, joinFlip, undo, canUndo, requestSeat, resolveSeat, seatGranted, seatDenied, kicked, notFound, status: conn, leave, clientId }
+	return { state, players, update, act, setSelf, cardAction, kick, flipJoin, joinFlip, undo, canUndo, requestSeat, resolveSeat, seatGranted, seatDenied, kicked, notFound, status: conn, leave, clientId, hostNow }
 }
 
 // ---- Round/turn helpers (encode the rulebook's structure) -------------------
