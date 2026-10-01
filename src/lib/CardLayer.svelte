@@ -59,6 +59,12 @@
 
 	$: seated = ($players ?? []).filter((p) => p.seat >= 0 && p.seat < $ms.seats).sort((a, b) => a.seat - b.seat);
 	$: cards = $ms.cards ?? {};
+	// level-up picks stay private until the round locks them in: everyone else's board is
+	// shown as it was when the level-up step opened (yours is always live). Display only —
+	// the game logic (who still has to level, readiness…) always reads `cards`.
+	$: viewCards = $ms.levelPhase && $ms.levelBase
+		? Object.fromEntries(Object.entries(cards).map(([pid, c]) => [pid, pid === clientId ? c : $ms.levelBase?.[pid] ?? c]))
+		: cards;
 	$: others = seated.filter((p) => p.id !== clientId);
 	$: dense = others.length > 6;
 	$: teamTint = (p: Player) => (teamForSeat(p.seat, $ms.seats) === 'orange' ? ORANGE : BLUE);
@@ -160,7 +166,7 @@
 	$: battlePhase = $ms.battlePhase ?? false;
 	$: levelPhase = $ms.levelPhase ?? false;
 	// the battle's removals come first; then the host opens the level-up step
-	function startLevelUp() { session.act('level up!', levelPatch()); }
+	function startLevelUp() { session.act('level up!', levelPatch($ms)); }
 	// the battle hands every card back (like a round end) so players can level up / swap now
 	// it also runs the end-of-turn push check and counts the battle zone (battle.ts)
 	function startBattle() {
@@ -264,7 +270,7 @@
 		const i = cs.turns[t] ?? (t === turnIdx && (revealed || own) ? cs.pending : null);
 		if (i != null && i !== PASS) { e.stopPropagation(); examine = { hid: cs.hero, idx: i, pid: pidOf(cs), secret: own && cs.turns[t] == null }; }
 	}
-	const pidOf = (cs: PlayerCardState) => Object.keys(cards).find((k) => cards[k] === cs);
+	const pidOf = (cs: PlayerCardState) => Object.keys(cards).find((k) => cards[k] === cs || viewCards[k] === cs);
 	// the card sitting in turn slot t (played, or this turn's once revealed)
 	const slotIdx = (cs: PlayerCardState, t: number) => { const i = cs.turns[t] ?? (t === turnIdx && revealed ? cs.pending : null); return i != null && i !== PASS ? i : null; };
 
@@ -685,7 +691,7 @@
 	{#if mobile}
 		<div class="mstrip">
 			{#each others as p (p.id)}
-				{@const cs = cards[p.id]}
+				{@const cs = viewCards[p.id]}
 				{#if cs}
 					{@const ini = initOf(cs, revealed)}
 					{@const cfx = fxFor(p.id, slotIdx(cs, turnIdx))}
@@ -709,7 +715,7 @@
 				</span>
 			</div>
 			{#each others as p (p.id)}
-				{@const cs = cards[p.id]}
+				{@const cs = viewCards[p.id]}
 				{@const st = statusMap[p.id] ?? EMPTY_STATUS}
 				{#if p.id === firstBlueId}<div class="ppdiv"></div>{/if}
 				<!-- a row opens that player's board; a face-up card inside previews directly -->
@@ -777,8 +783,8 @@
 	{/if}
 
 	<!-- ───────── overlay: a player's whole board ───────── -->
-	{#if overlayId && ovPlayer && cards[overlayId]}
-		{@const cs = cards[overlayId]}
+	{#if overlayId && ovPlayer && viewCards[overlayId]}
+		{@const cs = viewCards[overlayId]}
 		{@const oh = cs.hero}
 		{@const od = heroCards(oh)}
 		{@const oid = ovPlayer.id}
@@ -1404,7 +1410,7 @@
 					{#each curtainRows as row, ri (ri)}
 					<div class="cc-row">
 					{#each row as p (p.id)}
-						{@const cs = cards[p.id]}
+						{@const cs = viewCards[p.id]}
 						{@const idx = cs.pending}
 						<div class="cc" style="--tint:{teamTint(p)}">
 							{#if idx != null && idx !== PASS}
