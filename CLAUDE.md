@@ -58,10 +58,13 @@ Deployed to GitHub Pages: **https://7wjfh4pg2y-dev.github.io/goa2/**
 ## Team names
 - Players see **orange = the Atlanteans, blue = the Titans**. Internally everything stays `'orange' | 'blue'` (state, map tile types like `spawnOrange`/`baseBlue`, LANE/zone keys like 'Orange Beach', image files, CSS classes). All on-screen wording goes through `src/lib/teams.ts`: `teamName` (plural, takes a plural verb: "Atlanteans win", "the Titans push"), `teamAdj` ("Atlantean Life", "the Titan Throne"), `aTeam` / `aMinion` ("an Atlantean melee minion"), `placeName` (zone/lane keys → "Atlantean Beach"). Win reasons: "<Team> ran out of Life Tokens" / "pushed into the <Adj> Throne" / "won the Final Push".
 
+## Game recorder (quiet — no UI anywhere)
+- `src/lib/recorder.ts` (tested): GameView runs `createRecorder(room, clientId).tick($ms)`; every browser keeps a full localStorage journal (`goa2-rec:<room>-<startFlip.at>`): players/heroes, draft, one snapshot per turn (level, coins, card played, Life, waves, lane), the WHOLE log (the shared one is capped at LOG_CAP), and the final state. A **full game** = seen from round 1 turn 1, won (`wonBy`), ≥2 different people seated — anything else is a test run (never sent; stale journals pruned after 3 days by `sweepJournals` on app start, which also retries failed uploads). On the win, the host inserts the row into Supabase table **`goa2_games`** (others retry after 15 s; the shared id makes duplicates fail harmlessly). The table is insert-only for the anon key (RLS, no select policy) — read it in the Supabase dashboard. The recorder is fail-safe (browser only, every error swallowed). A post-game stats screen can be built on this data later.
+
 ## Aesthetic (keep consistent)
 - Global battlefield background (orange top-left → blue bottom-right, subtle green corners) in `+layout.svelte`. Constant logo. `reveal` transitions.
 - Glass cards `rgba(12,18,32,.46)` + blur + soft border. Highlight gradient token `--hl: linear-gradient(120deg,#ef7d22,#2f7fe6)`.
-- Team colours: **orange `#ef7d22`** (Atlanteans), **blue `#2f7fe6`** (Titans). Ready = green `#16a34a`, danger/ban = red. Team-coloured Lock In in the draft.
+- Team colours: **orange `#ef7d22`** (Atlanteans), **blue `#2f7fe6`** (Titans). Player colours (`PLAYER_COLORS`, warm → cool, 14): crimson, rose, pink, sienna, yellow, lime, green, teal, cyan, purple, magenta, white, slate, black — the lobby swatches stay on ONE row and shrink to fit. Ready = green `#16a34a`, danger/ban = red. Team-coloured Lock In in the draft.
 - Font: **Modesto Poster** (the Guards font) is set on `body` in `app.postcss` for the whole app (`font-synthesis: none` — one weight, no faux bold). Don't add other font-families; card faces (card_painter canvas) keep their own print fonts. Atlantis also available.
 
 ## Gotchas

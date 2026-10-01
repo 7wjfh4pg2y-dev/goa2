@@ -453,7 +453,12 @@ export interface PlayerColorDef { id: string; label: string; hex: string }
 // Ordered as a rainbow (ROYGBIV, skipping orange & blue which are the team
 // colours) with neutrals last. Teal and brown were dropped — too close to the
 // blue and orange team colours to tell apart on the board.
+// warm → cool. Warm hues steer clear of the Atlantean orange (#ef7d22) and the Titan blue.
 export const PLAYER_COLORS: PlayerColorDef[] = [
+	{ id: 'crimson', label: 'Crimson', hex: '#dc2626' },
+	{ id: 'rose', label: 'Rose', hex: '#fb7185' },
+	{ id: 'pink', label: 'Pink', hex: '#f472b6' },
+	{ id: 'sienna', label: 'Sienna', hex: '#a0522d' },
 	{ id: 'yellow', label: 'Yellow', hex: '#eab308' },
 	{ id: 'lime', label: 'Lime', hex: '#84cc16' },
 	{ id: 'green', label: 'Green', hex: '#22c55e' },
