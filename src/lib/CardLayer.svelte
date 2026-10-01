@@ -174,8 +174,14 @@
 	let levelSplash: LevelSplash;
 	let wasLevel: boolean | null = null;
 	$: watchLevel(levelPhase);
+	// enough coins to pay every level from here up to 8 (the ultimate)
+	function reachesUlt(c: PlayerCardState) {
+		let need = 0;
+		for (let l = levelOf(c); l < 8; l++) need += levelCost(l);
+		return levelOf(c) < 8 && c.coins >= need;
+	}
 	function watchLevel(on: boolean) {
-		if (wasLevel === false && on && mine) levelSplash?.play(mustLevel(mine) ? 'up' : 'pity', mine.coins);
+		if (wasLevel === false && on && mine) levelSplash?.play(mustLevel(mine) ? 'up' : 'pity', mine.coins, reachesUlt(mine));
 		wasLevel = on;
 	}
 	// the battle hands every card back (like a round end) so players can level up / swap now
