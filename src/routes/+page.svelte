@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { teamName, aTeam } from '$lib/teams';
+	import { sweepJournals } from '$lib/recorder';
 	import { onMount, onDestroy } from 'svelte';
 	import { browser } from '$app/environment';
 	import { base } from '$app/paths';
@@ -124,6 +125,7 @@
 	}
 
 	onMount(() => {
+		sweepJournals();
 		// shareable link ?room=CODE → jump straight to Join, prefilled
 		const q = new URLSearchParams(location.search).get('room');
 		if (q) {
@@ -901,11 +903,13 @@
 	.lbl { font-size: 0.78rem; color: #94a3b8; }
 	.field { width: 100%; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.18); background: rgba(8, 12, 22, 0.6); padding: 0.55rem 0.7rem; color: white; }
 	.field.up { text-transform: uppercase; }
-	.chips, .swatches { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+	.chips { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+	/* one row of colours, always: the dots shrink to fit instead of wrapping */
+	.swatches { display: flex; flex-wrap: nowrap; gap: 6px; align-items: center; min-width: 0; }
 	.chips.two { display: grid; grid-template-columns: 1fr 1fr; }
 	.chip { border: 1px solid rgba(255, 255, 255, 0.16); background: rgba(255, 255, 255, 0.05); color: #e5e7eb; border-radius: 999px; padding: 0.35rem 0.8rem; font-size: 0.85rem; cursor: pointer; }
 	.chip.on { background: var(--hl); border-color: rgba(255, 255, 255, 0.3); color: white; }
-	.sw { width: 1.1rem; height: 1.1rem; flex: none; border-radius: 50%; background: var(--sc); border: 2px solid rgba(255, 255, 255, 0.25); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35); cursor: pointer; padding: 0; }
+	.sw { width: 1.1rem; height: auto; aspect-ratio: 1; flex: 0 1 1.1rem; min-width: 0; border-radius: 50%; background: var(--sc); border: 2px solid rgba(255, 255, 255, 0.25); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35); cursor: pointer; padding: 0; }
 	.sw.sel { outline: 2px solid #f59e0b; outline-offset: 2px; border-color: #fff; }
 	.sw:disabled { opacity: 0.28; cursor: not-allowed; }
 	.hint { font-size: 0.72rem; color: #94a3b8; margin: 2px 0 0; }
@@ -1069,8 +1073,8 @@
 		.teampanel { padding: 8px 6px; }
 		.tseats { gap: 6px; }
 		.tseat { flex: 1 1 64px; min-width: 60px; padding: 7px 3px; }
-		.swatches { flex-wrap: nowrap; gap: 7px; }
-		.sw { flex: 1 1 0; width: auto; height: auto; max-width: 1.6rem; aspect-ratio: 1; }
+		.swatches { gap: 4px; }
+		.sw { flex: 1 1 0; width: auto; max-width: 1.6rem; border-width: 1.5px; }
 		/* buttons split the row evenly and shrink their text rather than collide */
 		.lobbybtns { gap: 6px; }
 		.lobbybtns > button { flex: 1 1 0; margin: 0; padding: 0.65rem 0.3rem; font-size: clamp(0.72rem, 3.6vw, 0.95rem); text-align: center; }

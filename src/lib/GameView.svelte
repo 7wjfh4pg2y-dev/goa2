@@ -9,6 +9,7 @@
 	import VictorySplash from '$lib/VictorySplash.svelte';
 	import { heroById, heroLogo } from '$lib/heroes';
 	import { teamName, teamAdj, aMinion, placeName } from '$lib/teams';
+	import { createRecorder } from '$lib/recorder';
 	import { zoneName } from '$lib/zones';
 	import { effectLabel } from '$lib/effects';
 	import { battleZone, canBattleRemove, pushLane, laneNotes, heavyImmune } from '$lib/battle';
@@ -28,6 +29,9 @@
 	export let clientId: string;
 	export let room: string;
 	export let onLeave: () => void;
+	// quietly journal the game; a full game (first turn → win) is filed away when it ends
+	const recorder = createRecorder(room, clientId);
+	$: recorder.tick($ms);
 
 	const status = session.status;
 	const canUndo = session.canUndo;
