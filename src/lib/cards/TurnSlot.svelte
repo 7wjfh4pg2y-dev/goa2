@@ -14,6 +14,7 @@
 	export let revealed = false; // has everyone readied (cards face-up)
 	export let label = ''; // e.g. "1".."4" shown on an empty slot
 	export let examinable = false;
+	export let peekable = false; // your own face-down card: click to read it (it stays face-down for everyone else)
 
 	$: passed = isCurrent && pending === PASS;
 	$: showFlip = isCurrent && pending != null && pending !== PASS; // back/front flipper
@@ -27,7 +28,7 @@
 		<Card {heroId} card={heroCards(heroId)[played]} />
 	</button>
 {:else if showFlip}
-	<button class="slot" class:btn={examinable && revealed} class:thru={!(examinable && revealed)} tabindex={examinable && revealed ? 0 : -1} on:click on:keydown>
+	<button class="slot" class:btn={examinable && (revealed || peekable)} class:thru={!(examinable && (revealed || peekable))} tabindex={examinable && (revealed || peekable) ? 0 : -1} title={peekable && !revealed ? 'Your card — click to read it' : undefined} on:click on:keydown>
 		<div class="flip" class:up={revealed}>
 			<div class="face back">
 				<span class="band top"></span>
