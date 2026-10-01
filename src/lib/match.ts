@@ -303,6 +303,7 @@ export interface MatchState {
 	// set by the host on Begin: a shared coin flip everyone animates to reveal
 	// which team's tie-breaker side is up at the start of the game
 	startFlip: { side: Team; at: number } | null
+	gameId?: string // set by the host when the draft starts: one id per game (the quiet recorder keys on it)
 	rev: number // monotonic version for last-write-wins
 	updatedBy: string
 	updatedAt: number

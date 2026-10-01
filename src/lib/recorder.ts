@@ -52,8 +52,9 @@ export interface Journal {
 	final?: { round: number; turn: number; life: Record<Team, number>; waves: number; lane: number; wonBy: { team: Team; reason: string }; cards: MatchState['cards'] }
 }
 
-/** The same id on every client: room + the moment the host pressed Begin. */
-export const gameId = (room: string, s: MatchState) => `${room}-${s.startFlip?.at ?? 0}`
+/** The same id on every client: room + the game's own id (set by the host when the draft starts).
+ *  Older games without one fall back to the Begin flip time (cleared by then, hence the old "-0" ids). */
+export const gameId = (room: string, s: MatchState) => `${room}-${s.gameId ?? s.startFlip?.at ?? 0}`
 
 const snap = (s: MatchState): Snap => {
 	const cards: Snap['cards'] = {}

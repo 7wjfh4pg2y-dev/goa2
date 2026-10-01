@@ -399,7 +399,7 @@
 	function startDraft(startingTeam: Team) {
 		const pool = HEROES.filter((hr) => $state.draftStars.includes(hr.stars)).map((hr) => hr.id);
 		const d = buildDraft($state.draftSystem, pool, $players, $state.seats, startingTeam);
-		session?.update({ draft: d, startFlip: null, seatMap: buildSeatMap($players, $state.seats) });
+		session?.update({ draft: d, startFlip: null, seatMap: buildSeatMap($players, $state.seats), gameId: Date.now().toString(36) });
 	}
 	// join reached a room code with no host → don't create one
 	function failJoin() {

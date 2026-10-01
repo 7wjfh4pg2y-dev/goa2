@@ -15,6 +15,7 @@ const base = (over: Partial<MatchState> = {}): MatchState => ({
 describe('game recorder', () => {
 	it('uses the same id on every client', () => {
 		expect(gameId('ROOM', base())).toBe('ROOM-123')
+		expect(gameId('ROOM', base({ gameId: 'g1', startFlip: null } as Partial<MatchState>))).toBe('ROOM-g1')
 	})
 	it('keeps the whole log, one snapshot per turn, and the players', () => {
 		let j = newJournal('ROOM', base())
