@@ -13,13 +13,16 @@
 	let timer: ReturnType<typeof setTimeout> | null = null;
 	$: dur = shown?.ult ? 3600 : 2600;
 	/** `coins` = what you hold as the step opens; `ult` = they reach all the way to level 8 */
-	export function play(kind: 'up' | 'pity', coins = 0, ult = false) {
+	/** returns how long it plays (ms) */
+	export function play(kind: 'up' | 'pity', coins = 0, ult = false): number {
+		const ms = kind === 'up' && ult ? 3600 : 2600;
 		shown = null;
 		if (timer) clearTimeout(timer);
 		requestAnimationFrame(() => {
 			shown = { kind, coins, ult: kind === 'up' && ult, key: Date.now() };
-			timer = setTimeout(() => (shown = null), shown.ult ? 3600 : 2600);
+			timer = setTimeout(() => (shown = null), ms);
 		});
+		return ms;
 	}
 	onDestroy(() => { if (timer) clearTimeout(timer); });
 </script>
