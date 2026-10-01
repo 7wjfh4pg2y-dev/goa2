@@ -43,7 +43,7 @@
 	{#key shown.id}
 		<div class="bs {outcome}" class:mob={mobile} style={vars} aria-live="polite">
 			<div class="band">
-				<div class="side l"><span class="front"></span></div>
+				<div class="side l"></div>
 				<div class="side r"></div>
 				<div class="impact"></div>
 			</div>
@@ -80,14 +80,10 @@
 		100% { transform: translateY(-50%) skewY(-3deg) translateX(105%); opacity: .3; filter: blur(6px); }
 	}
 
-	/* the two armies: each a colour wall; the left army's leading edge is the battle front */
+	/* the two armies: each a colour wall meeting at the battle front (no white seam — it read as a glare) */
 	.side { position: absolute; top: 0; bottom: 0; }
 	.side.l { left: 0; background: linear-gradient(90deg, color-mix(in srgb, var(--l) 55%, #000), var(--l) 70%, var(--l2)); }
 	.side.r { right: 0; background: linear-gradient(270deg, color-mix(in srgb, var(--r) 55%, #000), var(--r) 70%, var(--r2)); }
-	.front { position: absolute; right: -6px; top: -20%; bottom: -20%; width: 12px; background: linear-gradient(180deg, transparent, #fff 30%, #fff 70%, transparent);
-		box-shadow: 0 0 26px 10px rgba(255, 255, 255, .7), 0 0 60px 20px rgba(255, 220, 160, .45); opacity: 0; transform: skewX(-12deg);
-		animation: front var(--T) linear both; }
-	@keyframes front { 0%, 13% { opacity: 0; } 15% { opacity: 1; } 62% { opacity: 1; } 70%, 100% { opacity: .0; } }
 
 	/* WIN (4.3 s): charge in (6–15%) · slam · the struggle (grind back and forth, 15–50%) ·
 	   the winner breaks through and shoves the loser clean off (50–64%) */
@@ -95,8 +91,6 @@
 	.lwin .side.r, .rwin .side.l { animation: lose var(--T) cubic-bezier(.3, .8, .3, 1) both; }
 	@keyframes win  { 0%, 6% { width: 0; } 15% { width: 50%; } 20% { width: 46%; } 26% { width: 54%; } 32% { width: 47%; } 38% { width: 53%; } 44% { width: 48%; } 50% { width: 51%; } 64%, 100% { width: 100%; } }
 	@keyframes lose { 0%, 6% { width: 0; } 15% { width: 50%; } 20% { width: 54%; } 26% { width: 46%; } 32% { width: 53%; } 38% { width: 47%; } 44% { width: 52%; } 50% { width: 49%; } 64%, 100% { width: 0; } }
-	.lwin .front, .rwin .front { animation: frontW var(--T) linear both; }
-	@keyframes frontW { 0%, 13% { opacity: 0; } 15%, 60% { opacity: 1; } 66%, 100% { opacity: 0; } }
 	.lwin .impact, .rwin .impact { animation: impactW var(--T) ease-out both; }
 	@keyframes impactW { 0%, 14% { opacity: 0; } 15.5% { opacity: .9; } 22% { opacity: 0; } 50% { opacity: 0; } 52.5% { opacity: .6; } 58%, 100% { opacity: 0; } }
 	.lwin .band, .rwin .band { animation: band var(--T) cubic-bezier(.16, .9, .2, 1) both, shakeW var(--T) linear both; }
@@ -109,7 +103,6 @@
 	.tie .side.r { animation: bTie var(--T) cubic-bezier(.3, .8, .3, 1) both; }
 	@keyframes oTie  { 0%, 6% { width: 0; } 15% { width: 50%; } 20% { width: 46%; } 26% { width: 54%; } 32% { width: 47%; } 38% { width: 53%; } 44% { width: 49%; } 52% { width: 50%; } 60%, 100% { width: 38%; } }
 	@keyframes bTie  { 0%, 6% { width: 0; } 15% { width: 50%; } 20% { width: 54%; } 26% { width: 46%; } 32% { width: 53%; } 38% { width: 47%; } 44% { width: 51%; } 52% { width: 50%; } 60%, 100% { width: 38%; } }
-	.tie .front { display: none; } /* no white seam over the purple */
 	.tie .impact { animation: impact var(--T) ease-out both; }
 	@keyframes impact { 0%, 14% { opacity: 0; } 15.5% { opacity: .9; } 22%, 100% { opacity: 0; } }
 	@keyframes shake { 0%, 15% { translate: 0 0; } 16% { translate: 6px -3px; } 17% { translate: -5px 2px; } 18% { translate: 3px 0; } 19%, 59% { translate: 0 0; } 60% { translate: 8px -2px; } 61% { translate: -6px 3px; } 62% { translate: 2px 0; } 63%, 100% { translate: 0 0; } }
