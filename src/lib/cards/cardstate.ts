@@ -209,6 +209,15 @@ export function discardCard(s: PlayerCardState, idx: number): PlayerCardState {
 	return { ...s, hand: s.hand.filter((i) => i !== idx), discard: [...s.discard, idx] }
 }
 
+/** Some effects discard a card that was already played: it leaves its turn slot (the
+ *  slot empties) — or, for this turn's revealed card, it stays "played" as a pass. */
+export function discardPlayed(s: PlayerCardState, idx: number): PlayerCardState {
+	const t = s.turns.indexOf(idx)
+	if (t >= 0) { const turns = s.turns.slice(); turns[t] = null; return { ...s, turns, discard: [...s.discard, idx] } }
+	if (s.pending === idx) return { ...s, pending: PASS, discard: [...s.discard, idx] }
+	return s
+}
+
 /** Undo a discard (pull it back into hand). */
 export function undiscard(s: PlayerCardState, idx: number): PlayerCardState {
 	if (!s.discard.includes(idx)) return s

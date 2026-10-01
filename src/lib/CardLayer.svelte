@@ -21,6 +21,8 @@
 	import { HERO_KIT, COMPANIONS, MINES, statusFrom, toggleStatusMarker, tokenName, tokensLeft, type ArmToken } from '$lib/tokens';
 	import { PASS, statDeltas, levelOf, levelCost, ultimateIndex, mustLevel, canPick, canAfford, swapSource, twinOf, allowedMoves, type PlayerCardState, type StatKey, type CardZone } from '$lib/cards/cardstate';
 	import LevelConfirm from '$lib/LevelConfirm.svelte';
+	import TurnSplash from '$lib/TurnSplash.svelte';
+	import { browser } from '$app/environment';
 
 	export let session: MatchSession;
 	export let ms: Readable<MatchState>;
@@ -178,12 +180,30 @@
 	}
 	const canTakeNow = (cs: PlayerCardState, i: number) => battlePhase && canAfford(cs) && canPick(cs, i);
 
-	// "Round X" banner that pops for a few seconds when a new round starts
-	let roundBanner = 0;
-	let roundTimer: ReturnType<typeof setTimeout> | null = null;
-	let lastRound: number | null = null;
-	$: { const r = $ms.round; if (lastRound === null) lastRound = r; else if (r > lastRound) { lastRound = r; showRoundBanner(r); } else lastRound = r; }
-	function showRoundBanner(r: number) { if (roundTimer) clearTimeout(roundTimer); roundBanner = r; roundTimer = setTimeout(() => (roundBanner = 0), 3200); }
+	// a splash for every new turn / new round (TurnSplash). Look: ?splash=blade|crest|clash
+	// in the URL picks one and remembers it on this device (until we settle on one).
+	let turnSplash: TurnSplash;
+	const SPLASHES = ['blade', 'crest', 'clash'] as const;
+	let splashLook: (typeof SPLASHES)[number] = 'blade';
+	if (browser) {
+		try {
+			const q = new URLSearchParams(location.search).get('splash');
+			if (q && (SPLASHES as readonly string[]).includes(q)) localStorage.setItem('goa2-splash', q);
+			const v = localStorage.getItem('goa2-splash');
+			if (v && (SPLASHES as readonly string[]).includes(v)) splashLook = v as typeof splashLook;
+		} catch { /* private mode */ }
+	}
+	let lastRT: string | null = null;
+	$: watchTurn($ms.round, $ms.turn);
+	function watchTurn(r: number, t: number) {
+		const k = `${r}.${t}`;
+		if (lastRT !== null && k !== lastRT) {
+			const [pr, pt] = lastRT.split('.').map(Number);
+			if (r > pr) turnSplash?.play('round', r, t);
+			else if (r === pr && t > pt) turnSplash?.play('turn', r, t);
+		}
+		lastRT = k;
+	}
 
 	const allStats = (cs: PlayerCardState) => {
 		const deltas = statDeltas(cs);
@@ -259,11 +279,19 @@
 	$: fxFor = (pid: string | undefined, idx: number | null) => (pid && idx != null ? effects.find((e) => e.pid === pid && e.idx === idx) : undefined);
 	$: fxLabel = (e: Effect) => effectLabel(e, $ms.round, $ms.turn);
 	$: colorOf = (pid: string) => colorHex(seated.find((p) => p.id === pid)?.color ?? '');
-	let fxPick: EffectDur = 'turn';
 	$: examineFx = examine?.pid ? fxFor(examine.pid, examine.idx) : undefined;
 	$: examineDetected = examine ? detectDuration(heroCards(examine.hid)[examine.idx]?.description) : null;
-	$: if (examine) fxPick = examineDetected ?? 'turn';
 	$: canFx = !!examine?.pid && (examine.pid === clientId || iAmHost);
+	// a played card (turn slot / this turn's card) can be discarded by an effect (owner or host)
+	$: exOwner = examine?.pid ? cards[examine.pid] : undefined;
+	$: canDiscardEx = canFx && !!exOwner && !!examine && (exOwner.turns.includes(examine.idx) || exOwner.pending === examine.idx);
+	let fxOpen = false; // "Activate effect" pressed → pick how long
+	$: if (examine) fxOpen = false;
+	function discardEx() {
+		if (!examine?.pid) return;
+		session.cardAction({ kind: 'discardPlayed', pid: examine.pid, idx: examine.idx });
+		examine = null;
+	}
 	function activateFx(pid: string, hero: string, idx: number, dur: EffectDur) {
 		const name = heroCards(hero)[idx]?.name ?? 'Effect';
 		const e: Effect = { id: `fx_${pid}_${idx}_${Date.now().toString(36)}`, pid, hero, idx, name, dur, round: $ms.round, turn: $ms.turn, ...endOf(dur, $ms.round, $ms.turn) };
@@ -434,7 +462,7 @@
 		];
 	}
 	function skipCurtain() { curtainTimers.forEach(clearTimeout); curtain = false; }
-	onDestroy(() => { curtainTimers.forEach(clearTimeout); if (roundTimer) clearTimeout(roundTimer); if (countTick) clearInterval(countTick); if (lowerTimer) clearTimeout(lowerTimer); if (discTimer) clearTimeout(discTimer); });
+	onDestroy(() => { curtainTimers.forEach(clearTimeout); if (countTick) clearInterval(countTick); if (lowerTimer) clearTimeout(lowerTimer); if (discTimer) clearTimeout(discTimer); });
 
 	// ── token / marker shelf: each hero's own kit (see tokens.ts) ──────────────
 	// Pick one → it rides under the cursor → tap a hex to place it (GameView).
@@ -851,21 +879,24 @@
 				</div>
 				{#if exList}<span class="exdots">{#each exList as c, i (i)}<i class:on={i === exPos}></i>{/each}</span>{/if}
 				{#if examine.pid && (canFx || examineFx)}
-					<!-- lingering effect: switch it on (duration read from the card) / end it -->
+					<!-- a played card: Activate effect (then how long) or Discard; a live effect can be ended -->
 					<div class="fxctl">
 						{#if examineFx}
 							<span class="fxstate">Effect active · <b>{fxLabel(examineFx)}</b></span>
 							{#if canFx}<button class="fxend" on:click={() => endFx(examineFx)}>End effect</button>{/if}
-						{:else}
-							<span class="fxstate">Lingering effect</span>
+							{#if canDiscardEx}<button class="fxdisc" on:click={discardEx}>Discard</button>{/if}
+						{:else if fxOpen}
 							<div class="fxdurs">
 								{#each ['turn', 'next', 'round'] as d}
-									<button class="fxdur" class:on={fxPick === d} on:click={() => (fxPick = d as EffectDur)} title={examineDetected === d ? 'From the card text' : ''}>
+									<button class="fxdur" class:on={examineDetected === d} on:click={() => examine?.pid && activateFx(examine.pid, examine.hid, examine.idx, d as EffectDur)} title={examineDetected === d ? 'From the card text' : ''}>
 										{DUR_LABEL[d as EffectDur]}{#if examineDetected === d}<i>✦</i>{/if}
 									</button>
 								{/each}
 							</div>
-							<button class="fxgo" on:click={() => examine?.pid && activateFx(examine.pid, examine.hid, examine.idx, fxPick)}>Activate</button>
+							<button class="fxend" on:click={() => (fxOpen = false)} title="Back">✕</button>
+						{:else}
+							<button class="fxgo" on:click={() => (fxOpen = true)}>Activate effect</button>
+							{#if canDiscardEx}<button class="fxdisc" on:click={discardEx}>Discard</button>{/if}
 						{/if}
 					</div>
 				{/if}
@@ -1085,11 +1116,10 @@
 			{#if pvList.length > 1}<span class="pvdots">{#each pvList as c (c)}<i class:on={c === selected}></i>{/each}</span>{/if}
 			{#if previewSrc === 'discard'}
 				<button class="act tohand" style={teamVars(myTeam)} on:click={() => pullBack(selected!)}>Recover to hand</button>
-			{:else if canCommit}
-				<button class="act primary" on:click={() => commit(selected!)}>Commit · Turn {$ms.turn}</button>
-				<button class="act danger" on:click={() => defend(selected!)}>Defend (discard)</button>
-			{:else if iDefending && mine?.hand.includes(selected!)}
-				<button class="act danger" on:click={() => defend(selected!)}>Discard to defend</button>
+			{:else}
+				{#if canCommit}<button class="act tohand" style={teamVars(myTeam)} on:click={() => commit(selected!)}>Commit · Turn {$ms.turn}</button>{/if}
+				<!-- discard any time, as often as effects demand -->
+				{#if mine?.hand.includes(selected!)}<button class="act discard" on:click={() => defend(selected!)}>Discard</button>{/if}
 			{/if}
 			<button class="act" on:click={closePreview}>Close</button>
 		</div>
@@ -1364,10 +1394,8 @@
 		</div>
 	{/if}
 
-	<!-- ───────── round-start banner ───────── -->
-	{#if roundBanner}
-		<div class="roundbanner"><span class="rb-sub">Round</span><span class="rb-num">{roundBanner}</span></div>
-	{/if}
+	<!-- ───────── new turn / new round splash ───────── -->
+	<TurnSplash bind:this={turnSplash} variant={splashLook} {mobile} />
 
 	<!-- ───────── dramatic simultaneous reveal ───────── -->
 	{#if curtain}
@@ -1700,10 +1728,6 @@
 
 	/* dramatic reveal curtain */
 	/* round-start banner */
-	.roundbanner { position: fixed; inset: 0; z-index: 58; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; pointer-events: none; animation: rbfade 3.2s ease forwards; }
-	.roundbanner .rb-sub { font-family: 'Modesto Poster', serif; font-size: 1.6rem; letter-spacing: .3em; text-transform: uppercase; color: #cbb488; text-shadow: 0 2px 10px rgba(0,0,0,.8); }
-	.roundbanner .rb-num { font-family: 'Modesto Poster', serif; font-size: 7rem; line-height: .9; color: #f6ead2; text-shadow: 0 4px 20px rgba(0,0,0,.85), 0 0 40px rgba(199,154,78,.5); }
-	@keyframes rbfade { 0% { opacity: 0; transform: scale(.8); } 12% { opacity: 1; transform: scale(1); } 82% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1.05); } }
 
 	.curtain { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; cursor: pointer;
 		background: radial-gradient(120% 90% at 50% 40%, rgba(20,14,6,.86), rgba(3,5,10,.96)); backdrop-filter: blur(6px); animation: curtainIn .35s ease; }
@@ -1755,6 +1779,8 @@
 	.fxdur i { font-style: normal; margin-left: 4px; color: #e8c173; }
 	.fxdur.on { background: rgba(199,154,78,.32); border-color: rgba(230,190,110,.85); color: #fff; }
 	.fxgo { padding: 5px 14px; border-radius: 8px; cursor: pointer; font-size: .78rem; color: #1a0f06; background: linear-gradient(180deg, #f3d08a, #d4a64a); border: 1px solid #fbe7b0; }
+	.fxdisc { padding: 5px 16px; border-radius: 8px; cursor: pointer; font-size: .78rem; color: #fff; background: linear-gradient(180deg, #e0463c, #a82620); border: 1px solid rgba(255,170,160,.7); }
+	.act.discard { color: #fff; background: linear-gradient(180deg, #e0463c, #a82620); border-color: rgba(255,170,160,.7); box-shadow: 0 3px 0 #6e1812; }
 	.fxend { padding: 5px 12px; border-radius: 8px; cursor: pointer; font-size: .74rem; color: #ffc9c2; background: rgba(220,60,60,.2); border: 1px solid rgba(239,68,68,.5); }
 	/* a played card with a live effect: glows in its player's colour + duration badge */
 	.fxwrap { position: relative; display: block; }

@@ -28,6 +28,7 @@ import {
 	uncommit,
 	discardCard,
 	undiscard,
+	discardPlayed,
 	revealPlayer,
 	endRoundAll,
 	levelUp,
@@ -49,6 +50,7 @@ export type CardReq =
 	| { kind: 'uncommit'; pid: string }
 	| { kind: 'defend'; pid: string; idx: number }
 	| { kind: 'undiscard'; pid: string; idx: number }
+	| { kind: 'discardPlayed'; pid: string; idx: number } // an effect discards a card already played (turn slot / this turn's card)
 	| { kind: 'coins'; pid: string; delta: number }
 	| { kind: 'cardmove'; pid: string; idx: number; to: CardZone } // move a card between hand/deck/upgrade/removed
 	| { kind: 'ult'; pid: string; on: boolean } // unlock / relock the ultimate (level 8)
@@ -135,6 +137,7 @@ export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 	else if (req.kind === 'uncommit') next = uncommit(cs)
 	else if (req.kind === 'defend') next = discardCard(cs, req.idx)
 	else if (req.kind === 'undiscard') next = undiscard(cs, req.idx)
+	else if (req.kind === 'discardPlayed') next = discardPlayed(cs, req.idx)
 	else if (req.kind === 'coins') next = addCoins(cs, req.delta)
 	else if (req.kind === 'cardmove') next = manualMove(cs, req.idx, req.to)
 	else if (req.kind === 'ult') next = { ...cs, ultimate: req.on }
@@ -1348,9 +1351,30 @@ export function canRespawn(s: MatchState, pid: string): boolean {
  *  (A map without marked spawn points → [] = anywhere goes.) */
 export function freeSpawns(s: MatchState, team: Team): string[] {
 	const taken = new Set(Object.values(s.pieces ?? {}).filter((p) => !p.attachedTo).map((p) => p.hex))
-	return throneHexes(s.map, team).filter((h) => !taken.has(h))
+	return heroSpawns(s, team).filter((h) => !taken.has(h))
 }
 const spawnOk = (s: MatchState, team: Team, hex: string) => !throneHexes(s.map, team).length || freeSpawns(s, team).includes(hex)
+
+/** A team's hero spawn points. With 8+ players the two base hexes between the spawn
+ *  points (in the row that holds most of them) open up too. */
+export function heroSpawns(s: Pick<MatchState, 'map' | 'seats'>, team: Team): string[] {
+	const base = throneHexes(s.map, team)
+	return (s.seats ?? 0) >= 8 ? [...base, ...extraSpawns(s.map, team)] : base
+}
+export function extraSpawns(map: GameMap | null, team: Team): string[] {
+	const cells = map?.cells ?? {}
+	const sp = throneHexes(map, team)
+	if (sp.length < 2) return []
+	const zone = team === 'orange' ? 'baseOrange' : 'baseBlue'
+	const N = [[[1, 0], [0, -1], [-1, -1], [-1, 0], [-1, 1], [0, 1]], [[1, 0], [1, -1], [0, -1], [-1, 0], [0, 1], [1, 1]]]
+	const nb = (h: string) => { const [c, r] = h.split('_').map(Number); return N[r & 1].map(([dc, dr]) => `${c + dc}_${r + dr}`) }
+	const row = (h: string) => Number(h.split('_')[1])
+	const counts: Record<number, number> = {}
+	for (const h of sp) counts[row(h)] = (counts[row(h)] ?? 0) + 1
+	const main = Number(Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0])
+	// base hexes next to two spawn points, on the main spawn row
+	return Object.keys(cells).filter((h) => cells[h] === zone && row(h) === main && nb(h).filter((n) => sp.includes(n)).length >= 2).sort().slice(0, 2)
+}
 
 /** Game start: put your hero on one of your base's free spawn points. */
 export function spawnHero(s: MatchState, pid: string, hex: string): Partial<MatchState> {

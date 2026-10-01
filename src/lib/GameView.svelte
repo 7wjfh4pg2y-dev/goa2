@@ -121,6 +121,8 @@
 		color: p.color ? colorHex(p.color) : undefined,
 		// heavies are immune while another minion of theirs stands in the battle zone (host can override)
 		immune: p.role === 'heavy' && heavyImmune($ms, p.id) ? true : undefined,
+		// hover label (mouse): the same name the toolbar shows, heroes/minions in their team colour
+		name: labelOf(p), nameColor: teamText(p),
 		locked: p.role === 'heavy' && !iAmHost && heavyImmune($ms, p.id) ? true : undefined
 	}));
 
@@ -357,8 +359,11 @@
 	$: tipId = actId && confirmKind ? actId : selPieceId;
 	$: tipId, mobile, trackTip();
 	onDestroy(() => { if (typeof window !== 'undefined') cancelAnimationFrame(tipRaf); });
+	// hero / minion names read in their team colour (a lighter tint so they stay legible)
+	const teamText = (p: { kind?: string; role?: string; team: string } | null | undefined) =>
+		p && (p.kind === 'hero' || p.role) ? (p.team === 'blue' ? '#6aa8ff' : p.team === 'orange' ? '#ff9a4a' : undefined) : undefined;
 	const labelOf = (p: typeof selPiece) => !p ? '' : p.kind === 'hero' ? `${heroById(p.hero ?? '')?.name ?? 'Hero'} (${playerName(p.id)})`
-		: p.role ? `${p.team} ${p.role} minion`
+		: p.role ? `${p.role} minion`
 		: p.token === 'companion' ? (p.label ?? 'companion')
 		: p.token && MINES.has(p.token) ? (p.faceDown ? 'mine (face down)' : tokenName(p.token))
 		: p.token ? tokenName(p.token) : 'token';
@@ -528,7 +533,7 @@
 	{#if confirmKind && actPiece}
 		<div class="pietool confirm" class:anchored={!!tipPos} style={tipPos ? `left:${tipPos.x / lay.s}px; top:${tipPos.y / lay.s}px` : ''}>
 			{#if (confirmKind === 'attack' || confirmKind === 'defeat') && attackSum}
-				<span class="pietxt">{confirmKind === 'attack' ? 'Attack' : 'Defeat'} {whoOf(actPiece.id)}?</span>
+				<span class="pietxt nc">{confirmKind === 'attack' ? 'Attack' : 'Defeat'} <b style:color={teamText(actPiece)}>{whoOf(actPiece.id)}</b>?</span>
 				<span class="rw" title="You get {attackSum.coins}{attackSum.assists.length ? `, each teammate ${attackSum.assist} assist` : ''}">
 					<span class="gc sm"></span><b>{attackSum.coins}</b>{#if attackSum.assists.length}<i>/</i><span class="gc sm"></span><b>{attackSum.assist}</b>{/if}
 				</span>
@@ -536,18 +541,18 @@
 				{#if confirmKind === 'attack'}<button class="piedefeat" on:click={doAttack}>⚔ Attack</button>
 				{:else}<button class="piedefeat" on:click={doDefeatHero}>☠ Defeat</button>{/if}
 			{:else}
-				<span class="pietxt nc">Remove <b style:color={actPiece.team === 'blue' ? '#6aa8ff' : '#ff9a4a'}>{cap(actPiece.role ?? '')} Minion</b></span>
+				<span class="pietxt nc">Remove <b style:color={teamText(actPiece)}>{cap(actPiece.role ?? '')} Minion</b></span>
 				<button class="piedel" on:click={doRemoveMinion}>Remove</button>
 			{/if}
 			<button class="piex" on:click={closeConfirm} aria-label="Cancel">✕</button>
 		</div>
 	{:else if selPiece && (selPiece.role || selPiece.token || (selPiece.kind === 'hero' && canDefeatSel))}
 		<div class="pietool" class:anchored={!!tipPos} style={tipPos ? `left:${tipPos.x / lay.s}px; top:${tipPos.y / lay.s}px` : ''}>
-			<span class="pietxt">{selLabel}</span>
+			<span class="pietxt" style:color={teamText(selPiece)}>{selLabel}</span>
 			{#if canFlip}
 				<button class="pieflip" on:click={flipMine}>{selPiece.faceDown ? 'Flip — reveal' : 'Flip face down'}</button>
 			{/if}
-			{#if selImmune}<span class="pieimm" title="Heavy minions can't be moved, defeated or removed while another minion of their team is in the battle zone{iAmHost ? ' — as host you can still override for card exceptions' : ''}">🛡 Immune</span>{/if}
+			{#if selImmune}<span class="pieimm" title="Heavy minions can't be moved, defeated or removed while another minion of their team is in the battle zone{iAmHost ? ' — as host you can still override for card exceptions' : ''}"><svg class="shd" viewBox="0 0 100 100" aria-hidden="true"><defs><linearGradient id="shd-s" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" /><stop offset=".45" stop-color="#cfd5dc" /><stop offset="1" stop-color="#7d8792" /></linearGradient></defs><path d="M50 6 L88 18 V46 C88 70 70 86 50 95 C30 86 12 70 12 46 V18 Z" fill="url(#shd-s)" stroke="#d9a845" stroke-width="8" stroke-linejoin="round" /><path d="M50 20 V82 M26 40 H74" stroke="#d9a845" stroke-width="5" stroke-linecap="round" opacity=".85" /></svg>Immune</span>{/if}
 			{#if canDefeatSel && selPiece.kind === 'hero'}
 				<button class="piedefeat" on:click={() => attackSel('attack')} disabled={!!attacks[selPiece.id]}>{attacks[selPiece.id] ? 'Under attack…' : '⚔ Attack'}</button>
 				<button class="piedel" on:click={() => attackSel('defeat')} title="Not an attack (e.g. a discard-or-die effect): defeat them outright — same rewards">☠ Defeat</button>
@@ -994,7 +999,8 @@
 	.ab.yes { background: var(--tc); color: #fff; }
 	.ab.no { background: rgba(220, 60, 60, 0.3); border-color: rgba(239, 68, 68, 0.7); color: #ffc9c2; }
 	@keyframes atkpulse { 50% { box-shadow: 0 0 40px rgba(239, 68, 68, 0.6), 0 10px 28px rgba(0,0,0,.6); } }
-	.pieimm { font-size: 0.72rem; color: #f0c86a; border: 1px solid rgba(240, 200, 106, 0.5); border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
+	.pieimm .shd { width: 14px; height: 14px; vertical-align: -2px; margin-right: 4px; }
+	.pieimm { font-size: 0.72rem; color: #e6e9ee; border: 1px solid rgba(217, 168, 69, 0.6); border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
 	.placehint.battle { border-color: rgba(239, 68, 68, 0.6); padding-left: 16px; }
 	.placehint.battle b { font-weight: normal; } .placehint .to { color: #ffb27a; } .placehint .tb { color: #8cc0ff; }
 	.placehint.won { padding: 8px 20px; font-size: 1rem; border-color: rgba(240, 200, 120, 0.9); color: #ffe7a8; box-shadow: 0 0 30px rgba(240, 200, 120, .35), 0 8px 24px rgba(0,0,0,.5); }
