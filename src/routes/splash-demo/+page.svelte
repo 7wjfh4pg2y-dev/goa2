@@ -4,6 +4,7 @@
 	import PushSplash from '$lib/PushSplash.svelte';
 	import DefeatSplash from '$lib/DefeatSplash.svelte';
 	import TurnSplash from '$lib/TurnSplash.svelte';
+	import LevelSplash from '$lib/LevelSplash.svelte';
 	import VictorySplash from '$lib/VictorySplash.svelte';
 	import type { BattleNews, DefeatNews, Team } from '$lib/match';
 	import type { PushNews } from '$lib/battle';
@@ -42,6 +43,7 @@
 	let won: { team: Team; reason: string } | null = null;
 	let me: Team = 'orange'; // whose eyes we watch through: your team sits on the right
 	let turnSplash: TurnSplash;
+	let levelSplash: LevelSplash;
 	let round = 2, turn = 1;
 </script>
 
@@ -103,6 +105,10 @@
 			<button on:click={() => { turn = turn % 4 + 1; turnSplash.play('turn', round, turn); }}>Next turn</button>
 			<button on:click={() => { round += 1; turn = 1; turnSplash.play('round', round, 1); }}>Next round</button>
 		</div>
+		<div class="row">
+			<button on:click={() => levelSplash.play('up')}>Level up</button>
+			<button on:click={() => levelSplash.play('pity')}>Pity coin</button>
+		</div>
 	</section>
 </div>
 
@@ -110,6 +116,7 @@
 <PushSplash news={push} {mobile} myTeam={me} />
 <DefeatSplash news={kill} {cards} names={(i) => names[i] ?? i} {lifeArt} {mobile} myTeam={me} />
 <TurnSplash bind:this={turnSplash} {mobile} />
+<LevelSplash bind:this={levelSplash} {mobile} />
 {#if won}
 	{#key won}<VictorySplash round={5} team={won.team} reason={won.reason} myTeam={me} {mobile} onClose={() => (won = null)} />{/key}
 {/if}

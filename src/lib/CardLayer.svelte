@@ -24,6 +24,7 @@
 	import LevelConfirm from '$lib/LevelConfirm.svelte';
 	import TurnSplash from '$lib/TurnSplash.svelte';
 	import DockHand from '$lib/DockHand.svelte';
+	import LevelSplash from '$lib/LevelSplash.svelte';
 
 	export let session: MatchSession;
 	export let ms: Readable<MatchState>;
@@ -167,6 +168,14 @@
 	$: levelPhase = $ms.levelPhase ?? false;
 	// the battle's removals come first; then the host opens the level-up step
 	function startLevelUp() { session.act('level up!', levelPatch($ms)); }
+	// the level-up step opening: a splash for you — Level up, or (can't afford one) a pity coin
+	let levelSplash: LevelSplash;
+	let wasLevel: boolean | null = null;
+	$: watchLevel(levelPhase);
+	function watchLevel(on: boolean) {
+		if (wasLevel === false && on && mine) levelSplash?.play(mustLevel(mine) ? 'up' : 'pity');
+		wasLevel = on;
+	}
 	// the battle hands every card back (like a round end) so players can level up / swap now
 	// it also runs the end-of-turn push check and counts the battle zone (battle.ts)
 	function startBattle() {
@@ -1400,6 +1409,7 @@
 
 	<!-- ───────── new turn / new round splash ───────── -->
 	<TurnSplash bind:this={turnSplash} {mobile} />
+	<LevelSplash bind:this={levelSplash} {mobile} />
 
 	<!-- ───────── dramatic simultaneous reveal ───────── -->
 	{#if curtain}
