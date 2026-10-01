@@ -4,6 +4,7 @@
 	import PushSplash from '$lib/PushSplash.svelte';
 	import DefeatSplash from '$lib/DefeatSplash.svelte';
 	import TurnSplash from '$lib/TurnSplash.svelte';
+	import VictorySplash from '$lib/VictorySplash.svelte';
 	import type { BattleNews, DefeatNews, Team } from '$lib/match';
 	import type { PushNews } from '$lib/battle';
 	import type { PlayerCardState } from '$lib/cards/cardstate';
@@ -37,6 +38,9 @@
 		// (the demo has no board: the splash reads each hero from `cards`)
 	}
 
+	// game over
+	let won: { team: Team; reason: string } | null = null;
+	const roster = (t: Team) => (t === 'orange' ? ['a', 'c'] : ['b', 'd']).map((pid) => ({ pid, hero: (cards[pid] as unknown as { hero: string }).hero, name: names[pid] }));
 	let me: Team = 'orange'; // whose eyes we watch through: your team sits on the right
 	let turnSplash: TurnSplash;
 	let round = 2, turn = 1;
@@ -87,6 +91,13 @@
 		</div>
 	</section>
 	<section>
+		<h2>Game over</h2>
+		<div class="row">
+			<button class="o" on:click={() => (won = { team: 'orange', reason: 'Blue ran out of Life' })}>Orange wins (life)</button>
+			<button class="b" on:click={() => (won = { team: 'blue', reason: 'pushed into the Orange throne' })}>Blue wins (throne)</button>
+		</div>
+	</section>
+	<section>
 		<h2>Turn / round</h2>
 		<div class="row">
 			<button on:click={() => { turn = turn % 4 + 1; turnSplash.play('turn', round, turn); }}>Next turn</button>
@@ -99,6 +110,9 @@
 <PushSplash news={push} {mobile} myTeam={me} />
 <DefeatSplash news={kill} {cards} names={(i) => names[i] ?? i} {lifeArt} {mobile} myTeam={me} />
 <TurnSplash bind:this={turnSplash} {mobile} />
+{#if won}
+	{#key won}<VictorySplash team={won.team} reason={won.reason} winners={roster(won.team)} losers={roster(won.team === 'orange' ? 'blue' : 'orange')} myTeam={me} me="a" {mobile} onClose={() => (won = null)} />{/key}
+{/if}
 
 <style>
 	.page { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 16px; box-sizing: border-box; color: #f6ead2; }

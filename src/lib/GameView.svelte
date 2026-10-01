@@ -6,6 +6,7 @@
 	import DefeatSplash from '$lib/DefeatSplash.svelte';
 	import BattleSplash from '$lib/BattleSplash.svelte';
 	import PushSplash from '$lib/PushSplash.svelte';
+	import VictorySplash from '$lib/VictorySplash.svelte';
 	import { heroById, heroLogo } from '$lib/heroes';
 	import { zoneName } from '$lib/zones';
 	import { effectLabel } from '$lib/effects';
@@ -16,7 +17,7 @@
 	import { uiLayout, layoutVars } from '$lib/layout';
 	import { placeToken, moveToken, effectiveHex, MINES, tokenName, tokensLeft, removalOptions, applyRemoval, removalLog, canRemove, type ArmToken, type RemovalOption } from '$lib/tokens';
 	import {
-		colorHex, movePiece, teamForSeat, throneHex, minionCoins, heroDefeatSummary, canRespawn, freeSpawns,
+		colorHex, movePiece, teamForSeat, throneHex, minionCoins, heroDefeatSummary, canRespawn, freeSpawns, teamOf,
 		type MatchState, type Player, type MatchSession, type Team, type ConnStatus
 	} from '$lib/match';
 
@@ -149,7 +150,7 @@
 	$: armBattleFallback(battleSplashing ? battleNews?.id ?? null : null);
 	function armBattleFallback(id: string | null) { if (id) setTimeout(() => (battleDoneId = id), 5000); } // if the splash never reports back
 	$: battle = battleSplashing ? null : $ms.battle ?? null;
-	$: battleMarks = battle ? Object.values($ms.pieces ?? {}).filter((p) => canBattleRemove($ms, p.id)).map((p) => ({ hex: p.hex, r: 0, color: '#ef4444' })) : [];
+	$: battleMarks = battle ? Object.values($ms.pieces ?? {}).filter((p) => canBattleRemove($ms, p.id)).map((p) => ({ hex: p.hex, r: 0, color: battle?.loser === 'blue' ? '#8cc0ff' : '#ffb27a' })) : []; // the losing team's own colour
 	$: iChooseBattle = !!battle && (iAmHost || (iPlay && myTeam === battle.loser));
 	$: selImmune = !!selPiece && selPiece.role === 'heavy' && heavyImmune($ms, selPiece.id);
 	$: canBattleSel = !!selPiece && iChooseBattle && canBattleRemove($ms, selPiece.id);
@@ -170,6 +171,35 @@
 		session.act(laneNotes($ms, patch).join(' · ') + ' (by hand)', patch);
 	}
 	const cap = (t: string) => t[0].toUpperCase() + t.slice(1);
+
+	// ── game over ──
+	// a team's Life hit 0: the host confirms before the game ends (a mis-click on a token can't end it)
+	$: lifeOut = !$ms.wonBy ? ($ms.life.orange <= 0 ? 'orange' : $ms.life.blue <= 0 ? 'blue' : null) as Team | null : null;
+	let lifeDismissed = '';
+	$: askLifeEnd = iAmHost && !!lifeOut && lifeDismissed !== lifeOut;
+	$: if (!lifeOut) lifeDismissed = '';
+	function endOnLife() {
+		if (!lifeOut) return;
+		const win: Team = lifeOut === 'orange' ? 'blue' : 'orange';
+		session.act(`🏆 ${cap(win)} wins — ${cap(lifeOut)} ran out of Life`, { wonBy: { team: win, reason: `${cap(lifeOut)} ran out of Life` } });
+	}
+	// the victory splash: everyone, as soon as a winner is set (and again from the gold banner)
+	let victoryClosed = false;
+	$: if (!$ms.wonBy) victoryClosed = false;
+	// a game-winning push plays "The throne falls / Final push" first, then the victory screen
+	let victoryHold = false;
+	let wonSeen: string | null | undefined = undefined;
+	$: watchWon($ms.wonBy ? `${$ms.wonBy.team}:${$ms.wonBy.reason}` : null);
+	function watchWon(k: string | null) {
+		if (k === wonSeen) return;
+		wonSeen = k;
+		const p = $ms.pushNews;
+		const wait = k && p?.won ? 5000 - (Date.now() - p.at) : 0;
+		if (wait > 0) { victoryHold = true; setTimeout(() => (victoryHold = false), wait); }
+	}
+	$: roster = Object.keys($ms.cards ?? {}).map((pid) => ({ pid, hero: $ms.cards?.[pid]?.hero ?? '', name: playerName(pid), team: teamOf($ms, pid) }));
+	$: winRoster = $ms.wonBy ? roster.filter((h) => h.team === $ms.wonBy?.team) : [];
+	$: loseRoster = $ms.wonBy ? roster.filter((h) => h.team && h.team !== $ms.wonBy?.team) : [];
 
 	// gear/star throne hexes, so the board can draw them and heroes/minions spawn there
 	$: thrones = [
@@ -488,11 +518,21 @@
 
 <div class="gamewrap" class:mob={mobile} class:dashfull={!mobile && lay.underHud} style={mobile ? '' : layoutVars(lay)}>
 	{#if $ms.wonBy}
-		<div class="placehint won">🏆 {cap($ms.wonBy.team)} wins — {$ms.wonBy.reason}</div>
+		<button class="placehint won" on:click={() => (victoryClosed = false)} title="Show the victory screen again">🏆 {cap($ms.wonBy.team)} wins — {$ms.wonBy.reason}</button>
 	{:else if battle && !pendingToken && !pendingRespawn && !(mobile && pendingSpawn)}
-		<div class="placehint battle">
-			<span>⚔ Minion battle · <b class="to">Orange {battle.orange}</b> : <b class="tb">{battle.blue} Blue</b> — {cap(battle.loser ?? '')} removes {battle.remove} more{#if iChooseBattle} · tap a red minion{/if}</span>
-			{#if iChooseBattle}<button class="spcancel" on:click={battleAutoAll} title="Melee first, heavies last">Let the game choose</button>{/if}
+		<!-- the battle's removal step: who removes how many of THEIR OWN minions, impossible to miss -->
+		<div class="battlebox" style="--lc:{battle.loser === 'blue' ? '#2f7fe6' : '#ef7d22'}; --lt:{battle.loser === 'blue' ? '#8cc0ff' : '#ffb27a'}">
+			<div class="bbhead">⚔ Minion battle · <b class="to">Orange {battle.orange}</b> : <b class="tb">{battle.blue} Blue</b></div>
+			<div class="bbmain">
+				<span><b class="lt">{cap(battle.loser ?? '')}</b> removes <b class="n">{battle.remove}</b> of their own minion{battle.remove === 1 ? '' : 's'}</span>
+				<span class="bbpips">{#each Array(battle.remove) as _, k (k)}<i></i>{/each}</span>
+			</div>
+			{#if iChooseBattle}
+				<div class="bbsub">{myTeam === battle.loser ? 'Tap your glowing minions to remove them' : `Tap the glowing ${battle.loser} minions to remove them`} — the heavy goes last
+					<button class="bbauto" on:click={battleAutoAll} title="Melee first, heavies last">Let the game choose</button></div>
+			{:else}
+				<div class="bbsub">Waiting for {cap(battle.loser ?? '')} to remove {battle.remove === 1 ? 'a minion' : `${battle.remove} minions`}…</div>
+			{/if}
 		</div>
 	{:else if (outgoing.length || hostWatch.length) && !pendingToken && !pendingRespawn}
 		<div class="placehint atk">
@@ -529,6 +569,24 @@
 			{/if}
 			<button class="spcancel" on:click={cancelPlace}>Cancel</button>
 		</div>
+	{/if}
+	{#if $ms.wonBy && !victoryClosed && !victoryHold}
+		<VictorySplash team={$ms.wonBy.team} reason={$ms.wonBy.reason} winners={winRoster} losers={loseRoster}
+			myTeam={mySeat >= 0 && mySeat < $ms.seats ? myTeam : null} me={clientId} {mobile} onClose={() => (victoryClosed = true)} />
+	{/if}
+	{#if askLifeEnd && lifeOut}
+		<div class="modal-scrim" role="presentation">
+			<div class="modal" role="dialog" aria-modal="true" tabindex="-1">
+				<h3>{cap(lifeOut)} has no Life left</h3>
+				<p>End the game? <b style:color={lifeOut === 'orange' ? '#8cc0ff' : '#ffb27a'}>{lifeOut === 'orange' ? 'Blue' : 'Orange'}</b> wins.</p>
+				<div class="mrow">
+					<button class="mcancel" on:click={() => (lifeDismissed = lifeOut ?? '')}>Not yet</button>
+					<button class="mleave" on:click={endOnLife}>🏆 End the game</button>
+				</div>
+			</div>
+		</div>
+	{:else if lifeOut && !iAmHost}
+		<div class="placehint lifeout">{cap(lifeOut)} has no Life left — waiting for the host to end the game</div>
 	{/if}
 	<BattleSplash news={battleNews} {mobile} myTeam={viewTeam} onDone={() => (battleDoneId = battleNews?.id ?? null)} />
 	<!-- a push (mid-turn, or from the battle) waits for the battle splash to finish -->
@@ -1004,8 +1062,23 @@
 	@keyframes atkpulse { 50% { box-shadow: 0 0 40px rgba(239, 68, 68, 0.6), 0 10px 28px rgba(0,0,0,.6); } }
 	.pieimm { font-size: 0.76rem; color: #2a2f38; padding: 4px 13px; border-radius: 999px; white-space: nowrap; letter-spacing: .04em; text-shadow: 0 1px 0 rgba(255,255,255,.6);
 		background: linear-gradient(180deg, #ffffff, #d4d9df 48%, #a3acb7); border: 2px solid #d9a845; box-shadow: 0 0 0 1px #6b4a10, 0 2px 6px rgba(0,0,0,.45), inset 0 1px 0 #fff; }
-	.placehint.battle { border-color: rgba(239, 68, 68, 0.6); padding-left: 16px; }
-	.placehint.battle b { font-weight: normal; } .placehint .to { color: #ffb27a; } .placehint .tb { color: #8cc0ff; }
+	/* minion battle removal: a bigger panel at the top, in the losing team's colour */
+	.battlebox { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 9; min-width: 380px; max-width: 92vw; box-sizing: border-box;
+		display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 18px 12px; border-radius: 14px; text-align: center; color: #f6ead2;
+		background: linear-gradient(180deg, color-mix(in srgb, var(--lc) 30%, rgba(11, 16, 26, .95)), rgba(11, 16, 26, .95)); border: 2px solid var(--lc);
+		box-shadow: 0 0 26px color-mix(in srgb, var(--lc) 45%, transparent), 0 10px 28px rgba(0, 0, 0, .55); animation: bbIn .35s cubic-bezier(.3, 1.4, .5, 1) both, bbGlow 2s ease-in-out .4s infinite; }
+	@keyframes bbIn { from { opacity: 0; transform: translateX(-50%) translateY(-14px) scale(.9); } to { opacity: 1; transform: translateX(-50%); } }
+	@keyframes bbGlow { 50% { box-shadow: 0 0 40px color-mix(in srgb, var(--lc) 70%, transparent), 0 10px 28px rgba(0, 0, 0, .55); } }
+	.battlebox b { font-weight: normal; } .battlebox .to { color: #ffb27a; } .battlebox .tb { color: #8cc0ff; }
+	.bbhead { font-size: .72rem; letter-spacing: .2em; text-transform: uppercase; color: #d9c79a; }
+	.bbmain { display: flex; align-items: center; gap: 10px; font-size: 1.3rem; }
+	.bbmain .lt { color: var(--lt); } .bbmain .n { color: #fff; font-size: 1.15em; }
+	.bbpips { display: flex; gap: 4px; }
+	.bbpips i { width: 12px; height: 12px; border-radius: 50%; background: var(--lt); box-shadow: 0 0 8px var(--lc); }
+	.bbsub { font-size: .78rem; color: #cbd5e1; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center; }
+	.bbauto { font: inherit; font-size: .74rem; padding: 3px 12px; border-radius: 999px; cursor: pointer; color: #fff; background: color-mix(in srgb, var(--lc) 55%, transparent); border: 1px solid var(--lt); }
+	.placehint.lifeout { top: auto; bottom: 120px; border-color: rgba(240, 200, 120, .8); }
+	button.placehint.won { font: inherit; cursor: pointer; }
 	.placehint.won { padding: 8px 20px; font-size: 1rem; border-color: rgba(240, 200, 120, 0.9); color: #ffe7a8; box-shadow: 0 0 30px rgba(240, 200, 120, .35), 0 8px 24px rgba(0,0,0,.5); }
 	.spcancel.go { background: linear-gradient(180deg, #e2a64a, #b8781f); color: #1a1206; border-color: #fbe7b0; }
 	/* Remove menu: one button per reason, the plain Remove last */
@@ -1077,7 +1150,7 @@
 	/* zoomed as a whole; its insets are design px, so the real-px dash is divided back */
 	.gamewrap:not(.mob) .hud { zoom: var(--uis, 1); }
 	.gamewrap.dashfull .hud { bottom: calc(22px + var(--dh, 70px) / var(--uis, 1)); }
-	.gamewrap:not(.mob) :is(.modal, .managepanel, .pietool, .placehint, .atkask) { zoom: var(--uis, 1); }
+	.gamewrap:not(.mob) :is(.modal, .managepanel, .pietool, .placehint, .atkask, .battlebox) { zoom: var(--uis, 1); }
 	.hud .mapname { font-family: 'Modesto Poster', serif; font-size: 1.02rem; letter-spacing: 0.03em; color: #f6ead2; text-align: center; }
 
 	.fxlist { gap: 3px; }
@@ -1186,6 +1259,7 @@
 	.boardarea.mob { top: 116px; bottom: 106px; }
 	.gamewrap.mob .pietool, .gamewrap.mob .placehint { top: 124px; max-width: 94vw; }
 	.gamewrap.mob .pietool { top: 172px; }
+	.gamewrap.mob .battlebox { top: 118px; min-width: 0; width: 94vw; padding: 8px 10px; } .gamewrap.mob .bbmain { font-size: 1rem; }
 	.gamewrap.mob .atkask { top: 220px; max-width: 94vw; font-size: 0.8rem; }
 	/* phone toolbar: everything stays inside the pill — the label gives way first */
 	.gamewrap.mob .pietool { gap: 6px; padding: 5px 6px 5px 10px; box-sizing: border-box; }
