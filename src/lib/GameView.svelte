@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { afterUpdate, onDestroy } from 'svelte';
-	import type { Readable } from 'svelte/store';
+	import { readable, type Readable } from 'svelte/store';
 	import BoardCanvas from '$lib/BoardCanvas.svelte';
 	import CardLayer from '$lib/CardLayer.svelte';
 	import DefeatSplash from '$lib/DefeatSplash.svelte';
@@ -32,6 +32,18 @@
 	// quietly journal the game; a full game (first turn → win) is filed away when it ends
 	const recorder = createRecorder(room, clientId);
 	$: recorder.tick($ms);
+	// pings (match.ts): the dash button arms one (the next board tap pings; pressed again =
+	// a general ping on your own hero), Alt+click / a long press ping straight away
+	const pingsS = session.pings ?? readable([]);
+	let pingArmed = false;
+	$: boardPings = $pingsS.map((p) => ({ id: p.id, hex: p.hex, color: colorHex(p.color) }));
+	function doPing(hex: string | null) { pingArmed = false; if (hex) session.ping?.(hex); }
+	function pingButton() {
+		if (!pingArmed) { pingArmed = true; return; }
+		const me = $ms.pieces?.[clientId];
+		pingArmed = false;
+		if (me) session.ping?.(me.hex);
+	}
 
 	const status = session.status;
 	const canUndo = session.canUndo;
@@ -530,7 +542,7 @@
 	</div>
 {/snippet}
 
-<svelte:window on:keydown={(e) => { if (e.key !== 'Escape') return; if (confirmLeave) confirmLeave = false; else { pendingSpawn = null; pendingToken = null; } }} on:pointerdown={(e) => { viewsOutside(e); }} bind:innerWidth={gvw} bind:innerHeight={gvh} />
+<svelte:window on:keydown={(e) => { if (e.key !== 'Escape') return; if (confirmLeave) confirmLeave = false; else { pendingSpawn = null; pendingToken = null; pingArmed = false; } }} on:pointerdown={(e) => { viewsOutside(e); }} bind:innerWidth={gvw} bind:innerHeight={gvh} />
 
 <div class="gamewrap" class:mob={mobile} class:dashfull={!mobile && lay.underHud} style={mobile ? '' : layoutVars(lay)}>
 	{#if $ms.wonBy}
@@ -610,10 +622,10 @@
 	<div class="ocean"></div>
 	<!-- on a phone the board sits between the top bar + player strip and the dash -->
 	<div class="boardarea" class:mob={mobile}>
-	<BoardCanvas bind:this={board} map={$ms.map ?? {}} rotation={orientation} interactive={true} {placing} {placeGhost} holdColor={myHoldColor} onCancelPlace={cancelPlace} {areas} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} />
+	<BoardCanvas bind:this={board} map={$ms.map ?? {}} rotation={orientation} interactive={true} {placing} {placeGhost} holdColor={myHoldColor} onCancelPlace={cancelPlace} {areas} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} pings={boardPings} onPing={doPing} {pingArmed} />
 	</div>
 
-	<CardLayer bind:this={cardLayer} {mobile} {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} onRespawn={placeMyHero} onEnter={placeMyHero} onArmToken={armToken} holdingToken={!!pendingToken} bind:previewId />
+	<CardLayer bind:this={cardLayer} {mobile} {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} onRespawn={placeMyHero} onEnter={placeMyHero} onArmToken={armToken} holdingToken={!!pendingToken} {pingArmed} onPing={pingButton} bind:previewId />
 
 	<!-- selected minion/token: offer delete (heroes aren't deletable) -->
 	{#if confirmKind && actPiece}

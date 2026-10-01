@@ -32,6 +32,11 @@
 	// tap on an empty hex (no piece under the cursor, nothing carried) — used by
 	// placement modes such as spawning a minion where you click.
 	export let onHex: ((hex: string) => void) | null = null;
+	// pings: rings on a hex in the pinger's colour. Alt+click (desktop) or a long press (touch)
+	// pings straight away; with `pingArmed` the next tap pings (off the board = cancel)
+	export let pings: Array<{ id: string; hex: string; color: string }> = [];
+	export let onPing: ((hex: string | null) => void) | null = null;
+	export let pingArmed = false;
 	// hexes that hold a team's throne (gear/star) — drawn on top of the base tile
 	export let thrones: Array<{ hex: string; team: string }> = [];
 
@@ -256,6 +261,9 @@
 	const activePointers = new Map<number, { x: number; y: number }>();
 	let pinch: { dist: number; scale0: number } | null = null;
 	const twoDist = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.hypot(a.x - b.x, a.y - b.y);
+	let lpTimer: ReturnType<typeof setTimeout> | null = null;
+	let longPressed = false;
+	const clearLongPress = () => { if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } };
 	function down(e: PointerEvent) {
 		if (!interactive) return;
 		e.preventDefault(); // stop native text/element selection + image drag
@@ -267,6 +275,26 @@
 			pinch = { dist: twoDist(a, b) || 1, scale0: scale };
 			panning = false; moved = true; dragId = null; pressId = null;
 			return;
+		}
+		// Alt+click: ping that hex (no pan, no pick-up)
+		if (e.altKey && onPing) {
+			const pt = toChild(e.clientX, e.clientY);
+			const hex = hexAt(pt.x, pt.y);
+			if (hex) onPing(hex);
+			activePointers.delete(e.pointerId);
+			return;
+		}
+		// touch: a long press pings the hex under the finger
+		clearLongPress();
+		if (e.pointerType !== 'mouse' && onPing) {
+			const cx = e.clientX, cy = e.clientY;
+			lpTimer = setTimeout(() => {
+				lpTimer = null;
+				if (moved || pinch || activePointers.size !== 1) return;
+				const pt = toChild(cx, cy);
+				const hex = hexAt(pt.x, pt.y);
+				if (hex) { longPressed = true; panning = false; pressId = null; onPing?.(hex); }
+			}, 550);
 		}
 		// derive the pressed token fresh from the hit target — never a stale id
 		const el = (e.target as Element)?.closest?.('[data-piece]');
@@ -300,6 +328,7 @@
 		if (!moved) {
 			if (Math.hypot(e.clientX - downC.x, e.clientY - downC.y) < DRAG_THRESHOLD) return;
 			moved = true;
+			clearLongPress();
 			if (pressId && onMovePiece && !isLocked(pressId)) { dragId = pressId; panning = false; } // grab the token
 		}
 		if (dragId) {
@@ -314,6 +343,8 @@
 	function up(e: PointerEvent) {
 		try { wrapEl.releasePointerCapture(e.pointerId); } catch {}
 		activePointers.delete(e.pointerId);
+		clearLongPress();
+		if (longPressed) { longPressed = false; panning = false; pressId = null; moved = false; return; } // that press was a ping
 		if (pinch) { // finishing (or stepping out of) a pinch — don't treat as pan/tap
 			if (activePointers.size < 2) pinch = null;
 			panning = false; pressId = null; moved = false;
@@ -333,6 +364,11 @@
 	$: if (placing) selected = null;
 	function handleTap(e: PointerEvent) {
 		if (!interactive) return;
+		if (pingArmed && onPing) { // ping mode: this tap pings (off the board = cancel)
+			const pt = toChild(e.clientX, e.clientY);
+			onPing(hexAt(pt.x, pt.y));
+			return;
+		}
 		if (placing) { // drop what's held on the hex under the pointer; off the board → put it back
 			const pt = toChild(e.clientX, e.clientY);
 			const hex = hexAt(pt.x, pt.y);
@@ -363,7 +399,7 @@
 	onMount(() => { if (interactive) wrapEl?.addEventListener('wheel', onWheel, { passive: false }); });
 	// Esc puts a picked-up piece back down
 	function onKey(e: KeyboardEvent) { if (e.key === 'Escape' && (selected || dragId)) release(); }
-	onDestroy(() => wrapEl?.removeEventListener('wheel', onWheel));
+	onDestroy(() => { wrapEl?.removeEventListener('wheel', onWheel); clearLongPress(); });
 
 	function centerOf(id: string) {
 		const [c, r] = id.split('_').map(Number);
@@ -476,6 +512,7 @@
 	on:pointercancel={up}
 	on:pointerleave={() => { if (!dragId) hoverHex = null; hoverName = null; }}
 	class:holding={!!ghostPiece}
+	class:pinging={pingArmed}
 	role="img"
 	aria-label={map.name ? `Game board: ${map.name}` : 'Game board'}
 >
@@ -567,6 +604,16 @@
 				{/if}
 			{/each}
 
+			<!-- pings: rings rippling out from the hex, in the pinger's colour -->
+			{#each pings as pg (pg.id)}
+				{@const c = centerOf(pg.hex)}
+				<g class="ping" pointer-events="none" style="--pc:{pg.color}">
+					<circle class="pring" cx={c.x} cy={c.y} r={size * 1.1} stroke-width={size * 0.14} />
+					<circle class="pring late" cx={c.x} cy={c.y} r={size * 1.1} stroke-width={size * 0.14} />
+					<circle class="pdot" cx={c.x} cy={c.y} r={size * 0.3} />
+				</g>
+			{/each}
+
 			<!-- the held object's ghost, riding under the cursor (only over real hexes) -->
 			{#if ghostPiece && hoverHex}
 				<g class="ghost" opacity=".62" pointer-events="none" transform={rotEff ? `rotate(${-rotEff} ${hoverPt.x} ${hoverPt.y})` : undefined}>
@@ -592,6 +639,12 @@
 	.board-wrap.holding, .board-wrap.holding :global(*) { cursor: grabbing !important; }
 	.piece.lifted { opacity: .4; }
 	.piece.selected circle { filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.6)); }
+	.board-wrap.pinging, .board-wrap.pinging :global(*) { cursor: crosshair !important; }
+	.ping .pring { fill: none; stroke: var(--pc); transform-box: fill-box; transform-origin: center; animation: pring 1.1s ease-out 3; opacity: 0; }
+	.ping .pring.late { animation-delay: .4s; }
+	.ping .pdot { fill: var(--pc); stroke: #fff; stroke-width: 1.5; animation: pdot 3.5s ease forwards; }
+	@keyframes pring { 0% { transform: scale(.25); opacity: 1; } 100% { transform: scale(1.6); opacity: 0; } }
+	@keyframes pdot { 0% { opacity: 0; } 8% { opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; } }
 	.selring { animation: spin 8s linear infinite; transform-box: fill-box; transform-origin: center; }
 	@keyframes spin { to { transform: rotate(360deg); } }
 </style>
