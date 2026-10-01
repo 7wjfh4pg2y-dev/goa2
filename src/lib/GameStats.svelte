@@ -39,15 +39,15 @@
 	type Col = { k: keyof PlayerStat; label: string; short: string };
 	const COLS: Col[] = [
 		{ k: 'level', label: 'Level', short: 'Lv' },
-		{ k: 'kills', label: 'Heroes defeated', short: 'Def' },
-		{ k: 'deaths', label: 'Times defeated', short: 'Fell' },
+		{ k: 'kills', label: 'Hero kills', short: 'Kills' },
+		{ k: 'deaths', label: 'Deaths', short: 'Deaths' },
 		{ k: 'assists', label: 'Assists', short: 'Ast' },
-		{ k: 'minions', label: 'Minions defeated', short: 'Min' },
-		{ k: 'coins', label: 'Coins earned', short: 'Coins' }
+		{ k: 'minions', label: 'Minion kills', short: 'Mins' },
+		{ k: 'coins', label: 'Coins Earned', short: 'Coins' }
 	];
 	$: rows = (t: Team) => data.players.filter((p) => p.team === t);
 	$: total = (t: Team, k: keyof PlayerStat) => rows(t).reduce((n, p) => n + (p[k] as number), 0);
-	// the game's best in a column (gold) — not for "times defeated", nobody is proud of that
+	// the game's best in a column (gold) — not for deaths, nobody is proud of that
 	$: best = (k: keyof PlayerStat) => (k === 'deaths' ? Infinity : Math.max(...data.players.map((p) => p[k] as number)));
 	$: totalKills = data.players.reduce((n, p) => n + p.kills, 0);
 	$: totalMinions = data.players.reduce((n, p) => n + p.minions, 0);
@@ -85,8 +85,8 @@
 		<div class="tiles">
 			<div class="tile"><b>{data.rounds}</b><span>Rounds</span></div>
 			<div class="tile"><b>{fmtTime(data.minutes)}</b><span>Time played</span></div>
-			<div class="tile"><b>{totalKills}</b><span>Heroes defeated</span></div>
-			<div class="tile"><b>{totalMinions}</b><span>Minions defeated</span></div>
+			<div class="tile"><b>{totalKills}</b><span>Hero kills</span></div>
+			<div class="tile"><b>{totalMinions}</b><span>Minion kills</span></div>
 		</div>
 
 		<div class="tables">
