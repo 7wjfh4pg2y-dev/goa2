@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { placeToken, moveToken, statusFrom, toggleStatusMarker, effectiveHex } from './tokens'
-import { applyCardReq, battlePatch, keepsThroughRound, type Piece, type MatchState } from './match'
+import { applyCardReq, battlePatch, levelPatch, keepsThroughRound, type Piece, type MatchState } from './match'
 
 const heroes: Record<string, Piece> = {
 	bain: { id: 'bain', hex: '1_1', team: 'orange', kind: 'hero', hero: 'bain' },
@@ -86,6 +86,18 @@ describe('minion battle', () => {
 		const s = { turn: 4, round: 1, pieces: {}, cards: { a: cs } } as unknown as MatchState
 		const red2 = 2 // any card index works for the gate check
 		expect(applyCardReq(s, { kind: 'take', pid: 'a', idx: red2 })).toEqual({})
+		// the battle alone doesn't open it — removals come first, then the host's Level Up
+		expect(applyCardReq({ ...s, battlePhase: true } as MatchState, { kind: 'take', pid: 'a', idx: red2 })).toEqual({})
+		expect(applyCardReq({ ...s, battlePhase: true, ...levelPatch() } as MatchState, { kind: 'swap', pid: 'a', idx: red2 })).not.toBe(undefined)
+	})
+
+	it('the round advance closes the level-up step', () => {
+		const cs = { hero: 'arien', level: 1, coins: 0, ultimate: false, hand: [0], turns: [null, null, null, null], pending: null, discard: [], upgrade: [], removed: [], items: {} }
+		const s = { turn: 4, round: 1, pieces: {}, cards: { a: cs }, battlePhase: true, levelPhase: true } as unknown as MatchState
+		const after = applyCardReq(s, { kind: 'advance', pid: 'a' })
+		expect(after.levelPhase).toBe(false)
+		expect(after.battlePhase).toBe(false)
+		expect(after.cards!.a.coins).toBe(1) // pity coin
 	})
 })
 

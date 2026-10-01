@@ -8,7 +8,7 @@
 	import { teamName } from '$lib/teams';
 	import type { Readable } from 'svelte/store';
 	import type { MatchSession, MatchState, Player } from '$lib/match';
-	import { teamForSeat, colorHex, battlePatch, canRespawn } from '$lib/match';
+	import { teamForSeat, colorHex, battlePatch, levelPatch, canRespawn } from '$lib/match';
 	import { battleResult, battleText, laneNotes } from '$lib/battle';
 	import Card from '$lib/cards/Card.svelte';
 	import DeckView from '$lib/DeckView.svelte';
@@ -155,9 +155,12 @@
 		if (live && !countTick) { countNow = session?.hostNow?.() ?? Date.now(); countTick = setInterval(() => (countNow = session?.hostNow?.() ?? Date.now()), 100); }
 		else if (!live && countTick) { clearInterval(countTick); countTick = null; }
 	}
-	// end-of-round flow: turn 4 → Minion Battle (battle.ts) → level-ups → Next round
+	// end-of-round flow: turn 4 → Minion Battle (battle.ts) → removals → host's Level Up → Next round
 	$: isFinalTurn = $ms.turn >= 4;
 	$: battlePhase = $ms.battlePhase ?? false;
+	$: levelPhase = $ms.levelPhase ?? false;
+	// the battle's removals come first; then the host opens the level-up step
+	function startLevelUp() { session.act('level up!', levelPatch()); }
 	// the battle hands every card back (like a round end) so players can level up / swap now
 	// it also runs the end-of-turn push check and counts the battle zone (battle.ts)
 	function startBattle() {
@@ -166,10 +169,10 @@
 	}
 	// then the level-up phase: forced while you can afford it (the deck opens by
 	// itself), and the host's "Next round" waits until everyone present is done
-	$: levelWaiting = battlePhase ? seatedWithCards.filter((p) => mustLevel(cards[p.id])) : [];
-	$: iMustLevel = battlePhase && !!mine && mustLevel(mine);
+	$: levelWaiting = levelPhase ? seatedWithCards.filter((p) => mustLevel(cards[p.id])) : [];
+	$: iMustLevel = levelPhase && !!mine && mustLevel(mine);
 	let autoOpened = false;
-	$: if (!battlePhase) autoOpened = false;
+	$: if (!levelPhase) autoOpened = false;
 	$: if (iMustLevel && !autoOpened) { autoOpened = true; deckOpen = true; deckTab = 'deck'; }
 	// phone level-up / swap confirmation
 	let lvConfirm: { kind: 'take' | 'swap'; idx: number } | null = null;
@@ -181,7 +184,7 @@
 		}
 		lvConfirm = null; deckSel = null;
 	}
-	const canTakeNow = (cs: PlayerCardState, i: number) => battlePhase && canAfford(cs) && canPick(cs, i);
+	const canTakeNow = (cs: PlayerCardState, i: number) => levelPhase && canAfford(cs) && canPick(cs, i);
 
 	// a splash (the crest) for every new turn / new round
 	let turnSplash: TurnSplash;
@@ -651,6 +654,8 @@
 			     so the level-up phase gets its own branch: the host moves on to the next round -->
 			{#if $ms.battle?.remove}
 				<span class="waithost">Waiting for the {teamName($ms.battle.loser)} to remove {$ms.battle.remove} minion{$ms.battle.remove === 1 ? '' : 's'}…</span>
+			{:else if !levelPhase}
+				<button class="act primary" on:click={startLevelUp}>Level Up ⬆</button>
 			{:else if levelWaiting.length}
 				<span class="waithost" title="Level-ups are forced while a hero can afford them">Waiting for {levelWaiting.map((p) => p.name).join(', ')} to level up…</span>
 			{:else}
@@ -899,7 +904,7 @@
 	<!-- ───────── desktop deck: upgrade tree + every card as a banner ───────── -->
 	{#if deckOpen && mine && !mobile}
 		<DeckView cs={mine} teamStyle={teamVars(myTeam)} onClose={() => { deckOpen = false; deckSel = null; }}
-			levelPhase={battlePhase} onMove={(i, to) => moveTo(i, to)}
+			levelPhase={levelPhase} onMove={(i, to) => moveTo(i, to)}
 			onTake={(i) => session.cardAction({ kind: 'take', pid: clientId, idx: i })}
 			onSwap={(i) => session.cardAction({ kind: 'swap', pid: clientId, idx: i })}
 			onPreview={(i) => mine && examineCard(mine.hero, i)} />
@@ -925,8 +930,8 @@
 					<span class="dkcoin"></span><b>{mine.coins}</b>
 					{#if levelOf(mine) >= 8}Max level — ultimate active
 					{:else if iMustLevel}⬆ Level up! {levelOf(mine)} → {levelOf(mine) + 1} costs {levelCost(levelOf(mine))} · pick a glowing card
-					{:else if battlePhase && (mine.roundPicks ?? []).length}Levelled up · swap this round's pick until the round ends
-					{:else if battlePhase}Not enough coins · +1 pity coin at round end
+					{:else if levelPhase && (mine.roundPicks ?? []).length}Levelled up · swap this round's pick until the round ends
+					{:else if levelPhase}Not enough coins · +1 pity coin at round end
 					{:else}Next level costs {levelCost(levelOf(mine))}{/if}
 				</div>
 				{#if mobile}
@@ -1067,7 +1072,7 @@
 							{#if canTakeNow(mine, deckSel)}
 								{@const tw = twinOf(dh, deckSel)}
 								<button class="act tohand sm lvtake" on:click={() => (lvConfirm = { kind: 'take', idx: deckSel! })}>Take{#if tw >= 0 && heroCards(dh)[tw]?.item} · +1 <img src={statIcon(heroCards(dh)[tw]?.item)} alt="" />{/if}</button>
-							{:else if battlePhase && swapSource(mine, deckSel) != null}
+							{:else if levelPhase && swapSource(mine, deckSel) != null}
 								<button class="act tohand sm lvtake" on:click={() => (lvConfirm = { kind: 'swap', idx: deckSel! })}>Swap to this path</button>
 							{:else}
 							{@const ok = allowedMoves(mine, deckSel)}

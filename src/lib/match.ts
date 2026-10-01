@@ -84,6 +84,9 @@ export function battlePatch(s: MatchState): Partial<MatchState> {
 	return { battlePhase: true, cards: endRoundAll(migrated), ...fight, battleNews }
 }
 
+/** Host, after the minion battle (and its removals): open the level-up step. */
+export const levelPatch = (): Partial<MatchState> => ({ levelPhase: true })
+
 /** Apply a card instruction to the shared state, returning the patch to broadcast. */
 export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 	const cards = s.cards ?? {}
@@ -106,8 +109,8 @@ export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 			for (const id in s.pieces ?? {}) if (keepsThroughRound(s.pieces[id])) pieces[id] = s.pieces[id]
 			// the level-up phase closes with the round: picks lock in, no level-up = pity coin
 			let next = endRoundAll(migrated)
-			next = Object.fromEntries(Object.entries(next).map(([pid, c]) => [pid, s.battlePhase ? closeLevelPhase(c) : lockPicks(c)]))
-			return { cards: next, round: s.round + 1, turn: 1, battlePhase: false, battle: null, attacks: {}, pieces, status: {}, radii: {}, effects: expireEffects(s.effects, s.round, s.turn) }
+			next = Object.fromEntries(Object.entries(next).map(([pid, c]) => [pid, s.battlePhase || s.levelPhase ? closeLevelPhase(c) : lockPicks(c)]))
+			return { cards: next, round: s.round + 1, turn: 1, battlePhase: false, levelPhase: false, battle: null, attacks: {}, pieces, status: {}, radii: {}, effects: expireEffects(s.effects, s.round, s.turn) }
 		}
 		// end of turn: Glitch / Grenade tokens leave play (tokens.ts), then a team with
 		// no minions left in the battle zone gets pushed (battle.ts)
@@ -145,8 +148,8 @@ export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 	else if (req.kind === 'coins') next = addCoins(cs, req.delta)
 	else if (req.kind === 'cardmove') next = manualMove(cs, req.idx, req.to)
 	else if (req.kind === 'ult') next = { ...cs, ultimate: req.on }
-	else if (req.kind === 'take') { if (!s.battlePhase) return {}; next = levelUp(cs, req.idx) }
-	else if (req.kind === 'swap') { if (!s.battlePhase) return {}; next = swapPick(cs, req.idx) }
+	else if (req.kind === 'take') { if (!s.levelPhase) return {}; next = levelUp(cs, req.idx) }
+	else if (req.kind === 'swap') { if (!s.levelPhase) return {}; next = swapPick(cs, req.idx) }
 	return { cards: { ...cards, [req.pid]: next } }
 }
 
@@ -261,6 +264,7 @@ export interface MatchState {
 	cardPhase?: 'planning' | 'resolving' // planning = commit/ready; resolving = act in initiative order
 	resolved?: string[] // playerIds who have confirmed their action done this turn
 	battlePhase?: boolean // turn 4 revealed → minion battle pending (before advancing the round)
+	levelPhase?: boolean // after the battle (and its removals) the host opens the level-up step
 	lane?: number // battle zone: index into LANE (battle.ts) — 0 Orange Beach, 1 Center, 2 Blue Beach
 	battle?: Battle | null // minion battle in progress: the loser still has minions to take off
 	wonBy?: { team: Team; reason: string } | null // a push won the game (throne / last wave)
@@ -1174,7 +1178,7 @@ export function joinMatch(
 		for (const pid in patch.cards ?? {}) {
 			const before = local.cards?.[pid], after = patch.cards![pid]
 			if (before && after && levelOf(after) > levelOf(before)) note(pid, `reached Level ${levelOf(after)} ⬆`)
-			if (req.kind === 'advance' && local.battlePhase && before && after && !(before.roundPicks ?? []).length && after.coins > before.coins)
+			if (req.kind === 'advance' && (local.battlePhase || local.levelPhase) && before && after && !(before.roundPicks ?? []).length && after.coins > before.coins)
 				note(pid, `couldn't level up — pity coin +1 → ${after.coins}`)
 		}
 		if (req.kind === 'swap' && patch.cards?.[req.pid]) note(req.pid, 'swapped a level-up pick for its twin')
