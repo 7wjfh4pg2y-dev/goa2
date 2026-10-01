@@ -239,19 +239,8 @@
 	// host keeps the directory entry in sync with the room
 	$: if (roomHandle) roomHandle.update({ count: seatedCount, started: $state.started });
 
-	// host handoff: if the current host has left the room, the remaining player
-	// with the smallest id claims host (deterministic, so everyone agrees).
-	$: if (
-		session &&
-		$state.rev >= 0 &&
-		(mode === 'lobby' || mode === 'draft' || mode === 'game') &&
-		$state.host &&
-		$players.length &&
-		!$players.some((p) => p.id === $state.host)
-	) {
-		const cand = [...$players].map((p) => p.id).sort()[0];
-		if (cand === session.clientId && $state.host !== cand) session.update({ host: cand });
-	}
+	// (host hand-over lives in match.ts: a grace period, seat order, an epoch so a stale
+	// update can't undo it, and the creator takes the role back when they're here)
 
 	// whoever is host keeps the room in the public directory (covers handoff),
 	// in every in-game phase so it stays discoverable/spectatable throughout

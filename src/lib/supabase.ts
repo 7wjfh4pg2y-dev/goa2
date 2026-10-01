@@ -16,6 +16,10 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 	realtime: {
 		// Keep cursor updates snappy without flooding the free-tier limits.
 		params: { eventsPerSecond: 30 },
+		// heartbeats from a Web Worker: browsers throttle timers in background tabs (switch to
+		// Discord, minimise the window…), heartbeats ran late, the server dropped the socket and
+		// that player vanished from presence — which also handed the host role around
+		worker: typeof Worker !== 'undefined',
 	},
 })
 

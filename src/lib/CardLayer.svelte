@@ -146,11 +146,13 @@
 	})();
 	$: revealed = allCommitted && revealAt != null && countNow >= revealAt;
 	// tick a local clock only while the countdown is live, to drive 3→2→1 and the flip
-	let countNow = Date.now();
+	// the countdown runs on the HOST's clock (revealAt is host time): a device whose clock is off
+	// used to sit on "3" for seconds, or skip it
+	let countNow = session?.hostNow?.() ?? Date.now();
 	let countTick: ReturnType<typeof setInterval> | null = null;
 	$: manageCountTick(allCommitted && revealAt != null && countNow < revealAt);
 	function manageCountTick(live: boolean) {
-		if (live && !countTick) { countNow = Date.now(); countTick = setInterval(() => (countNow = Date.now()), 100); }
+		if (live && !countTick) { countNow = session?.hostNow?.() ?? Date.now(); countTick = setInterval(() => (countNow = session?.hostNow?.() ?? Date.now()), 100); }
 		else if (!live && countTick) { clearInterval(countTick); countTick = null; }
 	}
 	// end-of-round flow: turn 4 → Minion Battle (battle.ts) → level-ups → Next round

@@ -118,10 +118,41 @@ describe('host hand-over', () => {
 		await vi.advanceTimersByTimeAsync(5000);
 		expect(get(a.state).host).toBe(host.clientId); // still inside the grace period (a refresh would come back)
 
-		await vi.advanceTimersByTimeAsync(7000);
+		await vi.advanceTimersByTimeAsync(12000);
 		expect(get(b.state).host).toBe(b.clientId); // seat 1 is next round the table
 		expect(get(a.state).host).toBe(b.clientId);
 		expect(get(b.state).log.at(-1)?.text).toContain('is now the host');
+		vi.useRealTimers();
+	});
+
+	it('a stale snapshot can never undo a hand-over, and the creator takes the role back', async () => {
+		vi.useFakeTimers();
+		const host = joinMatch('ROOMR', { name: 'Host', color: 'spectator' }, { seed: initialMatchState({ players: 4 }) });
+		const a = joinMatch('ROOMR', { name: 'A', color: 'spectator' }, {});
+		const b = joinMatch('ROOMR', { name: 'B', color: 'spectator' }, {});
+		a.setSelf({ seat: 2 });
+		b.setSelf({ seat: 1 });
+		await vi.advanceTimersByTimeAsync(1000);
+		const bus = buses['match:ROOMR'];
+		// the creator's presence drops (a throttled background tab) — but they're still connected
+		delete bus.presence[host.clientId];
+		a.setSelf({ ready: true });
+		await vi.advanceTimersByTimeAsync(16000);
+		expect(get(a.state).host).toBe(b.clientId);
+		expect(get(a.state).hostEpoch).toBe(1);
+
+		// someone who hadn't seen the hand-over yet sends a newer snapshot with the OLD host in it
+		const stale = { ...get(a.state), host: host.clientId, hostEpoch: 0, rev: get(a.state).rev + 5, updatedAt: Date.now() + 1, updatedBy: 'zz' };
+		bus.channels[0].send({ type: 'broadcast', event: 'state', payload: stale });
+		expect(get(a.state).rev).toBe(stale.rev); // the rest of the snapshot is taken…
+		expect(get(a.state).host).toBe(b.clientId); // …but not the stale host
+
+		// the creator's tab wakes up again: they take the role back
+		host.setSelf({ ready: false });
+		await vi.advanceTimersByTimeAsync(6000);
+		expect(get(a.state).host).toBe(host.clientId);
+		expect(get(b.state).host).toBe(host.clientId);
+		expect(get(host.state).log.at(-1)?.text).toContain('is the host again');
 		vi.useRealTimers();
 	});
 });
