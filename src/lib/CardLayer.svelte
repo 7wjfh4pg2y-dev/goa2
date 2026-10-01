@@ -36,6 +36,8 @@
 	export let holdingToken = false; // a shelf token is in hand, waiting for its hex
 	export let onRespawn: () => void = () => {}; // defeated hero: pick a spawn point to come back on
 	export let onEnter: () => void = () => {}; // game start: pick a spawn point for your hero
+	export let pingArmed = false; // the next board tap pings
+	export let onPing: () => void = () => {}; // arm a ping (pressed again: ping your own hero)
 	export let mobile = false; // phone layout (set by GameView at ≤760px wide): strip + compact dash
 
 	const ORANGE = '#ef7d22';
@@ -1262,6 +1264,10 @@
 							<button class="dsopen dsnmbtn" on:click={() => (overlayId = clientId)} title="Open your board"><span class="dsnm">{myName}</span><em>Lv {levelOf(mine)}</em></button>
 							<span class="initb" class:off={myInit == null} title="Your initiative this turn (card + upgrades)"><i class="inicon">{@html CLOCK}</i><b>{myInit ?? '–'}</b></span>
 							{@render radiusCtl()}
+							<button class="radbtn pingbtn" class:on={pingArmed} on:click={onPing} aria-label="Ping"
+								title={pingArmed ? 'Tap the board to ping a spot — or press again to ping your hero' : 'Ping: point something out on the board (or Alt+click it)'}>
+								<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3" fill="currentColor" stroke="none" /><path d="M6.3 6.3a8 8 0 0 0 0 11.4M17.7 6.3a8 8 0 0 1 0 11.4M3.5 3.5a12 12 0 0 0 0 17M20.5 3.5a12 12 0 0 1 0 17" /></svg>
+							</button>
 														<span class="dsmk">
 								{#if mst.poison}<img class="pois" src={icon('marker_poison')} alt="Poison" title="Poisoned" />{/if}
 								{#if mst.bounty}<img class="bnty" src={icon('marker_bounty')} alt="Bounty" title="Bounty on you" />{/if}
@@ -1889,6 +1895,9 @@
 	.radbtn b { min-width: .6em; font-size: .76rem; line-height: 1; font-variant-numeric: tabular-nums; }
 	.radbtn:hover { background: rgba(199,154,78,.24); color: #f6e3b4; }
 	.radbtn.on { background: rgba(199,154,78,.3); border-color: rgba(230,190,110,.8); color: #fff3d6; }
+	.radbtn.pingbtn { width: 24px; padding: 0; align-self: center; }
+	.radbtn.pingbtn.on { animation: pingarm 1s ease-in-out infinite; }
+	@keyframes pingarm { 50% { box-shadow: 0 0 0 3px rgba(230,190,110,.35), 0 0 12px rgba(230,190,110,.6); } }
 	.radpop { position: absolute; left: 0; bottom: calc(100% + 10px); z-index: 14; width: 196px; padding: 9px; border-radius: 12px;
 		background: rgba(11,16,26,.96); border: 1px solid rgba(199,154,78,.5); box-shadow: 0 16px 40px rgba(0,0,0,.6); }
 	.radgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }

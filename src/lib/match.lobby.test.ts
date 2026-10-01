@@ -125,6 +125,23 @@ describe('host hand-over', () => {
 		vi.useRealTimers();
 	});
 
+	it('a ping reaches everyone, one per player, and fades', async () => {
+		vi.useFakeTimers();
+		const host = joinMatch('ROOMP', { name: 'Host', color: 'teal' }, { seed: initialMatchState({ players: 2 }) });
+		const a = joinMatch('ROOMP', { name: 'A', color: 'pink' }, {});
+		await vi.advanceTimersByTimeAsync(1000);
+		host.ping('3_4');
+		expect(get(a.pings)).toMatchObject([{ by: host.clientId, hex: '3_4', color: 'teal' }]);
+		expect(get(host.pings)).toHaveLength(1);
+		host.ping('5_5'); // too soon: ignored (rate limit)
+		await vi.advanceTimersByTimeAsync(700);
+		host.ping('6_6'); // replaces the host's earlier ping
+		expect(get(a.pings).map((p) => p.hex)).toEqual(['6_6']);
+		await vi.advanceTimersByTimeAsync(4000);
+		expect(get(a.pings)).toEqual([]);
+		vi.useRealTimers();
+	});
+
 	it('a stale snapshot can never undo a hand-over, and the creator takes the role back', async () => {
 		vi.useFakeTimers();
 		const host = joinMatch('ROOMR', { name: 'Host', color: 'spectator' }, { seed: initialMatchState({ players: 4 }) });

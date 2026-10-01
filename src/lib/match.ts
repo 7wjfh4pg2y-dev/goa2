@@ -231,6 +231,10 @@ export const PHASE_LABELS: Record<Phase, string> = {
 	upgrade: 'Upgrade'
 }
 
+/** A ping: a short-lived "look here" on a hex, in the pinger's colour (not part of the shared state). */
+export interface Ping { id: string; by: string; hex: string; color: string; at: number }
+export const PING_MS = 3500
+
 export interface LogEntry {
 	id: string
 	by: string // player name
@@ -758,6 +762,10 @@ export interface MatchSession {
 	clientId: string
 	/** The host's clock as seen from here (for host-timed things like the reveal countdown). */
 	hostNow: () => number
+	/** Ping a hex: everyone sees rings there for a few seconds. */
+	ping: (hex: string) => void
+	/** The live pings (each fades after PING_MS; one per player at a time). */
+	pings: Readable<Ping[]>
 }
 
 /**
@@ -796,6 +804,13 @@ export function joinMatch(
 	const seatDenied = writable(0)
 	// another player flipped to join a team — everyone plays the coin animation
 	const joinFlip = writable<{ id: string; name: string; side: Team; at: number } | null>(null)
+	// pings ride their own broadcast (never the shared state): one live ping per player
+	const pings = writable<Ping[]>([])
+	const addPing = (p: Ping) => {
+		pings.update((l) => [...l.filter((x) => x.by !== p.by), p])
+		setTimeout(() => pings.update((l) => l.filter((x) => x.id !== p.id)), PING_MS)
+	}
+	let lastPing = 0
 	// host-local undo: snapshots of state before each logged action THIS turn.
 	// Immutable nested updates mean a shallow reference is a safe snapshot. The
 	// stack resets whenever the round/turn changes, so undo floors at turn start.
@@ -910,6 +925,7 @@ export function joinMatch(
 				if (local.host !== clientId) return
 				hostApplyReq(payload as CardReq)
 			})
+			.on('broadcast', { event: 'ping' }, ({ payload }) => addPing(payload as Ping))
 			.on('broadcast', { event: 'joinflip' }, ({ payload }) => {
 				joinFlip.set(payload as { id: string; name: string; side: Team; at: number })
 			})
@@ -1088,6 +1104,15 @@ export function joinMatch(
 		undoing = false
 	}
 
+	const ping = (hex: string) => {
+		const now = Date.now()
+		if (!hex || now - lastPing < 600) return // a gentle limit: the channel is rate-limited
+		lastPing = now
+		const p: Ping = { id: `${clientId}-${now}`, by: clientId, hex, color: me.color, at: now }
+		addPing(p)
+		try { channel.send({ type: 'broadcast', event: 'ping', payload: p }) } catch { /* ignore */ }
+	}
+
 	const act = (text: string, patch: Partial<MatchState>) => {
 		const entry: LogEntry = {
 			id: globalThis.crypto?.randomUUID?.() ?? `l_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
@@ -1249,7 +1274,7 @@ export function joinMatch(
 		void dropChannel(channel)
 	}
 
-	return { state, players, update, act, setSelf, cardAction, kick, flipJoin, joinFlip, undo, canUndo, requestSeat, resolveSeat, seatGranted, seatDenied, kicked, notFound, status: conn, leave, clientId, hostNow }
+	return { state, players, update, act, setSelf, cardAction, kick, flipJoin, joinFlip, undo, canUndo, requestSeat, resolveSeat, seatGranted, seatDenied, kicked, notFound, status: conn, leave, clientId, hostNow, ping, pings }
 }
 
 // ---- Round/turn helpers (encode the rulebook's structure) -------------------
