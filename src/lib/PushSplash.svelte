@@ -1,13 +1,16 @@
 <script lang="ts">
 	// THE WAVE ADVANCES — a lane push: an arrow-shaped band in the pushing team's colour
-	// storms across in the push direction (orange → right, blue → left, the same sides
-	// as the battle splash), chevrons streaming through it. A game-winning push reads
+	// storms across in the push direction, drawn from the viewer's side: your base is
+	// bottom-right, so YOUR team pushes right → left and the enemy pushes left → right
+	// (same sides as the battle splash), chevrons streaming through it. A game-winning push reads
 	// THE THRONE FALLS / FINAL PUSH instead. Played by every client from `pushNews`.
 	import { onDestroy } from 'svelte';
 	import type { PushNews } from '$lib/battle';
+	import type { Team } from '$lib/match';
 
 	export let news: PushNews | null = null;
 	export let mobile = false;
+	export let myTeam: Team = 'blue'; // the viewer's team sits on the right (spectators: blue)
 
 	let seen = news?.id ?? null; // joining mid-game: don't replay an old push
 	let shown: PushNews | null = null;
@@ -32,7 +35,7 @@
 
 {#if shown}
 	{#key shown.id}
-		<div class="ps {shown.winner}" class:won={!!shown.won} class:mob={mobile} aria-live="polite">
+		<div class="ps {shown.winner}" class:won={!!shown.won} class:fromR={shown.winner === myTeam} class:mob={mobile} aria-live="polite">
 			<div class="band">
 				<div class="chevs">{#each CHEVS as i (i)}<i></i>{/each}</div>
 				<div class="glint"></div>
@@ -62,7 +65,7 @@
 		clip-path: polygon(0 0, 92% 0, 100% 50%, 92% 100%, 0 100%, 6% 50%);
 		background: linear-gradient(90deg, var(--cd) 0%, var(--c) 45%, var(--c2) 92%);
 		animation: storm var(--T) cubic-bezier(.2, .85, .25, 1) both; }
-	.blue .band { transform-origin: center; scale: -1 1; }
+	.fromR .band { transform-origin: center; scale: -1 1; } /* your team pushes from the right */
 	@keyframes storm {
 		0% { transform: translateY(-50%) translateX(-110%); filter: blur(8px); }
 		12% { transform: translateY(-50%) translateX(0); filter: blur(0); }

@@ -37,6 +37,7 @@
 		// (the demo has no board: the splash reads each hero from `cards`)
 	}
 
+	let me: Team = 'orange'; // whose eyes we watch through: your team sits on the right
 	let turnSplash: TurnSplash;
 	let round = 2, turn = 1;
 </script>
@@ -46,6 +47,11 @@
 
 <div class="page">
 	<h1>Splash demo</h1>
+	<div class="row view">
+		<span>View as</span>
+		<button class="o" class:off={me !== 'orange'} on:click={() => (me = 'orange')}>Orange player</button>
+		<button class="b" class:off={me !== 'blue'} on:click={() => (me = 'blue')}>Blue player</button>
+	</div>
 	<section>
 		<h2>Minion battle</h2>
 		<div class="row">
@@ -89,9 +95,9 @@
 	</section>
 </div>
 
-<BattleSplash {news} {mobile} />
-<PushSplash news={push} {mobile} />
-<DefeatSplash news={kill} {cards} names={(i) => names[i] ?? i} {lifeArt} {mobile} />
+<BattleSplash {news} {mobile} myTeam={me} />
+<PushSplash news={push} {mobile} myTeam={me} />
+<DefeatSplash news={kill} {cards} names={(i) => names[i] ?? i} {lifeArt} {mobile} myTeam={me} />
 <TurnSplash bind:this={turnSplash} {mobile} />
 
 <style>
@@ -105,6 +111,8 @@
 	button.o { background: #ef7d22; border-color: transparent; color: #fff; }
 	button.b { background: #2f7fe6; border-color: transparent; color: #fff; }
 	button.t { background: #7a4292; border-color: transparent; color: #fff; }
+	.view { align-items: center; gap: 10px; font-size: .9rem; color: #e3cf9c; }
+	button.off { opacity: .4; }
 	.note { margin: -2px 0 10px; text-align: center; font-size: .78rem; color: #cbd5e1; }
 	.custom label { display: flex; align-items: center; gap: 6px; font-size: .9rem; }
 	.custom input { width: 56px; padding: 6px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, .2); background: rgba(0, 0, 0, .35); color: #fff; font: inherit; }

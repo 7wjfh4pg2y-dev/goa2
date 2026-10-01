@@ -89,6 +89,8 @@
 	$: mySeat = $players.find((p) => p.id === clientId)?.seat ?? -1;
 	$: myTeam = teamForSeat(mySeat, $ms.seats);
 	$: orientation = myTeam === 'orange' ? 180 : 0;
+	// splashes are drawn from your side: your team on the right (spectators watch as blue)
+	$: viewTeam = (mySeat >= 0 && mySeat < $ms.seats ? myTeam : 'blue') as Team;
 	$: iAmHost = $ms.host === clientId;
 
 	// ── in-game manage menu: seats, spectators, kick, seat-takeover approvals ──
@@ -528,10 +530,10 @@
 			<button class="spcancel" on:click={cancelPlace}>Cancel</button>
 		</div>
 	{/if}
-	<BattleSplash news={battleNews} {mobile} onDone={() => (battleDoneId = battleNews?.id ?? null)} />
+	<BattleSplash news={battleNews} {mobile} myTeam={viewTeam} onDone={() => (battleDoneId = battleNews?.id ?? null)} />
 	<!-- a push (mid-turn, or from the battle) waits for the battle splash to finish -->
-	<PushSplash news={battleSplashing ? null : $ms.pushNews ?? null} {mobile} />
-	<DefeatSplash news={$ms.lastDefeat ?? null} pieces={$ms.pieces} cards={$ms.cards ?? {}} defeated={$ms.defeated ?? {}} names={(id) => playerName(id)} {lifeArt} {mobile} />
+	<PushSplash news={battleSplashing ? null : $ms.pushNews ?? null} {mobile} myTeam={viewTeam} />
+	<DefeatSplash news={$ms.lastDefeat ?? null} pieces={$ms.pieces} cards={$ms.cards ?? {}} defeated={$ms.defeated ?? {}} names={(id) => playerName(id)} {lifeArt} {mobile} myTeam={viewTeam} />
 	<div class="ocean"></div>
 	<!-- on a phone the board sits between the top bar + player strip and the dash -->
 	<div class="boardarea" class:mob={mobile}>
