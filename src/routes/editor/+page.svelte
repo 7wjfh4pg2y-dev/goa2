@@ -8,16 +8,16 @@
 	const SQRT3 = Math.sqrt(3);
 
 	const PALETTE = [
-		{ t: 'baseOrange', label: 'Orange base', c: '#ea580c' },
-		{ t: 'baseBlue', label: 'Blue base', c: '#2563eb' },
-		{ t: 'baseOrangeSpawn', label: 'Orange throne', c: '#c2410c' },
-		{ t: 'baseBlueSpawn', label: 'Blue throne', c: '#1e40af' },
+		{ t: 'baseOrange', label: 'Atlantean base', c: '#ea580c' },
+		{ t: 'baseBlue', label: 'Titan base', c: '#2563eb' },
+		{ t: 'baseOrangeSpawn', label: 'Atlantean throne', c: '#c2410c' },
+		{ t: 'baseBlueSpawn', label: 'Titan throne', c: '#1e40af' },
 		{ t: 'forest', label: 'Forest', c: '#16a34a' },
 		{ t: 'beach', label: 'Beach', c: '#eab308' },
 		{ t: 'middle', label: 'Middle', c: '#9ca3af' },
 		{ t: 'terrain', label: 'Terrain', c: '#111827' },
-		{ t: 'spawnOrange', label: 'Orange spawn', c: '#ef4444' },
-		{ t: 'spawnBlue', label: 'Blue spawn', c: '#a855f7' }
+		{ t: 'spawnOrange', label: 'Atlantean spawn', c: '#ef4444' },
+		{ t: 'spawnBlue', label: 'Titan spawn', c: '#a855f7' }
 	] as const;
 	type HexType = (typeof PALETTE)[number]['t'];
 	const colorOf = (t: HexType) => PALETTE.find((p) => p.t === t)?.c ?? '#fff';
@@ -282,8 +282,8 @@
 
 		<div class="bz">
 			<b>Starting wave</b>
-			<div class="bzrow"><span class="o">Orange</span> {bzCount('orange', 'melee')}M · {bzCount('orange', 'ranged')}R · {bzCount('orange', 'heavy')}H</div>
-			<div class="bzrow"><span class="b">Blue</span> {bzCount('blue', 'melee')}M · {bzCount('blue', 'ranged')}R · {bzCount('blue', 'heavy')}H</div>
+			<div class="bzrow"><span class="o">Atlanteans</span> {bzCount('orange', 'melee')}M · {bzCount('orange', 'ranged')}R · {bzCount('orange', 'heavy')}H</div>
+			<div class="bzrow"><span class="b">Titans</span> {bzCount('blue', 'melee')}M · {bzCount('blue', 'ranged')}R · {bzCount('blue', 'heavy')}H</div>
 			<p class="tip">Rulebook default per team: 4 Melee · 1 Ranged · 1 Heavy.</p>
 		</div>
 

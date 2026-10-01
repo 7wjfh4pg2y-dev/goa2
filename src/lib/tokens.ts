@@ -1,5 +1,6 @@
 // Hero tokens & markers: which hero gets which, and the board rules for them.
 // Pure functions over the shared `pieces` map so they can be unit-tested.
+import { aMinion } from './teams'
 import type { Piece, Team } from './match'
 
 /** 'companion' = the hero's lettered summon (Trinkets' Turret, Widget's Pyro). */
@@ -179,7 +180,7 @@ export function applyRemoval(pieces: Record<string, Piece>, id: string, choice: 
 
 /** The activity-log line for a removal (hero = the enemy hero who set off a mine). */
 export function removalLog(p: Piece, choice: string, hero?: string): string {
-	const name = p.kind === 'minion' ? `a ${p.team} ${p.role} minion` : p.token === 'companion' ? (p.label ?? 'companion') : tokenName(p.token ?? '')
+	const name = p.kind === 'minion' ? aMinion(p.team, p.role) : p.token === 'companion' ? (p.label ?? 'companion') : tokenName(p.token ?? '')
 	if (choice === 'trigger') {
 		const who = hero ?? 'An enemy hero'
 		return p.token === 'token_blast' ? `set off a mine — 💥 Blast! ${who} discards a card, if able` : `set off a mine — a Dud (${who} is unharmed)`

@@ -5,6 +5,7 @@
 	// greyed out, the killer in full colour; the strike comes from the killer's side.
 	// What it paid out sits below.
 	// Driven by the shared `lastDefeat` news (match.ts); it never blocks the board.
+	import { teamName } from '$lib/teams';
 	import { onDestroy } from 'svelte';
 	import { heroById, heroSplash } from '$lib/heroes';
 	import type { DefeatNews, Piece, Team } from '$lib/match';
@@ -36,7 +37,6 @@
 
 	const heroOf = (pid: string) => defeated[pid]?.piece.hero ?? pieces[pid]?.hero ?? cards[pid]?.hero ?? '';
 	const TEAM = { orange: '#ef7d22', blue: '#2f7fe6' };
-	const cap = (t: string) => t[0].toUpperCase() + t.slice(1);
 	$: vTeam = (shown?.team ?? 'orange') as Team;
 	$: kTeam = (vTeam === 'orange' ? 'blue' : 'orange') as Team;
 	$: vHero = shown ? heroOf(shown.victim) : '';
@@ -63,7 +63,7 @@
 				<div class="rew">
 					<span class="r"><i class="coin"></i>+{shown.coins} <em>{names(shown.by)}</em></span>
 					{#each shown.assists as a (a)}<span class="r"><i class="coin"></i>+{shown.assist} <em>{names(a)}</em></span>{/each}
-					<span class="r loss"><img src={lifeArt(vTeam, 'back')} alt="" />−{shown.lives} <em>{cap(vTeam)}</em></span>
+					<span class="r loss"><img src={lifeArt(vTeam, 'back')} alt="" />−{shown.lives} <em>{teamName(vTeam)}</em></span>
 				</div>
 			</div>
 		</div>

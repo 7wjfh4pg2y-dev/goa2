@@ -8,6 +8,7 @@
 	import PushSplash from '$lib/PushSplash.svelte';
 	import VictorySplash from '$lib/VictorySplash.svelte';
 	import { heroById, heroLogo } from '$lib/heroes';
+	import { teamName, teamAdj, aMinion, placeName } from '$lib/teams';
 	import { zoneName } from '$lib/zones';
 	import { effectLabel } from '$lib/effects';
 	import { battleZone, canBattleRemove, pushLane, laneNotes, heavyImmune } from '$lib/battle';
@@ -57,7 +58,7 @@
 		const arr = [...($ms.lifeTok?.[team] ?? [])];
 		arr[i] = !arr[i];
 		const count = arr.filter(Boolean).length;
-		session.act(`${team === 'orange' ? 'Orange' : 'Blue'} Life ${$ms.life[team]} → ${count}`,
+		session.act(`${teamAdj(team)} Life ${$ms.life[team]} → ${count}`,
 			{ lifeTok: { ...$ms.lifeTok, [team]: arr }, life: { ...$ms.life, [team]: count } });
 	}
 	function toggleWave(i: number) {
@@ -181,7 +182,7 @@
 	function endOnLife() {
 		if (!lifeOut) return;
 		const win: Team = lifeOut === 'orange' ? 'blue' : 'orange';
-		session.act(`🏆 ${cap(win)} wins — ${cap(lifeOut)} ran out of Life`, { wonBy: { team: win, reason: `${cap(lifeOut)} ran out of Life` } });
+		session.act(`🏆 ${teamName(win)} win — ${teamName(lifeOut)} ran out of Life Tokens`, { wonBy: { team: win, reason: `${teamName(lifeOut)} ran out of Life Tokens` } });
 	}
 	// the victory splash: everyone, as soon as a winner is set (and again from the gold banner)
 	let victoryClosed = false;
@@ -197,8 +198,6 @@
 		const wait = k && p?.won ? 5000 - (Date.now() - p.at) : 0;
 		if (wait > 0) { victoryHold = true; setTimeout(() => (victoryHold = false), wait); }
 	}
-	$: roster = Object.keys($ms.cards ?? {}).map((pid) => ({ pid, hero: $ms.cards?.[pid]?.hero ?? '', name: playerName(pid), team: teamOf($ms, pid) }));
-	$: winRoster = $ms.wonBy ? roster.filter((h) => h.team === $ms.wonBy?.team) : [];
 
 	// gear/star throne hexes, so the board can draw them and heroes/minions spawn there
 	$: thrones = [
@@ -211,10 +210,10 @@
 		if (heavyImmune($ms, id) && !iAmHost) return; // immune heavy: stays put
 		const label = p?.hero ? heroById(p.hero)?.name ?? 'a piece' : 'a piece';
 		if (p?.kind === 'token') {
-			session.act(`moved ${p.token ? tokenName(p.token) : 'a token'} → ${zoneName($ms.map, hex)}`, { pieces: moveToken($ms.pieces, id, hex) });
+			session.act(`moved ${p.token ? tokenName(p.token) : 'a token'} → ${placeName(zoneName($ms.map, hex))}`, { pieces: moveToken($ms.pieces, id, hex) });
 			return;
 		}
-		session.act(`moved ${label} → ${zoneName($ms.map, hex)}`, movePiece($ms, id, hex));
+		session.act(`moved ${label} → ${placeName(zoneName($ms.map, hex))}`, movePiece($ms, id, hex));
 	}
 
 	// ── minion spawn (temporary manual controls) + piece delete ────────────────
@@ -274,7 +273,7 @@
 			const id = `tok_${t.owner}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 5)}`;
 			const pieces = placeToken($ms.pieces, { id, hex, team: t.team, token: t.token, owner: t.owner, label: t.label, color: t.color });
 			const what = t.token === 'companion' ? `deployed ${t.label}` : MINES.has(t.token) ? 'laid a mine' : `placed ${tokenName(t.token)}`;
-			const on = pieces[id].attachedTo ? ` on ${heroById($ms.pieces[pieces[id].attachedTo!]?.hero ?? '')?.name ?? 'a hero'}` : ` → ${zoneName($ms.map, hex)}`;
+			const on = pieces[id].attachedTo ? ` on ${heroById($ms.pieces[pieces[id].attachedTo!]?.hero ?? '')?.name ?? 'a hero'}` : ` → ${placeName(zoneName($ms.map, hex))}`;
 			session.act(what + on, { pieces });
 			pendingToken = null;
 			return;
@@ -282,7 +281,7 @@
 		if (!pendingSpawn) return;
 		const { team, role } = pendingSpawn;
 		const id = `minion_${team}_${role}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 5)}`;
-		session.act(`spawned a ${team} ${role} minion`, { pieces: { ...$ms.pieces, [id]: { id, hex, team, kind: 'minion' as const, role } } });
+		session.act(`spawned ${aMinion(team, role)}`, { pieces: { ...$ms.pieces, [id]: { id, hex, team, kind: 'minion' as const, role } } });
 		pendingSpawn = null;
 	}
 
@@ -414,7 +413,7 @@
 	let tieFlip = false;
 	function flipTie() {
 		const next: Team = $ms.tieBreaker === 'orange' ? 'blue' : 'orange';
-		session.act(`Tie-breaker → ${next === 'orange' ? 'Orange' : 'Blue'}`, { tieBreaker: next });
+		session.act(`Tie-breaker → ${teamName(next)}`, { tieBreaker: next });
 	}
 
 	const connLabel = (s: ConnStatus) =>
@@ -502,11 +501,11 @@
 <!-- battle zone + host push override (desktop HUD and the phone waves sheet) -->
 {#snippet laneCtl()}
 	<div class="lane">
-		<span class="bz" title="Battle zone — the minion battle is fought here; a push moves it one zone towards the loser's throne">⚔ {battleZone($ms)}</span>
+		<span class="bz" title="Battle zone — the minion battle is fought here; a push moves it one zone towards the loser's throne">⚔ {placeName(battleZone($ms))}</span>
 		{#if iAmHost && !$ms.wonBy}
 			<span class="pushes">
 				{#each ['orange', 'blue'] as t}
-					<button class="pushb {t}" class:arm={pushArm === t} on:click={() => manualPush(t as Team)} title="Host override: {cap(t)} pushes the lane">{pushArm === t ? 'Confirm?' : `${cap(t)} push`}</button>
+					<button class="pushb {t}" class:arm={pushArm === t} on:click={() => manualPush(t as Team)} title="Host override: the {teamName(t)} push the lane">{pushArm === t ? 'Confirm?' : `${teamAdj(t)} push`}</button>
 				{/each}
 			</span>
 		{/if}
@@ -517,20 +516,20 @@
 
 <div class="gamewrap" class:mob={mobile} class:dashfull={!mobile && lay.underHud} style={mobile ? '' : layoutVars(lay)}>
 	{#if $ms.wonBy}
-		<button class="placehint won" on:click={() => (victoryClosed = false)} title="Show the victory screen again">🏆 {cap($ms.wonBy.team)} wins — {$ms.wonBy.reason}</button>
+		<button class="placehint won" on:click={() => (victoryClosed = false)} title="Show the victory screen again">🏆 {teamName($ms.wonBy.team)} win — {$ms.wonBy.reason}</button>
 	{:else if battle && !pendingToken && !pendingRespawn && !(mobile && pendingSpawn)}
 		<!-- the battle's removal step: who removes how many of THEIR OWN minions, impossible to miss -->
 		<div class="battlebox" style="--lc:{battle.loser === 'blue' ? '#2f7fe6' : '#ef7d22'}; --lt:{battle.loser === 'blue' ? '#8cc0ff' : '#ffb27a'}">
-			<div class="bbhead">⚔ Minion battle · <b class="to">Orange {battle.orange}</b> : <b class="tb">{battle.blue} Blue</b></div>
+			<div class="bbhead">⚔ Minion battle · <b class="to">Atlanteans {battle.orange}</b> : <b class="tb">{battle.blue} Titans</b></div>
 			<div class="bbmain">
-				<span><b class="lt">{cap(battle.loser ?? '')}</b> removes <b class="n">{battle.remove}</b> of their own minion{battle.remove === 1 ? '' : 's'}</span>
+				<span>The <b class="lt">{teamName(battle.loser)}</b> remove <b class="n">{battle.remove}</b> of their own minion{battle.remove === 1 ? '' : 's'}</span>
 				<span class="bbpips">{#each Array(battle.remove) as _, k (k)}<i></i>{/each}</span>
 			</div>
 			{#if iChooseBattle}
 				<div class="bbsub">{myTeam === battle.loser ? 'Tap your glowing minions to remove them' : `Tap the glowing ${battle.loser} minions to remove them`} — the heavy goes last
 					<button class="bbauto" on:click={battleAutoAll} title="Melee first, heavies last">Let the game choose</button></div>
 			{:else}
-				<div class="bbsub">Waiting for {cap(battle.loser ?? '')} to remove {battle.remove === 1 ? 'a minion' : `${battle.remove} minions`}…</div>
+				<div class="bbsub">Waiting for the {teamName(battle.loser)} to remove {battle.remove === 1 ? 'a minion' : `${battle.remove} minions`}…</div>
 			{/if}
 		</div>
 	{:else if (outgoing.length || hostWatch.length) && !pendingToken && !pendingRespawn}
@@ -570,15 +569,13 @@
 		</div>
 	{/if}
 	{#if $ms.wonBy && !victoryClosed && !victoryHold}
-		<VictorySplash team={$ms.wonBy.team} reason={$ms.wonBy.reason} winners={winRoster}
-			myTeam={mySeat >= 0 && mySeat < $ms.seats ? myTeam : null} {mobile} onClose={() => (victoryClosed = true)}
-			life={$ms.life} waves={$ms.waves} round={$ms.round} />
+		<VictorySplash team={$ms.wonBy.team} reason={$ms.wonBy.reason} myTeam={mySeat >= 0 && mySeat < $ms.seats ? myTeam : null} {mobile} onClose={() => (victoryClosed = true)} round={$ms.round} />
 	{/if}
 	{#if askLifeEnd && lifeOut}
 		<div class="modal-scrim" role="presentation">
 			<div class="modal" role="dialog" aria-modal="true" tabindex="-1">
-				<h3>{cap(lifeOut)} has no Life left</h3>
-				<p>End the game? <b style:color={lifeOut === 'orange' ? '#8cc0ff' : '#ffb27a'}>{lifeOut === 'orange' ? 'Blue' : 'Orange'}</b> wins.</p>
+				<h3>The {teamName(lifeOut)} have no Life Tokens left</h3>
+				<p>End the game? <b style:color={lifeOut === 'orange' ? '#8cc0ff' : '#ffb27a'}>{teamName(lifeOut === 'orange' ? 'blue' : 'orange')}</b> win.</p>
 				<div class="mrow">
 					<button class="mcancel" on:click={() => (lifeDismissed = lifeOut ?? '')}>Not yet</button>
 					<button class="mleave" on:click={endOnLife}>🏆 End the game</button>
@@ -586,7 +583,7 @@
 			</div>
 		</div>
 	{:else if lifeOut && !iAmHost}
-		<div class="placehint lifeout">{cap(lifeOut)} has no Life left — waiting for the host to end the game</div>
+		<div class="placehint lifeout">The {teamName(lifeOut)} have no Life Tokens left — waiting for the host to end the game</div>
 	{/if}
 	<BattleSplash news={battleNews} {mobile} myTeam={viewTeam} onDone={() => (battleDoneId = battleNews?.id ?? null)} />
 	<!-- a push (mid-turn, or from the battle) waits for the battle splash to finish -->
@@ -608,7 +605,7 @@
 				<span class="rw" title="You get {attackSum.coins}{attackSum.assists.length ? `, each teammate ${attackSum.assist} assist` : ''}">
 					<span class="gc sm"></span><b>{attackSum.coins}</b>{#if attackSum.assists.length}<i>/</i><span class="gc sm"></span><b>{attackSum.assist}</b>{/if}
 				</span>
-				<span class="rw" title="{cap(attackSum.team ?? '')} loses {attackSum.lives} life"><img class="lt" src={lifeArt((attackSum.team ?? 'orange') as Team, 'back')} alt="" /><b>{attackSum.lives}</b></span>
+				<span class="rw" title="The {teamName(attackSum.team)} lose {attackSum.lives} Life"><img class="lt" src={lifeArt((attackSum.team ?? 'orange') as Team, 'back')} alt="" /><b>{attackSum.lives}</b></span>
 				{#if confirmKind === 'attack'}<button class="piedefeat" on:click={doAttack}>⚔ Attack</button>
 				{:else}<button class="piedefeat" on:click={doDefeatHero}>☠ Defeat</button>{/if}
 			{:else}
@@ -741,7 +738,7 @@
 		<div class="mtop">
 			<button class="mib" on:click={() => (menuOpen = true)} aria-label="Menu">☰</button>
 			<span class="mpill rt"><b>R{$ms.round}</b>·<b>T{$ms.turn}</b></span>
-			<button class="mib tie" on:click={flipTie} title="Tie-breaker: {$ms.tieBreaker === 'orange' ? 'Orange' : 'Blue'} — tap to flip"><img src={tieArt($ms.tieBreaker)} class:flip={tieFlip} alt="" /></button>
+			<button class="mib tie" on:click={flipTie} title="Tie-breaker: {teamName($ms.tieBreaker)} — tap to flip"><img src={tieArt($ms.tieBreaker)} class:flip={tieFlip} alt="" /></button>
 			<button class="mpill" on:click={() => (lwOpen = true)} aria-label="Waves"><img class="wv" src={waveIcon} alt="" /><b class="n2">{$ms.waves}</b></button>
 			<button class="mpill life" on:click={() => (lwOpen = true)} aria-label="Life"><b class="n2 lo">{$ms.life.orange}</b><img src={lifeSplit} alt="" /><b class="n2 lb">{$ms.life.blue}</b></button>
 			<!-- your ultimate fills the gap between life and gold: always previewable; purple pulse once unlocked -->
@@ -771,8 +768,8 @@
 				<div class="msec">
 					<div class="mlbl">Spawn</div>
 					{#each ['orange', 'blue'] as t}
-						<div class="spr"><span class="tm {t}">{t === 'orange' ? 'O' : 'B'}</span>
-							{#each MINION_ROLES as r}<button class="mn" on:click={() => { armSpawn(t as Team, r); menuOpen = false; }} title="{t} {r}">{r[0].toUpperCase()}</button>{/each}
+						<div class="spr"><span class="tm {t}">{t === 'orange' ? 'A' : 'T'}</span>
+							{#each MINION_ROLES as r}<button class="mn" on:click={() => { armSpawn(t as Team, r); menuOpen = false; }} title="{teamAdj(t)} {r}">{r[0].toUpperCase()}</button>{/each}
 						</div>
 					{/each}
 				</div>
@@ -832,7 +829,7 @@
 					<div class="lg w">{#each $ms.waveTok ?? [] as full, i}<button class="wtok" class:dep={!full} class:flip={flips[`w${i}`]} style="background-image:url({waveIcon})" on:click={() => toggleWave(i)} aria-label="Wave token"></button>{/each}</div>
 					{@render laneCtl()}</div>
 				{#each ['orange', 'blue'] as t}
-					<div class="lsec"><div class="lh {t}"><span>{t === 'orange' ? 'Orange' : 'Blue'} life</span><b>{$ms.life[t as Team]} / {lifeMax}</b></div>
+					<div class="lsec"><div class="lh {t}"><span>{teamAdj(t)} Life</span><b>{$ms.life[t as Team]} / {lifeMax}</b></div>
 						<div class="lg">{#each $ms.lifeTok?.[t as Team] ?? [] as full, i}<button class="ltok" class:dep={!full} class:flip={flips[`l${t}${i}`]} style="background-image:url({lifeArt(t as Team, full ? 'front' : 'back')})" on:click={() => toggleLife(t as Team, i)} aria-label="Life token"></button>{/each}</div></div>
 				{/each}
 			</div>
@@ -873,22 +870,22 @@
 
 		<!-- team Life: one token per starting Life; each toggles full ↔ spent -->
 		<div class="hsec life orange">
-			<div class="slabel"><span class="tn">Orange</span><span class="tc">{$ms.life.orange}<small>/{lifeMax}</small></span></div>
+			<div class="slabel"><span class="tn">Atlanteans</span><span class="tc">{$ms.life.orange}<small>/{lifeMax}</small></span></div>
 			<div class="tokens">
 				{#each $ms.lifeTok?.orange ?? [] as full, i}
 					<button class="ltok" class:dep={!full} class:flip={flips[`lorange${i}`]}
 						style="background-image:url({lifeArt('orange', full ? 'front' : 'back')})"
-						on:click={() => toggleLife('orange', i)} title="Orange Life token — click to spend / restore"></button>
+						on:click={() => toggleLife('orange', i)} title="Atlantean Life token — click to spend / restore"></button>
 				{/each}
 			</div>
 		</div>
 		<div class="hsec life blue">
-			<div class="slabel"><span class="tn">Blue</span><span class="tc">{$ms.life.blue}<small>/{lifeMax}</small></span></div>
+			<div class="slabel"><span class="tn">Titans</span><span class="tc">{$ms.life.blue}<small>/{lifeMax}</small></span></div>
 			<div class="tokens">
 				{#each $ms.lifeTok?.blue ?? [] as full, i}
 					<button class="ltok" class:dep={!full} class:flip={flips[`lblue${i}`]}
 						style="background-image:url({lifeArt('blue', full ? 'front' : 'back')})"
-						on:click={() => toggleLife('blue', i)} title="Blue Life token — click to spend / restore"></button>
+						on:click={() => toggleLife('blue', i)} title="Titan Life token — click to spend / restore"></button>
 				{/each}
 			</div>
 		</div>
@@ -897,8 +894,8 @@
 		<div class="hsec">
 			<div class="slabel"><span>Spawn minion</span></div>
 			<div class="spawnrow">
-				<button class="spbtn orange" class:on={spawnTeam === 'orange'} on:click={() => (spawnTeam = spawnTeam === 'orange' ? null : 'orange')}>Orange ▾</button>
-				<button class="spbtn blue" class:on={spawnTeam === 'blue'} on:click={() => (spawnTeam = spawnTeam === 'blue' ? null : 'blue')}>Blue ▾</button>
+				<button class="spbtn orange" class:on={spawnTeam === 'orange'} on:click={() => (spawnTeam = spawnTeam === 'orange' ? null : 'orange')}>Atlanteans ▾</button>
+				<button class="spbtn blue" class:on={spawnTeam === 'blue'} on:click={() => (spawnTeam = spawnTeam === 'blue' ? null : 'blue')}>Titans ▾</button>
 			</div>
 			{#if spawnTeam}
 				<div class="spmenu {spawnTeam}">
@@ -915,9 +912,9 @@
 			{/if}
 		</div>
 
-		<button class="tiebtn {$ms.tieBreaker}" on:click={flipTie} title="Flip the tie-breaker — {$ms.tieBreaker === 'orange' ? 'Orange' : 'Blue'} breaks ties">
+		<button class="tiebtn {$ms.tieBreaker}" on:click={flipTie} title="Flip the tie-breaker — the {teamName($ms.tieBreaker)} break ties">
 			<span class="coin"><img src={tieArt($ms.tieBreaker)} class:flip={tieFlip} alt="" /></span>
-			<span>Tie-breaker: {$ms.tieBreaker === 'orange' ? 'Orange' : 'Blue'}</span>
+			<span class="tietxt">Ties → {teamName($ms.tieBreaker)}</span>
 		</button>
 
 		<!-- active abilities: one fixed row per hero (so nothing below shifts), card-colour pips light up; tap a live row to read the card -->
@@ -1191,6 +1188,7 @@
 
 	.tiebtn { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; border: 1px solid rgba(255, 255, 255, 0.16);
 		background: rgba(255, 255, 255, 0.05); border-radius: 9px; padding: 4px 8px; color: #e5e7eb; cursor: pointer; font-size: 0.76rem; font-weight: 600; }
+	.tiebtn .tietxt { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 	.tiebtn .coin { width: 1.5rem; height: 1.5rem; perspective: 60px; flex: none; }
 	.tiebtn .coin img { width: 100%; height: 100%; display: block; }
 	.tiebtn .coin img.flip { animation: coinflip 0.45s ease-in-out; }
@@ -1200,7 +1198,7 @@
 
 	/* minion spawn controls */
 	.spawnrow { display: flex; gap: 5px; }
-	.spbtn { flex: 1; border-radius: 8px; padding: 4px 6px; font-size: 0.72rem; font-weight: 700; cursor: pointer; color: #f1f5f9; border: 1px solid transparent; }
+	.spbtn { flex: 1; min-width: 0; white-space: nowrap; border-radius: 8px; padding: 4px 4px; font-size: 0.7rem; font-weight: 700; cursor: pointer; color: #f1f5f9; border: 1px solid transparent; }
 	.spbtn.orange { background: rgba(239, 125, 34, 0.18); border-color: rgba(239, 125, 34, 0.5); }
 	.spbtn.orange.on, .spbtn.orange:hover { background: rgba(239, 125, 34, 0.34); }
 	.spbtn.blue { background: rgba(47, 127, 230, 0.18); border-color: rgba(47, 127, 230, 0.5); }

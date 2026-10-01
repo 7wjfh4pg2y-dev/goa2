@@ -120,9 +120,9 @@ describe('the minion lane', () => {
 	})
 
 	it('pushing past the last zone, or taking the last wave, wins', () => {
-		expect(pushLane(game({ lane: 0 } as Partial<MatchState>), 'blue').wonBy).toEqual({ team: 'blue', reason: 'pushed into the Orange throne' })
+		expect(pushLane(game({ lane: 0 } as Partial<MatchState>), 'blue').wonBy).toEqual({ team: 'blue', reason: 'pushed into the Atlantean Throne' })
 		const last = game({ waves: 1, waveTok: [true, false, false] } as Partial<MatchState>)
-		expect(pushLane(last, 'orange').wonBy).toEqual({ team: 'orange', reason: 'won the final push' })
+		expect(pushLane(last, 'orange').wonBy).toEqual({ team: 'orange', reason: 'won the Final Push' })
 	})
 
 	it('a taken spawn point sends its minion to the nearest free hex in the zone', () => {

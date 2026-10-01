@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { teamName, aTeam } from '$lib/teams';
 	import { onMount, onDestroy } from 'svelte';
 	import { browser } from '$app/environment';
 	import { base } from '$app/paths';
@@ -373,7 +374,7 @@
 	// from (otherwise it appears already at the final face — the "only blue" bug).
 	function playCoin(side: Team, opts: { caption?: string; pending?: string; after?: () => void } = {}) {
 		coinShown = true; coinDone = false;
-		coinCaption = opts.caption ?? (side === 'orange' ? 'You’re Orange!' : 'You’re Blue!');
+		coinCaption = opts.caption ?? `You’re ${aTeam(side)}!`;
 		coinPending = opts.pending ?? 'Flipping…';
 		const start = coinRot;
 		requestAnimationFrame(() => requestAnimationFrame(() => {
@@ -388,7 +389,7 @@
 		lastStartFlip = $state.startFlip.at;
 		const side = $state.startFlip.side;
 		playCoin(side, {
-			caption: side === 'orange' ? 'Orange goes first' : 'Blue goes first',
+			caption: `The ${teamName(side)} go first`,
 			after: () => { if (iAmHost) startDraft(side); }
 		});
 	}
@@ -475,8 +476,8 @@
 	function openSeatsOn(team: Team): number[] {
 		return (team === 'orange' ? orangeSeats : blueSeats).filter((i) => !takenSeats.has(i) && i !== mySeat);
 	}
-	// team-join flip captions, shown to everyone: "X is flipping…" → "X is Orange!"
-	const flipCaps = (who: string, side: Team) => ({ pending: `${who} is flipping…`, caption: `${who} is ${side === 'orange' ? 'Orange' : 'Blue'}!` });
+	// team-join flip captions, shown to everyone: "X is flipping…" → "X joins the Atlanteans!"
+	const flipCaps = (who: string, side: Team) => ({ pending: `${who} is flipping…`, caption: `${who} joins the ${teamName(side)}!` });
 	// Flip a coin for your team, then take an open seat on that side. Balanced —
 	// if the coin's side is full, you land on the other. (Or just tap a seat.)
 	let flipping = false;
@@ -756,7 +757,7 @@
 
 					<div class="fld">
 						<div class="teamstop">
-							<span>Teams {#if mySeat < 0}· flip, or tap an open seat{:else}· <b class="youteam {myTeam}">you’re {myTeam === 'orange' ? 'Orange' : 'Blue'}</b>{/if}</span>
+							<span>Teams {#if mySeat < 0}· flip, or tap an open seat{:else}· <b class="youteam {myTeam}">you’re {aTeam(myTeam)}</b>{/if}</span>
 							<!-- one slot: flip in while spectating, step out to spectate while seated -->
 							{#if mySeat < 0}
 								<button class="flipbtn hero" on:click={flipForTeam} disabled={flipping || seatedCount >= seatCount}>🪙 Flip for your team</button>
@@ -768,7 +769,7 @@
 						</div>
 						<div class="teams">
 							<div class="teampanel orange">
-								<div class="teamhdr"><span class="tflag"></span>Orange <span class="tcount">{orangeCount}/{half}</span></div>
+								<div class="teamhdr"><span class="tflag"></span>Atlanteans <span class="tcount">{orangeCount}/{half}</span></div>
 								<div class="tseats">
 									{#each orangeSeats as i (i)}
 										{@const p = bySeat[i]}
@@ -788,7 +789,7 @@
 								</div>
 							</div>
 							<div class="teampanel blue">
-								<div class="teamhdr"><span class="tflag"></span>Blue <span class="tcount">{blueCount}/{seatCount - half}</span></div>
+								<div class="teamhdr"><span class="tflag"></span>Titans <span class="tcount">{blueCount}/{seatCount - half}</span></div>
 								<div class="tseats">
 									{#each blueSeats as i (i)}
 										{@const p = bySeat[i]}
@@ -848,8 +849,8 @@
 	<div class="coinoverlay">
 		<div class="coinstage">
 			<div class="coin" style="transform: rotateY({coinRot}deg)">
-				<img class="face front" src={coinOrange} alt="Orange" />
-				<img class="face back" src={coinBlue} alt="Blue" />
+				<img class="face front" src={coinOrange} alt="Atlanteans" />
+				<img class="face back" src={coinBlue} alt="Titans" />
 			</div>
 			<p class="coincap" class:done={coinDone}>{coinDone ? coinCaption : coinPending}</p>
 		</div>

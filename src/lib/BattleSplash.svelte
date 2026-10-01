@@ -2,9 +2,10 @@
 	// MINION BATTLE — drawn from the viewer's side: YOUR team charges in from the right
 	// (your base is bottom-right), the enemy from the left. They collide in the middle and
 	// the winner shoves straight through,
-	// clean off the band ("Blue wins — Orange removes 2"). A tie grinds back and forth,
+	// clean off the band ("Titans win — Atlanteans remove 2"). A tie grinds back and forth,
 	// locks up and recoils over a purple glow: DEADLOCK. Played by every client from the shared `battleNews` (match.ts); the
 	// removal step on the board waits until the slash has gone (`onDone`).
+	import { teamName } from '$lib/teams';
 	import { onDestroy } from 'svelte';
 	import type { BattleNews, Team } from '$lib/match';
 
@@ -34,7 +35,6 @@
 	$: R = myTeam;
 	$: winner = !shown?.loser ? null : shown.loser === 'orange' ? 'blue' : 'orange';
 	$: outcome = !winner ? 'tie' : winner === L ? 'lwin' : 'rwin';
-	const cap = (t: string) => t[0].toUpperCase() + t.slice(1);
 	const COL: Record<Team, [string, string, string]> = { orange: ['#ef7d22', '#ffb36b', '#ffd2a8'], blue: ['#2f7fe6', '#8cc0ff', '#cfe3ff'] };
 	$: vars = `--l:${COL[L][0]};--l2:${COL[L][1]};--lt:${COL[L][2]};--r:${COL[R][0]};--r2:${COL[R][1]};--rt:${COL[R][2]}`;
 </script>
@@ -56,8 +56,8 @@
 					<span class="big dead">Deadlock</span>
 					<span class="sub">No minions removed</span>
 				{:else}
-					<span class="big win">{cap(winner ?? '')} wins</span>
-					<span class="sub">{cap(shown.loser ?? '')} removes <b>{shown.remove}</b> minion{shown.remove === 1 ? '' : 's'}</span>
+					<span class="big win">{teamName(winner)} win</span>
+					<span class="sub">{teamName(shown.loser)} remove <b>{shown.remove}</b> minion{shown.remove === 1 ? '' : 's'}</span>
 				{/if}
 			</div>
 		</div>
@@ -141,5 +141,5 @@
 	/* phones: a slimmer band and smaller words */
 	.mob .band { height: 130px; zoom: 1; }
 	.mob .txt { zoom: 1; }
-	.mob .score { font-size: 2.6rem; } .mob .big { font-size: 2.5rem; } .mob .sub { font-size: .8rem; } .mob .kick { font-size: .7rem; }
+	.mob .score { font-size: 2.6rem; } .mob .big { font-size: min(2.5rem, 7.6vw); white-space: nowrap; } .mob .sub { font-size: .8rem; } .mob .kick { font-size: .7rem; }
 </style>

@@ -539,7 +539,7 @@
 				{@const sel = selected === p.id || dragId === p.id}
 				<g class="piece" class:selectable={!!onMovePiece} class:selected={sel} class:lifted={sel && !!hoverHex}
 					role="button" tabindex="-1" data-piece={p.id}
-					aria-label={p.role ? `${p.team} ${p.role} minion` : `${p.team} ${p.label ?? 'piece'}`}
+					aria-label={p.role ? `${p.team === "blue" ? "Titan" : "Atlantean"} ${p.role} minion` : (p.label ?? "piece")}
 					transform={rotEff ? `rotate(${-rotEff} ${c.x} ${c.y})` : undefined}
 				>
 					{#if sel}

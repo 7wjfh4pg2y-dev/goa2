@@ -1,8 +1,9 @@
 <script lang="ts">
 	// Team-vs-Team splash shown once every hero is locked: each player's hero
 	// hangs as a cloth war banner (art up top, sigil + name, stats and roles on
-	// the cloth below). Orange hangs on the left, Blue on the right, a VS crest
+	// the cloth below). The Atlanteans (orange) hang on the left, the Titans (blue) on the right, a VS crest
 	// between. The host starts the game from here.
+	import { teamName } from '$lib/teams';
 	import { onDestroy, onMount } from 'svelte';
 	import { heroCards } from '$lib/cards/deck';
 	import { startingHand } from '$lib/cards/cardstate';
@@ -59,7 +60,7 @@
 				<div class="crest"><span>VS</span></div>
 			{/if}
 			<div class="side {side.team}">
-				<div class="teamname">{side.team === 'orange' ? 'Orange' : 'Blue'}</div>
+				<div class="teamname">{teamName(side.team)}</div>
 				<div class="banners">
 					{#each side.ids as id, i (id)}
 						{@const h = picks[id] ? heroById(picks[id]) : undefined}

@@ -5,24 +5,21 @@
 	//    tie-breaker art) drops in flipping and lands on the winners' face
 	//  · Life ran out — both teams' Life hearts (enemy left, yours right, like the other splashes):
 	//    the winners' beats and glows, the losers' shakes and cracks to its broken back
-	// Then two gold rules draw out, the title tracks in between them, the reason and the
-	// champions' names below.
+	// Then two gold rules draw out, the title tracks in between them, and ONE line below
+	// says how: "Titans ran out of Life Tokens" / "Atlanteans pushed into the Titan Throne" /
+	// "Titans won the Final Push". (Names / numbers belong on a post-game stats screen.)
 	import type { Team } from '$lib/match';
+	import { teamName } from '$lib/teams';
 	import tieOrange from '$lib/images/tiebreaker_orange.png';
 	import tieBlue from '$lib/images/tiebreaker_blue.png';
 
-	type Hero = { pid: string; hero: string; name: string };
 	export let team: Team; // the winning team
 	export let reason = '';
-	export let winners: Hero[] = [];
 	export let myTeam: Team | null = null; // null = spectator
-	export let life: Record<Team, number> = { orange: 0, blue: 0 };
-	export let waves = 0;
 	export let round = 1;
 	export let mobile = false;
 	export let onClose: () => void = () => {};
 
-	const cap = (t: string) => t[0].toUpperCase() + t.slice(1);
 	const EMBLEM: Record<Team, string> = { orange: tieOrange, blue: tieBlue };
 	const lifeImgs = import.meta.glob('./cards/images/life_counter_*.png', { eager: true, import: 'default' }) as Record<string, string>;
 	const heart = (t: Team, side: 'front' | 'back') => lifeImgs[`./cards/images/life_counter_${t}_${side}.png`] ?? '';
@@ -30,8 +27,8 @@
 	const L: Record<Team, string> = { orange: '#ffb27a', blue: '#8cc0ff' };
 	$: loser = (team === 'orange' ? 'blue' : 'orange') as Team;
 	$: lost = myTeam != null && myTeam !== team;
-	$: title = myTeam == null ? `${cap(team)} wins` : lost ? 'Defeat' : 'Victory';
-	$: line = /^(orange|blue)\b/i.test(reason) ? reason : `${cap(team)} ${reason}`;
+	$: title = myTeam == null ? `${teamName(team)} win` : lost ? 'Defeat' : 'Victory';
+	$: line = /^(atlanteans|titans|orange|blue)\b/i.test(reason) ? reason : `${teamName(team)} ${reason}`;
 	$: byLife = /life/i.test(reason); // won on Life → the hearts; a push → the coin
 	$: mine = (myTeam ?? 'blue') as Team; // your side sits on the right (spectators: blue)
 	$: enemy = (mine === 'orange' ? 'blue' : 'orange') as Team;
@@ -60,13 +57,11 @@
 				</div>
 			{/if}
 		</div>
-		<span class="kick">{cap(team)} team · Round {round}</span>
+		<span class="kick">{teamName(team)} · Round {round}</span>
 		<span class="rule"></span>
 		<span class="ttl">{title}</span>
 		<span class="rule"></span>
 		<span class="why">{line}</span>
-		<span class="champs">{winners.map((h) => h.name).join('  ·  ')}</span>
-		<span class="stats">{waves} wave{waves === 1 ? '' : 's'} left · Life {life.orange} : {life.blue}</span>
 	</div>
 	<div class="foot"><button class="close" on:click={onClose}>View the board</button></div>
 </div>
@@ -86,12 +81,10 @@
 		background: linear-gradient(180deg, #fff8e0 8%, #f3cd72 50%, #a8701f 92%); -webkit-background-clip: text; background-clip: text; color: transparent;
 		filter: drop-shadow(0 4px 0 rgba(0, 0, 0, .65)); animation: track 1.2s cubic-bezier(.2, .7, .2, 1) calc(var(--td) + .3s) both; }
 	.lost .ttl { background: linear-gradient(180deg, #f1f2f4 8%, #a3a9b3 50%, #4b5059 92%); -webkit-background-clip: text; background-clip: text; }
-	.why { font-size: 1.15rem; letter-spacing: .12em; color: #f0dcae; text-align: center; animation: up .5s ease calc(var(--td) + .9s) both; }
-	.champs { font-size: 1.3rem; letter-spacing: .14em; text-transform: uppercase; color: #fff3d6; animation: up .5s ease calc(var(--td) + 1.1s) both; }
-	.stats { font-size: .78rem; letter-spacing: .3em; text-transform: uppercase; color: #8b93a1; animation: up .5s ease calc(var(--td) + 1.3s) both; }
+	.why { font-size: 1.35rem; letter-spacing: .1em; color: #f0dcae; text-align: center; animation: up .5s ease calc(var(--td) + .9s) both; }
 	.foot { position: absolute; left: 0; right: 0; bottom: 5vh; display: grid; place-items: center; z-index: 5; }
 	.close { font: inherit; font-size: 1.05rem; padding: .7rem 2rem; border-radius: 12px; cursor: pointer; color: #fff; letter-spacing: .05em; zoom: var(--uis, 1);
-		background: color-mix(in srgb, var(--wc) 70%, #000); border: 1px solid rgba(255, 255, 255, .3); box-shadow: 0 8px 24px rgba(0, 0, 0, .5); animation: up .5s ease calc(var(--td) + 1.6s) both; }
+		background: color-mix(in srgb, var(--wc) 70%, #000); border: 1px solid rgba(255, 255, 255, .3); box-shadow: 0 8px 24px rgba(0, 0, 0, .5); animation: up .5s ease calc(var(--td) + 1.3s) both; }
 	.close:hover { filter: brightness(1.12); }
 	@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 	@keyframes up { from { opacity: 0; translate: 0 12px; } to { opacity: 1; translate: 0 0; } }

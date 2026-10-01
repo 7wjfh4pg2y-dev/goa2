@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { teamName } from '$lib/teams';
 	import { onMount, onDestroy } from 'svelte';
 	import type { Readable } from 'svelte/store';
 	import MatchupSplash from '$lib/MatchupSplash.svelte';
@@ -205,7 +206,7 @@
 		if (d.system === 'all-random') return 'Heroes assigned';
 		if (!turn) return '';
 		if (turn.actor === clientId) return turn.type === 'ban' ? 'Your ban' : 'Your pick';
-		return `${turn.team === 'orange' ? 'Orange' : 'Blue'} · ${nameOf(turn.actor)} is ${turn.type === 'ban' ? 'banning' : 'picking'}…`;
+		return `${teamName(turn.team)} · ${nameOf(turn.actor)} is ${turn.type === 'ban' ? 'banning' : 'picking'}…`;
 	})();
 	$: bannerTeam = complete ? myTeam : d?.order.length ? turn?.team : myTeam;
 
@@ -247,7 +248,7 @@
 			<div class="toast t-{toastAction.team}" class:ban={toastAction.type === 'ban'}>
 				<div class="tav"><img src={heroAvatar(toastAction.hero)} alt="" />{#if toastAction.type === 'ban'}<span class="tban">✕</span>{/if}</div>
 				<div class="ttext">
-					<span class="twho"><span class="tteam">{toastAction.team === 'orange' ? 'Orange' : 'Blue'}</span> · {nameOf(toastAction.actor)}{toastAction.auto ? ' · auto' : ''}</span>
+					<span class="twho"><span class="tteam">{teamName(toastAction.team)}</span> · {nameOf(toastAction.actor)}{toastAction.auto ? ' · auto' : ''}</span>
 					<span class="tact"><span class="tverb">{toastAction.type === 'ban' ? 'Banned' : 'Picked'}</span> {toastHero.name} <span class="ttitle">{toastHero.title}</span></span>
 				</div>
 			</div>
@@ -337,7 +338,7 @@
 
 	<footer class="rails" class:dense={Math.max(rosters.orange.length, rosters.blue.length) >= 3} class:packed={Math.max(rosters.orange.length, rosters.blue.length) >= 4}>
 		{#each [{ team: 'orange', ids: rosters.orange }, { team: 'blue', ids: rosters.blue }] as r (r.team)}
-			<div class="rail {r.team}" aria-label="{r.team === 'orange' ? 'Orange' : 'Blue'} team">
+			<div class="rail {r.team}" aria-label="{teamName(r.team)}">
 				{#each r.ids as id (id)}
 					{@const ph = d.picks[id] ? heroById(d.picks[id]) : undefined}
 					<div class="pcard" class:filled={!!ph} class:active={id === activeActor} class:me={id === clientId} title={ph ? `${nameOf(id)} — ${ph.name}, ${ph.title}` : nameOf(id)}>

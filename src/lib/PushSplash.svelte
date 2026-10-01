@@ -4,6 +4,7 @@
 	// bottom-right, so YOUR team pushes right → left and the enemy pushes left → right
 	// (same sides as the battle splash), chevrons streaming through it. A game-winning push reads
 	// THE THRONE FALLS / FINAL PUSH instead. Played by every client from `pushNews`.
+	import { teamName, placeName } from '$lib/teams';
 	import { onDestroy } from 'svelte';
 	import type { PushNews } from '$lib/battle';
 	import type { Team } from '$lib/match';
@@ -28,7 +29,6 @@
 		});
 	}
 	onDestroy(() => { if (timer) clearTimeout(timer); });
-	const cap = (t: string) => t[0].toUpperCase() + t.slice(1);
 	// the arrow is ONE svg (body + head) clipped to its own shape, so the chevrons and the
 	// glint run all the way into the tip; sized from the measured box
 	let aw = 0, ah = 0;
@@ -75,13 +75,13 @@
 				{/if}
 			</div>
 			<div class="txt">
-				<span class="kick">{cap(shown.winner)} pushes</span>
+				<span class="kick">{teamName(shown.winner)} push</span>
 				{#if shown.won}
-					<span class="big">{shown.to === null && shown.won.includes('throne') ? 'The throne falls' : 'Final push'}</span>
-					<span class="sub">{cap(shown.winner)} wins the game!</span>
+					<span class="big">{shown.to === null && /throne/i.test(shown.won) ? 'The throne falls' : 'Final push'}</span>
+					<span class="sub">{teamName(shown.winner)} win the game!</span>
 				{:else}
 					<span class="big">The wave advances</span>
-					<span class="sub">Battle zone → <b>{shown.to}</b> · Waves {shown.wavesBefore} → {shown.wavesAfter}</span>
+					<span class="sub">Battle zone → <b>{placeName(shown.to)}</b> · Waves {shown.wavesBefore} → {shown.wavesAfter}</span>
 				{/if}
 			</div>
 		</div>

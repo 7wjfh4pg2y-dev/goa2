@@ -13,6 +13,7 @@
 // broken by `updatedAt`) wins. For a handful of players nudging a shared
 // tracker this is robust and easy to reason about.
 
+import { teamName, aMinion } from './teams'
 import { tokenExpiry, sweepTokens, statusFrom } from './tokens'
 import { expireEffects, type Effect } from './effects'
 import { startBattle, pushCheck, battleRemove, battleAuto, battleResult, laneNotes, heavyImmune, type Battle, type PushNews } from './battle'
@@ -1109,7 +1110,7 @@ export function joinMatch(
 		}
 		if (req.kind === 'defeatMinion' || req.kind === 'removeMinion') {
 			const m = local.pieces?.[req.piece]
-			const what = `a ${m?.team ?? ''} ${m?.role ?? ''} minion`.replace(/\s+/g, ' ')
+			const what = aMinion(m?.team, m?.role)
 			note(req.pid, req.kind === 'defeatMinion' ? `defeated ${what} (+${minionCoins(m?.role)} coins)` : `removed ${what} (no coins)`)
 		}
 		if (req.kind === 'respawn' && patch.pieces) note(req.pid, 'respawned ⤴')
@@ -1124,11 +1125,11 @@ export function joinMatch(
 		if (patch.lastDefeat && patch.lastDefeat.id !== local.lastDefeat?.id) {
 			const d = patch.lastDefeat
 			const assist = d.assists.length ? ` · ${d.assists.map(nameOf).join(', ')} +${d.assist} assist` : ''
-			note(d.by, `defeated ${nameOf(d.victim)} — +${d.coins} coins${assist} · ${d.team === 'orange' ? 'Orange' : 'Blue'} −${d.lives} life`)
+			note(d.by, `defeated ${nameOf(d.victim)} — +${d.coins} coins${assist} · ${teamName(d.team)} −${d.lives} life`)
 		}
 		if (req.kind === 'battleRemove' && patch.pieces) {
 			const m = local.pieces?.[req.piece]
-			note(req.pid, `took off a ${m?.team ?? ''} ${m?.role ?? ''} minion for the minion battle`.replace(/\s+/g, ' '))
+			note(req.pid, `took off ${aMinion(m?.team, m?.role)} for the minion battle`)
 		}
 		if (req.kind === 'battleAuto' && patch.pieces) note(req.pid, 'let the game remove the rest of the minions (melee first, heavies last)')
 		if (['advance', 'battleRemove', 'battleAuto', 'defeatMinion', 'removeMinion'].includes(req.kind)) for (const t of laneNotes(local, patch)) note(req.pid, t)
@@ -1441,9 +1442,9 @@ export function adjustLife(s: MatchState, team: Team, delta: number): Partial<Ma
 /** Whichever end condition has triggered, or null while play continues. */
 export function winner(s: MatchState): { team: Team; reason: string } | null {
 	if (s.wonBy) return s.wonBy
-	if (s.life.orange <= 0) return { team: 'blue', reason: 'Orange ran out of Life counters' }
-	if (s.life.blue <= 0) return { team: 'orange', reason: 'Blue ran out of Life counters' }
-	if (s.waves <= 0 && s.lastPush) return { team: s.lastPush, reason: 'Won the final Push' }
+	if (s.life.orange <= 0) return { team: 'blue', reason: 'Atlanteans ran out of Life Tokens' }
+	if (s.life.blue <= 0) return { team: 'orange', reason: 'Titans ran out of Life Tokens' }
+	if (s.waves <= 0 && s.lastPush) return { team: s.lastPush, reason: 'won the Final Push' }
 	return null
 }
 
