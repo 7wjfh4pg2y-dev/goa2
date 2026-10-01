@@ -15,7 +15,7 @@
 
 import { tokenExpiry, sweepTokens, statusFrom } from './tokens'
 import { expireEffects, type Effect } from './effects'
-import { startBattle, pushCheck, battleRemove, battleAuto, battleResult, laneNotes, heavyImmune, type Battle } from './battle'
+import { startBattle, pushCheck, battleRemove, battleAuto, battleResult, laneNotes, heavyImmune, type Battle, type PushNews } from './battle'
 import { get, writable, type Readable } from 'svelte/store'
 import { supabase } from './supabase'
 import { tabClientId } from './identity'
@@ -265,6 +265,8 @@ export interface MatchState {
 	wonBy?: { team: Team; reason: string } | null // a push won the game (throne / last wave)
 	/** heroes under attack, keyed by the defender: who attacks, and whether they chose to defend */
 	attacks?: Record<string, { by: string; defending: boolean; at: number }>
+	/** the latest lane push — every client plays the "wave advances" splash when `id` changes */
+	pushNews?: PushNews | null
 	/** the latest minion battle — every client plays the battle splash when `id` changes */
 	battleNews?: BattleNews | null
 	/** the latest hero defeat — every client plays the defeat splash when `id` changes */

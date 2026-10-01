@@ -19,6 +19,18 @@ import { zoneTable, hexCube, cubeDist } from './zones'
 export const LANE = ['Orange Beach', 'Center', 'Blue Beach'] as const
 export const START_LANE = 1
 
+/** A push, for the "wave advances" splash every client plays once. */
+export interface PushNews {
+	id: string
+	winner: Team
+	from: string // the zone that was the battle zone
+	to: string | null // the new battle zone (null: the game ended)
+	wavesBefore: number
+	wavesAfter: number
+	won: string | null // the game-winning reason, if this push won it
+	at: number
+}
+
 export interface Battle {
 	orange: number
 	blue: number
@@ -123,11 +135,19 @@ export function pushLane(s: MatchState, winner: Team): Partial<MatchState> {
 	const pieces: Record<string, Piece> = {}
 	for (const id in s.pieces ?? {}) { const p = s.pieces[id]; if (!(p.kind === 'minion' && inZone(s, p.hex))) pieces[id] = p }
 	const lane = laneOf(s) + (winner === 'orange' ? 1 : -1)
+	const news = (to: string | null, won: string | null): PushNews => ({
+		id: `p_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+		winner, from: battleZone(s), to, wavesBefore: s.waves, wavesAfter: waves, won, at: Date.now()
+	})
 	const patch: Partial<MatchState> = { waves, waveTok, lastPush: winner, pieces, battle: null }
-	if (lane < 0 || lane >= LANE.length) return { ...patch, wonBy: { team: winner, reason: `pushed into the ${cap(loser)} throne` } }
+	if (lane < 0 || lane >= LANE.length) {
+		const reason = `pushed into the ${cap(loser)} throne`
+		return { ...patch, wonBy: { team: winner, reason }, pushNews: news(null, reason) }
+	}
 	patch.lane = lane
-	if (waves <= 0) return { ...patch, wonBy: { team: winner, reason: 'won the final push' } }
+	if (waves <= 0) return { ...patch, wonBy: { team: winner, reason: 'won the final push' }, pushNews: news(null, 'won the final push') }
 	patch.pieces = { ...pieces, ...spawnWave(s.map, LANE[lane], pieces, `${s.round}_${s.turn}_${waves}`) }
+	patch.pushNews = news(LANE[lane], null)
 	return patch
 }
 
