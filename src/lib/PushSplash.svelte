@@ -29,20 +29,50 @@
 	}
 	onDestroy(() => { if (timer) clearTimeout(timer); });
 	const cap = (t: string) => t[0].toUpperCase() + t.slice(1);
-	const CHEVS = Array.from({ length: 28 }, (_, i) => i);
-	$: loser = shown?.winner === 'orange' ? 'blue' : 'orange';
+	// the arrow is ONE svg (body + head) clipped to its own shape, so the chevrons and the
+	// glint run all the way into the tip; sized from the measured box
+	let aw = 0, ah = 0;
+	$: fromR = !!shown && shown.winner === myTeam;
+	$: hw = ah * 0.55; // head length
+	$: shape = !aw || !ah ? '' : fromR
+		? `M${aw} 0 H${hw} L0 ${ah / 2} L${hw} ${ah} H${aw} Z`
+		: `M0 0 H${aw - hw} L${aw} ${ah / 2} L${aw - hw} ${ah} H0 Z`;
+	$: sp = ah * 0.58; // chevron spacing (= one loop of the stream)
+	$: chevs = !aw || !ah ? [] : Array.from({ length: Math.ceil(aw / sp) + 3 }, (_, i) => {
+		const x = (i - 1) * sp, h = ah * 0.24, w = ah * 0.24, m = ah / 2;
+		return fromR ? `${x + w},${m - h} ${x},${m} ${x + w},${m + h}` : `${x},${m - h} ${x + w},${m} ${x},${m + h}`;
+	});
 </script>
 
 {#if shown}
 	{#key shown.id}
 		<div class="ps {shown.winner}" class:won={!!shown.won} class:fromR={shown.winner === myTeam} class:mob={mobile} aria-live="polite">
-			<!-- one plain arrow: a body + an SVG head, pointing the way the wave moves -->
-			<div class="arrow">
-				<div class="body">
-					<div class="chevs">{#each CHEVS as i (i)}<i></i>{/each}</div>
-					<div class="glint"></div>
-				</div>
-				<svg class="head" viewBox="0 0 60 100" preserveAspectRatio="none" aria-hidden="true"><polygon points="0,0 60,50 0,100" /></svg>
+			<!-- one plain arrow pointing the way the wave moves; chevrons stream right into the tip -->
+			<div class="arrow" bind:clientWidth={aw} bind:clientHeight={ah}>
+				{#if shape}
+					<svg width={aw} height={ah} viewBox="0 0 {aw} {ah}" aria-hidden="true">
+						<defs>
+							<clipPath id="pc-{shown.id}"><path d={shape} /></clipPath>
+							<linearGradient id="pg-{shown.id}" x1={fromR ? 1 : 0} x2={fromR ? 0 : 1} y1="0" y2="0">
+								<stop offset="0" style="stop-color: var(--cd)" /><stop offset=".45" style="stop-color: var(--c)" /><stop offset="1" style="stop-color: var(--c2)" />
+							</linearGradient>
+							<linearGradient id="pl-{shown.id}" x1="0" x2="1" y1="0" y2="0">
+								<stop offset="0" stop-color="#fff" stop-opacity="0" /><stop offset=".5" stop-color="#fff" stop-opacity=".45" /><stop offset="1" stop-color="#fff" stop-opacity="0" />
+							</linearGradient>
+						</defs>
+						<g clip-path="url(#pc-{shown.id})">
+							<rect width={aw} height={ah} fill="url(#pg-{shown.id})" />
+							<g class="chevs" stroke-width={ah * 0.08}>
+								{#each chevs as pts, i (i)}<polyline points={pts} />{/each}
+								<animateTransform attributeName="transform" type="translate" from="{fromR ? sp : -sp} 0" to="0 0" dur=".55s" repeatCount="indefinite" />
+							</g>
+							<rect y="0" height={ah} width={aw * 0.3} x={fromR ? aw : -aw * 0.3} fill="url(#pl-{shown.id})">
+								<animate attributeName="x" from={fromR ? aw : -aw * 0.3} to={fromR ? -aw * 0.3 : aw} begin=".25s" dur="1.1s" fill="freeze" />
+							</rect>
+						</g>
+						{#if shown.won}<path d={shape} fill="none" stroke="#ffd27a" stroke-width="5" stroke-linejoin="round" />{/if}
+					</svg>
+				{/if}
 			</div>
 			<div class="txt">
 				<span class="kick">{cap(shown.winner)} pushes</span>
@@ -65,32 +95,16 @@
 	.ps.blue { --c: #2f7fe6; --c2: #8cc0ff; --cd: #0f2f63; }
 
 	/* the arrow: storms in from behind, holds while the chevrons race, then shoots off ahead.
-	   Built from plain boxes + an SVG head and animated with transform only — no clip-path,
-	   no blur, no `scale: -1` mirroring (iOS Safari drew those differently). Your team
-	   pushes right → left (.fromR: head on the left, its own keyframes). */
-	.arrow { position: absolute; left: -3vw; right: 5vw; top: calc(50% - var(--h) / 2); height: var(--h); display: flex; --h: calc(200px * var(--uis, 1)); --hw: calc(110px * var(--uis, 1));
+	   One SVG clipped to the arrow shape (chevrons + glint reach the tip), moved with
+	   transform only — no CSS clip-path, blur or `scale: -1` mirroring. Your team pushes
+	   right → left (.fromR: head on the left, its own keyframes). */
+	.arrow { position: absolute; left: -3vw; right: 5vw; top: calc(50% - var(--h) / 2); height: var(--h); --h: calc(200px * var(--uis, 1));
 		animation: stormL var(--T) cubic-bezier(.2, .85, .25, 1) both; }
-	.fromR .arrow { left: 5vw; right: -3vw; flex-direction: row-reverse; animation-name: stormR; }
+	.fromR .arrow { left: 5vw; right: -3vw; animation-name: stormR; }
+	.arrow svg { display: block; }
 	@keyframes stormL { 0% { transform: translateX(-110vw); } 12% { transform: translateX(0); } 86% { transform: translateX(0); opacity: 1; } 100% { transform: translateX(110vw); opacity: .3; } }
 	@keyframes stormR { 0% { transform: translateX(110vw); } 12% { transform: translateX(0); } 86% { transform: translateX(0); opacity: 1; } 100% { transform: translateX(-110vw); opacity: .3; } }
-	.body { position: relative; flex: 1; min-width: 0; overflow: hidden; background: linear-gradient(90deg, var(--cd) 0%, var(--c) 45%, var(--c2) 100%); }
-	.fromR .body { background: linear-gradient(270deg, var(--cd) 0%, var(--c) 45%, var(--c2) 100%); }
-	.head { flex: none; width: var(--hw); height: 100%; margin-left: -1px; fill: var(--c2); }
-	.fromR .head { margin: 0 -1px 0 0; transform: scaleX(-1); }
-	.won .body { box-shadow: inset 0 4px 0 #ffd27a, inset 0 -4px 0 #ffd27a; }
-	.won .head polygon { stroke: #ffd27a; stroke-width: 4; vector-effect: non-scaling-stroke; }
-	/* a row of chevrons streaming in the push direction */
-	.chevs { position: absolute; top: 50%; left: 0; display: flex; gap: 46px; margin-top: -35px; animation: streamL .55s linear infinite; }
-	.chevs i { flex: none; width: 70px; height: 70px; border-top: 16px solid rgba(255, 255, 255, .22); border-right: 16px solid rgba(255, 255, 255, .22);
-		transform: rotate(45deg); box-sizing: border-box; }
-	.fromR .chevs { left: auto; right: 0; animation-name: streamR; }
-	.fromR .chevs i { transform: rotate(-135deg); }
-	@keyframes streamL { from { transform: translateX(-116px); } to { transform: translateX(0); } }
-	@keyframes streamR { from { transform: translateX(116px); } to { transform: translateX(0); } }
-	.glint { position: absolute; top: 0; bottom: 0; width: 30%; left: -30%; background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .45), transparent); animation: glintL 1.1s ease-out .25s both; }
-	.fromR .glint { animation-name: glintR; }
-	@keyframes glintL { from { left: -30%; } to { left: 110%; } }
-	@keyframes glintR { from { left: 110%; } to { left: -30%; } }
+	.chevs { fill: none; stroke: rgba(255, 255, 255, .22); stroke-linejoin: miter; }
 
 	.txt { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; zoom: var(--uis, 1); text-align: center;
 		color: #fff; text-shadow: 0 3px 0 var(--cd), 0 0 26px rgba(0, 0, 0, .85), 0 0 50px rgba(0, 0, 0, .6); }
@@ -103,14 +117,9 @@
 	@keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 	@keyframes out { 0%, 86% { opacity: 1; } 100% { opacity: 0; } }
 
-	/* phones: the title always fits one line; smaller arrow + chevrons (loop = 48 + 30 px) */
-	.mob .arrow { --h: 150px; --hw: 70px; }
+	/* phones: the title always fits one line; a slimmer arrow */
+	.mob .arrow { --h: 150px; }
 	.mob .txt { zoom: 1; padding: 0 10px; }
 	.mob .big { font-size: min(2.2rem, 7vw); white-space: nowrap; } .mob.won .big { font-size: min(2.6rem, 7.6vw); }
 	.mob .sub { font-size: .74rem; letter-spacing: .04em; } .mob .kick { font-size: .7rem; letter-spacing: .3em; }
-	.mob .chevs { gap: 30px; margin-top: -24px; animation-name: streamLM; } .mob.fromR .chevs { animation-name: streamRM; }
-	/* only top + right: preflight makes every border solid, so a bare `border-width` drew all four sides (a diamond) */
-	.mob .chevs i { width: 48px; height: 48px; border-top-width: 11px; border-right-width: 11px; }
-	@keyframes streamLM { from { transform: translateX(-78px); } to { transform: translateX(0); } }
-	@keyframes streamRM { from { transform: translateX(78px); } to { transform: translateX(0); } }
 </style>
