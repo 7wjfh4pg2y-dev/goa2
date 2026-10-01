@@ -45,7 +45,6 @@
 	let turnSplash: TurnSplash;
 	let levelSplash: LevelSplash;
 	let round = 2, turn = 1;
-	let lvLook: 'chev' | 'gems' = 'chev';
 </script>
 
 <svelte:window bind:innerWidth={w} />
@@ -107,9 +106,8 @@
 			<button on:click={() => { round += 1; turn = 1; turnSplash.play('round', round, 1); }}>Next round</button>
 		</div>
 		<div class="row">
-			<button class:off={lvLook !== 'chev'} on:click={() => (lvLook = 'chev')}>Look A</button>
-			<button class:off={lvLook !== 'gems'} on:click={() => (lvLook = 'gems')}>Look B</button>
 			<button on:click={() => levelSplash.play('up', 7)}>Level up</button>
+			<button on:click={() => levelSplash.play('up', 18, true)}>Level up (ultimate in reach)</button>
 			<button on:click={() => levelSplash.play('pity', 1)}>Pity coin</button>
 		</div>
 	</section>
@@ -119,7 +117,7 @@
 <PushSplash news={push} {mobile} myTeam={me} />
 <DefeatSplash news={kill} {cards} names={(i) => names[i] ?? i} {lifeArt} {mobile} myTeam={me} />
 <TurnSplash bind:this={turnSplash} {mobile} />
-<LevelSplash bind:this={levelSplash} {mobile} look={lvLook} />
+<LevelSplash bind:this={levelSplash} {mobile} />
 {#if won}
 	{#key won}<VictorySplash round={5} team={won.team} reason={won.reason} myTeam={me} {mobile} onClose={() => (won = null)} />{/key}
 {/if}
