@@ -61,11 +61,12 @@
 	.ps.blue { --c: #2f7fe6; --c2: #8cc0ff; --cd: #0f2f63; }
 
 	/* the arrow band: storms in from behind, holds while the chevrons race, then shoots off ahead */
-	.band { position: absolute; left: -5%; width: 110%; top: 50%; height: 200px; zoom: var(--uis, 1); overflow: hidden;
-		clip-path: polygon(0 0, 92% 0, 100% 50%, 92% 100%, 0 100%, 6% 50%);
+	/* one plain arrow: flat tail off-screen, the head on-screen pointing the way the wave moves */
+	.band { position: absolute; left: -14%; width: 106%; top: 50%; height: 200px; zoom: var(--uis, 1); overflow: hidden;
+		clip-path: polygon(0 0, calc(100% - 130px) 0, 100% 50%, calc(100% - 130px) 100%, 0 100%);
 		background: linear-gradient(90deg, var(--cd) 0%, var(--c) 45%, var(--c2) 92%);
 		animation: storm var(--T) cubic-bezier(.2, .85, .25, 1) both; }
-	.fromR .band { transform-origin: center; scale: -1 1; } /* your team pushes from the right */
+	.fromR .band { left: auto; right: -14%; transform-origin: center; scale: -1 1; } /* your team pushes from the right */
 	@keyframes storm {
 		0% { transform: translateY(-50%) translateX(-110%); filter: blur(8px); }
 		12% { transform: translateY(-50%) translateX(0); filter: blur(0); }
@@ -92,12 +93,13 @@
 	@keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 	@keyframes out { 0%, 86% { opacity: 1; } 100% { opacity: 0; } }
 
-	/* phones: the title always fits one line, a px arrow head (a % one is too blunt on a
-	   narrow band), and the chevron loop matches the smaller chevron spacing (48 + 30 px) */
-	.mob .band { height: 150px; zoom: 1; clip-path: polygon(0 0, calc(100% - 46px) 0, 100% 50%, calc(100% - 46px) 100%, 0 100%, 28px 50%); }
+	/* phones: the title always fits one line, a bold arrow head, and the chevron loop
+	   matches the smaller chevron spacing (48 + 30 px) */
+	.mob .band { height: 150px; zoom: 1; left: -16%; width: 110%; clip-path: polygon(0 0, calc(100% - 80px) 0, 100% 50%, calc(100% - 80px) 100%, 0 100%); }
 	.mob .txt { zoom: 1; padding: 0 10px; }
 	.mob .big { font-size: min(2.2rem, 7vw); white-space: nowrap; } .mob.won .big { font-size: min(2.6rem, 7.6vw); }
 	.mob .sub { font-size: .74rem; letter-spacing: .04em; } .mob .kick { font-size: .7rem; letter-spacing: .3em; }
+	.mob.fromR .band { left: auto; right: -16%; }
 	.mob .chevs { gap: 30px; animation-name: streamM; }
 	.mob .chevs i { width: 48px; height: 48px; border-width: 11px; }
 	@keyframes streamM { from { translate: -78px 0; } to { translate: 0 0; } }
