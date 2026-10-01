@@ -938,16 +938,7 @@
 			radial-gradient(70% 60% at 20% 88%, rgba(20, 70, 110, 0.4), transparent 62%),
 			radial-gradient(140% 120% at 50% -15%, #1a4a63 0%, #0c3247 38%, #071f30 70%, #04121d 100%);
 	}
-	.ocean::before { content: ''; position: absolute; inset: -30%;
-		background:
-			repeating-linear-gradient(115deg, rgba(150, 220, 245, 0.045) 0 2px, transparent 2px 26px),
-			repeating-linear-gradient(160deg, rgba(120, 200, 230, 0.03) 0 3px, transparent 3px 40px);
-		animation: drift 24s linear infinite; }
-	.ocean::after { content: ''; position: absolute; inset: -30%;
-		background: repeating-linear-gradient(200deg, rgba(90, 175, 215, 0.035) 0 2px, transparent 2px 46px);
-		mix-blend-mode: screen; animation: drift2 32s linear infinite; }
-	@keyframes drift { to { transform: translate(64px, -22px); } }
-	@keyframes drift2 { to { transform: translate(-58px, 18px); } }
+	/* (the drifting wave-line overlay was removed — plain ocean gradient for now) */
 
 	.viewctl { display: flex; gap: 5px; margin-top: auto; padding-top: 4px; }
 	.vbtn { flex: 1; height: 2rem; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.18); background: rgba(255, 255, 255, 0.05); color: #e5e7eb; cursor: pointer; font-size: 1rem; line-height: 1; }
