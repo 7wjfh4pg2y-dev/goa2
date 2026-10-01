@@ -572,7 +572,8 @@
 	{/if}
 	{#if $ms.wonBy && !victoryClosed && !victoryHold}
 		<VictorySplash team={$ms.wonBy.team} reason={$ms.wonBy.reason} winners={winRoster} losers={loseRoster}
-			myTeam={mySeat >= 0 && mySeat < $ms.seats ? myTeam : null} me={clientId} {mobile} onClose={() => (victoryClosed = true)} />
+			myTeam={mySeat >= 0 && mySeat < $ms.seats ? myTeam : null} me={clientId} {mobile} onClose={() => (victoryClosed = true)}
+			life={$ms.life} waves={$ms.waves} round={$ms.round} />
 	{/if}
 	{#if askLifeEnd && lifeOut}
 		<div class="modal-scrim" role="presentation">

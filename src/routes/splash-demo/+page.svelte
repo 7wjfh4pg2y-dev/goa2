@@ -40,6 +40,8 @@
 
 	// game over
 	let won: { team: Team; reason: string } | null = null;
+	let vlook: 'shatter' | 'hall' | 'stamp' = 'shatter';
+	const VLOOKS = [['shatter', 'Throne Shatter'], ['hall', 'Hall of Heroes'], ['stamp', 'Impact Stamp']] as const;
 	const roster = (t: Team) => (t === 'orange' ? ['a', 'c'] : ['b', 'd']).map((pid) => ({ pid, hero: (cards[pid] as unknown as { hero: string }).hero, name: names[pid] }));
 	let me: Team = 'orange'; // whose eyes we watch through: your team sits on the right
 	let turnSplash: TurnSplash;
@@ -92,6 +94,7 @@
 	</section>
 	<section>
 		<h2>Game over</h2>
+		<div class="row looks">{#each VLOOKS as [k, n] (k)}<button class:sel={vlook === k} on:click={() => (vlook = k)}>{n}</button>{/each}</div>
 		<div class="row">
 			<button class="o" on:click={() => (won = { team: 'orange', reason: 'Blue ran out of Life' })}>Orange wins (life)</button>
 			<button class="b" on:click={() => (won = { team: 'blue', reason: 'pushed into the Orange throne' })}>Blue wins (throne)</button>
@@ -111,7 +114,7 @@
 <DefeatSplash news={kill} {cards} names={(i) => names[i] ?? i} {lifeArt} {mobile} myTeam={me} />
 <TurnSplash bind:this={turnSplash} {mobile} />
 {#if won}
-	{#key won}<VictorySplash team={won.team} reason={won.reason} winners={roster(won.team)} losers={roster(won.team === 'orange' ? 'blue' : 'orange')} myTeam={me} me="a" {mobile} onClose={() => (won = null)} />{/key}
+	{#key won}<VictorySplash variant={vlook} life={won.team === 'orange' ? { orange: 4, blue: 0 } : { orange: 2, blue: 5 }} waves={3} round={5} team={won.team} reason={won.reason} winners={roster(won.team)} losers={roster(won.team === 'orange' ? 'blue' : 'orange')} myTeam={me} me="a" {mobile} onClose={() => (won = null)} />{/key}
 {/if}
 
 <style>
@@ -127,6 +130,7 @@
 	button.t { background: #7a4292; border-color: transparent; color: #fff; }
 	.view { align-items: center; gap: 10px; font-size: .9rem; color: #e3cf9c; }
 	button.off { opacity: .4; }
+	.looks button.sel { background: #d9a845; color: #1a1206; border-color: transparent; }
 	.note { margin: -2px 0 10px; text-align: center; font-size: .78rem; color: #cbd5e1; }
 	.custom label { display: flex; align-items: center; gap: 6px; font-size: .9rem; }
 	.custom input { width: 56px; padding: 6px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, .2); background: rgba(0, 0, 0, .35); color: #fff; font: inherit; }
