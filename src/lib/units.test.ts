@@ -33,7 +33,7 @@ describe('defeating and removing units', () => {
 		expect(r.cards).toBeUndefined() // no coins
 	})
 
-	it('A defeats B (level 3): A +3, teammate C +1 assist, Blue −1 life, B’s face-down card is discarded', () => {
+	it('A defeats B (level 3): A +3, teammate C +1 assist, Blue −1 life, B’s face-down card stays in its slot', () => {
 		const p = applyCardReq(game(), { kind: 'defeatHero', pid: 'A', target: 'B' })
 		expect(p.cards!.A.coins).toBe(5 + 3)
 		expect(p.cards!.C.coins).toBe(5 + 1)
@@ -41,8 +41,8 @@ describe('defeating and removing units', () => {
 		expect(p.cards!.B.coins).toBe(5) // the reward comes from the game, not B's bank
 		expect(p.life).toEqual({ orange: 6, blue: 5 })
 		expect(p.pieces!.B).toBeUndefined()
-		expect(p.cards!.B.pending).toBeNull()
-		expect(p.cards!.B.discard).toContain(4)
+		expect(p.cards!.B.pending).toBe(4)
+		expect(p.cards!.B.discard).not.toContain(4)
 		expect(p.defeated!.B.turn).toBe(2)
 	})
 
@@ -57,13 +57,24 @@ describe('defeating and removing units', () => {
 		expect(p.pieces!.bnty).toBeUndefined()
 	})
 
-	it('keeps the hand; keeps this turn\'s card only if it had already resolved', () => {
+	it('keeps the hand, and this turn\'s card stays in its slot (never discarded)', () => {
 		const s = game()
 		const p = applyCardReq(s, { kind: 'defeatHero', pid: 'A', target: 'B' })
 		expect(p.cards!.B.hand).toEqual(s.cards!.B.hand)
-		const kept = applyCardReq(s, { kind: 'defeatHero', pid: 'A', target: 'B', keepCard: true })
-		expect(kept.cards!.B.pending).toBe(4)
-		expect(kept.cards!.B.discard).not.toContain(4)
+		expect(p.cards!.B.pending).toBe(4)
+		expect(p.cards!.B.discard).not.toContain(4)
+	})
+
+	it('clears the fallen hero\'s tokens — but not Trinkets\' Turret', () => {
+		const s = game()
+		const tok = (id: string, token: string, owner: string, extra: Partial<Piece> = {}): Piece => ({ id, hex: '7_7', team: 'blue', kind: 'token', token, owner, ...extra })
+		s.pieces = { ...s.pieces, tree: tok('tree', 'token_tree', 'B'), pyro: tok('pyro', 'companion', 'B', { label: 'Pyro' }),
+			turret: tok('turret', 'companion', 'B', { label: 'Turret' }), other: tok('other', 'token_rock', 'C') }
+		const p = applyCardReq(s, { kind: 'defeatHero', pid: 'A', target: 'B' })
+		expect(p.pieces!.tree).toBeUndefined()
+		expect(p.pieces!.pyro).toBeUndefined()
+		expect(p.pieces!.turret).toBeDefined()
+		expect(p.pieces!.other).toBeDefined()
 	})
 
 	it('respawns in a later turn once they play a card (possibly next round)', () => {
@@ -71,7 +82,8 @@ describe('defeating and removing units', () => {
 		s = { ...s, ...applyCardReq(s, { kind: 'defeatHero', pid: 'A', target: 'B' }) } as MatchState
 		expect(canRespawn(s, 'B')).toBe(false) // same turn
 		expect(applyCardReq(s, { kind: 'respawn', pid: 'B', hex: '9_9' })).toEqual({})
-		s = { ...s, turn: 3 }
+		s = { ...s, ...applyCardReq(s, { kind: 'advance', pid: 'A' }) } as MatchState // the card locks into its slot
+		expect(s.turn).toBe(3)
 		expect(canRespawn(s, 'B')).toBe(false) // next turn, but no card played yet
 		s = { ...s, cards: { ...s.cards, B: { ...s.cards!.B, pending: s.cards!.B.hand[0] } } } as MatchState
 		expect(canRespawn(s, 'B')).toBe(true)

@@ -1371,13 +1371,21 @@ export function defeatHero(s: MatchState, pid: string, target: string, keepCard?
 	const hero = s.pieces?.[target]
 	if (!hero || hero.kind !== 'hero' || pid === target) return {}
 	const sum = heroDefeatSummary(s, pid, target)
-	keepCard ??= cardResolved(s, pid, target)
+	void keepCard // (kept for old callers) the card stays in its turn slot either way
 	let cards = addCoinsTo(s.cards ?? {}, pid, sum.coins)
 	for (const a of sum.assists) cards = addCoinsTo(cards, a, sum.assist)
-	const v = cards[target]
-	if (!keepCard && v && v.pending != null && v.pending >= 0) cards = { ...cards, [target]: { ...v, discard: [...v.discard, v.pending], pending: null } }
+	// a defeated hero's tokens all leave the board (Wuk's trees, Mortimer's zombies, Widget's
+	// Pyro, Min's mines…) — except Trinkets' Turret, an object rather than a token; markers on
+	// the fallen hero come off too. This turn's card stays in its slot (some heroes care
+	// what's in their turn slots, others what's in their discard).
+	const isTurret = (p: Piece) => p.token === 'companion' && (p.label === 'Turret' || s.cards?.[target]?.hero === 'trinkets')
 	const pieces: Record<string, Piece> = {}
-	for (const id in s.pieces) if (id !== target && s.pieces[id].attachedTo !== target) pieces[id] = s.pieces[id]
+	for (const id in s.pieces) {
+		const p = s.pieces[id]
+		if (id === target || p.attachedTo === target) continue
+		if (p.kind === 'token' && p.owner === target && !isTurret(p)) continue
+		pieces[id] = p
+	}
 	const life = sum.team ? { ...s.life, [sum.team]: Math.max(0, s.life[sum.team] - sum.lives) } : s.life
 	const lifeTok = sum.team && s.lifeTok ? { ...s.lifeTok, [sum.team]: spendTokens(s.lifeTok[sum.team] ?? [], sum.lives) } : s.lifeTok
 	const attacks = { ...(s.attacks ?? {}) }
