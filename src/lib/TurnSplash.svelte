@@ -7,7 +7,7 @@
 	export let mobile = false;
 
 	const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
-	const DUR = 2400;
+	const DUR = 2400, ROUND_DUR = 3000; // a new round also turns card I face-up after the sweep
 	let shown: { kind: 'turn' | 'round'; round: number; turn: number; key: number } | null = null;
 	let timer: ReturnType<typeof setTimeout> | null = null;
 	/** Show the splash: a new round shows "Round N", a new turn "Turn N". */
@@ -16,7 +16,7 @@
 		if (timer) clearTimeout(timer);
 		requestAnimationFrame(() => {
 			shown = { kind, round, turn, key: Date.now() };
-			timer = setTimeout(() => (shown = null), DUR);
+			timer = setTimeout(() => (shown = null), kind === 'round' ? ROUND_DUR : DUR);
 		});
 	}
 	onDestroy(() => { if (timer) clearTimeout(timer); });
@@ -31,7 +31,7 @@
 		<div class="ts" class:mob={mobile} class:round={isRound} aria-live="polite">
 				<div class="row">
 					{#each [1, 2, 3, 4] as n (n)}
-						<div class="slot" class:done={!isRound && n < t} class:now={!isRound && n === t} class:wipe={isRound} style="--i:{n}">
+						<div class="slot" class:done={!isRound && n < t} class:now={!isRound && n === t} class:wipe={isRound && n > 1} class:first={isRound && n === 1} style="--i:{n}">
 							<div class="face back"><span class="sym">✦</span></div>
 							<div class="face front"><span class="rn">{ROMAN[n]}</span></div>
 							{#if !isRound && n < t}<span class="stamp">✓</span>{/if}
@@ -44,18 +44,19 @@
 {/if}
 
 <style>
+	.ts.round { --D: 3s; }
 	.ts { position: fixed; inset: 0; z-index: 58; pointer-events: none; overflow: hidden; display: grid; place-items: center; }
 	.txt { position: absolute; display: flex; flex-direction: column; align-items: center; gap: 2px; zoom: var(--uis, 1);
 		color: #f6ead2; text-align: center; text-shadow: 0 3px 0 rgba(0, 0, 0, .55), 0 0 26px rgba(0, 0, 0, .9); }
-	.big { font-size: 3.4rem; line-height: 1; letter-spacing: .04em; animation: fade .3s ease .45s both, out 2.4s ease both; }
+	.big { font-size: 3.4rem; line-height: 1; letter-spacing: .04em; animation: fade .3s ease .45s both, out var(--D, 2.4s) ease both; }
 	.round .big { color: #ffe3a0; }
-	.small { font-size: 1rem; letter-spacing: .4em; text-transform: uppercase; color: #e3cf9c; animation: fade .3s ease .6s both, out 2.4s ease both; }
+	.small { font-size: 1rem; letter-spacing: .4em; text-transform: uppercase; color: #e3cf9c; animation: fade .3s ease .6s both, out var(--D, 2.4s) ease both; }
 	@keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 	@keyframes out { 0%, 86% { opacity: 1; } 100% { opacity: 0; } }
 	@keyframes slam { from { opacity: 0; transform: scale(1.9); filter: blur(5px); } to { opacity: 1; transform: scale(1); filter: blur(0); } }
 
 	/* ── SLOTS: the four turn cards (flat flips: squash to an edge, swap the face, open up) ── */
-	.row { display: flex; gap: 22px; zoom: var(--uis, 1); margin-top: -70px; animation: out 2.4s ease both; }
+	.row { display: flex; gap: 22px; zoom: var(--uis, 1); margin-top: -70px; animation: out var(--D, 2.4s) ease both; }
 	.slot { position: relative; width: 108px; height: 150px; animation: slotIn .45s cubic-bezier(.3, 1.4, .5, 1) calc(var(--i) * 60ms) both; }
 	@keyframes slotIn { from { opacity: 0; translate: 0 -120px; rotate: -8deg; } to { opacity: 1; translate: 0 0; rotate: 0deg; } }
 	.face { position: absolute; inset: 0; border-radius: 12px; display: grid; place-items: center; box-shadow: 0 10px 26px rgba(0, 0, 0, .65); }
@@ -79,8 +80,16 @@
 	@keyframes wipe { 0% { transform: scaleX(1); } 50% { transform: scaleX(0); } 100% { transform: scaleX(1); } }
 	.slot.wipe .front { animation: faceOut .5s calc(.45s + var(--i) * 90ms) both; }
 	@keyframes faceOut { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+	/* …then card I flips face-up again: the new round's first turn (one timeline: sweep → pause → reveal) */
+	.slot.first { z-index: 2; animation: slotIn .45s cubic-bezier(.3, 1.4, .5, 1) calc(var(--i) * 60ms) both, firstFlip 1.9s ease .54s both; }
+	@keyframes firstFlip {
+		0% { transform: scale(1, 1); } 13% { transform: scale(0, 1); } 26% { transform: scale(1, 1); }
+		62% { transform: scale(1, 1); } 72% { transform: scale(0, 1.12); } 86% { transform: scale(1.32, 1.32); } 100% { transform: scale(1.22, 1.22); }
+	}
+	.slot.first .front { animation: firstFace 1.9s .54s both; box-shadow: 0 0 0 3px #fff3, 0 0 40px 10px rgba(255, 210, 120, .7), 0 10px 26px rgba(0, 0, 0, .65); }
+	@keyframes firstFace { 0%, 12.9% { opacity: 1; } 13%, 71.9% { opacity: 0; } 72%, 100% { opacity: 1; } }
 	.slotstxt { margin-top: 250px; }
-	.slotstxt .big { animation: slam .45s cubic-bezier(.2, 1.4, .3, 1) .7s both, out 2.4s ease both; }
+	.slotstxt .big { animation: slam .45s cubic-bezier(.2, 1.4, .3, 1) .7s both, out var(--D, 2.4s) ease both; }
 
 	/* phones */
 	.mob .txt, .mob .row { zoom: .62; }
