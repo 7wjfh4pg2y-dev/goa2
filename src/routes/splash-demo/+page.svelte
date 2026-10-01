@@ -40,8 +40,8 @@
 
 	// game over
 	let won: { team: Team; reason: string } | null = null;
-	let vlook: 'shatter' | 'hall' | 'stamp' = 'shatter';
-	const VLOOKS = [['shatter', 'Throne Shatter'], ['hall', 'Hall of Heroes'], ['stamp', 'Impact Stamp']] as const;
+	let vlook: 'gates' | 'tide' | 'scroll' = 'gates';
+	const VLOOKS = [['gates', 'The Gates'], ['tide', 'The Tide'], ['scroll', 'The Decree']] as const;
 	const roster = (t: Team) => (t === 'orange' ? ['a', 'c'] : ['b', 'd']).map((pid) => ({ pid, hero: (cards[pid] as unknown as { hero: string }).hero, name: names[pid] }));
 	let me: Team = 'orange'; // whose eyes we watch through: your team sits on the right
 	let turnSplash: TurnSplash;
