@@ -211,7 +211,7 @@
 
 	// overlay + examine
 	let overlayId: string | null = null;
-	type ExCard = { hid: string; idx: number; pid?: string };
+	type ExCard = { hid: string; idx: number; pid?: string; secret?: boolean };
 	// `list`: several cards to page through (e.g. a player's active effects) — ‹ › / swipe
 	let examine: (ExCard & { list?: ExCard[] }) | null = null;
 	$: exList = examine?.list && examine.list.length > 1 ? examine.list : null;
@@ -259,8 +259,10 @@
 	// click a turn slot: a face-up card previews; anything else falls through to
 	// the container (a player row / your dash opens the full board)
 	function peekSlot(e: Event, cs: PlayerCardState, t: number) {
-		const i = cs.turns[t] ?? (t === turnIdx && revealed ? cs.pending : null);
-		if (i != null && i !== PASS) { e.stopPropagation(); examine = { hid: cs.hero, idx: i, pid: pidOf(cs) }; }
+		// your own face-down card can be read any time (no need to take it back); others' stay hidden
+		const own = pidOf(cs) === clientId && t === turnIdx && !revealed;
+		const i = cs.turns[t] ?? (t === turnIdx && (revealed || own) ? cs.pending : null);
+		if (i != null && i !== PASS) { e.stopPropagation(); examine = { hid: cs.hero, idx: i, pid: pidOf(cs), secret: own && cs.turns[t] == null }; }
 	}
 	const pidOf = (cs: PlayerCardState) => Object.keys(cards).find((k) => cards[k] === cs);
 	// the card sitting in turn slot t (played, or this turn's once revealed)
@@ -276,7 +278,8 @@
 	$: colorOf = (pid: string) => colorHex(seated.find((p) => p.id === pid)?.color ?? '');
 	$: examineFx = examine?.pid ? fxFor(examine.pid, examine.idx) : undefined;
 	$: examineDetected = examine ? detectDuration(heroCards(examine.hid)[examine.idx]?.description) : null;
-	$: canFx = !!examine?.pid && (examine.pid === clientId || iAmHost);
+	// (not on your own still-hidden card: an effect would show it to everyone before the reveal)
+	$: canFx = !!examine?.pid && (examine.pid === clientId || iAmHost) && !examine.secret;
 	// a played card (turn slot / this turn's card) can be discarded by an effect (owner or host)
 	$: exOwner = examine?.pid ? cards[examine.pid] : undefined;
 	$: canDiscardEx = canFx && !!exOwner && !!examine && (exOwner.turns.includes(examine.idx) || exOwner.pending === examine.idx);
@@ -690,7 +693,7 @@
 						<span class="mpic"><PlayerIcon hero={cs.hero} team={pTeam(p)} color={colorHex(p.color)} size="28px" ring={2} ult={cs.ultimate} /></span>
 						<span class="mpn"><b>{p.name}</b><small>{heroName(cs.hero)}</small></span>
 						<span class="mlv"><em>Lv {levelOf(cs)}</em><i class="mini" class:off={ini == null}>{@html CLOCK}<b>{ini ?? '–'}</b></i></span>
-						<span class="mcard fxwrap" class:fx={!!cfx} style="--fxc:{colorOf(p.id)}"><TurnSlot heroId={cs.hero} played={cs.turns[turnIdx]} pending={cs.pending} isCurrent {revealed} examinable on:click={(e) => peekSlot(e, cs, turnIdx)} /></span>
+						<span class="mcard fxwrap" class:fx={!!cfx} style="--fxc:{colorOf(p.id)}"><TurnSlot heroId={cs.hero} played={cs.turns[turnIdx]} pending={cs.pending} isCurrent {revealed} peekable={p.id === clientId} examinable on:click={(e) => peekSlot(e, cs, turnIdx)} /></span>
 						<span class="msx">{#each allStats(cs) as r}<span class:up={r.delta > 0}>{#if r.delta > 0}<span class="pp">{#each Array(r.delta) as _}<i></i>{/each}</span>{/if}<img src={statImg(r.key)} alt={r.label} /></span>{/each}</span>
 					</div>
 				{/if}
@@ -728,7 +731,7 @@
 						</span>
 						{#if cs && dense}
 							<span class="dslot">
-								<span class="fxwrap" class:fx={!!fxFor(p.id, slotIdx(cs, turnIdx))} style="--fxc:{colorOf(p.id)}"><TurnSlot heroId={cs.hero} played={cs.turns[turnIdx]} pending={cs.pending} isCurrent {revealed} examinable on:click={(e) => peekSlot(e, cs, turnIdx)} /></span>
+								<span class="fxwrap" class:fx={!!fxFor(p.id, slotIdx(cs, turnIdx))} style="--fxc:{colorOf(p.id)}"><TurnSlot heroId={cs.hero} played={cs.turns[turnIdx]} pending={cs.pending} isCurrent {revealed} peekable={p.id === clientId} examinable on:click={(e) => peekSlot(e, cs, turnIdx)} /></span>
 							</span>
 						{/if}
 						{#if cs && isSkipped(cs)}<span class="skiptag" title="No cards left — skipped this turn">skip</span>
@@ -754,7 +757,7 @@
 						{#if !dense}
 							<div class="pturns">
 								{#each [0, 1, 2, 3] as t}
-									<span class="fxwrap" class:fx={!!fxFor(p.id, slotIdx(cs, t))} style="--fxc:{colorOf(p.id)}"><TurnSlot heroId={cs.hero} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} label={ROMAN[t]} examinable on:click={(e) => peekSlot(e, cs, t)} /></span>
+									<span class="fxwrap" class:fx={!!fxFor(p.id, slotIdx(cs, t))} style="--fxc:{colorOf(p.id)}"><TurnSlot heroId={cs.hero} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} label={ROMAN[t]} peekable={p.id === clientId} examinable on:click={(e) => peekSlot(e, cs, t)} /></span>
 								{/each}
 								<!-- discard: the most recent card, count below (like your dash) -->
 								<span class="pdisc" title="Discard pile">
@@ -826,7 +829,7 @@
 							<div class="tlabel">Turn {t + 1}</div>
 							<div class="tslot">
 								<span class="tbroman">{ROMAN[t]}</span>
-								<span class="fxwrap" class:fx={!!fxFor(oid, slotIdx(cs, t))} style="--fxc:{colorOf(oid)}"><TurnSlot heroId={oh} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} examinable on:click={(e) => peekSlot(e, cs, t)} /></span>
+								<span class="fxwrap" class:fx={!!fxFor(oid, slotIdx(cs, t))} style="--fxc:{colorOf(oid)}"><TurnSlot heroId={oh} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} peekable={oid === clientId} examinable on:click={(e) => peekSlot(e, cs, t)} /></span>
 							</div>
 						</div>
 					{/each}
@@ -1164,7 +1167,7 @@
 			<div class="mslots">
 				{#each [0, 1, 2, 3] as t}
 					{@const dfx = fxFor(clientId, slotIdx(mine, t))}
-					<span class="msl fxwrap" class:fx={!!dfx} style="--fxc:{colorOf(clientId)}"><TurnSlot heroId={mine.hero} played={mine.turns[t]} pending={mine.pending} isCurrent={t === turnIdx} {revealed} label={ROMAN[t]} examinable on:click={(e) => peekSlot(e, mine, t)} /></span>
+					<span class="msl fxwrap" class:fx={!!dfx} style="--fxc:{colorOf(clientId)}"><TurnSlot heroId={mine.hero} played={mine.turns[t]} pending={mine.pending} isCurrent={t === turnIdx} {revealed} label={ROMAN[t]} peekable examinable on:click={(e) => peekSlot(e, mine, t)} /></span>
 				{/each}
 				<span class="msep"></span>
 				<span class="msl mdisc discwrap" role="group" aria-label="Discard pile">
@@ -1294,7 +1297,7 @@
 							<span class="roman">{['I', 'II', 'III', 'IV'][t]}</span>
 							{#if has}
 								{@const dfx = fxFor(clientId, slotIdx(mine, t))}
-								<div class="dm-on fxwrap" class:fx={!!dfx} style="--fxc:{colorOf(clientId)}"><TurnSlot heroId={mine.hero} played={mine.turns[t]} pending={mine.pending} isCurrent={t === turnIdx} {revealed}
+								<div class="dm-on fxwrap" class:fx={!!dfx} style="--fxc:{colorOf(clientId)}"><TurnSlot heroId={mine.hero} played={mine.turns[t]} pending={mine.pending} isCurrent={t === turnIdx} {revealed} peekable
 									examinable on:click={(e) => peekSlot(e, mine, t)} /></div>
 							{/if}
 						</div>
