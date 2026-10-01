@@ -88,7 +88,7 @@ export function battlePatch(s: MatchState): Partial<MatchState> {
 }
 
 /** Host, after the minion battle (and its removals): open the level-up step. */
-export const levelPatch = (): Partial<MatchState> => ({ levelPhase: true })
+export const levelPatch = (s?: Pick<MatchState, 'cards'>): Partial<MatchState> => ({ levelPhase: true, levelBase: s?.cards ?? null })
 
 /** Apply a card instruction to the shared state, returning the patch to broadcast. */
 export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
@@ -113,7 +113,7 @@ export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 			// the level-up phase closes with the round: picks lock in, no level-up = pity coin
 			let next = endRoundAll(migrated)
 			next = Object.fromEntries(Object.entries(next).map(([pid, c]) => [pid, s.battlePhase || s.levelPhase ? closeLevelPhase(c) : lockPicks(c)]))
-			return { cards: next, round: s.round + 1, turn: 1, battlePhase: false, levelPhase: false, battle: null, attacks: {}, pieces, status: {}, radii: {}, effects: expireEffects(s.effects, s.round, s.turn) }
+			return { cards: next, round: s.round + 1, turn: 1, battlePhase: false, levelPhase: false, levelBase: null, battle: null, attacks: {}, pieces, status: {}, radii: {}, effects: expireEffects(s.effects, s.round, s.turn) }
 		}
 		// end of turn: Glitch / Grenade tokens leave play (tokens.ts), then a team with
 		// no minions left in the battle zone gets pushed (battle.ts)
@@ -270,6 +270,7 @@ export interface MatchState {
 	resolved?: string[] // playerIds who have confirmed their action done this turn
 	battlePhase?: boolean // turn 4 revealed → minion battle pending (before advancing the round)
 	levelPhase?: boolean // after the battle (and its removals) the host opens the level-up step
+	levelBase?: Record<string, PlayerCardState> | null // every board as the level-up step opened: what OTHER players see until the round locks the picks
 	lane?: number // battle zone: index into LANE (battle.ts) — 0 Orange Beach, 1 Center, 2 Blue Beach
 	battle?: Battle | null // minion battle in progress: the loser still has minions to take off
 	wonBy?: { team: Team; reason: string } | null // a push won the game (throne / last wave)
