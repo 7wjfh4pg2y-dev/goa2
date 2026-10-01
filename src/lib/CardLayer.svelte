@@ -175,7 +175,7 @@
 	let wasLevel: boolean | null = null;
 	$: watchLevel(levelPhase);
 	function watchLevel(on: boolean) {
-		if (wasLevel === false && on && mine) levelSplash?.play(mustLevel(mine) ? 'up' : 'pity', levelOf(mine));
+		if (wasLevel === false && on && mine) levelSplash?.play(mustLevel(mine) ? 'up' : 'pity', mine.coins);
 		wasLevel = on;
 	}
 	// the battle hands every card back (like a round end) so players can level up / swap now
