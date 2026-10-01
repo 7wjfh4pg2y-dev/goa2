@@ -1336,8 +1336,8 @@
 
 				<!-- hand display: auto-hide · fan / spread · dock into the dash -->
 				<div class="handopts">
-				<button class="hopt" class:on={autoRetract} disabled={dockHand} on:click={toggleRetract} aria-pressed={autoRetract} aria-label="Auto-hide hand"
-					title={autoRetract ? 'Auto-hide hand: ON — hover or tap the card tips to raise it' : 'Auto-hide hand: OFF — cards stay up'}>
+				<button class="hopt" class:on={autoRetract} on:click={toggleRetract} aria-pressed={autoRetract} aria-label="Auto-hide hand"
+					title={dockHand ? (autoRetract ? 'Auto-hide: ON — ribbons only; hover one to see its banner' : 'Auto-hide: OFF — your hand stays up as banners') : autoRetract ? 'Auto-hide hand: ON — hover or tap the card tips to raise it' : 'Auto-hide hand: OFF — cards stay up'}>
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true">
 						<rect x="4.5" y="2.5" width="8" height="11" rx="1.4" fill="rgba(9,13,22,.9)" transform="rotate(-9 8.5 8)" />
 						<rect x="11.5" y="2.5" width="8" height="11" rx="1.4" fill="rgba(9,13,22,.9)" transform="rotate(9 15.5 8)" />
@@ -1372,7 +1372,7 @@
 				<!-- docked-hand well: always reserved, so docking / undocking shifts nothing -->
 				<div class="dockhand" class:empty={!dockHand}>
 					{#if dockHand}
-						<DockHand heroId={mine.hero} hand={handOrdered} onPick={(i) => preview(i)} />
+						<DockHand heroId={mine.hero} hand={handOrdered} fanned={!autoRetract} onPick={(i) => preview(i)} />
 					{:else}
 						<button class="dockhint" on:click={toggleDock} title="Dock your hand here">Dock hand here</button>
 					{/if}
