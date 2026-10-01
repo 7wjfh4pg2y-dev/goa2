@@ -173,6 +173,7 @@
 	// the level-up step opening: a splash for you — Level up, or (can't afford one) a pity coin
 	let levelSplash: LevelSplash;
 	let wasLevel: boolean | null = null;
+	let splashUntil = 0; // the forced deck waits for the splash to finish
 	$: watchLevel(levelPhase);
 	// enough coins to pay every level from here up to 8 (the ultimate)
 	function reachesUlt(c: PlayerCardState) {
@@ -181,7 +182,7 @@
 		return levelOf(c) < 8 && c.coins >= need;
 	}
 	function watchLevel(on: boolean) {
-		if (wasLevel === false && on && mine) levelSplash?.play(mustLevel(mine) ? 'up' : 'pity', mine.coins, reachesUlt(mine));
+		if (wasLevel === false && on && mine) splashUntil = Date.now() + (levelSplash?.play(mustLevel(mine) ? 'up' : 'pity', mine.coins, reachesUlt(mine)) ?? 0);
 		wasLevel = on;
 	}
 	// the battle hands every card back (like a round end) so players can level up / swap now
@@ -196,7 +197,8 @@
 	$: iMustLevel = levelPhase && !!mine && mustLevel(mine);
 	let autoOpened = false;
 	$: if (!levelPhase) autoOpened = false;
-	$: if (iMustLevel && !autoOpened) { autoOpened = true; deckOpen = true; deckTab = 'deck'; }
+	$: if (iMustLevel && !autoOpened) { autoOpened = true; setTimeout(openForced, Math.max(0, splashUntil - Date.now())); }
+	function openForced() { if (levelPhase && mine && mustLevel(mine)) { deckOpen = true; deckTab = 'deck'; } }
 	// phone level-up / swap confirmation
 	let lvConfirm: { kind: 'take' | 'swap'; idx: number } | null = null;
 	function confirmLevel() {
