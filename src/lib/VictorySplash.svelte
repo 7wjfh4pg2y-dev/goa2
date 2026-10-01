@@ -150,5 +150,6 @@
 	.mob .ttl { font-size: min(6rem, calc(15vw / var(--z))); }
 	.mob .pair { gap: 40px; }
 	.mob .why { font-size: 1.3rem; }
-	.mob .close { zoom: 1; }
+	.mob .close { zoom: 1; font-size: .92rem; padding: .6rem 1.1rem; white-space: nowrap; }
+	.mob .foot { gap: 8px; padding: 0 12px; }
 </style>

@@ -53,7 +53,7 @@
 	$: totalMinions = data.players.reduce((n, p) => n + p.minions, 0);
 
 	// ── the tide of battle: the battle zone after every turn ──
-	const W = 560, H = 230, PL = 112, PR = 12, PT = 10, PB = 44;
+	const W = 560, H = 300, PL = 112, PR = 12, PT = 10, PB = 44;
 	const iw = W - PL - PR, ih = H - PT - PB;
 	// level 0 = your own throne (bottom) … 4 = the enemy throne (top)
 	$: lvl = (z: number) => (mine === 'orange' ? z + 1 : 3 - z);
@@ -182,9 +182,12 @@
 	.tile span { font-size: .72rem; letter-spacing: .14em; text-transform: uppercase; color: #93a3b8; }
 
 	.body { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); grid-template-areas: 'tab tiles' 'tab tide'; grid-template-rows: auto 1fr;
-		gap: 12px 14px; align-items: start; }
+		gap: 12px 14px; align-items: stretch; }
 	.tables { grid-area: tab; display: flex; flex-direction: column; gap: 12px; }
-	.tide { grid-area: tide; }
+	.tables section { flex: 1; }
+	/* the tide panel stretches so its bottom lines up with the last team table */
+	.tide { grid-area: tide; display: flex; flex-direction: column; }
+	.tide .chart { flex: 1; display: flex; flex-direction: column; justify-content: center; }
 	section { border-radius: 14px; background: rgba(12, 18, 32, .55); border: 1px solid rgba(255, 255, 255, .1); padding: 10px 12px 8px; }
 	.team { border-top: 3px solid var(--tc); }
 	header { display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px; }
@@ -225,8 +228,10 @@
 	.tip b { font-weight: normal; color: #fff; }
 
 	/* phones: one column, compact table headers */
-	.mob .body { grid-template-columns: 1fr; grid-template-areas: 'tiles' 'tab' 'tide'; }
+	.mob .body { grid-template-columns: 1fr; grid-template-areas: 'tiles' 'tab' 'tide'; grid-template-rows: none; }
 	.mob td { font-size: .95rem; padding: 4px 3px; }
 	.mob th { padding: 4px 3px; white-space: nowrap; }
 	.mob .nm em { display: none; }
+	.mob .tide header { flex-wrap: wrap; row-gap: 0; }
+	.mob .tide .tn { white-space: nowrap; }
 </style>
