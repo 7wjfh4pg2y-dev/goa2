@@ -58,7 +58,8 @@ export const gameId = (room: string, s: MatchState) => `${room}-${s.gameId ?? s.
 
 const snap = (s: MatchState): Snap => {
 	const cards: Snap['cards'] = {}
-	for (const [pid, c] of Object.entries(s.cards ?? {})) cards[pid] = { lv: c.level, coins: c.coins, played: c.turns?.[s.turn - 1] ?? null }
+	// the committed card sits in `pending` until the turn moves on, then lands in turns[]
+	for (const [pid, c] of Object.entries(s.cards ?? {})) cards[pid] = { lv: c.level, coins: c.coins, played: c.turns?.[s.turn - 1] ?? c.pending ?? null }
 	return { round: s.round, turn: s.turn, at: Date.now(), life: { ...s.life }, waves: s.waves, lane: s.lane ?? 1, cards }
 }
 
@@ -96,7 +97,15 @@ export function journalUpdate(j: Journal, s: MatchState): Journal {
 	// one snapshot per turn: the current turn keeps updating until the turn moves on
 	const now = snap(s)
 	if (!out.cur) { out.cur = now; changed = true }
-	else if (out.cur.round !== s.round || out.cur.turn !== s.turn) { out.turns = [...out.turns, out.cur]; out.cur = now; changed = true }
+	else if (out.cur.round !== s.round || out.cur.turn !== s.turn) {
+		// the finished turn: its played cards are now in turns[] (same round) — fill any the snapshot missed
+		const done = { ...out.cur, cards: { ...out.cur.cards } }
+		if (s.round === done.round) for (const [pid, c] of Object.entries(s.cards ?? {})) {
+			const played = c.turns?.[done.turn - 1]
+			if (played != null && done.cards[pid]) done.cards[pid] = { ...done.cards[pid], played }
+		}
+		out.turns = [...out.turns, done]; out.cur = now; changed = true
+	}
 	else if (JSON.stringify(out.cur.cards) !== JSON.stringify(now.cards) || out.cur.waves !== now.waves || out.cur.lane !== now.lane
 		|| out.cur.life.orange !== now.life.orange || out.cur.life.blue !== now.life.blue) { out.cur = { ...now, at: out.cur.at }; changed = true }
 	if (s.wonBy) {

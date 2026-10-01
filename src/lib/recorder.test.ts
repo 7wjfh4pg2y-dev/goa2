@@ -28,6 +28,13 @@ describe('game recorder', () => {
 		expect(j.cur?.turn).toBe(2)
 		expect(j.players.a).toEqual({ name: 'Zaheen', seat: 0, hero: 'arien' })
 		expect(j.draft?.picks).toEqual({ a: 'arien', b: 'brogan' })
+		// turn 1's card is filled in when the turn moves on
+		expect(j.turns[0].cards.a.played).toBe(7)
+	})
+	it('records the committed (pending) card during the turn', () => {
+		const c = base().cards!
+		const j = journalUpdate(newJournal('ROOM', base()), base({ cards: { ...c, b: { ...c.b, pending: 3 } } }))
+		expect(j.cur?.cards.b.played).toBe(3)
 	})
 	it('returns the same journal when nothing changed', () => {
 		const j = journalUpdate(newJournal('ROOM', base()), base())
