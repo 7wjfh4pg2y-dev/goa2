@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { applyCardReq, canRespawn, lifeTier, cardInitiative, cardResolved, type MatchState, type Piece } from './match'
+import { applyCardReq, canRespawn, lifeTier, cardInitiative, cardResolved, clearable, type MatchState, type Piece } from './match'
 import { newPlayerCardState } from './cards/cardstate'
 
 // A (orange) + C (orange, A's teammate) vs B (blue, level 3) and D (blue)
@@ -65,16 +65,19 @@ describe('defeating and removing units', () => {
 		expect(p.cards!.B.discard).not.toContain(4)
 	})
 
-	it('clears the fallen hero\'s tokens — but not Trinkets\' Turret', () => {
+	it('leaves the fallen hero\'s tokens on the board (rulebook p.19) — only the markers riding on them come off', () => {
 		const s = game()
 		const tok = (id: string, token: string, owner: string, extra: Partial<Piece> = {}): Piece => ({ id, hex: '7_7', team: 'blue', kind: 'token', token, owner, ...extra })
 		s.pieces = { ...s.pieces, tree: tok('tree', 'token_tree', 'B'), pyro: tok('pyro', 'companion', 'B', { label: 'Pyro' }),
-			turret: tok('turret', 'companion', 'B', { label: 'Turret' }), other: tok('other', 'token_rock', 'C') }
+			turret: tok('turret', 'companion', 'B', { label: 'Turret' }), other: tok('other', 'token_rock', 'C'),
+			poison: tok('poison', 'marker_poison', 'A', { attachedTo: 'B' }) }
 		const p = applyCardReq(s, { kind: 'defeatHero', pid: 'A', target: 'B' })
-		expect(p.pieces!.tree).toBeUndefined()
-		expect(p.pieces!.pyro).toBeUndefined()
+		expect(p.pieces!.B).toBeUndefined()
+		expect(p.pieces!.tree).toBeDefined()
+		expect(p.pieces!.pyro).toBeDefined()
 		expect(p.pieces!.turret).toBeDefined()
 		expect(p.pieces!.other).toBeDefined()
+		expect(p.pieces!.poison).toBeUndefined() // a marker the fallen hero carried is returned
 	})
 
 	it('taking your own hero off the board: no rewards, tokens stay, back with the next card', () => {
@@ -88,16 +91,23 @@ describe('defeating and removing units', () => {
 		expect(p.cards).toBeUndefined()
 	})
 
-	it('Clear: the enemy tokens next to your hero leave the board (not friends, not further away, not the Turret)', () => {
+	it('Clear: the player chooses among the tokens next to their hero — friend or foe, never further away, never the Turret', () => {
 		const s = game() // A stands on 1_1
 		const tok = (id: string, hex: string, owner: string, extra: Partial<Piece> = {}): Piece => ({ id, hex, team: 'blue', kind: 'token', token: 'token_rock', owner, ...extra })
-		s.pieces = { ...s.pieces, near: tok('near', '2_1', 'B'), far: tok('far', '3_1', 'B'), mine: tok('mine', '0_1', 'C'), turret: tok('turret', '0_1', 'D', { token: 'companion', label: 'Turret' }) }
-		const p = applyCardReq(s, { kind: 'clearAround', pid: 'A' })
+		s.pieces = { ...s.pieces, near: tok('near', '2_1', 'B'), near2: tok('near2', '1_0', 'D'), far: tok('far', '3_1', 'B'), mine: tok('mine', '0_1', 'C'),
+			turret: tok('turret', '0_1', 'D', { token: 'companion', label: 'Turret' }), ride: tok('ride', '2_1', 'B', { token: 'marker_poison', attachedTo: 'C' }) }
+		expect(clearable(s, 'A').map((p) => p.id).sort()).toEqual(['mine', 'near', 'near2']) // an ally's token (mine) can go too
+		// only what was chosen leaves; ids that aren't adjacent tokens are ignored
+		const p = applyCardReq(s, { kind: 'clearAround', pid: 'A', ids: ['near', 'mine', 'far', 'turret', 'ride', 'm1'] })
 		expect(p.pieces!.near).toBeUndefined()
+		expect(p.pieces!.mine).toBeUndefined()
+		expect(p.pieces!.near2).toBeDefined() // not chosen
 		expect(p.pieces!.far).toBeDefined()
-		expect(p.pieces!.mine).toBeDefined()
 		expect(p.pieces!.turret).toBeDefined()
-		expect(applyCardReq({ ...s, pieces: p.pieces! } as MatchState, { kind: 'clearAround', pid: 'A' })).toEqual({}) // nothing left to clear
+		expect(p.pieces!.ride).toBeDefined()
+		expect(p.pieces!.m1).toBeDefined()
+		expect(applyCardReq(s, { kind: 'clearAround', pid: 'A', ids: [] })).toEqual({}) // nothing chosen
+		expect(applyCardReq(s, { kind: 'clearAround', pid: 'A', ids: ['far'] })).toEqual({}) // nothing legal chosen
 	})
 
 	it('respawns in a later turn once they play a card (possibly next round)', () => {

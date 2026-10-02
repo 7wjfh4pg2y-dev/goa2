@@ -29,11 +29,11 @@ describe('the minion lane', () => {
 	})
 
 	it('spawn points: 6 a side in the Center; on a beach the home team has 6, the visitors 5', () => {
-		const count = (z: string) => { const w = Object.values(spawnWave(M, z, {}, 't')); expect(w.every((p) => zoneTable(M)[p.hex] === z)).toBe(true); return { o: w.filter((p) => p.team === 'orange').length, b: w.filter((p) => p.team === 'blue').length } }
+		const count = (z: string) => { const w = Object.values(spawnWave(M, z, {}, 't').minions); expect(w.every((p) => zoneTable(M)[p.hex] === z)).toBe(true); return { o: w.filter((p) => p.team === 'orange').length, b: w.filter((p) => p.team === 'blue').length } }
 		expect(count('Center')).toEqual({ o: 6, b: 6 })
 		expect(count('Orange Beach')).toEqual({ o: 6, b: 5 })
 		expect(count('Blue Beach')).toEqual({ o: 5, b: 6 })
-		const roles = Object.values(spawnWave(M, 'Center', {}, 't')).filter((p) => p.team === 'blue').map((p) => p.role).sort()
+		const roles = Object.values(spawnWave(M, 'Center', {}, 't').minions).filter((p) => p.team === 'blue').map((p) => p.role).sort()
 		expect(roles).toEqual(['heavy', 'melee', 'melee', 'melee', 'melee', 'ranged'])
 	})
 
@@ -125,12 +125,44 @@ describe('the minion lane', () => {
 		expect(pushLane(last, 'orange').wonBy).toEqual({ team: 'orange', reason: 'won the Final Push' })
 	})
 
-	it('a taken spawn point sends its minion to the nearest free hex in the zone', () => {
+	it('a spawn point held by a unit sends its minion to the nearest free hex in the zone', () => {
 		const hero: Piece = { id: 'X', hex: '9_10', team: 'blue', kind: 'hero' }
-		const w = Object.values(spawnWave(M, 'Center', { X: hero }, 't'))
+		const { minions, cleared } = spawnWave(M, 'Center', { X: hero }, 't')
+		const w = Object.values(minions)
 		expect(w).toHaveLength(12)
 		expect(w.some((p) => p.hex === '9_10')).toBe(false)
 		expect(new Set(w.map((p) => p.hex)).size).toBe(12)
+		expect(cleared).toEqual([])
+	})
+
+	it('a token on a spawn point is removed and the minion spawns there — but Trinkets\' Turret is an object and stays', () => {
+		const sp = Object.values(spawnWave(M, 'Center', {}, 't').minions).map((p) => p.hex)
+		expect(sp).toContain('9_10')
+		const other = sp.find((h) => h !== '9_10')!
+		const rock: Piece = { id: 'rock', hex: '9_10', team: 'blue', kind: 'token', token: 'token_rock', owner: 'B' }
+		const turret: Piece = { id: 'turret', hex: other, team: 'blue', kind: 'token', token: 'companion', label: 'Turret', owner: 'B' }
+		const { minions, cleared } = spawnWave(M, 'Center', { rock, turret }, 't')
+		const w = Object.values(minions)
+		expect(cleared).toEqual(['rock'])
+		expect(w).toHaveLength(12)
+		expect(w.some((p) => p.hex === '9_10')).toBe(true) // the rock made way
+		expect(w.some((p) => p.hex === other)).toBe(false) // the Turret didn't
+		expect(new Set(w.map((p) => p.hex)).size).toBe(12)
+		// a companion without the label is still the Turret when its owner plays Trinkets
+		const bare: Piece = { ...turret, label: undefined }
+		expect(spawnWave(M, 'Center', { bare }, 't', { B: { hero: 'trinkets' } }).cleared).toEqual([])
+		expect(spawnWave(M, 'Center', { bare }, 't', { B: { hero: 'widget' } }).cleared).toEqual(['turret']) // Pyro is a token
+	})
+
+	it('a push sweeps the tokens off the new battle zone\'s spawn points', () => {
+		const s = game()
+		const beach = Object.values(spawnWave(M, 'Blue Beach', {}, 't').minions)[0].hex
+		const rock: Piece = { id: 'rock', hex: beach, team: 'blue', kind: 'token', token: 'token_rock', owner: 'B' }
+		const away: Piece = { id: 'away', hex: '1_1', team: 'blue', kind: 'token', token: 'token_rock', owner: 'B' }
+		const p = pushLane({ ...s, pieces: { ...s.pieces, rock, away } }, 'orange')
+		expect(p.pieces!.rock).toBeUndefined()
+		expect(p.pieces!.away).toBeDefined()
+		expect(Object.values(p.pieces!).some((m) => m.kind === 'minion' && m.hex === beach)).toBe(true)
 	})
 
 	it('8+ players: the two base hexes between the spawn points open up', () => {

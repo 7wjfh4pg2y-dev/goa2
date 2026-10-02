@@ -15,7 +15,7 @@
 
 import { teamName, aMinion } from './teams'
 import { hexCube, cubeDist } from './zones'
-import { tokenExpiry, sweepTokens, statusFrom } from './tokens'
+import { tokenExpiry, sweepTokens, statusFrom, isTurret } from './tokens'
 import { expireEffects, type Effect } from './effects'
 import { startBattle, pushCheck, battleRemove, battleAuto, battleResult, laneNotes, heavyImmune, type Battle, type PushNews } from './battle'
 import { get, writable, type Readable } from 'svelte/store'
@@ -61,7 +61,7 @@ export type CardReq =
 	| { kind: 'defeatMinion'; pid: string; piece: string } // pid defeated an enemy minion: +2 coins (+4 heavy)
 	| { kind: 'removeMinion'; pid: string; piece: string } // a card effect removed a minion: no coins
 	| { kind: 'removeHero'; pid: string } // pid takes their own hero off the board (a card effect): no rewards, respawns with their next card
-	| { kind: 'clearAround'; pid: string } // after an attack card: every enemy token next to pid's hero leaves the board
+	| { kind: 'clearAround'; pid: string; ids: string[] } // Clear (instead of an attack): the chosen tokens next to pid's hero leave the board
 	| { kind: 'defeatHero'; pid: string; target: string; keepCard?: boolean } // pid defeated target's hero (coins, assists, life); keepCard = their card this turn had already resolved (default: worked out from initiative)
 	| { kind: 'attack'; pid: string; target: string } // pid attacks target's hero → the defender is asked "Defend?"
 	| { kind: 'attackResolve'; pid: string; target: string; result: 'defend' | 'defended' | 'defeated' | 'cancel' } // the defender's answer (or the host's); the attacker may cancel
@@ -130,7 +130,7 @@ export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 	}
 	if (req.kind === 'defeatHero') return defeatHero(s, req.pid, req.target, req.keepCard)
 	if (req.kind === 'removeHero') return removeHero(s, req.pid)
-	if (req.kind === 'clearAround') { const c = clearAround(s, req.pid); return c.removed.length ? { pieces: c.pieces } : {} }
+	if (req.kind === 'clearAround') { const c = clearAround(s, req.pid, req.ids ?? []); return c.removed.length ? { pieces: c.pieces } : {} }
 	if (req.kind === 'respawn') return respawnHero(s, req.pid, req.hex)
 	if (req.kind === 'spawn') return spawnHero(s, req.pid, req.hex)
 	if (req.kind === 'attack') return startAttack(s, req.pid, req.target)
@@ -1188,7 +1188,7 @@ export function joinMatch(
 		}
 		if (req.kind === 'respawn' && patch.pieces) note(req.pid, 'respawned ⤴')
 		if (req.kind === 'removeHero' && patch.defeated) note(req.pid, 'took their hero off the board — back with their next card')
-		if (req.kind === 'clearAround' && patch.pieces) { const n = Object.keys(local.pieces ?? {}).length - Object.keys(patch.pieces).length; note(req.pid, `cleared ${n} enemy token${n === 1 ? '' : 's'} around them`) }
+		if (req.kind === 'clearAround' && patch.pieces) { const n = Object.keys(local.pieces ?? {}).length - Object.keys(patch.pieces).length; note(req.pid, `cleared ${n} token${n === 1 ? '' : 's'} next to them`) }
 		if (req.kind === 'spawn' && patch.pieces) note(req.pid, 'entered the battlefield')
 		if (req.kind === 'attack' && patch.attacks) note(req.pid, `attacks ${nameOf(req.target)}!`)
 		if (req.kind === 'attackResolve' && (patch.attacks || patch.lastDefeat)) {
@@ -1396,10 +1396,10 @@ export function heroDefeatSummary(s: MatchState, pid: string, target: string) {
 
 /** `pid` defeats `target`'s hero: +coins = its level (from the game, not the victim);
  *  every teammate of `pid` +assist coins = its level tier; the victim's team spends
- *  that tier in Life (+1 with the Bounty); markers on it come off; the card they
- *  played this turn is discarded without effect — unless it had already resolved
- *  (`keepCard`); their hand, played and discarded cards stay; the hero leaves the
- *  board until it respawns. */
+ *  that tier in Life (+1 with the Bounty); markers on it come off; the tokens they
+ *  placed STAY on the board (rulebook p.19 — they go when they normally would, usually
+ *  at the end of the round); their hand, played and discarded cards stay, this turn's
+ *  card stays in its slot; the hero leaves the board until it respawns. */
 export function defeatHero(s: MatchState, pid: string, target: string, keepCard?: boolean): Partial<MatchState> {
 	const hero = s.pieces?.[target]
 	if (!hero || hero.kind !== 'hero' || pid === target) return {}
@@ -1407,16 +1407,14 @@ export function defeatHero(s: MatchState, pid: string, target: string, keepCard?
 	void keepCard // (kept for old callers) the card stays in its turn slot either way
 	let cards = addCoinsTo(s.cards ?? {}, pid, sum.coins)
 	for (const a of sum.assists) cards = addCoinsTo(cards, a, sum.assist)
-	// a defeated hero's tokens all leave the board (Wuk's trees, Mortimer's zombies, Widget's
-	// Pyro, Min's mines…) — except Trinkets' Turret, an object rather than a token; markers on
-	// the fallen hero come off too. This turn's card stays in its slot (some heroes care
-	// what's in their turn slots, others what's in their discard).
-	const isTurret = (p: Piece) => p.token === 'companion' && (p.label === 'Turret' || s.cards?.[target]?.hero === 'trinkets')
+	// the hero leaves the board and the markers riding on it come off. The tokens it placed
+	// stay where they are ("Tokens are not removed when the hero who placed them is defeated")
+	// until they'd normally go. This turn's card stays in its slot (some heroes care what's
+	// in their turn slots, others what's in their discard).
 	const pieces: Record<string, Piece> = {}
 	for (const id in s.pieces) {
 		const p = s.pieces[id]
 		if (id === target || p.attachedTo === target) continue
-		if (p.kind === 'token' && p.owner === target && !isTurret(p)) continue
 		pieces[id] = p
 	}
 	const life = sum.team ? { ...s.life, [sum.team]: Math.max(0, s.life[sum.team] - sum.lives) } : s.life
@@ -1459,17 +1457,22 @@ export function removeHero(s: MatchState, pid: string): Partial<MatchState> {
 	return { pieces, attacks, defeated: { ...(s.defeated ?? {}), [pid]: { round: s.round, turn: s.turn, piece: hero } } }
 }
 
-/** "Clear" (after an attack card): the enemy tokens standing next to pid's hero. Trinkets'
- *  Turret is an object, not a token; markers riding on heroes aren't on a hex. */
-export function clearAround(s: MatchState, pid: string): { pieces: Record<string, Piece>; removed: Piece[] } {
+/** The tokens a Clear action could take: every token standing next to pid's hero — friend
+ *  or foe ("remove any number of tokens adjacent to you"). Trinkets' Turret is an object,
+ *  not a token; markers riding on heroes aren't on a hex. */
+export function clearable(s: MatchState, pid: string): Piece[] {
 	const hero = s.pieces?.[pid]
-	const team = teamOf(s, pid)
-	if (!hero || hero.kind !== 'hero' || !team) return { pieces: s.pieces ?? {}, removed: [] }
+	if (!hero || hero.kind !== 'hero') return []
 	const at = hexCube(hero.hex)
-	const removed = Object.values(s.pieces ?? {}).filter((p) =>
-		p.kind === 'token' && !p.attachedTo && !!p.owner && teamOf(s, p.owner) !== team && teamOf(s, p.owner) != null &&
-		!(p.token === 'companion' && (p.label === 'Turret' || s.cards?.[p.owner]?.hero === 'trinkets')) &&
-		cubeDist(hexCube(p.hex), at) === 1)
+	return Object.values(s.pieces ?? {}).filter((p) =>
+		p.kind === 'token' && !p.attachedTo && !isTurret(p, s.cards) && cubeDist(hexCube(p.hex), at) === 1)
+}
+
+/** "Clear" (instead of an attack): the tokens the player chose (`ids`) among those next
+ *  to their hero leave the board; anything else in `ids` is ignored. */
+export function clearAround(s: MatchState, pid: string, ids: string[]): { pieces: Record<string, Piece>; removed: Piece[] } {
+	const want = new Set(ids)
+	const removed = clearable(s, pid).filter((p) => want.has(p.id))
 	const pieces = { ...(s.pieces ?? {}) }
 	for (const p of removed) delete pieces[p.id]
 	return { pieces, removed }
