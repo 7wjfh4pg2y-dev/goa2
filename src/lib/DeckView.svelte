@@ -22,7 +22,7 @@
 	import { heroCards } from '$lib/cards/deck';
 	import { heroSplash, heroLogo, HERO_BY_ID } from '$lib/heroes';
 	import {
-		levelOf, levelCost, statDeltas, ultimateIndex, pickTier, tierIn, canPick, canAfford, mustLevel, swapSource, twinOf, allowedMoves,
+		levelOf, levelCost, statDeltas, ultimateIndex, tierIn, canPick, canAfford, mustLevel, swapSource, twinOf, allowedMoves,
 		type PlayerCardState, type CardZone, type StatKey
 	} from '$lib/cards/cardstate';
 
@@ -54,7 +54,6 @@
 	$: ult = ultimateIndex(H);
 	$: basics = [find('GOLD')[0], find('SILVER')[0]].filter((i) => i != null && i >= 0);
 	$: LV = levelOf(cs);
-	$: nextTier = pickTier(cs);
 	$: afford = canAfford(cs);
 	$: forced = levelPhase && mustLevel(cs);
 
