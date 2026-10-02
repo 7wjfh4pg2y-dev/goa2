@@ -3,7 +3,7 @@
 	// played sit face-up, dimmed and stamped ✓; this turn's card flips face-up, slams bigger
 	// and glows. A new round flips all four back over in a sweep. Never blocks the board.
 	import { onDestroy } from 'svelte';
-	import logo from '$lib/images/goa-logo.png';
+	import logo from '$lib/images/goa-crest.webp';
 
 	export let mobile = false;
 
@@ -63,7 +63,7 @@
 	.face { position: absolute; inset: 0; border-radius: 12px; display: grid; place-items: center; box-shadow: 0 10px 26px rgba(0, 0, 0, .65); }
 	.back { background: radial-gradient(circle at 50% 40%, #2a1d44, #120c22); border: 2px solid rgba(217, 168, 69, .55); }
 	/* the card back: the Guards of Atlantis crest */
-	.back .sym { width: 78%; height: auto; filter: drop-shadow(0 3px 6px rgba(0, 0, 0, .6)); }
+	.back .sym { width: 86%; height: auto; filter: drop-shadow(0 3px 6px rgba(0, 0, 0, .6)); }
 	.front { background: linear-gradient(170deg, #fff1cf, #e9c27a 55%, #b9832f); border: 3px solid #ffe3a0; opacity: 0; }
 	.front .rn { font-size: 3.4rem; color: #3b2508; text-shadow: 0 2px 0 rgba(255, 255, 255, .4); }
 	/* done turns sit face-up but dimmed and stamped */
