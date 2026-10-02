@@ -69,10 +69,8 @@
 		? Object.fromEntries(Object.entries(cards).map(([pid, c]) => [pid, pid === clientId ? c : $ms.levelBase?.[pid] ?? c]))
 		: cards;
 	$: others = seated.filter((p) => p.id !== clientId);
-	$: dense = others.length > 6;
 	$: teamTint = (p: Player) => (teamForSeat(p.seat, $ms.seats) === 'orange' ? ORANGE : BLUE);
 	$: seatTeamName = (p: Player) => teamName(teamForSeat(p.seat, $ms.seats));
-	$: firstBlueId = others.find((p) => teamForSeat(p.seat, $ms.seats) === 'blue')?.id ?? '';
 	// team hue as CSS vars: --tc hex, --tcr base rgb, --tcl light rgb (for highlights)
 	const TEAM_VARS: Record<'orange' | 'blue', string> = {
 		orange: '--tc:#ef7d22; --tcr:239 125 34; --tcl:255 196 140;',
@@ -140,8 +138,6 @@
 	// A player is ready when they've committed, or when they simply have no cards
 	// left to play (there is no "pass" in GoA2 — you play a card unless you can't).
 	const isReady = (cs: PlayerCardState) => cs.pending != null || cs.hand.length === 0;
-	// no cards left to play this turn ⇒ automatically skipped (the one reveal exception)
-	const isSkipped = (cs: PlayerCardState) => cs.pending == null && cs.hand.length === 0;
 	$: readyCount = seatedWithCards.filter((p) => isReady(cards[p.id])).length;
 	// everyone in ⇒ the reveal is armed, but cards only flip face-up after a synced
 	// 3-2-1 countdown (host sets $ms.revealAt). Anyone can uncommit during it.
@@ -222,6 +218,7 @@
 			if (r > pr) turnSplash?.play('round', r, t);
 			else if (r === pr && t > pt) turnSplash?.play('turn', r, t);
 		}
+		if (k !== lastRT) railId = null;
 		lastRT = k;
 	}
 
@@ -254,7 +251,7 @@
 	};
 	$: ovPlayer = seated.find((p) => p.id === overlayId) ?? null;
 	// board hands us a player id to preview → open their overlay, then clear it
-	$: if (previewId) { overlayId = previewId; previewId = null; }
+	$: if (previewId) { openBoard(previewId); previewId = null; }
 
 	// local player
 	$: mine = cards[clientId] ?? null;
@@ -544,7 +541,6 @@
 	let autoRetract = readPref(PREF_RETRACT, true);
 	let spreadHand = readPref(PREF_SPREAD, false);
 	function toggleRetract() { autoRetract = !autoRetract; writePref(PREF_RETRACT, autoRetract); handUp = false; }
-	function toggleSpread() { spreadHand = !spreadHand; writePref(PREF_SPREAD, spreadHand); }
 	let dockHand = readPref(PREF_DOCK, false);
 	// phone: the fan button turns the hand into a stack of banners (hand + ultimate);
 	// "hide" then tucks them against the right edge, only the coloured markers showing
@@ -565,14 +561,9 @@
 		open();
 	}
 
-	// Desktop/tablet: ONE UI scale for the whole layout (see layout.ts). The dash is a
-	// fixed DASH_W × DASH_H design scaled as a whole; it runs under a shortened player
-	// panel (and, on portrait screens, under the HUD too) when it needs the room.
+	// Desktop/tablet: ONE UI scale for the whole layout (see layout.ts)
 	let vw = 1440;
-	$: lay = uiLayout(vw, vhPx);
-	$: dashUnderPanel = lay.underPanel;
-	$: dashVars = layoutVars(lay);
-	function toggleDock() { dockHand = !dockHand; writePref(PREF_DOCK, dockHand); handUp = false; }
+	$: dashVars = layoutVars(uiLayout(vw, vhPx));
 	let handUp = false;
 	let lowerTimer: ReturnType<typeof setTimeout> | null = null;
 	function raiseHand(e: PointerEvent) {
@@ -602,16 +593,133 @@
 		if (tokenDrawer && !t?.closest?.('.tokwrap') && !(holdingToken && t?.closest?.('.board-wrap, .placehint'))) tokenDrawer = false;
 	}
 	$: retracted = autoRetract && !handUp;
+
+	// ═════════ desktop: the helm (the phone layout never reads any of this) ═════════
+	// Roster chips in the top bar · initiative rail under it · a player's board dropping from
+	// their chip · the hand rising from the console · the console with ONE action button.
+	// viewer-relative like every splash: the enemy on the LEFT, your team on the RIGHT (spectators watch as blue)
+	$: viewTeam = mySeat >= 0 && myTeam === 'orange' ? 'orange' : 'blue';
+	$: chipsL = seated.filter((p) => pTeam(p) !== viewTeam);
+	$: chipsR = [...seated.filter((p) => pTeam(p) === viewTeam && p.id !== clientId), ...seated.filter((p) => pTeam(p) === viewTeam && p.id === clientId)];
+	// this turn's card on a chip: nothing yet · face down · face up (its initiative) · defeated
+	type ChipCard = { k: 'none' | 'skip' | 'back' | 'up' | 'dead'; n?: number | null; idx?: number; c?: string };
+	$: chipCard = (p: Player, cs: PlayerCardState | undefined): ChipCard => {
+		if (!cs) return { k: 'none' };
+		const d = $ms.defeated?.[p.id];
+		if (d && d.round === $ms.round && d.turn === $ms.turn) return { k: 'dead' };
+		const up = revealed && cs.turns[turnIdx] == null && cs.pending != null && cs.pending !== PASS ? cs.pending : null;
+		if (up != null) return { k: 'up', idx: up, n: initOf(cs, true), c: cardGlow(cs.hero, up) };
+		// your own committed card already shows you its number
+		if (cs.pending != null && cs.pending !== PASS) return { k: 'back', n: p.id === clientId ? initOf(cs, true) : null };
+		if (d) return { k: 'dead' };
+		return { k: cs.pending === PASS || (!battlePhase && cs.hand.length === 0) ? 'skip' : 'none' };
+	};
+	// the rail: the revealed cards, highest initiative first; a tie goes to the team on the tie-breaker coin
+	$: rail = revealed
+		? seatedWithCards
+				.map((p) => {
+					const cs = cards[p.id], idx = cs.turns[turnIdx] == null && cs.pending != null && cs.pending !== PASS ? cs.pending : null;
+					return idx == null ? null : { p, hero: cs.hero, idx, n: initOf(cs, true) ?? 0, c: cardGlow(cs.hero, idx), tie: pTeam(p) === $ms.tieBreaker ? 0 : 1 };
+				})
+				.filter((r): r is NonNullable<typeof r> => !!r)
+				.sort((a, b) => b.n - a.n || a.tie - b.tie)
+		: [];
+	// who is acting: nothing in the shared state says, so it is this viewer's own marker —
+	// it starts on the first card; click a later one when its turn comes
+	let railId: string | null = null;
+	$: railPos = Math.max(0, rail.findIndex((r) => r.p.id === railId));
+
+	// a player's board: on a phone the overlay; here it drops from their chip, one per side
+	let dosL: string | null = null, dosR: string | null = null;
+	function openBoard(pid: string) {
+		if (mobile) { overlayId = pid; return; }
+		const p = seated.find((x) => x.id === pid);
+		if (!p) return;
+		if (pTeam(p) === viewTeam) dosR = dosR === pid ? null : pid;
+		else dosL = dosL === pid ? null : pid;
+	}
+	function onKey(e: KeyboardEvent) {
+		if (e.key !== 'Escape' || mobile || deckOpen || examine || selected != null) return;
+		armed = null; dosL = dosR = null;
+	}
+
+	// arm, then commit: a click lifts a hand card and the action button becomes Commit;
+	// a second click (or any click when you can't commit) opens it full size, as before
+	let armed: number | null = null;
+	$: if (armed != null && (!canCommit || !mine?.hand.includes(armed))) armed = null;
+	function deskCardClick(idx: number) {
+		if (autoRetract && !handUp) { handUp = true; return; } // touch: the first tap raises the hand
+		if (canCommit && armed !== idx) { armed = idx; return; }
+		preview(idx);
+	}
+	function commitArmed() {
+		if (armed == null || !canCommit) return;
+		session.cardAction({ kind: 'commit', pid: clientId, idx: armed });
+		armed = null;
+	}
+	// one hand tool: click = fan → side by side → ribbons in the console; right-click / long-press = keep it up
+	function cycleHand() {
+		if (dockHand) { dockHand = false; spreadHand = false; }
+		else if (spreadHand) dockHand = true;
+		else spreadHand = true;
+		writePref(PREF_DOCK, dockHand); writePref(PREF_SPREAD, spreadHand); handUp = false;
+	}
+
+	// the ONE action button: a main action (brass), a way back (quiet), or who we are waiting for
+	type Order = { label: string; sub?: string; kind: 'go' | 'quiet' | 'wait' | 'off'; pulse?: boolean; hook?: string; run?: () => void };
+	const waitFor = (ps: Player[]) => (ps.length === 1 ? ps[0].name : `${ps.length} players`);
+	let order: Order = { label: 'Commit', kind: 'off' };
+	$: {
+		if (iCanRespawn) order = { label: 'Respawn', kind: 'go', pulse: true, run: onRespawn };
+		else if (iMustEnter) order = { label: 'Spawn hero', kind: 'go', pulse: true, hook: 'spawnglow', run: onEnter };
+		else if (iDefending) order = { label: 'Defended', kind: 'go', run: () => answerAttack('defended') };
+		else if (spawnWaiting.length) order = { label: 'Waiting', sub: waitFor(spawnWaiting), kind: 'wait' };
+		else if (battlePhase) {
+			if ($ms.battle?.remove) order = { label: 'Waiting', sub: teamName($ms.battle.loser), kind: 'wait' };
+			else if (!levelPhase) order = iAmHost ? { label: 'Level up', kind: 'go', run: startLevelUp } : { label: 'Waiting', sub: 'Host', kind: 'wait' };
+			else if (iMustLevel) order = { label: 'Level up', kind: 'go', pulse: true, run: () => (deckOpen = true) };
+			else if (levelWaiting.length) order = { label: 'Waiting', sub: waitFor(levelWaiting), kind: 'wait' };
+			else order = iAmHost ? { label: 'Next round', kind: 'go', run: onAdvanceTurn } : { label: 'Waiting', sub: 'Host', kind: 'wait' };
+		} else if (revealed) order = !iAmHost ? { label: 'Waiting', sub: 'Host', kind: 'wait' } : isFinalTurn ? { label: 'Minion battle', kind: 'go', run: startBattle } : { label: 'Next turn', kind: 'go', run: onAdvanceTurn };
+		else if (myReady) order = { label: 'Take back', kind: 'quiet', run: takeBack };
+		else if (armed != null && canCommit) order = { label: 'Commit', kind: 'go', pulse: true, run: commitArmed };
+		else if (mine && !mine.hand.length) order = { label: 'Waiting', kind: 'wait' };
+		else order = { label: 'Commit', kind: 'off' };
+	}
+	$: orderPx = [22, 22, 22, 22, 22, 22, 20, 16, 14][Math.min(8, Math.max(...order.label.split(' ').map((w) => w.length)))];
+	// the 8-step level ring round your token
+	const RING = Array.from({ length: 8 }, (_, i) => {
+		const r = 52, c = 56, a0 = ((-90 + i * 45 + 3.4) * Math.PI) / 180, a1 = ((-90 + (i + 1) * 45 - 3.4) * Math.PI) / 180;
+		const pt = (a: number) => `${(c + r * Math.cos(a)).toFixed(1)} ${(c + r * Math.sin(a)).toFixed(1)}`;
+		return `M${pt(a0)} A${r} ${r} 0 0 1 ${pt(a1)}`;
+	});
+	const statWord = (r: { key: string; label: string }) => (r.key === 'move' ? 'Movement' : r.label);
+	// the card view's dials: the card's values your items raise (the card itself prints the rest)
+	$: pvDials = (() => {
+		if (!mine || selected == null) return [];
+		const c = heroCards(mine.hero)[selected], d = statDeltas(mine), clr = (c?.color ?? 'gold').toLowerCase();
+		if (!c) return [];
+		const out: { img: string | undefined; v: number; up: number; label: string }[] = [];
+		const add = (img: string | undefined, v: number | undefined, up: number | undefined, label: string) => { if (v != null && up) out.push({ img, v: v + up, up, label }); };
+		add(icon('initiative'), c.initiative, d.init, 'Initiative');
+		const pa = c.primaryAction ?? '';
+		if (pa === 'ATTACK') add(icon(`attack_${clr}`), c.primaryValue, d.atk, 'Attack');
+		else if (pa.startsWith('DEFENSE')) add(icon(`defense_${clr}`), c.primaryValue, d.def, 'Defense');
+		else if (pa === 'MOVEMENT') add(icon(`movement_${clr}`), c.primaryValue, d.move, 'Movement');
+		if (c.secondaryDefense) add(icon('defense'), c.secondaryDefense, d.def, 'Defense');
+		if (c.secondaryMovement) add(icon('movement'), c.secondaryMovement, d.move, 'Movement');
+		return out;
+	})();
 </script>
 
-<svelte:window on:pointerdown={onWindowDown} bind:innerWidth={vw} bind:innerHeight={vhPx} />
+<svelte:window on:pointerdown={onWindowDown} on:keydown={onKey} bind:innerWidth={vw} bind:innerHeight={vhPx} />
 
 <!-- controls shared by the desktop dash and the phone dash -->
 {#snippet radiusCtl()}
 	<span class="radwrap">
 					<button class="radbtn" class:on={myRadius > 0} on:click={() => (radiusOpen = !radiusOpen)} title={myRadius ? `Radius ${myRadius} showing — click to change or clear` : 'Show an area radius around your hero'} aria-label="Area radius">
 						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke-dasharray="3 2.4" /><circle cx="12" cy="12" r="4.2" /><circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none" /></svg>
-						<b>{myRadius || '–'}</b>
+						<b class:nil={!myRadius}>{myRadius || '–'}</b>
 					</button>
 					{#if radiusOpen}
 						<div class="radpop">
@@ -724,85 +832,10 @@
 				{/if}
 			{/each}
 		</div>
-	{:else}
-	<!-- ───────── right side: the OTHER players ───────── -->
-		<div class="ppanel" class:dense class:withdash={!!mine && dashUnderPanel} style={dashVars}>
-			<div class="pptitle">
-				Players
-				<span class="phasetag" class:resolve={revealed} class:counting={countdownActive}>
-					{revealed ? `Revealed · Turn ${$ms.turn}` : countdownActive ? `Revealing… ${countdownLabel}` : `Planning · Turn ${$ms.turn} · ${readyCount}/${seatedWithCards.length} ready`}
-				</span>
-			</div>
-			{#each others as p (p.id)}
-				{@const cs = viewCards[p.id]}
-				{@const st = statusMap[p.id] ?? EMPTY_STATUS}
-				{#if p.id === firstBlueId}<div class="ppdiv"></div>{/if}
-				<!-- a row opens that player's board; a face-up card inside previews directly -->
-				<div class="prow" class:ultrow={cs?.ultimate} style="--tint:{teamTint(p)}; {teamVars(pTeam(p))}" role="button" tabindex="0"
-					on:click={() => (overlayId = p.id)} on:keydown={(e) => (e.key === 'Enter' || e.key === ' ') && (overlayId = p.id)}>
-					<div class="prtop">
-						<PlayerIcon hero={cs?.hero ?? ''} team={pTeam(p)} color={colorHex(p.color)} size="2rem" ring={2} ult={!!cs?.ultimate}>
-							{#if cs?.ultimate}<span class="crown">♛</span>{/if}
-						</PlayerIcon>
-						<span class="pmid">
-							<span class="pname">
-								{p.name}<em>Lv {cs ? levelOf(cs) : 1}</em>
-								{#if cs}<span class="coin" title="Coins">{cs.coins}</span>{/if}
-								{#if cs && cs.discard.length}<span class="dchip" title="Cards in discard pile"><i class="trashi">{@html TRASH}</i>{cs.discard.length}</span>{/if}
-								{#if st.poison}<span class="statmk pois" title="Poison"><img src={icon('marker_poison')} alt="" /></span>{/if}
-								{#if st.bounty}<span class="statmk bnty" title="Bounty"><img src={icon('marker_bounty')} alt="" /></span>{/if}
-							</span>
-							<span class="phero">{cs ? heroName(cs.hero) : ''}</span>
-						</span>
-						{#if cs && dense}
-							<span class="dslot">
-								<span class="fxwrap" class:fx={!!fxFor(p.id, slotIdx(cs, turnIdx))} style="--fxc:{colorOf(p.id)}"><TurnSlot heroId={cs.hero} played={cs.turns[turnIdx]} pending={cs.pending} isCurrent {revealed} peekable={p.id === clientId} examinable on:click={(e) => peekSlot(e, cs, turnIdx)} /></span>
-							</span>
-						{/if}
-						{#if cs && isSkipped(cs)}<span class="skiptag" title="No cards left — skipped this turn">skip</span>
-						{:else if cs && !revealed}<span class="rdot" class:on={isReady(cs)} title={isReady(cs) ? 'Ready' : 'Not ready'}></span>{/if}
-						<!-- this turn's initiative (card + upgrades), once revealed — sits above the radius stat -->
-						{#if cs}
-							{@const ini = initOf(cs, revealed)}
-							<span class="initb" class:off={ini == null} title="Initiative this turn">
-								<i class="inicon">{@html CLOCK}</i><b>{ini ?? '–'}</b>
-							</span>
-						{/if}
-					</div>
-					{#if cs}
-						<div class="pstats">
-							{#each allStats(cs) as r}
-								<span class="pstat" class:up={r.delta > 0}>
-									<span class="stripes">{#each Array(r.delta) as _}<span class="stripe"></span>{/each}</span>
-									<img src={icon(r.icon)} alt={r.label} />
-									<b>{r.delta > 0 ? '+' + r.delta : '–'}</b>
-								</span>
-							{/each}
-						</div>
-						{#if !dense}
-							<div class="pturns">
-								{#each [0, 1, 2, 3] as t}
-									<span class="fxwrap" class:fx={!!fxFor(p.id, slotIdx(cs, t))} style="--fxc:{colorOf(p.id)}"><TurnSlot heroId={cs.hero} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} label={ROMAN[t]} peekable={p.id === clientId} examinable on:click={(e) => peekSlot(e, cs, t)} /></span>
-								{/each}
-								<!-- discard: the most recent card, count below (like your dash) -->
-								<span class="pdisc" title="Discard pile">
-									<span class="trashw">{@html TRASH}</span>
-									{#if cs.discard.length}
-										<span class="pdcard"><Card heroId={cs.hero} card={heroCards(cs.hero)[cs.discard[cs.discard.length - 1]]} /></span>
-										<span class="pdct">{cs.discard.length}</span>
-									{/if}
-								</span>
-							</div>
-						{/if}
-					{/if}
-				</div>
-			{/each}
-		</div>
-
 	{/if}
 
-	<!-- ───────── overlay: a player's whole board ───────── -->
-	{#if overlayId && ovPlayer && viewCards[overlayId]}
+	<!-- ───────── phone overlay: a player's whole board (desktop: the board drops from their chip) ───────── -->
+	{#if mobile && overlayId && ovPlayer && viewCards[overlayId]}
 		{@const cs = viewCards[overlayId]}
 		{@const oh = cs.hero}
 		{@const od = heroCards(oh)}
@@ -894,7 +927,7 @@
 
 	<!-- ───────── examine one card ───────── -->
 	{#if examine}
-		<div class="scrim2" on:click={() => (examine = null)} on:keydown={(e) => e.key === 'Escape' && (examine = null)} role="presentation">
+		<div class="scrim2" class:desk={!mobile} style={mobile ? '' : dashVars} on:click={() => (examine = null)} on:keydown={(e) => e.key === 'Escape' && (examine = null)} role="presentation">
 			<div class="bigwrap" role="dialog" aria-modal="true" tabindex="-1" on:click|stopPropagation on:keydown|stopPropagation>
 				<div class="exrow" class:multi={!!exList}>
 					{#if exList}<button class="pvnav prev" on:click={() => stepExamine(-1)} aria-label="Previous card">‹</button>{/if}
@@ -903,7 +936,23 @@
 					{#if exList}<button class="pvnav next" on:click={() => stepExamine(1)} aria-label="Next card">›</button>{/if}
 				</div>
 				{#if exList}<span class="exdots">{#each exList as c, i (i)}<i class:on={i === exPos}></i>{/each}</span>{/if}
-				{#if examine.pid && (canFx || examineFx)}
+				{#if !mobile && examine.pid && (canFx || examineFx)}
+					<!-- a played card: switch its effect on (pick how long — ★ = named in the card text), end it, or discard the card -->
+					<div class="exacts">
+						{#if examineFx}
+							<span class="exlbl">{fxLabel(examineFx)}</span>
+							{#if canFx}<button class="hb sm fxend" on:click={() => endFx(examineFx)}>End effect</button>{/if}
+						{:else}
+							<span class="exlbl">Effect</span>
+							<span class="fxdurs">
+								{#each ['turn', 'next', 'round'] as d}
+									<button class="hb sm fxdur" class:go={examineDetected === d} on:click={() => examine?.pid && activateFx(examine.pid, examine.hid, examine.idx, d as EffectDur)}>{#if examineDetected === d}★ {/if}{DUR_LABEL[d as EffectDur]}</button>
+								{/each}
+							</span>
+						{/if}
+						{#if canDiscardEx}<button class="hb sm bad fxdisc" on:click={discardEx}>Discard</button>{/if}
+					</div>
+				{:else if examine.pid && (canFx || examineFx)}
 					<!-- a played card: Activate effect (then how long) or Discard; a live effect can be ended -->
 					<div class="fxctl">
 						{#if examineFx}
@@ -1121,8 +1170,49 @@
 		<div class="lvwrap"><LevelConfirm cs={mine} idx={lvConfirm.idx} kind={lvConfirm.kind} teamStyle={teamVars(myTeam)} onConfirm={confirmLevel} onCancel={() => (lvConfirm = null)} /></div>
 	{/if}
 
-	<!-- ───────── centered preview of a picked hand card ───────── -->
-	{#if mine && selected != null}
+	<!-- ───────── desktop card view: the card, what it gives with your items, Discard · Commit ───────── -->
+	{#if mine && selected != null && !mobile}
+		{@const pc = heroCards(mine.hero)[selected]}
+		<div class="cardview" style={dashVars} on:click={closePreview} role="presentation">
+			<div class="cv-col" on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" tabindex="-1">
+				<div class="cv-main">
+					<div class="pvcard" on:pointerdown={swipeStart} on:pointerup={swipeEnd} on:pointercancel={() => (swipeX = null)} role="presentation">
+						<div class="pvflip" class:up={committing}>
+							<div class="pvface front"><Card heroId={mine.hero} card={pc} /></div>
+							<div class="pvface back">
+								<span class="cb-band top"></span><span class="emblem sym"><img src={heroLogo(mine.hero)} alt="" /></span><span class="cb-band bot"></span>
+							</div>
+						</div>
+					</div>
+					{#if previewSrc === 'hand'}
+						<div class="dials">
+							{#each pvDials as d}
+								<span class="dial"><span class="dface"><img src={d.img} alt="" />{d.v}<small>+{d.up}</small></span>{d.label}</span>
+							{/each}
+						</div>
+					{/if}
+				</div>
+				{#if pvList.length > 1}
+					<div class="pager">
+						{#each pvList as c (c)}<button class:on={c === selected} on:click={() => !committing && (selected = c)} aria-label={heroCards(mine.hero)[c]?.name}><Card heroId={mine.hero} card={heroCards(mine.hero)[c]} /></button>{/each}
+					</div>
+				{/if}
+				<div class="pvbar">
+					{#if previewSrc === 'discard'}
+						<button class="hb go act tohand" on:click={() => pullBack(selected!)}>Recover</button>
+					{:else}
+						<!-- discard any time, as often as effects demand -->
+						{#if mine.hand.includes(selected)}<button class="hb bad act discard" on:click={() => defend(selected!)}>Discard</button>{/if}
+						{#if canCommit}<button class="hb go act tohand" on:click={() => commit(selected!)}>Commit</button>{/if}
+					{/if}
+				</div>
+			</div>
+			<button class="cvx" on:click={closePreview} aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
+		</div>
+	{/if}
+
+	<!-- ───────── phone: centered preview of a picked hand card ───────── -->
+	{#if mine && selected != null && mobile}
 		<div class="pvscrim" on:click={closePreview} on:keydown={(e) => e.key === 'Escape' && closePreview()} role="presentation"></div>
 		<div class="pvwrap" role="presentation" style={dashVars}>
 			{#if pvList.length > 1}<button class="pvnav prev" on:click={() => stepPreview(-1)} aria-label="Previous card">‹</button>{/if}
@@ -1130,7 +1220,7 @@
 				<div class="pvflip" class:up={committing}>
 					<div class="pvface front"><Card heroId={mine.hero} card={heroCards(mine.hero)[selected]} /></div>
 					<div class="pvface back">
-						<span class="band top"></span><span class="emblem sym"><img src={heroLogo(mine.hero)} alt="" /></span><span class="band bot"></span>
+						<span class="cb-band top"></span><span class="emblem sym"><img src={heroLogo(mine.hero)} alt="" /></span><span class="cb-band bot"></span>
 					</div>
 				</div>
 			</div>
@@ -1243,181 +1333,228 @@
 				<button class="mb undo" disabled={!iAmHost || !$canUndoS} on:click={() => session.undo()} title={iAmHost ? 'Undo the last move this turn' : 'Only the host can undo'} aria-label="Undo">↶</button>
 			</div>
 		</div>
-	{:else if mine}
-		{@const mst = statusMap[clientId] ?? EMPTY_STATUS}
-		{#if !dockHand}
-			<div class="tray" class:retracted class:spread={spreadHand} style={dashVars}>
-				{#each handOrdered as idx, k (idx)}
-					{@const f = fan(k, handOrdered.length)}
-					<button class="hc" style="--rot:{spreadHand ? 0 : f.rot}deg; --y:{spreadHand ? 0 : f.y * lay.s}px"
-						on:click={() => handCardClick(idx)} on:pointerenter={raiseHand} on:pointerleave={lowerHandSoon}>
-						<Card heroId={mine.hero} card={heroCards(mine.hero)[idx]} />
+	{/if}
+
+	<!-- ═════════ desktop: the helm — roster chips · initiative rail · player boards · the hand · the console ═════════
+	     ONE layer in design px (1440 × 900, wider / taller on bigger windows), scaled by the one UI scale -->
+	{#if !mobile}
+	<div class="helm" style={dashVars}>
+		{@render roster('l', chipsL)}
+		{@render roster('r', chipsR)}
+
+		{#if rail.length}
+			<div class="rail" class:tight={rail.length > 5}>
+				{#each rail as r, i (r.p.id)}
+					<button class="ini" class:done={i < railPos || !!$ms.defeated?.[r.p.id]} class:now={i === railPos} style="--cc:{r.c}" title="{heroCards(r.hero)[r.idx]?.name} · {r.p.name}"
+						on:click={() => (i === railPos ? (examine = { hid: r.hero, idx: r.idx, pid: r.p.id }) : (railId = r.p.id))}>
+						<b class="flag">{r.n}</b>
+						<PlayerIcon hero={r.hero} team={pTeam(r.p)} color={colorHex(r.p.color)} size="24px" ring={2} />
+						<span class="nm">{r.p.name}</span>
 					</button>
 				{/each}
 			</div>
 		{/if}
 
-		<div class="dash" class:ultdash={mine.ultimate} style="{teamVars(myTeam)}; {dashVars}">
-			<!-- LEFT: you · tokens · deck -->
-			<div class="dleft">
-				<div class="dself">
-					<button class="dsopen" on:click={() => (overlayId = clientId)} title="Open your board">
-						<PlayerIcon hero={mine.hero} team={myTeam ?? 'orange'} color={colorHex(myColor)} size="2.4rem" ult={mine.ultimate}>
-							{#if mine.ultimate}<span class="crown">♛</span>{/if}
-						</PlayerIcon>
-					</button>
-					<span class="dsmid">
-						<!-- name · level · initiative · radius (fixed slots) … status markers pinned right -->
-						<span class="dsname">
-							<button class="dsopen dsnmbtn" on:click={() => (overlayId = clientId)} title="Open your board"><span class="dsnm">{myName}</span><em>Lv {levelOf(mine)}</em></button>
-							<span class="initb" class:off={myInit == null} title="Your initiative this turn (card + upgrades)"><i class="inicon">{@html CLOCK}</i><b>{myInit ?? '–'}</b></span>
-							{@render radiusCtl()}
-							<button class="radbtn pingbtn" class:on={pingArmed} on:click={onPing} aria-label="Ping"
-								title={pingArmed ? 'Tap the board to ping a spot — or press again to ping your hero' : 'Ping: point something out on the board (or Alt+click it)'}>
-								<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3" fill="currentColor" stroke="none" /><path d="M6.3 6.3a8 8 0 0 0 0 11.4M17.7 6.3a8 8 0 0 1 0 11.4M3.5 3.5a12 12 0 0 0 0 17M20.5 3.5a12 12 0 0 1 0 17" /></svg>
-							</button>
-														<span class="dsmk">
-								{#if mst.poison}<img class="pois" src={icon('marker_poison')} alt="Poison" title="Poisoned" />{/if}
-								{#if mst.bounty}<img class="bnty" src={icon('marker_bounty')} alt="Bounty" title="Bounty on you" />{/if}
-							</span>
-						</span>
-						<button class="dsopen dsbody" on:click={() => (overlayId = clientId)} title="Open your board">
-						<span class="dshero">{heroName(mine.hero)}</span>
-					<span class="dstats">
-						{#each allStats(mine) as r}
-							<span class="pstat" class:up={r.delta > 0}>
-								<span class="stripes">{#each Array(r.delta) as _}<span class="stripe"></span>{/each}</span>
-								<img src={icon(r.icon)} alt={r.label} /><b>{r.delta > 0 ? '+' + r.delta : '–'}</b>
-							</span>
-						{/each}
-					</span>
+		{#if dosL}{@render dossier(dosL, 'l')}{/if}
+		{#if dosR}{@render dossier(dosR, 'r')}{/if}
+
+		{#if mine}
+			<!-- the hand rises from the console's top edge (unless it is docked as ribbons) -->
+			{#if !dockHand}
+				<div class="tray dk" class:retracted class:spread={spreadHand}>
+					{#each handOrdered as idx, k (idx)}
+						{@const f = fan(k, handOrdered.length)}
+						<button class="hc" class:armed={armed === idx} style="--rot:{spreadHand ? 0 : f.rot * 0.7}deg; --y:{spreadHand ? 0 : f.y * 0.6}px"
+							on:click={() => deskCardClick(idx)} on:pointerenter={raiseHand} on:pointerleave={lowerHandSoon}>
+							<Card heroId={mine.hero} card={heroCards(mine.hero)[idx]} />
 						</button>
-					</span>
+					{/each}
 				</div>
+			{/if}
 
-				<!-- tokens and markers: one shelf; the button shows its first item -->
-				{@render tokenCtl()}
-
-				<!-- your deck (face-down stack) and, once unlocked, your ultimate -->
-				<button class="deckstack" class:lvup={iMustLevel} on:click={() => (deckOpen = true)} title="View & manage your deck">
-					<span class="ds-card ds3"></span>
-					<span class="ds-card ds2"></span>
-					<span class="ds-card ds1"><img src={heroLogo(mine.hero)} alt="" /></span>
-					<span class="ds-count">{deckCards(mine).length}</span>
-				</button>
-				<!-- the ultimate's slot is always reserved, so unlocking it shifts nothing -->
-				{#if mine.ultimate && myUlt >= 0}
-					<button class="ultmini" on:click={() => (examine = { hid: mine.hero, idx: myUlt })} title="Your ultimate — click to enlarge">
-						<Card heroId={mine.hero} card={heroCards(mine.hero)[myUlt]} />
-						<span class="ultmini-tag">ULT</span>
-					</button>
-				{:else}
-					<span class="ultmini locked" title="Ultimate — unlocks at level 8">ULT</span>
-				{/if}
-			</div>
-
-			<!-- CENTRE: this round's four turns + your discard (numerals / trash sit faintly behind) -->
-			<div class="dmine">
-				<div class="dm-turns">
-					{#each [0, 1, 2, 3] as t}
-						{@const has = mine.turns[t] != null || (t === turnIdx && mine.pending != null && mine.pending !== PASS)}
-						<!-- click a slot to open your board; click a face-up card to preview it -->
-						<div class="dm-slot" role="button" tabindex="-1" title="Open your board" on:click={() => (overlayId = clientId)} on:keydown={(e) => e.key === 'Enter' && (overlayId = clientId)}>
-							<span class="roman">{['I', 'II', 'III', 'IV'][t]}</span>
-							{#if has}
-								{@const dfx = fxFor(clientId, slotIdx(mine, t))}
-								<div class="dm-on fxwrap" class:fx={!!dfx} style="--fxc:{colorOf(clientId)}"><TurnSlot heroId={mine.hero} played={mine.turns[t]} pending={mine.pending} isCurrent={t === turnIdx} {revealed} peekable
-									examinable on:click={(e) => peekSlot(e, mine, t)} /></div>
+			<div class="console" style={teamVars(myTeam)}>
+				<div class="hull">
+					{@render gauges(mine)}
+					<i class="div"></i>
+					<!-- this round's four turns as card wells, then the discard and the deck -->
+					<div class="slots">
+						{#each [0, 1, 2, 3] as t}
+							{@const sfx = fxFor(clientId, slotIdx(mine, t))}
+							<div class="wslot" class:now={t === turnIdx} role="button" tabindex="-1" on:click={() => openBoard(clientId)} on:keydown={(e) => e.key === 'Enter' && openBoard(clientId)}>
+								<span class="cwell dm-on" class:fxlit={!!sfx} style="--fxc:{colorOf(clientId)}">
+									<TurnSlot well heroId={mine.hero} played={mine.turns[t]} pending={mine.pending} isCurrent={t === turnIdx} {revealed} label={ROMAN[t]} peekable examinable on:click={(e) => peekSlot(e, mine, t)} />
+								</span>
+								{#if t === turnIdx && fxAsking}<i class="fxstar" title="This card has an effect — open it to switch it on">★</i>{/if}
+							</div>
+						{/each}
+						<div class="wslot pile discwrap" role="group" aria-label="Discard" on:pointerenter={(e) => mine.discard.length > 1 && discEnter(e, 'dash')} on:pointerleave={discLeave}>
+							{#if mine.discard.length}
+								<button class="cwell" title="Discard" on:click={() => (mine.discard.length === 1 ? openDiscard(mine.hero, mine.discard[0], true) : discTap('dash'))}>
+									<Card heroId={mine.hero} card={heroCards(mine.hero)[mine.discard[mine.discard.length - 1]]} />
+									<b class="num">{mine.discard.length}</b>
+								</button>
+								{#if discOpen === 'dash'}
+									<div class="discpop up">
+										{#each mine.discard as i (i)}
+											<button class="dpc" on:click={() => openDiscard(mine.hero, i, true)}><Card heroId={mine.hero} card={heroCards(mine.hero)[i]} /></button>
+										{/each}
+									</div>
+								{/if}
+							{:else}
+								<span class="cwell empty" title="Discard">{@html TRASH}</span>
 							{/if}
 						</div>
-					{/each}
-					<div class="dm-slot disc discwrap" role="group" aria-label="Discard pile" on:pointerenter={(e) => mine.discard.length > 1 && discEnter(e, 'dash')} on:pointerleave={discLeave}>
-						<span class="roman trash">{@html TRASH}</span>
-						{#if mine.discard.length}
-							<button class="discstack" on:click={() => (mine.discard.length === 1 ? openDiscard(mine.hero, mine.discard[0], true) : discTap('dash'))} title={mine.discard.length === 1 ? 'Preview (you can recover it to your hand)' : 'Discard — show all'}>
-								{#each mine.discard.slice(-3) as i, di (i)}
-									<span class="disc-card" style="--i:{di}"><Card heroId={mine.hero} card={heroCards(mine.hero)[i]} /></span>
-								{/each}
-								<span class="ds-count">{mine.discard.length}</span>
-							</button>
-							{#if discOpen === 'dash'}
-								<div class="discpop up">
-									{#each mine.discard as i (i)}
-										<button class="dpc" on:click={() => openDiscard(mine.hero, i, true)} title="Preview (you can recover it to your hand)"><Card heroId={mine.hero} card={heroCards(mine.hero)[i]} /></button>
+						<button class="wslot deck" class:lvup={iMustLevel} on:click={() => (deckOpen = true)} title="Deck">
+							<span class="cwell cback"><img src={heroLogo(mine.hero)} alt="" /></span>
+						</button>
+					</div>
+					<i class="div"></i>
+					{#if dockHand}
+						<div class="dockhand"><DockHand heroId={mine.hero} hand={handOrdered} fanned={!autoRetract} onPick={(i) => preview(i)} /></div>
+					{/if}
+					<div class="tools">
+						{@render radiusCtl()}
+						<button class="hbtn pingbtn" class:on={pingArmed} on:click={onPing} aria-label="Ping" title="Ping">
+							<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s6.5-5.6 6.5-10.5a6.5 6.5 0 0 0-13 0C5.5 15.4 12 21 12 21z" /><circle cx="12" cy="10.5" r="2.3" /></svg>
+						</button>
+						{@render tokenCtl()}
+						<button class="hbtn" class:on={!autoRetract} on:click={cycleHand} on:contextmenu|preventDefault={toggleRetract} aria-label="Hand"
+							title="Hand: {dockHand ? 'ribbons' : spreadHand ? 'side by side' : 'fan'}{autoRetract ? '' : ', kept up'} — click to change, right-click to keep it up">
+							<svg viewBox="0 0 24 24" aria-hidden="true">
+								{#if dockHand}
+									<path d="M6 3v15l2.5-2.5L11 18V3zM13 3v15l2.5-2.5L18 18V3z" />
+								{:else if spreadHand}
+									<rect x="2.5" y="6" width="5.6" height="12" rx="1.2" /><rect x="9.2" y="6" width="5.6" height="12" rx="1.2" /><rect x="15.9" y="6" width="5.6" height="12" rx="1.2" />
+								{:else}
+									<rect x="3.5" y="7" width="8" height="12" rx="1.5" transform="rotate(-12 7.5 13)" /><rect x="11.5" y="6" width="8" height="12" rx="1.5" transform="rotate(10 15.5 12)" />
+								{/if}
+							</svg>
+						</button>
+					</div>
+				</div>
+				<!-- left: you — your token in the 8-step level ring, your coins under it -->
+				<button class="medal" on:click={() => openBoard(clientId)} title="{myName} · {heroName(mine.hero)} · Level {levelOf(mine)}" aria-label="Your board">
+					<svg viewBox="0 0 112 112" aria-hidden="true">{#each RING as d, i (i)}<path {d} class:on={i < levelOf(mine)} class:u={i === 7} />{/each}</svg>
+					<PlayerIcon hero={mine.hero} team={myTeam ?? 'orange'} color={colorHex(myColor)} size="74px" ring={4} />
+				</button>
+				{@render purse()}
+				<!-- right: the one action -->
+				<div class="dact">
+					{#if iDefending}<button class="oalt" on:click={() => answerAttack('defeated')}>Defeated</button>{/if}
+					<button class="order {order.kind} {order.hook ?? ''}" class:pulse={order.pulse} disabled={!order.run} on:click={() => order.run?.()}>
+						<span class="oface" style="font-size:{orderPx}px">{order.label}{#if order.sub}<small>{order.sub}</small>{/if}</span>
+					</button>
+				</div>
+			</div>
+		{/if}
+	</div>
+	{/if}
+
+	{#snippet roster(side: 'l' | 'r', list: Player[])}
+		<div class="roster {side}" class:compact={list.length > 2}>
+			{#each list as p (p.id)}
+				{@const cs = viewCards[p.id]}
+				{@const st = chipCard(p, cs)}
+				<div class="rchip" class:me={p.id === clientId} class:open={dosL === p.id || dosR === p.id} class:out={!!$ms.defeated?.[p.id]} style={teamVars(pTeam(p))} role="button" tabindex="0"
+					title="{p.name}{cs ? ` · ${heroName(cs.hero)}` : ''}" on:click={() => openBoard(p.id)} on:keydown={(e) => (e.key === 'Enter' || e.key === ' ') && openBoard(p.id)}>
+					<PlayerIcon hero={cs?.hero ?? ''} team={pTeam(p)} color={colorHex(p.color)} size="38px" ring={2.5} />
+					{#if cs}<b class="lv" class:ult={cs.ultimate}>{levelOf(cs)}</b>{/if}
+					<span class="who"><b>{p.name}</b><small>{cs ? heroName(cs.hero) : ''}</small></span>
+					{#if cs && st.k === 'up' && st.idx != null}
+						<button class="cst up" style="--cc:{st.c}" title={heroCards(cs.hero)[st.idx]?.name} on:click|stopPropagation={() => (examine = { hid: cs.hero, idx: st.idx ?? 0, pid: p.id })}>{st.n}</button>
+					{:else if cs && st.k === 'back'}
+						<span class="cst back">{#if st.n != null}{st.n}{:else}<img src={heroLogo(cs.hero)} alt="" />{/if}</span>
+					{:else if st.k === 'dead'}
+						<span class="cst dead"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 11a7 7 0 0 1 14 0c0 2.6-1.2 4-2.5 5v3h-9v-3C6.2 15 5 13.6 5 11z" /><circle cx="9.5" cy="11.5" r="1.4" /><circle cx="14.5" cy="11.5" r="1.4" /></svg></span>
+					{:else}
+						<span class="cst">{st.k === 'skip' ? '–' : ''}</span>
+					{/if}
+				</div>
+			{/each}
+		</div>
+	{/snippet}
+
+	{#snippet gauges(cs: PlayerCardState)}
+		<span class="gauges">
+			{#each allStats(cs) as r (r.key)}
+				<span class="gauge" class:on={r.delta > 0} title={statWord(r)}><img src={icon(r.icon)} alt="" />{#if r.delta > 0}<b>+{r.delta}</b>{/if}</span>
+			{/each}
+		</span>
+	{/snippet}
+
+	{#snippet purse()}
+		{#if mine}
+			<span class="purse" title="Coins">
+				<button class="pm" on:click={() => changeCoins(-1)} aria-label="Remove a coin">−</button>
+				<span class="gcoin">{mine.coins}</span>
+				<button class="pm" on:click={() => changeCoins(1)} aria-label="Add a coin">+</button>
+			</span>
+		{/if}
+	{/snippet}
+
+	<!-- a player's board, dropped from their chip beside the island (yours carries your controls) -->
+	{#snippet dossier(pid: string, side: 'l' | 'r')}
+		{@const p = seated.find((x) => x.id === pid)}
+		{@const cs = viewCards[pid]}
+		{#if p && cs}
+			{@const own = pid === clientId}
+			{@const st = statusMap[pid] ?? EMPTY_STATUS}
+			{@const ult = ultimateIndex(cs.hero)}
+			<aside class="dossier {side}" style={teamVars(pTeam(p))}>
+				<div class="dos-head" style="background-image: linear-gradient(90deg, rgba(5,16,28,.94) 0%, rgba(5,16,28,.6) 45%, rgba(5,16,28,.05) 80%), url('{heroAvatar(cs.hero)}')">
+					<b>{heroName(cs.hero)}</b>
+					<span><PlayerIcon hero={cs.hero} team={pTeam(p)} color={colorHex(p.color)} size="20px" ring={2} />{p.name}</span>
+					<button class="dx" on:click={() => (side === 'l' ? (dosL = null) : (dosR = null))} aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
+				</div>
+				<div class="dos-body">
+					<div class="dos-row">
+						<span class="lvbar" title="Level {levelOf(cs)}">{#each Array(8) as _, k (k)}<i class:on={k < levelOf(cs)} class:u={k === 7}></i>{/each}</span>
+						<span class="sp"></span>
+						{#if own}{@render purse()}{:else}<span class="gcoin" title="Coins">{cs.coins}</span>{/if}
+					</div>
+					{@render gauges(cs)}
+					<div class="slots">
+						{#each [0, 1, 2, 3] as t}
+							<span class="cwell" class:now={t === turnIdx} class:fxlit={!!fxFor(pid, slotIdx(cs, t))} style="--fxc:{colorOf(pid)}">
+								<TurnSlot well heroId={cs.hero} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} label={ROMAN[t]} peekable={own} examinable on:click={(e) => peekSlot(e, cs, t)} />
+							</span>
+						{/each}
+					</div>
+					<div class="dos-row">
+						<span class="dcount" title="Hand"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="7" width="8" height="12" rx="1.5" transform="rotate(-12 7.5 13)" /><rect x="11.5" y="6" width="8" height="12" rx="1.5" transform="rotate(10 15.5 12)" /></svg><b>{cs.hand.length}</b></span>
+						<span class="dcount discwrap" role="group" aria-label="Discard" on:pointerenter={(e) => cs.discard.length > 1 && discEnter(e, pid)} on:pointerleave={discLeave}>
+							<button class="dbtn" disabled={!cs.discard.length} title="Discard" on:click={() => (cs.discard.length === 1 ? openDiscard(cs.hero, cs.discard[0], own) : discTap(pid))}>{@html TRASH}<b>{cs.discard.length}</b></button>
+							{#if discOpen === pid}
+								<div class="discpop">
+									{#each cs.discard as i (i)}
+										<button class="dpc" on:click={() => openDiscard(cs.hero, i, own)}><Card heroId={cs.hero} card={heroCards(cs.hero)[i]} /></button>
 									{/each}
 								</div>
 							{/if}
+						</span>
+						<span class="sp"></span>
+						<!-- one of each marker exists: click to put it on this hero (it leaves anyone else), again to take it off -->
+						<button class="dmark" class:on={!!st.poison} aria-pressed={!!st.poison} title="Poison" on:click={() => toggleStatus(pid, 'poison')}><img src={icon('marker_poison')} alt="Poison" /></button>
+						<button class="dmark" class:on={!!st.bounty} aria-pressed={!!st.bounty} title="Bounty" on:click={() => toggleStatus(pid, 'bounty')}><img src={icon('marker_bounty')} alt="Bounty" /></button>
+						{#if ult >= 0}
+							<button class="dult" class:on={cs.ultimate} title="Ultimate" on:click={() => examineCard(cs.hero, ult)}><Card heroId={cs.hero} card={heroCards(cs.hero)[ult]} /></button>
 						{/if}
 					</div>
-				</div>
-			</div>
-
-			<!-- RIGHT: turn actions · coins · hand display options · docked hand -->
-			<div class="dright">
-				<!-- fixed-width slot for the turn buttons, so nothing shifts when one appears -->
-				<div class="dact">
-					{@render actionBody()}
-				</div>
-
-				<!-- money: coins from killing minions, spent on level-ups -->
-				<div class="coinctl" title="Coins — killing minions earns them, spend on level-ups">
-					<button class="cbtn" on:click={() => changeCoins(-1)} aria-label="Remove coin">−</button>
-					<span class="coin lg">{mine.coins}</span>
-					<button class="cbtn" on:click={() => changeCoins(1)} aria-label="Add coin">+</button>
-				</div>
-
-				<!-- hand display: auto-hide · fan / spread · dock into the dash -->
-				<div class="handopts">
-				<button class="hopt" class:on={autoRetract} on:click={toggleRetract} aria-pressed={autoRetract} aria-label="Auto-hide hand"
-					title={dockHand ? (autoRetract ? 'Auto-hide: ON — ribbons only; hover one to see its banner' : 'Auto-hide: OFF — your hand stays up as banners') : autoRetract ? 'Auto-hide hand: ON — hover or tap the card tips to raise it' : 'Auto-hide hand: OFF — cards stay up'}>
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true">
-						<rect x="4.5" y="2.5" width="8" height="11" rx="1.4" fill="rgba(9,13,22,.9)" transform="rotate(-9 8.5 8)" />
-						<rect x="11.5" y="2.5" width="8" height="11" rx="1.4" fill="rgba(9,13,22,.9)" transform="rotate(9 15.5 8)" />
-						<path d="M2.5 15.5h19" />
-						{#if autoRetract}<path d="M9 18.5l3 3 3-3" />{:else}<path d="M9 21.5l3-3 3 3" />{/if}
-					</svg>
-				</button>
-				<button class="hopt" class:on={spreadHand} disabled={dockHand} on:click={toggleSpread} aria-pressed={spreadHand} aria-label="Hand layout"
-					title={spreadHand ? 'Hand layout: spread out — click to fan' : 'Hand layout: fanned — click to spread out'}>
-					<svg viewBox="0 0 24 24" fill="rgba(9,13,22,.9)" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true">
-						{#if spreadHand}
-							<rect x="1.5" y="6" width="6.2" height="10" rx="1.2" /><rect x="8.9" y="6" width="6.2" height="10" rx="1.2" /><rect x="16.3" y="6" width="6.2" height="10" rx="1.2" />
-						{:else}
-							<rect x="8.5" y="4" width="7" height="11" rx="1.3" transform="rotate(-22 12 21)" />
-							<rect x="8.5" y="4" width="7" height="11" rx="1.3" transform="rotate(22 12 21)" />
-							<rect x="8.5" y="4" width="7" height="11" rx="1.3" />
-						{/if}
-					</svg>
-				</button>
-					<button class="hopt dock" class:on={dockHand} on:click={toggleDock} aria-pressed={dockHand} aria-label="Dock hand in the dash"
-						title={dockHand ? 'Hand docked in the dash — click to bring it back over the board' : 'Dock your hand inside the dash (nothing over the board)'}>
-						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true">
-							<rect x="2.5" y="12.5" width="19" height="9" rx="2" />
-							<rect x="6" y="14.5" width="3.4" height="5" rx="0.6" fill="currentColor" stroke="none" />
-							<rect x="10.3" y="14.5" width="3.4" height="5" rx="0.6" fill="currentColor" stroke="none" />
-							<rect x="14.6" y="14.5" width="3.4" height="5" rx="0.6" fill="currentColor" stroke="none" />
-							{#if dockHand}<path d="M9 7.5l3-3 3 3M12 4.5v6" />{:else}<path d="M9 7l3 3 3-3M12 3.5v6.5" />{/if}
-						</svg>
-					</button>
-				</div>
-
-				<!-- docked-hand well: always reserved, so docking / undocking shifts nothing -->
-				<div class="dockhand" class:empty={!dockHand}>
-					{#if dockHand}
-						<DockHand heroId={mine.hero} hand={handOrdered} fanned={!autoRetract} onPick={(i) => preview(i)} />
-					{:else}
-						<button class="dockhint" on:click={toggleDock} title="Dock your hand here">Dock hand here</button>
+					{#if cs.removed.length}
+						<div class="dos-row removed" title="Removed">
+							{#each cs.removed as i (i)}<button class="rmini" on:click={() => (examine = { hid: cs.hero, idx: i })}><Card heroId={cs.hero} card={heroCards(cs.hero)[i]} /></button>{/each}
+						</div>
 					{/if}
 				</div>
-			</div>
-		</div>
-	{/if}
+			</aside>
+		{/if}
+	{/snippet}
 
 	<!-- ───────── synced pre-reveal countdown (take back your card to cancel) ───────── -->
 	{#if countdownActive}
 		<div class="countdown">
 			{#key countdownLabel}<span class="cd-num" class:go={countdownLabel === 'Reveal!'}>{countdownLabel}</span>{/key}
-			<span class="cd-sub">Revealing…</span>
+			{#if mobile}<span class="cd-sub">Revealing…</span>{/if}
 		</div>
 	{/if}
 
@@ -1427,7 +1564,7 @@
 
 	<!-- ───────── dramatic simultaneous reveal ───────── -->
 	{#if curtain}
-		<div class="curtain" on:click={skipCurtain} on:keydown={(e) => e.key === 'Escape' && skipCurtain()} role="presentation">
+		<div class="curtain" class:desk={!mobile} on:click={skipCurtain} on:keydown={(e) => e.key === 'Escape' && skipCurtain()} role="presentation">
 			<div class="curtain-inner">
 				<div class="curtain-title">Reveal — Turn {$ms.turn}</div>
 				<div class="curtain-cards" style="--cols:{curtainCols}; --rows:{curtainFit.rows}">
@@ -1439,7 +1576,7 @@
 						<div class="cc" style="--tint:{teamTint(p)}">
 							{#if idx != null && idx !== PASS}
 								<div class="cc-flip" class:up={curtainFlip}>
-									<div class="cc-face cc-back"><span class="band top"></span><span class="emblem"><img src={heroLogo(cs.hero)} alt="" /></span><span class="band bot"></span></div>
+									<div class="cc-face cc-back"><span class="cb-band top"></span><span class="emblem"><img src={heroLogo(cs.hero)} alt="" /></span><span class="cb-band bot"></span></div>
 									<div class="cc-face cc-front"><Card heroId={cs.hero} card={heroCards(cs.hero)[idx]} /></div>
 								</div>
 							{:else}
@@ -1451,42 +1588,14 @@
 					</div>
 					{/each}
 				</div>
-				<div class="curtain-hint">Resuming…</div>
+				{#if mobile}<div class="curtain-hint">Resuming…</div>{/if}
 			</div>
 		</div>
 	{/if}
 {/if}
 
 <style>
-	/* right-side player panel */
-	.ppanel { position: absolute; top: 12px; right: 12px; bottom: 12px; z-index: 6; width: 244px; padding: 10px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; color: #e5e7eb; background: rgba(9,13,22,.9); border: 1px solid rgba(199,154,78,.4); border-radius: 14px; zoom: var(--uis, 1); }
-	.pptitle { font-size: .6rem; letter-spacing: .16em; text-transform: uppercase; font-weight: 800; color: #b8a06a; padding: 2px 4px 4px; display: flex; flex-direction: column; gap: 3px; }
-	.phasetag { font-size: .56rem; letter-spacing: .04em; font-weight: 700; color: #7d8ba0; text-transform: none; }
-	.phasetag.resolve { color: #efb46a; }
-	.ppdiv { height: 1px; margin: 5px 2px; background: linear-gradient(90deg, transparent, rgba(199,154,78,.35), transparent); }
-	.prow { display: flex; flex-direction: column; gap: 4px; padding: 6px 7px; border-radius: 11px; cursor: pointer; text-align: left; background: rgba(12,18,32,.44); border: 1px solid rgba(255,255,255,.1); border-left: 3px solid var(--tint); color: #e5e7eb; transition: transform .12s, background .12s; }
-	.prow:hover { background: rgba(20,28,46,.6); transform: translateY(-2px); }
-	.prow:focus-visible { outline: 2px solid rgba(239,180,106,.7); outline-offset: 1px; }
-	/* level-8 opponent: team colour stays on the left, purple washes to the right */
-	.prow.ultrow { border-color: rgba(165,110,230,.5); border-left-color: var(--tint);
-		background: linear-gradient(90deg, rgba(12,18,32,.5) 0%, rgba(120,60,190,.24) 52%, rgba(155,92,232,.36) 100%);
-		box-shadow: inset 0 0 0 1px rgba(165,110,230,.26), 0 0 15px rgba(165,110,230,.26); }
-	.prow.ultrow:hover { background: linear-gradient(90deg, rgba(20,28,46,.6) 0%, rgba(130,70,200,.3) 52%, rgba(165,100,240,.42) 100%); }
-	.prow.ultrow::after { content: '★'; position: absolute; top: 5px; right: 8px; font-size: .7rem; color: #d9b6ff; text-shadow: 0 0 6px rgba(165,110,230,.9); }
-	.prow { position: relative; }
-	.prtop { display: flex; align-items: center; gap: 8px; }
-	.pmid { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; line-height: 1.05; }
-	.pname { font-family: 'Modesto Poster', serif; font-size: .84rem; color: #f3f6fb; display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
-	.pname em { font-style: normal; font-size: .56rem; font-weight: 700; color: #8b9bb0; }
-	.trashi { display: inline-flex; width: .72rem; height: .72rem; opacity: .8; }
-	.trashi :global(svg) { width: 100%; height: 100%; }
-	.dchip { display: inline-flex; align-items: center; gap: 2px; font-size: .54rem; font-weight: 800; font-variant-numeric: tabular-nums; color: #9fb0c4; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.12); border-radius: 5px; padding: 0 4px; }
-	/* compact HUD status markers (poison / bounty) */
-	.statmk { display: inline-flex; align-items: center; gap: 1px; font-size: .56rem; font-weight: 900; font-variant-numeric: tabular-nums; padding: 0 3px 0 2px; border-radius: 999px; line-height: 1; }
-	.statmk img { width: .82rem; height: .82rem; object-fit: contain; border-radius: 50%; }
-	.statmk.pois { color: #c8f5cf; background: rgba(65,174,89,.2); box-shadow: 0 0 0 1px rgba(65,174,89,.4); }
-	.statmk.bnty { color: #ffe6a6; background: rgba(232,182,74,.2); box-shadow: 0 0 0 1px rgba(232,182,74,.45); }
-	/* status controls in the board overlay */
+	/* status controls in the phone's board overlay */
 	.statusctl { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 10px; padding: 7px 10px; border-radius: 10px; background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.1); }
 	.sctog { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px 4px 5px; border-radius: 999px; cursor: pointer; font-size: .76rem; font-weight: 700;
 		color: #94a3b8; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.14); transition: background .12s, color .12s, box-shadow .12s; }
@@ -1496,48 +1605,11 @@
 	.sctog.pois.on { color: #c8f5cf; background: rgba(65,174,89,.24); border-color: rgba(65,174,89,.6); box-shadow: 0 0 10px rgba(65,174,89,.35); }
 	.sctog.bnty.on { color: #ffe6a6; background: rgba(232,182,74,.22); border-color: rgba(232,182,74,.6); box-shadow: 0 0 10px rgba(232,182,74,.35); }
 	.statusctl .sclbl { font-size: .58rem; letter-spacing: .12em; text-transform: uppercase; font-weight: 800; color: #93a3b8; }
-	.phero { font-family: 'Modesto Poster', serif; font-size: .64rem; letter-spacing: .02em; color: #cbd5e1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-	.dslot { width: 1.7rem; flex: none; }
 	/* gold coin chip */
 	.coin { display: inline-flex; align-items: center; justify-content: center; min-width: 1.05rem; height: 1.05rem; padding: 0 4px; border-radius: 999px;
 		background: linear-gradient(#f2d072, #c99a3e); color: #3a2a10; font-size: .58rem; font-weight: 900; font-variant-numeric: tabular-nums;
 		border: 1px solid rgba(0,0,0,.3); box-shadow: inset 0 1px 0 rgba(255,255,255,.45); }
 	.coin.lg { min-width: 1.8rem; font-variant-numeric: tabular-nums; height: 1.5rem; font-size: .82rem; }
-	/* ready light — red until committed, then green (right-aligned, tiny) */
-	.rdot { flex: none; width: .7rem; height: .7rem; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #ff8a8a, #d13a3a); box-shadow: 0 0 5px rgba(209,58,58,.7); }
-	.rdot.on { background: radial-gradient(circle at 35% 30%, #a6f5b6, #35c257); box-shadow: 0 0 6px rgba(53,194,87,.8); }
-	.skiptag { flex: none; font-size: .5rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #8b9bb0; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.14); border-radius: 5px; padding: 1px 5px; }
-	.pstats { display: grid; grid-template-columns: repeat(6, 1fr); gap: 3px; }
-	.pstat { position: relative; display: flex; flex-direction: column; align-items: center; gap: 0; padding: 2px 0 1px; border-radius: 5px; background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.06); }
-	.pstat img { height: .74rem; filter: brightness(0) invert(1); opacity: .55; }
-	.pstat b { font-size: .64rem; font-weight: 800; color: #b9c4d2; font-variant-numeric: tabular-nums; }
-	.pstat .stripes { position: absolute; top: 1px; left: 0; right: 0; display: flex; justify-content: center; gap: 1.5px; height: 3px; }
-	.pstat .stripe { width: 4px; height: 2px; transform: skewX(-24deg); background: rgb(var(--tcl, 255 183 116)); border-radius: 1px; }
-	.pstat.up { background: rgb(var(--tcr, 239 125 34) / .18); border-color: rgb(var(--tcr, 239 125 34) / .5); padding-top: 5px; }
-	.pstat.up img { opacity: 1; } .pstat.up b { color: rgb(var(--tcl, 255 207 163)); }
-	.pturns { display: grid; grid-template-columns: repeat(5, 36px); gap: 4px; justify-content: center; }
-	.pdisc { position: relative; display: block; aspect-ratio: 3 / 4; border-left: 1px solid rgba(255,255,255,.1); margin-left: 2px; padding-left: 3px; }
-	.trashw { position: absolute; inset: 18% 14% 18% 22%; color: rgba(255,255,255,.08); pointer-events: none; }
-	.trashw :global(svg) { width: 100%; height: 100%; }
-	.pdcard { position: relative; display: block; border-radius: 6%; overflow: hidden; box-shadow: 2px 2px 0 rgba(255,255,255,.18), 0 3px 8px rgba(0,0,0,.5); }
-	.pdcard :global(.cardface) { display: block; width: 100%; }
-	.pdct { position: absolute; left: 50%; bottom: -7px; transform: translateX(-50%); min-width: 1rem; height: .95rem; padding: 0 4px; border-radius: 999px; display: grid; place-items: center;
-		background: linear-gradient(#2b3444, #171d27); border: 1px solid rgba(199,154,78,.6); color: #f0dcae; font-size: .55rem; font-weight: 900; font-variant-numeric: tabular-nums; }
-	/* initiative this turn (card + upgrades) */
-	.initb { flex: none; margin-left: auto; display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px 2px 5px; border-radius: 8px;
-		background: rgb(var(--tcr, 239 125 34) / .2); border: 1px solid rgb(var(--tcl, 255 196 140) / .55); color: #fff; }
-	.initb .inicon { display: grid; place-items: center; width: .9rem; height: .9rem; flex: none; }
-	.initb .inicon :global(svg) { width: 100%; height: 100%; }
-	.initb { width: 46px; box-sizing: border-box; justify-content: center; } /* fixed: '–' and '12' take the same room */
-	.initb b { font-family: 'Modesto Poster', serif; font-size: .95rem; line-height: 1; font-variant-numeric: tabular-nums; }
-	.initb.off { opacity: .35; background: rgba(255,255,255,.04); border-color: rgba(255,255,255,.12); }
-	/* the ♛ badge on a level-8 player's icon */
-	.crown { position: absolute; z-index: 2; top: -10px; right: -8px; font-size: .9rem; color: #d9b6ff; text-shadow: 0 1px 3px #000; }
-	.ppanel.dense .prow { gap: 4px; padding: 5px 6px; }
-	.ppanel.dense .pname { font-size: .78rem; }
-	.ppanel.dense .phero { font-size: .56rem; }
-	.ppanel.dense .pstat b { font-size: .62rem; }
-	.ppanel.dense .pstat img { height: .72rem; }
 
 	/* overlay */
 	.scrim { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; background: rgba(3,6,12,.62); }
@@ -1615,7 +1687,6 @@
 	.zgrow { display: inline-flex; gap: 5px; margin-left: auto; }
 	.growchip { display: inline-flex; align-items: center; gap: 2px; font-size: .64rem; font-weight: 800; color: #ffcfa3; background: rgba(239,125,34,.16); border: 1px solid rgba(239,125,34,.4); border-radius: 6px; padding: 1px 5px; text-transform: none; }
 	.growchip img { height: .74rem; filter: brightness(0) invert(1); }
-	.dkhand { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px; border-radius: 12px; background: rgba(239,125,34,.08); border: 1px solid rgba(239,125,34,.25); min-height: 40px; align-items: center; }
 	.dkgrid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
 	.dkcard { position: relative; width: 100%; padding: 0; background: none; border: none; cursor: pointer; border-radius: 6px; overflow: hidden; box-shadow: 0 3px 8px rgba(0,0,0,.5); transition: transform .12s; }
 	.dkcard.sm { width: 58px; }
@@ -1627,14 +1698,8 @@
 	.dkcard.basic { cursor: zoom-in; }
 	.dkcard.basic:hover { transform: none; }
 	.dklock { position: absolute; top: 3px; right: 4px; font-size: .7rem; filter: drop-shadow(0 1px 2px #000); }
-	.dkpart { width: 1px; align-self: stretch; margin: 2px 4px; background: linear-gradient(180deg, transparent, rgba(199,154,78,.6), transparent); }
-	.dkpart.tall { margin: 2px 8px; background: linear-gradient(180deg, transparent, rgba(165,110,230,.7), transparent); width: 2px; }
 	/* ultimate slot in the deck view: never in hand, locked until level 8 */
-	.ultslot { display: flex; flex-direction: column; align-items: center; gap: 5px; }
 	.dkcard.ult { width: 72px; box-shadow: 0 0 0 2px rgba(165,110,230,.7), 0 6px 16px rgba(0,0,0,.55); cursor: zoom-in; }
-	.dkcard.ult.locked { filter: grayscale(.85) brightness(.5); }
-	.dkcard.ult.locked:hover { transform: none; }
-	.ultlock { position: absolute; inset: 0; display: grid; place-items: center; font-size: .6rem; font-weight: 800; letter-spacing: .04em; color: #e9dcff; background: rgba(20,10,35,.5); }
 	.ultbtn { background: linear-gradient(180deg, rgba(165,110,230,.3), rgba(165,110,230,.16)); border-color: rgba(180,130,240,.6); color: #efe0ff; }
 	/* grid card status: available = bright, placed elsewhere = tinted + dim */
 	/* the deck grid shows what's still available: cards in the deck are bright; ones already moved out dim, with a badge saying where */
@@ -1679,10 +1744,7 @@
 	.dktab.removed.on { background: rgba(150,160,175,.18); border-color: rgba(150,160,175,.7); }
 	.mob .zhint { display: none; }
 	.mob .dkcard:hover { transform: none; }
-	.mob .dkhand { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; align-items: start; }
 	.mob .dkcard.ult, .mob .dkcard.sm { width: 100%; }
-	.mob .dkpart { display: none; }
-	.mob .ultslot { grid-column: span 1; }
 	.mob .dkgrid { grid-template-columns: repeat(3, 1fr); }
 	.mob .dkzones { grid-template-columns: 1fr; }
 	.mob .dkrow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
@@ -1737,10 +1799,10 @@
 	/* upgrades lie upside down, like on the table (item symbol upright) */
 	.dkcard :global(.cardface) { transition: transform .5s cubic-bezier(.3,.7,.2,1); }
 	.dkcard.zupg :global(.cardface), .dkzone.upg .dkcard :global(.cardface) { transform: rotate(180deg); }
-	.deckstack.lvup, .mdeck.lvup { box-shadow: 0 0 0 2px #f0c060, 0 0 14px rgba(240,192,96,.75); animation: deckpulse 1.4s ease-in-out infinite; border-radius: 6px; }
+	.mdeck.lvup { box-shadow: 0 0 0 2px #f0c060, 0 0 14px rgba(240,192,96,.75); animation: deckpulse 1.4s ease-in-out infinite; border-radius: 6px; }
 	@keyframes deckpulse { 0%, 100% { opacity: 1; } 50% { opacity: .72; } }
 	/* keep the bottom of the last row reachable above the sticky bar */
-	.mob .dkzones, .mob .dkgrid, .mob .dkhand { margin-bottom: 12px; }
+	.mob .dkzones, .mob .dkgrid { margin-bottom: 12px; }
 
 	/* synced pre-reveal countdown — big number, doesn't block the hand/take-back */
 	.countdown { position: fixed; inset: 0; z-index: 57; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; pointer-events: none; }
@@ -1751,7 +1813,6 @@
 		background: radial-gradient(closest-side, rgba(4,6,12,.62), rgba(4,6,12,0)); pointer-events: none; }
 	.cd-num.go { font-size: 5.5rem; color: #ffe2a8; text-shadow: 0 4px 24px rgba(0,0,0,.85), 0 0 50px rgba(255,190,90,.7); }
 	.cd-sub { font-size: .85rem; letter-spacing: .14em; text-transform: uppercase; font-weight: 700; color: #f0dcae; padding: 4px 14px; border-radius: 999px; background: rgba(6,9,16,.72); text-shadow: 0 2px 8px rgba(0,0,0,.8); }
-	.phasetag.counting { color: #ffcf9b; }
 
 	/* dramatic reveal curtain */
 	/* round-start banner */
@@ -1776,9 +1837,9 @@
 	.cc-face.cc-front :global(.cardface) { display: block; width: 100%; border-radius: 5%; }
 	.cc-back { display: flex; flex-direction: column; box-shadow: 0 0 0 2px var(--tint);
 		background: repeating-linear-gradient(135deg, rgba(90,70,40,.04) 0 1px, transparent 1px 5px), radial-gradient(115% 78% at 50% 40%, #fdfcf8, #efe9db 62%, #ddd4c1 100%); }
-	.cc-back .band { position: relative; height: 13%; background: linear-gradient(180deg, #2c333f, #1a1f28); }
-	.cc-back .band::after { content: ''; position: absolute; left: 8%; right: 8%; height: 2px; background: linear-gradient(90deg, transparent, #caa25e 25%, #f2d89e 50%, #caa25e 75%, transparent); }
-	.cc-back .band.top::after { bottom: 0; } .cc-back .band.bot::after { top: 0; }
+	.cc-back .cb-band { position: relative; height: 13%; background: linear-gradient(180deg, #2c333f, #1a1f28); }
+	.cc-back .cb-band::after { content: ''; position: absolute; left: 8%; right: 8%; height: 2px; background: linear-gradient(90deg, transparent, #caa25e 25%, #f2d89e 50%, #caa25e 75%, transparent); }
+	.cc-back .cb-band.top::after { bottom: 0; } .cc-back .cb-band.bot::after { top: 0; }
 	.cc-back .emblem { flex: 1; display: grid; place-items: center; padding: 12%; }
 	.cc-back .emblem img { width: 76%; max-height: 100%; object-fit: contain; filter: drop-shadow(0 2px 5px rgba(0,0,0,.4)); }
 	.cc-name { display: flex; align-items: center; justify-content: center; gap: .4em; max-width: 100%; font-family: 'Modesto Poster', serif; font-size: clamp(.62rem, calc(var(--cw) / 14), 1.15rem); color: #eef2f8; }
@@ -1838,9 +1899,9 @@
 	.pvface.front :global(.cardface) { display: block; width: 100%; border-radius: 3%; }
 	.pvcard { box-shadow: 0 0 0 3px var(--glow), 0 0 44px var(--glow), 0 24px 60px rgba(0,0,0,.7); }
 	.pvface.back { transform: rotateY(180deg); display: flex; flex-direction: column; background: radial-gradient(115% 78% at 50% 40%, #fdfcf8, #efe9db 62%, #ddd4c1 100%); box-shadow: inset 0 0 0 1px rgba(120,95,55,.4); }
-	.pvface.back .band { position: relative; height: 13%; background: linear-gradient(180deg, #2c333f, #1a1f28); }
-	.pvface.back .band::after { content: ''; position: absolute; left: 8%; right: 8%; height: 2px; background: linear-gradient(90deg, transparent, #caa25e 25%, #f2d89e 50%, #caa25e 75%, transparent); }
-	.pvface.back .band.top::after { bottom: 0; } .pvface.back .band.bot::after { top: 0; }
+	.pvface.back .cb-band { position: relative; height: 13%; background: linear-gradient(180deg, #2c333f, #1a1f28); }
+	.pvface.back .cb-band::after { content: ''; position: absolute; left: 8%; right: 8%; height: 2px; background: linear-gradient(90deg, transparent, #caa25e 25%, #f2d89e 50%, #caa25e 75%, transparent); }
+	.pvface.back .cb-band.top::after { bottom: 0; } .pvface.back .cb-band.bot::after { top: 0; }
 	.pvface.back .emblem { flex: 1; display: grid; place-items: center; padding: 12%; }
 	.pvface.back .emblem img { width: 60%; border-radius: 50%; opacity: .85; }
 	.pvface.back .emblem.sym img { width: 74%; border-radius: 0; opacity: 1; filter: drop-shadow(0 2px 4px rgba(0,0,0,.4)); }
@@ -1854,44 +1915,11 @@
 	.pvdots i { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,.25); }
 	.pvdots i.on { background: #f0dcae; box-shadow: 0 0 6px rgba(240,220,174,.8); }
 
-	/* bottom dashboard */
-	.dash { position: absolute; left: var(--dx, 224px); bottom: var(--db, 12px); width: 1180px; height: 78px; box-sizing: border-box; transform: scale(var(--ds, 1)); transform-origin: bottom left;
-		z-index: 11; display: flex; align-items: center; gap: 18px; padding: 0 14px; border-radius: 13px; color: #e5e7eb;
-		background: linear-gradient(90deg, rgb(var(--tcr) / .2), rgba(9,13,22,.93) 26%, rgba(9,13,22,.93) 74%, rgb(var(--tcr) / .16)); border: 1px solid rgb(var(--tcr) / .55); box-shadow: 0 12px 34px rgba(0,0,0,.5), inset 0 1px 0 rgb(var(--tcl) / .14); }
-	.dleft { flex: none; display: flex; align-items: center; gap: 10px; }
-	.dright { flex: 1; min-width: 0; align-self: stretch; display: flex; align-items: center; gap: 12px; }
-	.dact { flex: none; width: 132px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
-	.dact .act { white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; padding-left: 10px; padding-right: 10px; }
+	/* the phone dash's action slot */
 	.act.takeback { padding: 7px 14px; font-size: .86rem; color: #fff; background: linear-gradient(180deg, #e0463c, #a82620); border-color: rgba(255,170,160,.7); box-shadow: 0 3px 0 #6e1812, 0 0 12px rgba(239,68,68,.45); }
 	.act.takeback:hover { filter: brightness(1.1); }
-	/* level-8 aura on your own dash — present but not blinding */
-	.dash.ultdash { border-color: rgba(165,110,230,.6); box-shadow: 0 12px 34px rgba(0,0,0,.5), 0 0 22px rgba(165,110,230,.28); }
-	@keyframes ultpulse { 0%, 100% { box-shadow: 0 12px 34px rgba(0,0,0,.5), 0 0 18px rgba(165,110,230,.22); } 50% { box-shadow: 0 12px 34px rgba(0,0,0,.5), 0 0 30px rgba(165,110,230,.42); } }
-	/* single-row profile: avatar · name/hero · stats (to cut dashboard height) */
-	.dself { display: flex; align-items: center; gap: 10px; flex: none; }
-	.dsopen { padding: 0; background: none; border: none; cursor: pointer; color: inherit; text-align: left; font: inherit; }
-	.dsnmbtn { flex: none; min-width: 0; max-width: 84px; display: flex; align-items: baseline; gap: 5px; }
-	.dsnmbtn:hover .dsnm { color: #fff; }
-	.dsbody { display: flex; flex-direction: column; gap: 1px; }
-	/* your hero token: team disc + hero symbol + your colour as the ring (matches the board piece) */
-	.dsmid { width: 210px; display: flex; flex-direction: column; gap: 1px; line-height: 1.02; }
-	.dsname { font-family: 'Modesto Poster', serif; font-size: .92rem; color: #f6ead2; display: flex; align-items: baseline; gap: 5px; min-width: 0; }
-	.dsnm { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-	.dsname em { flex: none; min-width: 2.3em; font-variant-numeric: tabular-nums; font-style: normal; font-size: .56rem; font-weight: 700; color: #9aa8bc; }
-	/* initiative: pinned to the right edge at a fixed width ('–' and '12' take the same room) */
-	.dsname .initb { align-self: center; padding: 1px 5px 1px 4px; }
-	.dsname .initb b { font-size: .82rem; min-width: 1.15em; text-align: center; }
-	.dshero { font-size: .58rem; color: #93a3b8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-	/* poison / bounty badges on the portrait's lower corners */
-	/* status markers on the name line, pinned just left of the initiative */
-	.dsmk { flex: none; margin-left: auto; align-self: center; display: flex; gap: 2px; }
-	.dsmk img { width: 15px; height: 15px; object-fit: contain; border-radius: 50%; }
-	.dsmk img.pois { box-shadow: 0 0 0 1.5px rgba(65,174,89,.85); }
-	.dsmk img.bnty { box-shadow: 0 0 0 1.5px rgba(232,182,74,.9); }
-	/* initiative + radius: gold, like the hand buttons, so they read apart from the stats */
-	.dsname .initb, .radbtn { width: 46px; height: 20px; box-sizing: border-box; flex: none; }
-	.dsname .initb { margin-left: 0; justify-content: center; background: rgba(199,154,78,.2); border-color: rgba(214,170,92,.6); color: #f6e3b4; }
-	.dsname .initb.off { opacity: .5; background: rgba(199,154,78,.08); border-color: rgba(199,154,78,.3); }
+	/* radius (phone dash; the desktop console restyles it under .tools) */
+	.radbtn { width: 46px; height: 20px; box-sizing: border-box; flex: none; }
 	.radwrap { position: relative; flex: none; align-self: center; display: flex; }
 	.radbtn { display: inline-flex; align-items: center; justify-content: center; gap: 2px; padding: 0 4px; border-radius: 8px; cursor: pointer;
 		color: #d8bf8a; background: rgba(199,154,78,.1); border: 1px solid rgba(199,154,78,.4); }
@@ -1899,9 +1927,6 @@
 	.radbtn b { min-width: .6em; font-size: .76rem; line-height: 1; font-variant-numeric: tabular-nums; }
 	.radbtn:hover { background: rgba(199,154,78,.24); color: #f6e3b4; }
 	.radbtn.on { background: rgba(199,154,78,.3); border-color: rgba(230,190,110,.8); color: #fff3d6; }
-	.radbtn.pingbtn { width: 24px; padding: 0; align-self: center; }
-	.radbtn.pingbtn.on { box-shadow: 0 0 0 3px rgba(230,190,110,.35), 0 0 12px rgba(230,190,110,.6); animation: pingarm 1s ease-in-out infinite; }
-	@keyframes pingarm { 0%, 100% { opacity: 1; } 50% { opacity: .72; } }
 	.radpop { position: absolute; left: 0; bottom: calc(100% + 10px); z-index: 14; width: 196px; padding: 9px; border-radius: 12px;
 		background: rgba(11,16,26,.96); border: 1px solid rgba(199,154,78,.5); box-shadow: 0 16px 40px rgba(0,0,0,.6); }
 	.radgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
@@ -1910,56 +1935,24 @@
 	.radn.on { background: rgba(199,154,78,.36); border-color: rgba(230,190,110,.85); color: #fff; }
 	.tokbtn:disabled { cursor: not-allowed; opacity: .45; }
 	.tokglyph { width: 1.4rem; height: 1.4rem; display: grid; place-items: center; font-size: 1.1rem; line-height: 1; color: #d8b56a; }
-	.dstats { display: grid; grid-template-columns: repeat(6, 1fr); gap: 3px; margin-top: 3px; }
 
-	/* hand floats above the dashboard, with a clear gap */
-	/* --cw = hand card width; scales with the viewport so the fan still fits on a tablet */
-	.tray { --cw: calc(150px * var(--uis, 1)); position: absolute; left: calc(224px * var(--uis, 1)); right: calc(260px * var(--uis, 1)); bottom: calc(var(--db, 12px) + var(--dh, 70px) + 36px * var(--uis, 1)); z-index: 10; display: flex; align-items: flex-end; justify-content: center; pointer-events: none;
+	/* the phone hand (.tray.mob — see the phone section for its size and place; desktop has .tray.dk) */
+	.tray.mob { --cw: calc(150px * var(--uis, 1)); position: absolute; left: calc(224px * var(--uis, 1)); right: calc(260px * var(--uis, 1)); bottom: calc(var(--db, 12px) + var(--dh, 70px) + 36px * var(--uis, 1)); z-index: 10; display: flex; align-items: flex-end; justify-content: center; pointer-events: none;
 		clip-path: inset(-800px -800px -60px -800px);
 		transition: transform .3s cubic-bezier(.3,.7,.2,1), clip-path .3s cubic-bezier(.3,.7,.2,1); }
 	/* auto-hide: sink the hand behind the dash (z 11) so only ~30px of card tips peek
 	   out; the clip keeps the sunk part from showing in the gap under the dash */
-	.tray.retracted { transform: translateY(calc(var(--cw) * 1.396 + 6px * var(--uis, 1))); clip-path: inset(-800px -800px calc(var(--cw) * 1.396 - 30px * var(--uis, 1) - var(--dh, 70px)) -800px); }
-	.hc { width: var(--cw); margin: 0 calc(var(--cw) * -0.11); padding: 0; background: none; border: none; cursor: pointer; pointer-events: auto; transform-origin: bottom center; transform: translateY(var(--y)) rotate(var(--rot)); transition: transform .16s; }
-	.hc :global(.cardface) { display: block; width: 100%; border-radius: 6%; box-shadow: 0 8px 18px rgba(0,0,0,.55); }
+	.tray.mob.retracted { transform: translateY(calc(var(--cw) * 1.396 + 6px * var(--uis, 1))); clip-path: inset(-800px -800px calc(var(--cw) * 1.396 - 30px * var(--uis, 1) - var(--dh, 70px)) -800px); }
+	.mob .hc { width: var(--cw); margin: 0 calc(var(--cw) * -0.11); padding: 0; background: none; border: none; cursor: pointer; pointer-events: auto; transform-origin: bottom center; transform: translateY(var(--y)) rotate(var(--rot)); transition: transform .16s; }
+	.mob .hc :global(.cardface) { display: block; width: 100%; border-radius: 6%; box-shadow: 0 8px 18px rgba(0,0,0,.55); }
 	/* hovered / tapped card straightens and magnifies so its text is readable */
-	.hc:hover { transform: translateY(calc(var(--y) - 36px * var(--uis, 1))) rotate(0deg) scale(1.45); z-index: 5; }
-	.hc:hover :global(.cardface) { box-shadow: 0 14px 34px rgba(0,0,0,.7); }
-	.tray.retracted .hc:hover { transform: translateY(var(--y)) rotate(var(--rot)); } /* the whole hand rises first */
+	.mob .hc:hover { transform: translateY(calc(var(--y) - 36px * var(--uis, 1))) rotate(0deg) scale(1.45); z-index: 5; }
+	.mob .hc:hover :global(.cardface) { box-shadow: 0 14px 34px rgba(0,0,0,.7); }
+	.tray.mob.retracted .hc:hover { transform: translateY(var(--y)) rotate(var(--rot)); } /* the whole hand rises first */
 	/* spread layout: side by side, no overlap; shrink evenly if the hand is wide */
-	.tray.spread .hc { flex: 0 1 var(--cw); width: auto; min-width: 0; margin: 0 4px; }
+	.tray.mob.spread .hc { flex: 0 1 var(--cw); width: auto; min-width: 0; margin: 0 4px; }
 
-	/* hand display toggles on the dash */
-	.handopts { flex: none; display: grid; grid-template-columns: auto auto; grid-template-rows: auto auto; gap: 4px; }
-	.hopt.dock { grid-column: 2; grid-row: 1 / 3; height: auto; }
-	.hopt.dock svg { width: 1.3rem; height: 1.3rem; }
-	.hopt:disabled { opacity: .35; cursor: not-allowed; }
-	.hopt { width: 1.95rem; height: 1.6rem; display: grid; place-items: center; padding: 0; border-radius: 7px; cursor: pointer; color: #b9a67c;
-		background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.14); transition: background .12s, color .12s; }
-	.hopt svg { width: 1.15rem; height: 1.15rem; }
-	.hopt:hover { background: rgba(199,154,78,.18); color: #f0dcae; }
-	.hopt.on { background: rgba(199,154,78,.26); border-color: rgba(199,154,78,.6); color: #f6ead2; }
 	.waithost { max-width: 5.6rem; font-size: .72rem; line-height: 1.15; text-align: center; font-weight: 700; letter-spacing: .02em; color: #b8a06a; font-style: italic; }
-	/* persistent ultimate access on the dash (once unlocked) */
-	.ultmini { position: relative; width: 40px; padding: 0; background: none; border: none; cursor: zoom-in; border-radius: 5px; overflow: visible; flex: none;
-		box-shadow: 0 0 0 2px #b482f0, 0 0 12px rgba(165,110,230,.6), 0 3px 8px rgba(0,0,0,.55); transition: transform .12s; }
-	.ultmini :global(.cardface) { display: block; width: 100%; border-radius: 5px; }
-	.ultmini:hover { transform: translateY(-3px); }
-	.ultmini.locked { aspect-ratio: 1192 / 1664; display: grid; place-items: center; cursor: default; box-shadow: none; border: 1px dashed rgba(180,130,240,.28);
-		font-size: .5rem; font-weight: 900; letter-spacing: .08em; color: rgba(200,170,240,.3); }
-	.ultmini.locked:hover { transform: none; }
-	.ultmini-tag { position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%); font-size: .5rem; font-weight: 900; letter-spacing: .08em; color: #efe0ff;
-		background: linear-gradient(180deg, #7a49c4, #5a2f9c); border: 1px solid rgba(180,130,240,.7); border-radius: 5px; padding: 0 5px; }
-	/* face-down deck stack on the dash (opens the deck view) */
-	.deckstack { position: relative; width: 40px; height: 54px; background: none; border: none; padding: 0; cursor: pointer; flex: none; }
-	.deckstack:hover .ds1 { transform: translateY(-3px); }
-	.ds-card { position: absolute; inset: 0; border-radius: 5px; box-shadow: 0 3px 8px rgba(0,0,0,.55);
-		background: repeating-linear-gradient(135deg, rgba(90,70,40,.05) 0 1px, transparent 1px 5px), radial-gradient(115% 78% at 50% 40%, #fdfcf8, #efe9db 62%, #ddd4c1 100%);
-		border: 1px solid rgba(120,95,55,.5); }
-	.ds3 { transform: translate(5px, 5px); opacity: .7; }
-	.ds2 { transform: translate(2.5px, 2.5px); opacity: .85; }
-	.ds1 { display: grid; place-items: center; transition: transform .14s; }
-	.ds1 img { width: 68%; max-height: 74%; object-fit: contain; filter: drop-shadow(0 1px 2px rgba(0,0,0,.4)); }
 	.ds-count { position: absolute; bottom: -5px; right: -6px; z-index: 2; min-width: 1.05rem; height: 1.05rem; padding: 0 4px; border-radius: 999px;
 		display: grid; place-items: center; background: linear-gradient(#2b3444, #171d27); border: 1px solid rgba(199,154,78,.6); color: #f0dcae;
 		font-size: .6rem; font-weight: 900; font-variant-numeric: tabular-nums; box-shadow: 0 2px 5px rgba(0,0,0,.5); }
@@ -1968,11 +1961,6 @@
 	.act.primary { background: #ef7d22; color: #1a0f06; border-color: transparent; box-shadow: 0 3px 0 #a8560f; }
 	.act.danger { background: rgba(220,60,60,.25); border-color: rgba(220,60,60,.5); color: #ffb4b4; }
 	.act.ghost { background: transparent; }
-
-	/* coin control (your dash) */
-	.coinctl { flex: none; display: flex; align-items: center; gap: 4px; padding: 3px 5px; border-radius: 9px; background: rgba(199,154,78,.12); border: 1px solid rgba(199,154,78,.35); }
-	.cbtn { width: 1.15rem; height: 1.15rem; border-radius: 6px; border: 1px solid rgba(255,255,255,.2); background: rgba(255,255,255,.08); color: #e5e7eb; font-weight: 800; cursor: pointer; line-height: 1; padding: 0; }
-	.cbtn:hover { background: rgba(255,255,255,.16); }
 
 	/* token tray */
 	.tokwrap { position: relative; flex: none; }
@@ -2010,31 +1998,250 @@
 	.tokclear:disabled { cursor: default; opacity: .35; color: #9aa4b2; background: rgba(255,255,255,.04); border-color: rgba(255,255,255,.12); }
 	.tokhint { min-width: 0; font-size: .58rem; color: #8b9bb0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-	.dmine { display: flex; align-items: center; justify-content: center; }
-	.dm-slot { cursor: pointer; }
-	.dm-slot:hover .roman { color: rgba(255,255,255,.16); }
-	.dm-slot .roman.trash { padding: 9px 7px 9px 11px; }
-	.dm-slot .roman.trash :global(svg) { width: 100%; height: 100%; }
-	/* docked hand: small separate cards inside the dash, at the far right */
-	.dockhand { flex: 1; min-width: 0; height: 58px; display: flex; align-items: flex-end; justify-content: center; gap: 4px; padding: 0 2px; border-radius: 9px; box-sizing: border-box; }
-	.dockhand.empty { align-items: center; border: 1px dashed rgba(255,255,255,.07); }
-	.dockhint { background: none; border: none; cursor: pointer; font-size: .62rem; letter-spacing: .08em; text-transform: uppercase; color: rgba(255,255,255,.16); }
-	.dockhint:hover { color: rgba(240,220,174,.55); }
-	.dm-turns { display: flex; gap: 5px; align-items: center; }
-	/* each slot: a faint Roman numeral behind, the card (if any) on top */
-	.dm-slot { position: relative; width: 42px; height: 56px; display: grid; place-items: center; }
-	.dm-slot.disc { width: 50px; margin-left: 4px; padding-left: 8px; border-left: 1px solid rgba(255,255,255,.12); }
-	.dm-slot .roman { position: absolute; inset: 0; display: grid; place-items: center; font-family: 'Modesto Poster', serif; font-size: 1.6rem; color: rgba(255,255,255,.09); pointer-events: none; }
-	.dm-on { position: relative; z-index: 1; width: 100%; }
-	/* face-up discard stack (mirrors the deck stack, but cards show face-up) + count */
-	.discstack { position: relative; z-index: 1; width: 38px; height: 50px; padding: 0; background: none; border: none; cursor: pointer; }
-	.discstack:hover .disc-card { filter: brightness(1.06); }
-	.disc-card { position: absolute; left: 50%; top: 0; width: 38px; margin-left: -19px; border-radius: 4px; overflow: hidden;
-		box-shadow: 0 2px 5px rgba(0,0,0,.6); transform: translate(calc(var(--i) * 2.5px), calc(var(--i) * 2.5px)); z-index: var(--i); }
-	.disc-card :global(.cardface) { display: block; width: 100%; border-radius: 4px; }
+	/* ═══════════ desktop: THE HELM (GameView gives phones their own layout) ═══════════
+	   One layer in design px — 1440 × 900, wider / taller on bigger windows — scaled by the
+	   one UI scale. Navy hull (nearly opaque, no blur), brass hairlines, brass = the one action.
+	   Performance: nothing here animates at rest; the only loop is the action button's ring
+	   (opacity), and everything that moves is a transform. */
+	.helm, .cardview, .scrim2.desk {
+		/* the Tide's values (ui/tide.css), carried here: a `.tide` wrapper would let that sheet's global rules into the cards */
+		--brass: #d8b36a; --brass-hi: #f4dfa8; --brass-lo: #a8853f; --brass-line: rgba(216,179,106,.38); --brass-faint: rgba(216,179,106,.14);
+		--ink: #f5f1e8; --ink-2: #bccbd9; --ink-3: #8a9fb3; --ink-dark: #1b1204; --danger-hi: #ffa3a3; --foam: #cfeaf5;
+		--hull: linear-gradient(180deg, rgba(17,46,75,.97), rgba(6,20,36,.98)); --brassfill: linear-gradient(180deg, #f6e2ad, #d8b36a 55%, #b98e42);
+		--lit: 0 0 0 2px #f4dfa8, 0 0 14px rgba(244,223,168,.55); --shhud: 0 6px 18px rgba(0,6,14,.5); }
+	.helm { position: absolute; inset: 0; zoom: var(--uis, 1); pointer-events: none; font-size: 15px; line-height: 1; letter-spacing: .02em; color: var(--ink); }
+	.helm button, .cardview button, .exacts button { letter-spacing: inherit; }
+	.cardview, .exacts { line-height: 1; letter-spacing: .02em; color: var(--ink); }
+	.helm svg, .cvx svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
-	/* zoomed: its own insets are in design px, so the real-px dash height is divided back */
-	.ppanel.withdash { bottom: calc(22px + var(--dh, 70px) / var(--uis, 1)); }
+	/* ── roster chips: the enemy left of the scoreline, your team right of it (zones: layout.ts CHIPS_IN / CHIPS_W) ── */
+	.roster { position: absolute; top: 8px; width: 372px; height: 56px; z-index: 7; display: flex; align-items: center; gap: 6px; }
+	.roster.l { right: calc(50% + 284px); }
+	.roster.r { left: calc(50% + 284px); justify-content: flex-end; }
+	.rchip { position: relative; flex: 0 1 159px; min-width: 0; height: 54px; box-sizing: border-box; display: flex; align-items: center; gap: 4px; padding: 0 7px 0 2px; border-radius: 27px 12px 12px 27px;
+		cursor: pointer; pointer-events: auto; background: var(--hull); border: 1px solid rgb(var(--tcr) / .65); box-shadow: var(--shhud); }
+	.rchip.me { border-color: var(--brass); }
+	.rchip.open { box-shadow: var(--lit); }
+	.rchip:focus-visible { outline: 2px solid var(--foam); outline-offset: 2px; }
+	.rchip.out :global(.picon) { filter: grayscale(1) brightness(.65); }
+	.rchip .lv { position: absolute; left: 30px; bottom: 1px; width: 19px; height: 19px; border-radius: 50%; display: grid; place-items: center; font-weight: 400; font-size: 12px;
+		color: var(--ink-dark); background: var(--brassfill); border: 1.5px solid #06182a; }
+	.rchip .lv.ult { color: #fff; background: #8a4fd6; }
+	.who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; padding-left: 2px; }
+	.who b { font-weight: 400; font-size: 16px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.who small { font-size: 12px; letter-spacing: 0; color: rgb(var(--tcl)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	/* three or more a side: the token and the card say it (the name is in the tooltip and on the board) */
+	.roster.compact .who { display: none; }
+	.roster.compact .rchip { flex: 0 1 88px; justify-content: space-between; }
+	/* this turn's card as a tiny card: empty · face down · face up with its initiative · defeated */
+	.cst { flex: none; width: 26px; height: 37px; box-sizing: border-box; padding: 0; border-radius: 4px; display: grid; place-items: center; font-size: 16px; color: var(--ink-3); border: 1.5px dashed rgba(255,255,255,.25); background: none; }
+	.cst.back { border: 0; color: var(--ink-dark); background: linear-gradient(180deg, #2c333f 0 16%, #f4efe3 16% 84%, #2c333f 84%); box-shadow: 0 0 0 1px #05101c; }
+	.cst.back img { width: 18px; height: 18px; object-fit: contain; }
+	.cst.up { border: 0; cursor: zoom-in; color: #fff; text-shadow: 0 1px 0 #000, 0 0 3px #000; background: var(--cc); background: linear-gradient(180deg, color-mix(in srgb, var(--cc) 92%, white), color-mix(in srgb, var(--cc) 70%, black)); box-shadow: 0 0 0 1px #05101c; }
+	.cst.dead { border: 1.5px solid rgba(229,72,77,.7); color: var(--danger-hi); background: rgba(229,72,77,.14); }
+	.cst.dead svg { width: 19px; height: 19px; }
+
+	/* ── initiative rail: the revealed cards in order, under the scoreline ── */
+	.rail { position: absolute; top: 70px; left: 50%; transform: translateX(-50%); max-width: 760px; height: 48px; z-index: 9; display: flex; align-items: center; gap: 6px; }
+	.ini { flex: 0 1 auto; min-width: 0; height: 38px; display: flex; align-items: center; gap: 6px; padding: 0 12px 0 0; border-radius: 9px; overflow: hidden; white-space: nowrap; cursor: pointer; pointer-events: auto;
+		font-size: 15px; color: var(--ink); background: #071a2d; border: 1px solid var(--brass-line); box-shadow: var(--shhud); }
+	.ini .flag { align-self: stretch; flex: none; width: 38px; display: grid; place-items: center; padding-bottom: 4px; font-weight: 400; font-size: 23px; color: #fff; text-shadow: 0 2px 0 #000, 0 0 4px #000;
+		background: var(--cc); background: linear-gradient(180deg, color-mix(in srgb, var(--cc) 92%, white), color-mix(in srgb, var(--cc) 70%, black)); clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 86%, 0 100%); }
+	.ini .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+	.ini.done { opacity: .45; box-shadow: none; }
+	.ini.now { height: 46px; font-size: 18px; color: var(--brass-hi); border-color: transparent; box-shadow: var(--lit); }
+	.ini.now .flag { width: 46px; font-size: 29px; }
+	.rail.tight .nm { display: none; }
+	.rail.tight .ini { padding-right: 6px; }
+
+	/* ── a player's board, hanging under their chip beside the island ── */
+	.dossier { position: absolute; top: 70px; width: 352px; z-index: 8; pointer-events: auto; display: flex; flex-direction: column; border-radius: 18px;
+		background: var(--hull); border: 1px solid var(--brass-line); box-shadow: 0 16px 40px rgba(0,6,14,.55); animation: dosin .2s ease-out; }
+	.dossier.l { left: 12px; }
+	.dossier.r { right: 12px; }
+	@keyframes dosin { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: none; } }
+	.dos-head { position: relative; flex: none; height: 88px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: flex-end; gap: 6px; padding: 0 16px 8px; border-top: 3px solid var(--tc); border-radius: 17px 17px 0 0;
+		background-size: cover; background-position: 50% 26%; }
+	.dos-head b { font-weight: 400; font-size: 30px; line-height: .9; color: var(--ink); text-shadow: 0 2px 6px #000; }
+	.dos-head span { display: flex; align-items: center; gap: 7px; font-size: 16px; color: var(--ink); text-shadow: 0 1px 3px #000; }
+	.dx, .cvx { display: grid; place-items: center; padding: 0; border-radius: 50%; color: var(--ink-2); background: rgba(3,11,21,.6); border: 1px solid rgba(255,255,255,.22); cursor: pointer; }
+	.dx { position: absolute; right: 8px; top: 8px; width: 32px; height: 32px; }
+	.dx svg { width: 15px; height: 15px; }
+	.dos-body { display: flex; flex-direction: column; gap: 14px; padding: 12px 16px 16px; }
+	.dos-row { position: relative; display: flex; align-items: center; gap: 10px; }
+	.dossier .dcount.discwrap { position: static; }
+	.dossier .discpop { left: 0; right: 0; bottom: auto; top: calc(100% + 8px); max-width: none; }
+	.sp { flex: 1; }
+	.lvbar { display: flex; gap: 3px; }
+	.lvbar i { width: 22px; height: 9px; border-radius: 2px; background: rgba(255,255,255,.12); }
+	.lvbar i.u { background: rgba(165,110,230,.4); }
+	.lvbar i.on { background: linear-gradient(180deg, #fff3cf, #d8b36a); }
+	.lvbar i.u.on { background: #b482f0; }
+	.dossier .slots { display: flex; justify-content: space-between; }
+	.dossier .cwell { width: 72px; height: 100px; }
+	.dcount { position: relative; display: inline-flex; align-items: center; gap: 6px; font-size: 20px; color: var(--ink-3); }
+	.dcount svg, .dbtn :global(svg) { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+	.dcount b { font-weight: 400; color: var(--ink); }
+	.dbtn { display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none; font: inherit; color: inherit; cursor: pointer; }
+	.dbtn:disabled { cursor: default; }
+	.dmark { width: 32px; height: 32px; padding: 0; border: 0; background: none; cursor: pointer; opacity: .3; filter: grayscale(1); }
+	.dmark.on { opacity: 1; filter: none; }
+	.dmark img { width: 100%; height: 100%; object-fit: contain; }
+	.dult { width: 36px; padding: 0; border: 0; border-radius: 4px; background: none; cursor: zoom-in; opacity: .45; filter: grayscale(.8); }
+	.dult.on { opacity: 1; filter: none; box-shadow: 0 0 0 2px #b482f0; }
+	.dult :global(.cardface) { display: block; width: 100%; border-radius: 4px; }
+	.dos-row.removed { flex-wrap: wrap; gap: 6px; padding-top: 12px; border-top: 1px solid var(--brass-faint); }
+	.dos-row.removed .rmini { width: 36px; opacity: .6; filter: grayscale(.7); }
+
+	/* ── shared small parts ── */
+	.gauges { display: flex; gap: 5px; }
+	.dossier .gauges { justify-content: space-between; padding-bottom: 6px; }
+	.gauge { position: relative; flex: none; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: rgba(2,9,18,.6); box-shadow: inset 0 2px 5px rgba(0,0,0,.6); }
+	.gauge img { width: 23px; height: 23px; object-fit: contain; opacity: .38; }
+	.gauge.on { box-shadow: inset 0 2px 5px rgba(0,0,0,.6), 0 0 0 1px var(--brass); }
+	.gauge.on img { opacity: 1; }
+	.gauge b { position: absolute; left: 50%; top: 100%; margin-top: -6px; transform: translateX(-50%); padding: 1px 5px 0; border-radius: 8px; font-weight: 400; font-size: 12px; line-height: 14px; white-space: nowrap;
+		color: var(--ink-dark); background: var(--brassfill); border: 1px solid #05101c; }
+	.purse { display: inline-flex; align-items: center; gap: 3px; height: 28px; box-sizing: border-box; padding: 0 3px; border-radius: 14px; background: #06182a; border: 1px solid var(--brass-line); pointer-events: auto; }
+	.pm { width: 20px; height: 20px; padding: 0; border: 0; border-radius: 50%; display: grid; place-items: center; font-size: 16px; line-height: 1; color: var(--ink-2); background: rgba(255,255,255,.08); cursor: pointer; }
+	.pm:hover { background: rgba(255,255,255,.18); color: var(--ink); }
+	.gcoin { display: inline-grid; place-items: center; flex: none; min-width: 22px; height: 22px; box-sizing: border-box; padding: 0 4px; border-radius: 11px; font-size: 14px; color: #4a3206;
+		background: radial-gradient(circle at 35% 30%, #fff1b8, #e8b64a 55%, #a87716); box-shadow: inset 0 0 0 1.5px rgba(120,80,10,.7); font-variant-numeric: tabular-nums; }
+	/* a card well: turn slots, discard, deck */
+	.cwell { position: relative; flex: none; display: grid; place-items: center; width: 60px; height: 84px; box-sizing: border-box; padding: 2px; border-radius: 6px; background: rgba(2,9,18,.66);
+		box-shadow: inset 0 2px 6px rgba(0,0,0,.8), 0 1px 0 rgba(255,255,255,.13); }
+	.cwell.now, .wslot.now .cwell { box-shadow: inset 0 2px 6px rgba(0,0,0,.8), var(--lit); }
+	.cwell :global(.cardface) { display: block; width: 100%; border-radius: 5%; }
+	/* a live effect: the card glows in its player's colour (still — no pulse) */
+	.cwell.fxlit { filter: drop-shadow(0 0 2px var(--fxc)) drop-shadow(0 0 7px var(--fxc)); }
+
+	/* ── the hand: rising from the console's top edge; the well behind it clips what is tucked ── */
+	.tray.dk { --cw: 150px; position: absolute; left: 50%; bottom: 110px; width: 900px; height: 320px; margin-left: -450px; z-index: 6; overflow: hidden; display: flex; align-items: flex-end; justify-content: center; }
+	.dk .hc { flex: none; width: var(--cw); margin: 0 -13px; padding: 0; border: 0; background: none; cursor: pointer; pointer-events: auto; transform-origin: bottom center;
+		transform: translateY(var(--y)) rotate(var(--rot)); transition: transform .18s ease-out; }
+	.dk .hc :global(.cardface) { display: block; width: 100%; border-radius: 6%; box-shadow: 0 0 0 1px #05101c; }
+	.dk.spread .hc { flex: 0 1 var(--cw); min-width: 0; margin: 0 4px; }
+	/* at rest only the tops show: initiative and name */
+	.dk.retracted .hc, .dk.retracted .hc:hover { transform: translateY(calc(var(--cw) * 1.396 - 42px + var(--y))) rotate(var(--rot)); }
+	/* raised: the card under the pointer straightens and grows to reading size */
+	.dk .hc:hover { transform: translateY(-6px) scale(1.42); z-index: 5; }
+	/* armed (one click): it stands clear with a brass edge, and the action button says Commit */
+	.dk .hc.armed { transform: translateY(-16px); z-index: 4; }
+	.dk .hc.armed:hover { transform: translateY(-6px) scale(1.42); z-index: 5; }
+	.dk.retracted .hc.armed, .dk.retracted .hc.armed:hover { transform: translateY(calc(var(--cw) * 1.396 - 150px)); }
+	.dk .hc.armed :global(.cardface) { box-shadow: var(--lit); }
+
+	/* ── the console ── */
+	.console { position: absolute; left: 50%; bottom: 12px; width: 1180px; height: 112px; margin-left: -590px; z-index: 7; }
+	.hull { position: absolute; left: 0; right: 0; bottom: 0; height: 100px; box-sizing: border-box; display: flex; align-items: center; justify-content: space-between; padding: 0 132px 0 136px; border-radius: 50px;
+		pointer-events: auto; background: var(--hull); border: 1px solid var(--brass); box-shadow: 0 10px 28px rgba(0,6,14,.55), inset 0 1px 0 rgba(255,255,255,.1); }
+	.hull .div { flex: none; width: 1px; height: 60px; background: var(--brass-faint); }
+	.hull .slots { display: flex; align-items: center; gap: 8px; }
+	.wslot { position: relative; flex: none; padding: 0; border: 0; background: none; cursor: pointer; }
+	.wslot.pile { margin-left: 10px; }
+	.wslot.pile button.well { border: 0; cursor: pointer; }
+	.cwell.empty { color: var(--ink-3); }
+	.cwell.empty :global(svg) { width: 24px; height: 24px; }
+	.cwell .num, .tools .radbtn b, .tools .tokct { position: absolute; right: -6px; top: -6px; min-width: 18px; height: 18px; box-sizing: border-box; padding: 0 4px; border-radius: 9px; display: grid; place-items: center;
+		font-weight: 400; font-size: 12px; line-height: 1; color: var(--ink-dark); background: var(--brass); border: 1px solid #06182a; }
+	.tools .radbtn b.nil { display: none; }
+	.cwell.cback { overflow: hidden; background: linear-gradient(180deg, #2c333f 0 13%, #f4efe3 13% 87%, #2c333f 87%); box-shadow: 0 0 0 1px #05101c, 3px 3px 0 -1px #b9b09c, 3px 3px 0 0 #05101c; }
+	.cwell.cback img { width: 78%; object-fit: contain; }
+	/* a level-up is waiting: the deck is lit (the action button carries the pulse) */
+	.wslot.deck.lvup .cwell { box-shadow: var(--lit); }
+	/* your revealed card names a lingering effect: open the card to switch it on */
+	.fxstar { position: absolute; right: -7px; top: -7px; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-size: 12px; line-height: 1; pointer-events: none;
+		color: var(--ink-dark); background: var(--brassfill); border: 1.5px solid #06182a; }
+	.dockhand { flex: none; width: 150px; height: 58px; display: flex; align-items: flex-end; justify-content: center; }
+	/* tools: radius · ping · tokens · hand */
+	.tools { flex: none; display: grid; grid-template-columns: repeat(2, 36px); gap: 6px; }
+	.hbtn, .tools .radbtn, .tools .tokbtn { position: relative; width: 36px; height: 36px; box-sizing: border-box; padding: 0; border-radius: 50%; display: grid; place-items: center; gap: 0; cursor: pointer;
+		color: var(--brass-hi); background: radial-gradient(circle at 50% 28%, #1c4469, #0a2038 72%); border: 1px solid var(--brass-line); }
+	.hbtn svg, .tools .radbtn svg { width: 18px; height: 18px; }
+	.hbtn.on, .tools .radbtn.on, .tools .tokbtn.on { color: var(--ink-dark); background: var(--brassfill); }
+	.hbtn:hover, .tools .radbtn:hover, .tools .tokbtn:hover { border-color: var(--brass); }
+	.tools .tokbtn:disabled { opacity: .45; cursor: not-allowed; }
+	.tools .tokbtn img, .tools .tokbtn .ltrdisc { width: 22px; height: 22px; }
+	.tools .tokglyph { width: auto; height: auto; font-size: 17px; color: inherit; }
+	.tools .radpop, .tools .tokdrawer { left: 50%; margin-left: -116px; bottom: calc(100% + 14px); background: #071a2d; border-color: var(--brass-line); }
+	.tools .radpop { margin-left: -98px; }
+	.tools .tokdrawer { bottom: calc(100% + 56px); } /* the tokens tool is in the lower row */
+	.tools .toklbl, .tools .tokhint { display: none; }
+	.tools .tokfoot { justify-content: flex-end; }
+	/* left: you */
+	.medal { position: absolute; left: 0; bottom: 0; width: 112px; height: 112px; padding: 0; border: 0; border-radius: 50%; display: grid; place-items: center; cursor: pointer; pointer-events: auto;
+		background: radial-gradient(circle at 50% 35%, #173a5c, #06182a 70%); box-shadow: 0 0 0 1px var(--brass), 0 6px 18px rgba(0,0,0,.55); }
+	.medal svg { position: absolute; inset: 0; width: 100%; height: 100%; stroke-width: 5; }
+	.medal path { stroke: rgba(255,255,255,.2); }
+	.medal path.u { stroke: rgba(165,110,230,.7); }
+	.medal path.on { stroke: #f1d795; }
+	.medal path.u.on { stroke: #c79bff; }
+	.console > .purse { position: absolute; left: 56px; bottom: -9px; transform: translateX(-50%); }
+	/* right: the one action. Brass = go; quiet = a way back; dim = waiting */
+	.dact { position: absolute; right: 0; bottom: 0; width: 112px; height: 112px; }
+	.order { position: relative; width: 112px; height: 112px; padding: 0; border: 0; border-radius: 50%; display: grid; place-items: center; cursor: pointer; pointer-events: auto;
+		background: #06182a; box-shadow: 0 0 0 1px var(--brass-line), 0 6px 18px rgba(0,0,0,.55); }
+	.order:disabled { cursor: default; }
+	.oface { width: 96px; height: 96px; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-align: center; line-height: .96; letter-spacing: .04em; text-transform: uppercase;
+		color: var(--brass-lo); background: radial-gradient(circle at 50% 30%, #173a5c, #06182a 72%); box-shadow: inset 0 0 0 1px var(--brass-faint); }
+	.oface small { max-width: 84px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; letter-spacing: .02em; text-transform: none; color: var(--ink-2); }
+	.order.quiet .oface { color: var(--brass-hi); box-shadow: inset 0 0 0 1px var(--brass-line); }
+	.order.go { box-shadow: 0 0 0 1px var(--brass), 0 6px 18px rgba(0,0,0,.55), 0 0 24px rgba(244,223,168,.4); }
+	.order.go .oface { color: var(--ink-dark); background: radial-gradient(circle at 50% 22%, #fff6da 0%, #f1d795 30%, #d8b36a 62%, #a8853f 100%); box-shadow: inset 0 2px 0 rgba(255,255,255,.65), inset 0 -5px 10px rgba(110,80,20,.5); }
+	.order.go:hover .oface { background: radial-gradient(circle at 50% 22%, #fffaea 0%, #f6e2ad 34%, #e2c07a 66%, #b08c45 100%); }
+	/* your move: one slow ring (a still glow whose opacity breathes) */
+	.order.pulse::after { content: ''; position: absolute; inset: -5px; border-radius: 50%; pointer-events: none; box-shadow: 0 0 0 2px #f4dfa8, 0 0 16px rgba(244,223,168,.7); animation: orderpulse 2s ease-in-out infinite; }
+	@keyframes orderpulse { 0%, 100% { opacity: .2; } 50% { opacity: 1; } }
+	.oalt { position: absolute; left: 50%; bottom: 120px; transform: translateX(-50%); height: 34px; padding: 0 16px; border-radius: 17px; font-size: 16px; white-space: nowrap; cursor: pointer; pointer-events: auto;
+		color: var(--danger-hi); background: #2a0f16; border: 1px solid rgba(229,72,77,.7); }
+
+	/* ── buttons of the card views ── */
+	.hb { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 52px; padding: 0 26px; border-radius: 12px; font-size: 21px; line-height: 1; white-space: nowrap; cursor: pointer;
+		color: var(--ink); background: rgba(255,255,255,.05); border: 1px solid var(--brass-line); }
+	.hb:hover { border-color: var(--brass); }
+	.hb.sm { height: 42px; padding: 0 16px; border-radius: 10px; font-size: 17px; }
+	.hb.go { color: var(--ink-dark); background: var(--brassfill); border-color: #8a6a2c; }
+	.hb.bad { color: var(--danger-hi); background: rgba(229,72,77,.1); border-color: rgba(229,72,77,.6); }
+	.pvbar .hb.go { min-width: 240px; }
+	.pvbar .hb { box-shadow: none; text-shadow: none; font-weight: 400; } /* (they keep the old `.act` class as a hook for scripts) */
+
+	/* ── the card view (a hand card, or one from your discard) ── */
+	.cardview { position: fixed; inset: 0; z-index: 31; zoom: var(--uis, 1); display: grid; place-items: center; background: rgba(3,11,21,.84); animation: curtainIn .15s ease; }
+	.cv-col { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+	.cv-main { position: relative; }
+	.cardview .pvcard { width: 380px; box-shadow: 0 0 0 1px #05101c, 0 18px 44px rgba(0,0,0,.6); }
+	.cardview .pvbar { position: static; zoom: 1; gap: 12px; align-items: center; pointer-events: auto; min-height: 52px; }
+	.dials { position: absolute; left: calc(100% + 48px); top: 56px; display: flex; flex-direction: column; gap: 24px; }
+	.dial { display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: 14px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2); }
+	.dface { position: relative; width: 84px; height: 84px; border-radius: 50%; display: grid; place-items: center; font-size: 40px; letter-spacing: 0; color: var(--ink);
+		background: radial-gradient(circle at 50% 30%, #16344f, #061423 75%); border: 1px solid var(--brass-hi); }
+	.dface img { position: absolute; left: -10px; top: -8px; width: 38px; height: 38px; object-fit: contain; }
+	.dface small { position: absolute; right: -8px; bottom: 2px; padding: 3px 7px 2px; border-radius: 10px; font-size: 14px; color: var(--ink-dark); background: var(--brassfill); border: 1px solid #05101c; }
+	.pager { display: flex; align-items: flex-end; gap: 8px; height: 68px; }
+	.pager button { width: 42px; padding: 0; border: 0; border-radius: 4px; background: none; cursor: pointer; opacity: .55; }
+	.pager button.on { width: 48px; opacity: 1; box-shadow: var(--lit); }
+	.pager :global(.cardface) { display: block; width: 100%; border-radius: 4px; }
+	.cvx { position: absolute; right: 20px; top: 18px; width: 44px; height: 44px; }
+	.cvx svg { width: 18px; height: 18px; }
+
+	/* ── examine (any other card) on desktop: Tide scrim, the played card's effect row ── */
+	.scrim2.desk { background: rgba(3,11,21,.84); }
+	.scrim2.desk .bigcard { width: 380px; filter: none; }
+	.scrim2.desk .bigcard :global(.cardface) { box-shadow: 0 0 0 1px #05101c, 0 18px 44px rgba(0,0,0,.6); }
+	.scrim2.desk .bigcard.fxon :global(.cardface) { box-shadow: 0 0 0 2px var(--fxc), 0 0 26px var(--fxc), 0 18px 44px rgba(0,0,0,.6); }
+	.exacts { display: flex; align-items: center; justify-content: center; gap: 10px; }
+	.exacts .fxdurs { gap: 8px; }
+	.exlbl { font-size: 14px; letter-spacing: .14em; text-transform: uppercase; color: var(--brass); }
+	.scrim2.desk .pvnav { color: var(--brass-hi); background: rgba(3,11,21,.6); border-color: var(--brass-line); }
+
+	/* ── the reveal on desktop: Tide colours ── */
+	.curtain.desk { background: radial-gradient(120% 90% at 50% 40%, rgba(10,34,56,.93), rgba(3,11,21,.97)); }
+	.curtain.desk .curtain-title { color: #f4dfa8; text-shadow: 0 2px 12px rgba(0,0,0,.7); }
+
+	@media (prefers-reduced-motion: reduce) {
+		.order.pulse::after, .dossier { animation: none; }
+		.dk .hc { transition: none; }
+	}
 
 	/* ═══════════ phone layout (GameView sets `mobile` at ≤760px) ═══════════
 	   top bar 44px (GameView) · player strip 72px · board · hand tips · dash 68px.
