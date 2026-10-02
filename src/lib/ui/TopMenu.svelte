@@ -69,7 +69,7 @@
 					{#if s.hero}<PlayerIcon hero={s.hero} team={s.team ?? 'orange'} color={s.color} size="38px" />{:else}<span class="nohero"></span>{/if}
 					<span class="who"><b>{s.name || 'Open'}</b><small>{s.hero ? heroById(s.hero)?.name ?? '' : `Seat ${s.seat + 1}`}</small></span>
 					{#if s.id && s.id === hostId}<span class="tag">Host</span>{/if}
-					{#if host && s.present && s.id !== me}<button class="pbtn bad" on:click={() => onKick(s.id)}>Kick</button>{/if}
+					{#if host && s.present && s.id !== me}<button class="pbtn x kick" on:click={() => onKick(s.id)} title="Kick" aria-label="Kick {s.name}"><TopIcon name="x" /></button>{/if}
 					{#if mySeat < 0 && !s.present}
 						{#if myRequestSeat === s.seat}<span class="tag">Asked</span>
 						{:else}<button class="pbtn" on:click={() => onRequestSeat(s.seat)} disabled={myRequestSeat >= 0}>Sit</button>{/if}
@@ -151,6 +151,7 @@
 	.who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
 	.who b { font-weight: 400; font-size: 18px; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 	.who small { font-size: 14px; line-height: 1; color: var(--ink-2); white-space: nowrap; }
+	.kick:hover { color: var(--danger-hi); }
 	.nohero { flex: none; width: 40px; height: 40px; border-radius: 50%; border: 1.5px dashed rgba(255, 255, 255, 0.25); }
 	.here { flex: none; width: 10px; height: 10px; border-radius: 50%; background: #2ecc71; }
 	.here.off { background: #f0a35a; }
