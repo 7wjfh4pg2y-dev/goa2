@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { afterUpdate, onDestroy } from 'svelte';
+	import { onDestroy } from 'svelte';
 	import { readable, type Readable } from 'svelte/store';
 	import BoardCanvas from '$lib/BoardCanvas.svelte';
 	import CardLayer from '$lib/CardLayer.svelte';
@@ -7,6 +7,12 @@
 	import BattleSplash from '$lib/BattleSplash.svelte';
 	import PushSplash from '$lib/PushSplash.svelte';
 	import VictorySplash from '$lib/VictorySplash.svelte';
+	// desktop / tablet HUD in the Tide look: scoreline, log tab, menu (the phone keeps its own bars)
+	import TopScore from '$lib/ui/TopScore.svelte';
+	import TopLog from '$lib/ui/TopLog.svelte';
+	import TopMenu from '$lib/ui/TopMenu.svelte';
+	import TopIcon from '$lib/ui/TopIcon.svelte';
+	import '$lib/ui/top-game.css';
 	import { heroById, heroLogo } from '$lib/heroes';
 	import { teamName, teamAdj, aMinion, placeName } from '$lib/teams';
 	import { createRecorder } from '$lib/recorder';
@@ -47,7 +53,8 @@
 
 	const status = session.status;
 	const canUndo = session.canUndo;
-	let logOpen = true;
+	let logOpen = false; // desktop log: a slim tab until opened
+	const doUndo = () => session.undo();
 	$: lifeMax = $ms.lifeMax || ($ms.lifeTok?.orange?.length ?? 8);
 
 	// real game art for the HUD (life-counter medallions + tie-breaker token)
@@ -122,7 +129,8 @@
 		const id = owner ? ('id' in owner ? owner.id : (owner as Player).id) : '';
 		const nm = owner ? ('name' in owner ? owner.name : (owner as Player).name) : '';
 		const hero = id ? ($ms.cards?.[id]?.hero ?? $ms.draft?.picks?.[id] ?? '') : '';
-		return { seat, id, name: nm, hero, team: teamForSeat(seat, $ms.seats), present: !!id && presentIds.has(id) };
+		return { seat, id, name: nm, hero, team: teamForSeat(seat, $ms.seats), present: !!id && presentIds.has(id),
+			color: colorHex($ms.pieces?.[id]?.color ?? $players.find((p) => p.id === id)?.color ?? '') };
 	});
 	function kickSeat(id: string) { if (iAmHost && id) session.kick(id); }
 	function requestSeat(seat: number) { session.requestSeat(seat); }
@@ -241,14 +249,12 @@
 	}
 
 	// ── minion spawn (temporary manual controls) + piece delete ────────────────
-	let spawnTeam: Team | null = null; // which team's spawn menu is open
 	const MINION_ROLES: Array<'melee' | 'ranged' | 'heavy'> = ['melee', 'ranged', 'heavy'];
 	// pick a role → arm placement; the next hex tap drops the minion there.
 	let pendingSpawn: { team: Team; role: 'melee' | 'ranged' | 'heavy' } | null = null;
 	function armSpawn(team: Team | null, role: 'melee' | 'ranged' | 'heavy') {
 		if (!team) return;
 		pendingSpawn = { team, role };
-		spawnTeam = null;
 	}
 	// a token / marker picked off the dash shelf, waiting for its hex
 	let pendingToken: ArmToken | null = null;
@@ -432,25 +438,31 @@
 	}
 	// only Min (the mine's owner) and the host may flip a mine
 	$: canFlip = !!selPiece?.token && MINES.has(selPiece.token) && (selPiece.owner === clientId || iAmHost);
-	// desktop: the toolbar floats just above the selected piece (not across the board at the top)
+	// desktop: the toolbar floats just above the selected piece. It is placed when the piece is selected and
+	// re-placed when something could have moved it — the pieces, the window, any input that pans / zooms / turns
+	// the board — then frame by frame only for as long as it is still moving. (It used to be read every frame
+	// while a piece was selected; a running rAF loop makes the page produce every frame.)
 	let tipPos: { x: number; y: number } | null = null;
 	let tipRaf = 0;
+	let tipFor: string | null = null;
+	function placeTip() {
+		tipRaf = 0;
+		const p = tipId && !mobile ? board?.clientPos(tipId) : null;
+		const x = p ? Math.round(p.x) : null, y = p ? Math.round(p.y - p.r - 8) : null;
+		if (x == null || y == null) { if (tipPos) tipPos = null; return; }
+		if (tipPos && tipPos.x === x && tipPos.y === y) return; // at rest
+		tipPos = { x, y };
+		tipRaf = requestAnimationFrame(placeTip); // it moved: look again next frame
+	}
+	const tipNudge = () => { if (tipId && !mobile && !tipRaf) tipRaf = requestAnimationFrame(placeTip); };
 	function trackTip() {
 		if (typeof window === 'undefined') return;
-		cancelAnimationFrame(tipRaf);
-		if (!tipId || mobile) { tipPos = null; return; }
-		const loop = () => {
-			const p = tipId ? board?.clientPos(tipId) : null;
-			// only touch the toolbar when the piece actually moved (not 60 re-renders a second)
-			const x = p ? Math.round(p.x) : null, y = p ? Math.round(p.y - p.r - 8) : null;
-			if (x == null || y == null) { if (tipPos) tipPos = null; }
-			else if (!tipPos || tipPos.x !== x || tipPos.y !== y) tipPos = { x, y };
-			if (tipId) tipRaf = requestAnimationFrame(loop);
-		};
-		loop();
+		if (!tipId || mobile) { cancelAnimationFrame(tipRaf); tipRaf = 0; tipPos = null; tipFor = null; return; }
+		if (tipFor !== tipId) { tipFor = tipId; cancelAnimationFrame(tipRaf); placeTip(); } // just selected: at once
+		else tipNudge();
 	}
 	$: tipId = actId && confirmKind ? actId : selPieceId;
-	$: tipId, mobile, trackTip();
+	$: tipId, mobile, $ms.pieces, gvw, gvh, trackTip();
 	onDestroy(() => { if (typeof window !== 'undefined') cancelAnimationFrame(tipRaf); });
 	// hero / minion names read in their team colour (a lighter tint so they stay legible)
 	const teamText = (p: { kind?: string; role?: string; team: string } | null | undefined) =>
@@ -540,17 +552,22 @@
 		if (viewsOpen && !(e.target as Element | null)?.closest?.('.viewswrap, .mviews')) viewsOpen = false;
 	}
 	$: log = $ms.log ?? [];
-	const hhmm = (t: number) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-	// keep the activity log pinned to the most recent entry
-	let logEl: HTMLDivElement | undefined;
-	let lastLogLen = -1, lastOpen = false;
-	afterUpdate(() => {
-		if (logEl && (log.length !== lastLogLen || logOpen !== lastOpen)) {
-			logEl.scrollTop = logEl.scrollHeight;
-			lastLogLen = log.length; lastOpen = logOpen;
-		}
-	});
+	// ── desktop / tablet: top bar (☰ · scoreline · view), log tab, prompt line, piece toolbar ──
+	let viewOpen = false;
+	// the island's resting view fits between the top bar (with the initiative rail under it) and the bottom console
+	$: boardInset = mobile ? null : { t: 118 * lay.s, b: 132 * lay.s };
+	// once the cards are revealed the initiative rail sits under the scoreline, so the prompts drop below it
+	$: railOn = $ms.revealAt != null && !$ms.battlePhase;
+	// the log's "effects in play": every hero with a live card effect
+	$: liveFx = abilityRows.flatMap((r) => r.fx ? [{ id: r.id, name: `${r.name} · ${r.fx.name}`, when: FX_SHORT[effectLabel(r.fx, $ms.round, $ms.turn)],
+		dots: FX_COLORS.filter(([c]) => r.lit.has(c)).map(([, hex]) => hex) }] : []);
+	function readFx(id: string) { const r = abilityRows.find((x) => x.id === id); if (r?.fx) cardLayer?.showCard(r.fx.hero, r.fx.idx, r.fx.pid, r.all); }
+	// the toolbar holds actions only (the piece's name is its hover label), so it shows only when there is one
+	$: toolHas = !!selPiece && (canFlip || selImmune || canBattleSel || ownHeroSel
+		|| (canDefeatSel && (selPiece.kind === 'hero' || !selImmune || iAmHost))
+		|| (canRemoveSel && selPiece.kind !== 'hero' && (!selImmune || iAmHost)));
+	$: tipStyle = tipPos ? `left:${tipPos.x / lay.s}px; top:${tipPos.y / lay.s}px` : '';
 </script>
 
 <!-- battle zone + host push override (desktop HUD and the phone waves sheet) -->
@@ -567,10 +584,12 @@
 	</div>
 {/snippet}
 
-<svelte:window on:keydown={(e) => { if (e.key !== 'Escape') return; if (confirmLeave) confirmLeave = false; else { pendingSpawn = null; pendingToken = null; pingArmed = false; if (clearing) cancelClear(); } }} on:pointerdown={(e) => { viewsOutside(e); }} bind:innerWidth={gvw} bind:innerHeight={gvh} />
+<svelte:window on:keydown={(e) => { if (e.key !== 'Escape') return; if (confirmLeave) confirmLeave = false; else if (manageOpen) manageOpen = false; else { pendingSpawn = null; pendingToken = null; pingArmed = false; if (clearing) cancelClear(); } }} on:pointerdown={(e) => { viewsOutside(e); }} on:pointermove={tipNudge} on:wheel|passive={tipNudge} on:click={tipNudge} bind:innerWidth={gvw} bind:innerHeight={gvh} />
 
-<div class="gamewrap" class:sea={boardLook === 'island'} class:mob={mobile} class:dashfull={!mobile && lay.underHud} style={mobile ? '' : layoutVars(lay)}>
-	{#if $ms.wonBy}
+<div class="gamewrap" class:sea={boardLook === 'island'} class:mob={mobile} style={mobile ? '' : layoutVars(lay)}>
+	{#if !mobile}
+		<!-- desktop / tablet: the prompt line lives in the top layer (below) -->
+	{:else if $ms.wonBy}
 		<button class="placehint won" on:click={() => (victoryClosed = false)} title="Show the victory screen again">🏆 {teamName($ms.wonBy.team)} win — {$ms.wonBy.reason}</button>
 	{:else if clearing}
 		<!-- Clear action: choose which of the tokens next to your hero leave the board -->
@@ -610,7 +629,7 @@
 	{:else if myDefeat && !iCanRespawn && !pendingRespawn && !pendingToken}
 		<div class="placehint defeat"><span>Defeated — play a card on your next turn to respawn</span></div>
 	{/if}
-	{#if incoming}
+	{#if mobile && incoming}
 		<div class="atkask" role="alertdialog" aria-label="You are being attacked">
 			<span><b>{whoOf(incoming.by)}</b> is attacking. Defend?</span>
 			<span class="atkbtns">
@@ -619,7 +638,7 @@
 			</span>
 		</div>
 	{/if}
-	{#if pendingToken || pendingRespawn || (mobile && pendingSpawn)}
+	{#if mobile && (pendingToken || pendingRespawn || pendingSpawn)}
 		<div class="placehint">
 			{#if pendingRespawn}
 				<span>Tap a glowing spawn point in your base</span>
@@ -635,17 +654,23 @@
 		<VictorySplash team={$ms.wonBy.team} reason={$ms.wonBy.reason} myTeam={mySeat >= 0 && mySeat < $ms.seats ? myTeam : null} {mobile} onClose={() => (victoryClosed = true)} round={$ms.round} />
 	{/if}
 	{#if askLifeEnd && lifeOut}
+		<div class="dlgs" class:tide={!mobile} class:top-dlg={!mobile}>
 		<div class="modal-scrim" role="presentation">
 			<div class="modal" role="dialog" aria-modal="true" tabindex="-1">
-				<h3>The {teamName(lifeOut)} have no Life Tokens left</h3>
-				<p>End the game? <b style:color={lifeOut === 'orange' ? '#8cc0ff' : '#ffb27a'}>{teamName(lifeOut === 'orange' ? 'blue' : 'orange')}</b> win.</p>
+				{#if mobile}
+					<h3>The {teamName(lifeOut)} have no Life Tokens left</h3>
+					<p>End the game? <b style:color={lifeOut === 'orange' ? '#8cc0ff' : '#ffb27a'}>{teamName(lifeOut === 'orange' ? 'blue' : 'orange')}</b> win.</p>
+				{:else}
+					<h3>{teamName(lifeOut)} are out of Life</h3>
+				{/if}
 				<div class="mrow">
 					<button class="mcancel" on:click={() => (lifeDismissed = lifeOut ?? '')}>Not yet</button>
-					<button class="mleave" on:click={endOnLife}>🏆 End the game</button>
+					<button class="mleave win" on:click={endOnLife}>{mobile ? '🏆 End the game' : 'End the game'}</button>
 				</div>
 			</div>
 		</div>
-	{:else if lifeOut && !iAmHost}
+		</div>
+	{:else if mobile && lifeOut && !iAmHost}
 		<div class="placehint lifeout">The {teamName(lifeOut)} have no Life Tokens left — waiting for the host to end the game</div>
 	{/if}
 	<BattleSplash news={battleNews} {mobile} myTeam={viewTeam} onDone={() => (battleDoneId = battleNews?.id ?? null)} />
@@ -655,14 +680,16 @@
 	<div class="ocean"></div>
 	<!-- on a phone the board sits between the top bar + player strip and the dash -->
 	<div class="boardarea" class:mob={mobile}>
-	<BoardCanvas bind:this={board} map={$ms.map ?? {}} look={boardLook} {glowZone} effects={boardFx} rotation={orientation} interactive={true} {placing} {placeGhost} holdColor={myHoldColor} onCancelPlace={cancelPlace} {areas} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} pings={boardPings} onPing={doPing} {pingArmed} />
+	<BoardCanvas bind:this={board} map={$ms.map ?? {}} look={boardLook} {glowZone} effects={boardFx} inset={boardInset} rotation={orientation} interactive={true} {placing} {placeGhost} holdColor={myHoldColor} onCancelPlace={cancelPlace} {areas} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} pings={boardPings} onPing={doPing} {pingArmed} />
 	</div>
 
 	<CardLayer bind:this={cardLayer} {mobile} {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} onRespawn={placeMyHero} onEnter={placeMyHero} onArmToken={armToken} holdingToken={!!pendingToken} {pingArmed} onPing={pingButton} bind:previewId />
 
-	<!-- selected minion/token: offer delete (heroes aren't deletable) -->
-	{#if confirmKind && actPiece}
-		<div class="pietool confirm" class:anchored={!!tipPos} style={tipPos ? `left:${tipPos.x / lay.s}px; top:${tipPos.y / lay.s}px` : ''}>
+	<!-- phone: the selected piece's toolbar, under the player strip -->
+	{#if !mobile}
+		<!-- desktop / tablet: the toolbar lives in the top layer (below) -->
+	{:else if confirmKind && actPiece}
+		<div class="pietool confirm">
 			{#if (confirmKind === 'attack' || confirmKind === 'defeat') && attackSum}
 				<span class="pietxt nc">{confirmKind === 'attack' ? 'Attack' : 'Defeat'} <b style:color={teamText(actPiece)}>{whoOf(actPiece.id)}</b>?</span>
 				<span class="rw" title="You get {attackSum.coins}{attackSum.assists.length ? `, each teammate ${attackSum.assist} assist` : ''}">
@@ -681,7 +708,7 @@
 			<button class="piex" on:click={closeConfirm} aria-label="Cancel">✕</button>
 		</div>
 	{:else if selPiece && (selPiece.role || selPiece.token || (selPiece.kind === 'hero' && (canDefeatSel || ownHeroSel)))}
-		<div class="pietool" class:anchored={!!tipPos} style={tipPos ? `left:${tipPos.x / lay.s}px; top:${tipPos.y / lay.s}px` : ''}>
+		<div class="pietool">
 			<span class="pietxt" style:color={teamText(selPiece)}>{selLabel}</span>
 			{#if canFlip}
 				<button class="pieflip" on:click={flipMine}>{selPiece.faceDown ? 'Flip — reveal' : 'Flip face down'}</button>
@@ -703,15 +730,16 @@
 		</div>
 	{/if}
 
+	<div class="dlgs" class:tide={!mobile} class:top-dlg={!mobile}>
 	{#if pickKiller}
 		<div class="modal-scrim" on:click={() => (pickKiller = false)} on:keydown={() => {}} role="presentation">
 			<div class="modal" on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" tabindex="-1">
 				<h3>Who defeated you?</h3>
-				<p>They get the reward, their teammates the assist coins, and you respawn as usual.</p>
+				{#if mobile}<p>They get the reward, their teammates the assist coins, and you respawn as usual.</p>{/if}
 				<div class="ropts">
 					{#each killers as k (k)}
 						{@const sum = heroDefeatSummary($ms, k, clientId)}
-						<button class="ropt" on:click={() => selfDefeat(k)}><b style:color={teamText({ kind: 'hero', team: teamOf($ms, k) ?? '' })}>{whoOf(k)}</b><small>+{sum.coins} coins{sum.assists.length ? ` · teammates +${sum.assist}` : ''} · the {teamName(sum.team)} lose {sum.lives} Life</small></button>
+						<button class="ropt" on:click={() => selfDefeat(k)}><b style:color={teamText({ kind: 'hero', team: teamOf($ms, k) ?? '' })}>{whoOf(k)}</b>{#if mobile}<small>+{sum.coins} coins{sum.assists.length ? ` · teammates +${sum.assist}` : ''} · the {teamName(sum.team)} lose {sum.lives} Life</small>{/if}</button>
 					{/each}
 					{#if !killers.length}<p class="rnone">No enemy heroes in the game.</p>{/if}
 				</div>
@@ -725,7 +753,7 @@
 			<div class="modal" on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" tabindex="-1">
 				{#if pickHeroFor}
 					<h3>Who moved through it?</h3>
-					<p>The mine is revealed and removed. A Blast makes that hero discard a card, if able.</p>
+					{#if mobile}<p>The mine is revealed and removed. A Blast makes that hero discard a card, if able.</p>{/if}
 					<div class="ropts">
 						{#each enemyHeroes as h (h.id)}
 							<button class="ropt" on:click={() => pickHeroFor && doRemove(pickHeroFor, h.id)}>{heroById(h.hero ?? '')?.name ?? 'Hero'}</button>
@@ -734,7 +762,7 @@
 					</div>
 					<div class="mrow"><button class="mcancel" on:click={() => (pickHeroFor = null)}>Back</button></div>
 				{:else}
-					<h3>Remove the {actLabel}?</h3>
+					<h3>Remove the {mobile ? actLabel : actLabel.replace(' (face down)', '')}?</h3>
 					<div class="ropts">
 						{#each removeOpts as o (o.id)}
 							<button class="ropt" class:plain={o.id === 'remove'} on:click={() => doRemove(o)}><b>{o.label}</b>{#if o.hint}<small>{o.hint}</small>{/if}</button>
@@ -750,7 +778,7 @@
 		<div class="modal-scrim" on:click={() => (confirmLeave = false)} on:keydown={() => {}} role="presentation">
 			<div class="modal" on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" tabindex="-1">
 				<h3>Leave the game?</h3>
-				<p>You'll drop back to the menu. You can rejoin with the room code while the game is live.</p>
+				{#if mobile}<p>You'll drop back to the menu. You can rejoin with the room code while the game is live.</p>{/if}
 				<div class="mrow">
 					<button class="mcancel" on:click={() => (confirmLeave = false)}>Stay</button>
 					<button class="mleave" on:click={onLeave}>Leave</button>
@@ -758,9 +786,9 @@
 			</div>
 		</div>
 	{/if}
+	</div>
 
-
-	{#if manageOpen}
+	{#if manageOpen && mobile}
 		<div class="modal-scrim" on:click={() => (manageOpen = false)} on:keydown={(e) => e.key === 'Escape' && (manageOpen = false)} role="presentation">
 			<div class="managepanel" on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" tabindex="-1">
 				<div class="mphead"><h3>Game Lobby</h3><button class="ix" on:click={() => (manageOpen = false)}>✕</button></div>
@@ -948,151 +976,123 @@
 			</div>
 		{/if}
 	{:else}
-	<!-- game HUD: right-side panel -->
-	<div class="hud">
-		<div class="mapline">
-			<button class="exitbtn" on:click={() => (confirmLeave = true)} title="Leave game" aria-label="Leave game">⎋</button>
-			<div class="mapname" title={$ms.map?.name ?? 'Board'}>{$ms.map?.name ?? 'Board'}</div>
-		</div>
-		<!-- room code + connection, right under the map name -->
-		<div class="roomline">
-			<span class="rc">Room <b>{room}</b></span>
-			<span class="conn {$status}"><span class="cdot"></span>{connLabel($status)}</span>
-		</div>
-		<button class="managebtn" class:alert={iAmHost && seatRequests.length} on:click={() => (manageOpen = true)} title="Game Lobby — players, seats and requests">
-			👥 Game Lobby{#if iAmHost && seatRequests.length}<span class="reqbadge">{seatRequests.length}</span>{/if}
+	<!-- ───────── desktop / tablet: the top bar (☰ · scoreline · view), the log tab, the prompt line, the piece toolbar, the menu ─────────
+	     One layer in design px (zoomed by the UI scale). The roster chips either side of the scoreline, the
+	     initiative rail under it and the console at the bottom belong to CardLayer. -->
+	<div class="tide top">
+		<button class="hbtn menubtn" class:is-on={manageOpen} on:click={() => (manageOpen = !manageOpen)} title="Menu" aria-label="Menu">
+			<TopIcon name="menu" /><i class="dot {$status}"></i>{#if iAmHost && seatRequests.length}<b class="num">{seatRequests.length}</b>{/if}
 		</button>
-
-		<div class="hsec rt">
-			<!-- read-only: rounds/turns only advance through play (host's Next turn) -->
-			<div class="rline"><span class="rv">Round {$ms.round}</span></div>
-			<div class="rline"><span class="rv">Turn {$ms.turn}</span></div>
-		</div>
-
-		<div class="hsec">
-			<div class="slabel"><span>Waves</span><span class="cnt">{$ms.waves}</span></div>
-			<div class="wtoks">
-				{#each $ms.waveTok ?? [] as full, i}
-					<button class="wtok" class:dep={!full} class:flip={flips[`w${i}`]}
-						style="background-image:url({waveIcon})" on:click={() => toggleWave(i)}
-						title="Wave token — click to spend / restore"></button>
-				{/each}
+		<TopScore view={viewTeam} round={$ms.round} turn={$ms.turn} lane={$ms.lane ?? 1} life={$ms.life} lifeTok={$ms.lifeTok} waveTok={$ms.waveTok ?? []} tie={$ms.tieBreaker}
+			{flips} {tieFlip} {lifeArt} {tieArt} onLife={toggleLife} onWave={toggleWave} onTie={flipTie} />
+		<button class="hbtn viewbtn" class:is-on={viewOpen} on:click={() => (viewOpen = !viewOpen)} title="View" aria-label="View"><TopIcon name="compass" /></button>
+		{#if viewOpen}
+			<div class="viewcol">
+				<button class="hbtn" on:click={() => board?.reset()} title="Recentre" aria-label="Recentre"><TopIcon name="target" /></button>
+				<button class="hbtn" on:click={() => board?.rotateBy(-45)} title="Turn left" aria-label="Turn left"><TopIcon name="rotl" /></button>
+				<button class="hbtn" on:click={() => board?.rotateBy(45)} title="Turn right" aria-label="Turn right"><TopIcon name="rotr" /></button>
+				<button class="hbtn" on:click={() => board?.zoomBtn(1.2)} title="Zoom in" aria-label="Zoom in"><TopIcon name="plus" /></button>
+				<button class="hbtn" on:click={() => board?.zoomBtn(1 / 1.2)} title="Zoom out" aria-label="Zoom out"><TopIcon name="minus" /></button>
 			</div>
-			{@render laneCtl()}
-		</div>
+		{/if}
 
-		<!-- team Life: one token per starting Life; each toggles full ↔ spent -->
-		<div class="hsec life orange">
-			<div class="slabel"><span class="tn">Atlanteans</span><span class="tc">{$ms.life.orange}<small>/{lifeMax}</small></span></div>
-			<div class="tokens">
-				{#each $ms.lifeTok?.orange ?? [] as full, i}
-					<button class="ltok" class:dep={!full} class:flip={flips[`lorange${i}`]}
-						style="background-image:url({lifeArt('orange', full ? 'front' : 'back')})"
-						on:click={() => toggleLife('orange', i)} title="Atlantean Life token — click to spend / restore"></button>
-				{/each}
-			</div>
-		</div>
-		<div class="hsec life blue">
-			<div class="slabel"><span class="tn">Titans</span><span class="tc">{$ms.life.blue}<small>/{lifeMax}</small></span></div>
-			<div class="tokens">
-				{#each $ms.lifeTok?.blue ?? [] as full, i}
-					<button class="ltok" class:dep={!full} class:flip={flips[`lblue${i}`]}
-						style="background-image:url({lifeArt('blue', full ? 'front' : 'back')})"
-						on:click={() => toggleLife('blue', i)} title="Titan Life token — click to spend / restore"></button>
-				{/each}
-			</div>
-		</div>
+		<TopLog bind:open={logOpen} {log} fx={liveFx} undo={iAmHost ? doUndo : null} canUndo={$canUndo} onFx={readFx} />
 
-		<!-- temporary manual minion spawns (auto-waves WIP) -->
-		<div class="hsec">
-			<div class="slabel"><span>Spawn minion</span></div>
-			<div class="spawnrow">
-				<button class="spbtn orange" class:on={spawnTeam === 'orange'} on:click={() => (spawnTeam = spawnTeam === 'orange' ? null : 'orange')}>Atlanteans ▾</button>
-				<button class="spbtn blue" class:on={spawnTeam === 'blue'} on:click={() => (spawnTeam = spawnTeam === 'blue' ? null : 'blue')}>Titans ▾</button>
-			</div>
-			{#if spawnTeam}
-				<div class="spmenu {spawnTeam}">
-					{#each MINION_ROLES as role}
-						<button class="sprole" on:click={() => armSpawn(spawnTeam, role)} title="Then click a hex to place">{role}</button>
-					{/each}
+		<!-- one line per thing that needs an answer; empty while nothing does -->
+		<div class="prompts" class:low={railOn}>
+			{#if $ms.wonBy}
+				<button class="prompt" on:click={() => (victoryClosed = false)}>{teamName($ms.wonBy.team)} win</button>
+			{:else if clearing}
+				<div class="prompt">
+					<span>{clearCands.length ? 'Clear tokens' : 'Nothing to clear'}</span>
+					{#if clearCands.length > 1}<button class="pbtn" on:click={clearAll}>All</button>{/if}
+					{#if clearCands.length}<button class="pbtn bad" on:click={doClear} disabled={!clearPick.length}>Remove {clearPick.length}</button>{/if}
+					<button class="pbtn" on:click={cancelClear}>Cancel</button>
 				</div>
-			{/if}
-			{#if pendingSpawn}
-				<div class="spawnhint {pendingSpawn.team}">
-					<span>Tap a hex to place the {pendingSpawn.team} {pendingSpawn.role}</span>
-					<button class="spcancel" on:click={() => (pendingSpawn = null)}>Cancel</button>
+			{:else if battle && !pendingToken && !pendingRespawn}
+				<!-- the minion battle's removal step: the losing team takes off its own minions -->
+				<div class="prompt battle is-{battle.loser}" class:plain={!iChooseBattle}>
+					<span><b>{teamName(battle.loser)}</b> remove {battle.remove}</span>
+					<span class="pips">{#each Array(battle.remove) as _, k (k)}<i></i>{/each}</span>
+					{#if iChooseBattle}<button class="pbtn" on:click={battleAutoAll} title="Melee first, heavies last">Auto</button>{/if}
 				</div>
-			{/if}
-		</div>
-
-		<button class="tiebtn {$ms.tieBreaker}" on:click={flipTie} title="Flip the tie-breaker — the {teamName($ms.tieBreaker)} break ties">
-			<span class="coin"><img src={tieArt($ms.tieBreaker)} class:flip={tieFlip} alt="" /></span>
-			<span class="tietxt">Ties → {teamName($ms.tieBreaker)}</span>
-		</button>
-
-		<!-- active abilities: one fixed row per hero (so nothing below shifts), card-colour pips light up; tap a live row to read the card -->
-		<div class="hsec fxlist">
-			<div class="fxhd">Active abilities</div>
-			{#each abilityRows as r (r.id)}
-				<button class="mab" class:live={!!r.fx} style="--tint:{r.team === 'orange' ? '#ef7d22' : '#2f7fe6'}" disabled={!r.fx}
-					on:click={() => { if (r.fx) cardLayer?.showCard(r.fx.hero, r.fx.idx, r.fx.pid, r.all); }} title={r.fx ? `Read ${r.fx.name}` : ''}>
-					<span class="abn">{r.name}</span>
-					<span class="abp">{#each FX_COLORS as [c, hex]}<i class:on={r.lit.has(c)} style="--pc:{hex}"></i>{/each}</span>
-					<span class="abt">{r.fx ? FX_SHORT[effectLabel(r.fx, $ms.round, $ms.turn)] : '–'}</span>
-				</button>
-			{/each}
-		</div>
-
-		<!-- activity log fills the space between the tie-breaker and the controls; retractable -->
-		<div class="logpanel" class:collapsed={!logOpen}>
-			<div class="loghdr">
-				<button class="loghead" on:click={() => (logOpen = !logOpen)} title={logOpen ? 'Hide activity' : 'Show activity'}>
-					<span>Activity</span><span class="chev">{logOpen ? '▾' : '▸'}</span>
-				</button>
-				{#if iAmHost}
-					<button class="undobtn" on:click={() => session.undo()} disabled={!$canUndo}
-						title={$canUndo ? `Undo: ${log[log.length - 1]?.text ?? ''}` : 'Nothing to undo this turn'}>↶ Undo</button>
-				{/if}
-			</div>
-			{#if logOpen}
-				<div class="logbody" bind:this={logEl}>
-					{#each log.slice(-40) as e (e.id)}
-						<div class="logline" title={hhmm(e.at)}><b>{e.by}</b> {e.text}</div>
-					{:else}
-						<div class="logempty">No moves yet.</div>
-					{/each}
-				</div>
-			{/if}
-		</div>
-
-		<!-- view controls, docked at the bottom of the HUD -->
-		<div class="viewctl">
-			<button class="vbtn recenter" on:click={() => board?.reset()} title="Recenter & reset view">⌖</button>
-			<button class="vbtn" on:click={() => board?.rotateBy(-45)} title="Rotate counter-clockwise (45°)">⟲</button>
-			<button class="vbtn" on:click={() => board?.rotateBy(45)} title="Rotate clockwise (45°)">⟳</button>
-			<button class="vbtn" on:click={() => board?.zoomBtn(1.2)} title="Zoom in">＋</button>
-			<button class="vbtn" on:click={() => board?.zoomBtn(1 / 1.2)} title="Zoom out">−</button>
-			<!-- saved views: jump to (or overwrite) one of three remembered angles -->
-			<div class="viewswrap">
-				<button class="vbtn views" class:on={viewsOpen} on:click={() => (viewsOpen = !viewsOpen)} title="Saved views" aria-label="Saved views">
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M3 8.5a2 2 0 0 1 2-2h2.2l1.4-2h6.8l1.4 2H19a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><circle cx="12" cy="13" r="3.6" /></svg>
-				</button>
-				{#if viewsOpen}
-					<div class="viewspop">
-						<div class="vplbl">Saved views</div>
-						{#each views as v, i}
-							<div class="vslot">
-								<button class="vgo" disabled={!v} on:click={() => goView(i)} title={v ? 'Jump to this view' : 'Empty — save a view here first'}>
-									<b>{i + 1}</b><span>{v ? viewLabel(v) : 'Empty'}</span>
-								</button>
-								<button class="vsave" on:click={() => saveView(i)} title={v ? 'Overwrite with the current view' : 'Save the current view here'}>{v ? 'Overwrite' : 'Save'}</button>
-							</div>
-						{/each}
-						<div class="vphint">Saves rotation, zoom &amp; position in this browser.</div>
+			{:else if (outgoing.length || hostWatch.length) && !pendingToken && !pendingRespawn}
+				{#each outgoing as [t, a] (t)}
+					<div class="prompt is-bad"><span>{a.defending ? `${whoOf(t)} defends` : `Attacking ${whoOf(t)}`}</span><button class="pbtn" on:click={() => answer(t, 'cancel')}>Call off</button></div>
+				{/each}
+				{#each hostWatch as [t, a] (t)}
+					<div class="prompt is-bad">
+						<span>{heroOf(a.by)} attacks {whoOf(t)} · away</span>
+						<button class="pbtn" on:click={() => answer(t, 'defended')}>Defended</button>
+						<button class="pbtn bad" on:click={() => answer(t, 'defeated')}>Defeated</button>
 					</div>
-				{/if}
-			</div>
+				{/each}
+			{:else if myDefeat && !iCanRespawn && !pendingRespawn && !pendingToken}
+				<div class="prompt plain is-bad"><span>Defeated · respawn next turn</span></div>
+			{/if}
+			{#if incoming}
+				<div class="prompt ask is-bad" role="alertdialog" aria-label="You are being attacked">
+					<span><b>{whoOf(incoming.by)}</b> attacks you</span>
+					<button class="pbtn go" on:click={() => answer(clientId, 'defend')}>Defend</button>
+					<button class="pbtn bad" on:click={() => answer(clientId, 'defeated')}>Defeated</button>
+				</div>
+			{/if}
+			{#if placing}
+				<div class="prompt place">
+					<span>{pendingRespawn ? 'Pick a spawn point' : pendingToken ? `Place ${pendingToken.token === 'companion' ? pendingToken.label : tokenName(pendingToken.token)}` : pendingSpawn ? `Place ${pendingSpawn.role} minion` : ''}</span>
+					<button class="pbtn" on:click={cancelPlace}>Cancel</button>
+				</div>
+			{/if}
+			{#if lifeOut && !iAmHost}<div class="prompt plain"><span>{teamName(lifeOut)} out of Life · waiting for host</span></div>{/if}
 		</div>
+
+		<!-- the piece toolbar: actions only, above the selected piece; a confirm takes its place -->
+		{#if confirmKind && actPiece}
+			<div class="ptool confirm" class:free={!tipPos} style={tipStyle}>
+				{#if (confirmKind === 'attack' || confirmKind === 'defeat') && attackSum}
+					<span class="lbl" style:color={teamText(actPiece)}>{whoOf(actPiece.id)}</span>
+					<span class="gain" title="You get {attackSum.coins}{attackSum.assists.length ? `, each teammate ${attackSum.assist}` : ''}">
+						<i class="coin"></i>+{attackSum.coins}{#if attackSum.assists.length}<em>/</em>+{attackSum.assist}{/if}
+					</span>
+					<span class="gain" title="The {teamName(attackSum.team)} lose {attackSum.lives} Life"><img src={lifeArt((attackSum.team ?? 'orange') as Team, 'front')} alt="" />−{attackSum.lives}</span>
+					{#if confirmKind === 'attack'}<button class="pbtn go" on:click={doAttack}>Attack</button>
+					{:else}<button class="pbtn bad" on:click={doDefeatHero}>Defeat</button>{/if}
+				{:else if confirmKind === 'selfremove'}
+					<span class="lbl">Your hero</span>
+					<button class="pbtn bad" on:click={doSelfRemove}>Remove</button>
+				{:else}
+					<span class="lbl" style:color={teamText(actPiece)}>{actPiece.role ?? ''} minion</span>
+					<button class="pbtn bad" on:click={doRemoveMinion}>Remove</button>
+				{/if}
+				<button class="pbtn x" on:click={closeConfirm} aria-label="Cancel"><TopIcon name="x" /></button>
+			</div>
+		{:else if selPiece && toolHas}
+			<div class="ptool" class:free={!tipPos} style={tipStyle} aria-label={selLabel}>
+				{#if canFlip}<button class="pbtn go" on:click={flipMine}>Flip</button>{/if}
+				{#if selImmune}<span class="imm" title="Heavy minions can't be moved, defeated or removed while another minion of their team is in the battle zone">Immune</span>{/if}
+				{#if canDefeatSel && selPiece.kind === 'hero'}
+					<button class="pbtn go" on:click={() => attackSel('attack')} disabled={!!attacks[selPiece.id]}>Attack</button>
+					<button class="pbtn bad" on:click={() => attackSel('defeat')} title="Not an attack: defeat them outright (same rewards)">Defeat</button>
+				{:else if canDefeatSel && (!selImmune || iAmHost)}
+					<button class="pbtn go" on:click={defeatSel}>Defeat <i class="coin"></i>{minionCoins(selPiece.role)}</button>
+				{/if}
+				{#if ownHeroSel}
+					{#if ownAttack}<button class="pbtn go" on:click={startClear} disabled={!clearCount} title="Clear instead of attacking: remove tokens next to you">Clear{clearCount ? ` ${clearCount}` : ''}</button>{/if}
+					<button class="pbtn bad" on:click={selfRemoveAsk} title="A card effect takes your hero off the board: no rewards, back with your next card">Remove</button>
+					<button class="pbtn bad" on:click={selfDefeatAsk} title="You were defeated (not by an attack): choose who gets the reward">Defeat</button>
+				{/if}
+				{#if canBattleSel}<button class="pbtn go" on:click={battleTakeSel}>For the battle</button>{/if}
+				{#if canRemoveSel && selPiece.kind !== 'hero' && (!selImmune || iAmHost)}<button class="pbtn bad" on:click={openRemove}>Remove</button>{/if}
+			</div>
+		{/if}
+
+		{#if manageOpen}
+			<TopMenu {room} mapName={$ms.map?.name ?? 'Board'} status={$status} host={iAmHost} hostId={$ms.host} me={clientId} {mySeat} seats={seatRows} requests={seatRequests} {myRequestSeat} {spectators}
+				look={boardLook} glow={zoneGlow} fx={boardFx} views={views.map((v) => (v ? viewLabel(v) : null))} {pushArm} won={!!$ms.wonBy}
+				onClose={() => (manageOpen = false)} onLeave={() => { manageOpen = false; confirmLeave = true; }} onKick={kickSeat} onRequestSeat={requestSeat} onResolveSeat={resolveSeat}
+				onLook={setBoardLook} onGlow={setZoneGlow} onFx={setBoardFx} onGoView={(i) => { goView(i); manageOpen = false; }} onSaveView={saveView}
+				onSpawn={(t, r) => { armSpawn(t, r); manageOpen = false; }} onPush={manualPush} />
+		{/if}
 	</div>
 	{/if}
 </div>
@@ -1112,19 +1112,7 @@
 			radial-gradient(140% 120% at 50% -15%, #1a4a63 0%, #0c3247 38%, #071f30 70%, #04121d 100%);
 	}
 
-	.viewctl { display: flex; gap: 5px; margin-top: auto; padding-top: 4px; }
-	.vbtn { flex: 1; height: 2rem; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.18); background: rgba(255, 255, 255, 0.05); color: #e5e7eb; cursor: pointer; font-size: 1rem; line-height: 1; }
-	.vbtn:hover { background: rgba(255, 255, 255, 0.16); }
-	/* recenter: brass accent so it's easy to find */
-	.vbtn.recenter { background: rgba(199, 154, 78, 0.22); border-color: rgba(214, 170, 92, 0.65); color: #f6e3b4; }
-	.vbtn.recenter:hover { background: rgba(199, 154, 78, 0.36); }
-	.viewswrap { position: relative; flex: 1; display: flex; }
-	.vbtn.views { display: grid; place-items: center; }
-	.vbtn.views svg { width: 1.05rem; height: 1.05rem; }
-	.vbtn.views.on { background: rgba(255, 255, 255, 0.16); }
-	.viewspop { position: absolute; right: 0; bottom: calc(100% + 8px); z-index: 12; width: 196px; padding: 9px; border-radius: 12px;
-		background: rgba(11, 16, 26, 0.96); border: 1px solid rgba(199, 154, 78, 0.5); box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6); }
-	.vplbl { font-size: 0.56rem; letter-spacing: 0.1em; text-transform: uppercase; color: #b8a06a; margin: 1px 2px 6px; }
+	/* saved views (phone ☰ menu) */
 	.vslot { display: flex; gap: 5px; margin-bottom: 5px; }
 	.vgo { flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px; padding: 5px 8px; border-radius: 8px; cursor: pointer; color: #e5e7eb; font-size: 0.72rem;
 		background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.14); text-align: left; }
@@ -1134,14 +1122,8 @@
 	.vgo:disabled { cursor: default; color: #7b8697; }
 	.vsave { flex: none; padding: 0 8px; border-radius: 8px; cursor: pointer; font-size: 0.62rem; color: #f6e3b4; background: rgba(199, 154, 78, 0.16); border: 1px solid rgba(199, 154, 78, 0.45); }
 	.vsave:hover { background: rgba(199, 154, 78, 0.3); }
-	.vphint { font-size: 0.56rem; color: #8b9bb0; margin: 2px 2px 0; }
-	/* exit sits left of the map name */
-	.mapline { display: flex; align-items: center; gap: 6px; }
-	.hud .mapline .mapname { flex: 1; min-width: 0; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-	.exitbtn { flex: none; width: 1.6rem; height: 1.6rem; }
-	.exitbtn { border-radius: 7px; cursor: pointer; font-size: 0.9rem; line-height: 1; padding: 0; color: #fca5a5; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.4); }
-	.exitbtn:hover { background: rgba(80, 20, 24, 0.7); }
 
+	.dlgs { display: contents; } /* desktop: carries the Tide look for the small dialogs (ui/top-game.css) */
 	.modal-scrim { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; background: rgba(3, 8, 14, 0.6); }
 	.modal { width: min(360px, 90vw); background: rgba(12, 18, 32, 0.92); border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 16px; padding: 20px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6); }
 	.modal h3 { font-family: 'Modesto Poster', serif; font-size: 1.4rem; margin: 0 0 6px; }
@@ -1215,12 +1197,7 @@
 	.mleave { background: #dc2626; color: #fff; }
 	.mleave:hover { background: #ef4444; }
 
-	/* room / connection cluster, tucked in the top-left corner */
-	/* in-game manage menu */
-	.managebtn { width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 6px 10px; border-radius: 9px; cursor: pointer;
-		background: rgba(199, 154, 78, 0.12); border: 1px solid rgba(199, 154, 78, 0.4); color: #e8dcc0; font-weight: 700; font-size: 0.76rem; }
-	.managebtn:hover { background: rgba(199, 154, 78, 0.24); }
-	.managebtn.alert { border-color: rgba(239, 125, 34, 0.8); box-shadow: 0 0 12px rgba(239, 125, 34, 0.4); }
+	/* phone: the Game Lobby panel (desktop has ui/TopMenu.svelte) */
 	.reqbadge { min-width: 1.05rem; height: 1.05rem; padding: 0 4px; border-radius: 999px; background: #ef7d22; color: #1a0f06; font-size: 0.62rem; font-weight: 900; display: grid; place-items: center; }
 	.managepanel { width: min(460px, 94vw); max-height: 88vh; overflow-y: auto; color: #e5e7eb; background: rgba(11, 16, 26, 0.96); border: 1px solid rgba(199, 154, 78, 0.5); border-radius: 16px; padding: 16px 18px; box-shadow: 0 24px 70px rgba(0, 0, 0, 0.7); }
 	.mphead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
@@ -1249,9 +1226,6 @@
 	.managepanel .act.danger { background: rgba(220, 60, 60, 0.25); border-color: rgba(220, 60, 60, 0.5); color: #ffb4b4; }
 	.managepanel .act.ghost { background: transparent; }
 
-	.roomline { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: -2px 2px 0; }
-	.rc { color: #94a3b8; font-size: 0.72rem; letter-spacing: 0.04em; }
-	.rc b { color: #e2e8f0; font-family: 'Modesto Poster', serif; font-weight: normal; letter-spacing: 0.1em; font-size: 0.86rem; }
 	.conn { display: inline-flex; align-items: center; gap: 5px; font-size: 0.7rem; font-weight: 600; color: #94a3b8; }
 	.conn .cdot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: #64748b; }
 	.conn.connected { color: #6ee7b7; } .conn.connected .cdot { background: #22c55e; box-shadow: 0 0 7px rgba(34, 197, 94, 0.7); }
@@ -1259,36 +1233,12 @@
 	.conn.reconnecting, .conn.connecting { color: #fcd34d; }
 	.conn.closed { color: #fca5a5; } .conn.closed .cdot { background: #ef4444; }
 
-	/* left-side HUD panel — tightened */
-	.hud { position: absolute; top: 12px; left: 12px; bottom: 12px; z-index: 6; width: 204px; display: flex; flex-direction: column; gap: 6px;
-		overflow-y: auto; background: rgba(9, 13, 22, 0.9); border: 1px solid rgba(199, 154, 78, 0.4);
-		border-radius: 12px; padding: 9px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), inset 0 0 26px rgba(199, 154, 78, 0.06); }
-	/* zoomed as a whole; its insets are design px, so the real-px dash is divided back */
-	.gamewrap:not(.mob) .hud { zoom: var(--uis, 1); }
-	.gamewrap.dashfull .hud { bottom: calc(22px + var(--dh, 70px) / var(--uis, 1)); }
-	.gamewrap:not(.mob) :is(.modal, .managepanel, .pietool, .placehint, .atkask, .battlebox) { zoom: var(--uis, 1); }
-	.hud .mapname { font-family: 'Modesto Poster', serif; font-size: 1.02rem; letter-spacing: 0.03em; color: #f6ead2; text-align: center; }
+	/* desktop: the small dialogs scale with the UI (everything else of the desktop HUD sits in the zoomed .top layer) */
+	.gamewrap:not(.mob) .modal { zoom: var(--uis, 1); }
 
-	.fxlist { gap: 3px; }
-	.fxhd { font-size: 0.56rem; letter-spacing: 0.1em; text-transform: uppercase; color: #b8a06a; margin-bottom: 1px; }
-		.fxlist .mab { margin-top: 0; }
 	.mab.live:hover { background: rgba(255, 255, 255, 0.12); }
-	.hsec { display: flex; flex-direction: column; gap: 4px; padding: 6px 8px; border-radius: 9px;
-		background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); }
-	.hsec.rt { gap: 4px; }
-	.rline { display: flex; align-items: center; justify-content: center; gap: 4px; }
-	.rline .rv { font-weight: 700; font-size: 0.82rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
-	.hsec.life.orange { border-left: 3px solid #ef7d22; } .hsec.life.blue { border-left: 3px solid #2f7fe6; }
 
-	.slabel { display: flex; align-items: baseline; justify-content: space-between; gap: 6px;
-		font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 700; color: #93a3b8; }
-	.slabel .cnt { color: #f1f5f9; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
-	.slabel .tn { font-family: 'Modesto Poster', serif; font-size: 0.9rem; letter-spacing: 0.02em; text-transform: none; }
-	.orange .tn { color: #ef9a5a; } .blue .tn { color: #6ea8f0; }
-	.slabel .tc { font-weight: 800; font-variant-numeric: tabular-nums; font-size: 0.9rem; color: #f1f5f9; }
-	.slabel .tc small { color: #94a3b8; font-weight: 600; font-size: 0.7rem; }
-
-	.tokens { display: flex; gap: 2px; flex-wrap: wrap; } /* 5 life tokens per row via 30px token + panel width */
+	/* life and wave tokens (phone sheet) */
 	.ltok { width: 30px; height: 29px; padding: 0; border: none; background: transparent no-repeat center / contain; cursor: pointer;
 		perspective: 80px; filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.55)); transition: transform 0.1s, filter 0.15s, opacity 0.15s; }
 	.ltok:hover { transform: translateY(-2px) scale(1.1); }
@@ -1296,7 +1246,6 @@
 	.ltok.dep:hover { opacity: 1; filter: grayscale(0.15) brightness(0.9); }
 	.ltok.flip { animation: coinflip 0.45s ease-in-out; }
 
-	.wtoks { display: flex; gap: 2px; flex-wrap: wrap; } /* 7 wave tokens per row via 20px token + panel width */
 	.wtok { width: 20px; height: 20px; padding: 0; border: none; border-radius: 50%; cursor: pointer;
 		background: rgba(0, 0, 0, 0.35) no-repeat center / 88%; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15);
 		filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5)); transition: transform 0.1s, filter 0.15s, opacity 0.15s; }
@@ -1305,46 +1254,16 @@
 	.wtok.dep:hover { opacity: 0.8; filter: grayscale(0.5) brightness(0.7); }
 	.wtok.flip { animation: coinflip 0.45s ease-in-out; }
 
-	.tiebtn { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; border: 1px solid rgba(255, 255, 255, 0.16);
-		background: rgba(255, 255, 255, 0.05); border-radius: 9px; padding: 4px 8px; color: #e5e7eb; cursor: pointer; font-size: 0.76rem; font-weight: 600; }
-	.tiebtn .tietxt { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-	.tiebtn .coin { width: 1.5rem; height: 1.5rem; perspective: 60px; flex: none; }
-	.tiebtn .coin img { width: 100%; height: 100%; display: block; }
-	.tiebtn .coin img.flip { animation: coinflip 0.45s ease-in-out; }
 	@keyframes coinflip { 0% { transform: rotateY(0); } 100% { transform: rotateY(360deg); } }
-	.tiebtn.orange { box-shadow: inset 0 0 14px rgba(239, 125, 34, 0.3); border-color: rgba(239, 125, 34, 0.4); }
-	.tiebtn.blue { box-shadow: inset 0 0 14px rgba(47, 127, 230, 0.3); border-color: rgba(47, 127, 230, 0.4); }
 
-	/* minion spawn controls */
-	.spawnrow { display: flex; gap: 5px; }
-	.spbtn { flex: 1; min-width: 0; white-space: nowrap; border-radius: 8px; padding: 4px 4px; font-size: 0.7rem; font-weight: 700; cursor: pointer; color: #f1f5f9; border: 1px solid transparent; }
-	.spbtn.orange { background: rgba(239, 125, 34, 0.18); border-color: rgba(239, 125, 34, 0.5); }
-	.spbtn.orange.on, .spbtn.orange:hover { background: rgba(239, 125, 34, 0.34); }
-	.spbtn.blue { background: rgba(47, 127, 230, 0.18); border-color: rgba(47, 127, 230, 0.5); }
-	.spbtn.blue.on, .spbtn.blue:hover { background: rgba(47, 127, 230, 0.34); }
-	.spmenu { display: flex; gap: 4px; margin-top: 5px; }
-	.sprole { flex: 1; text-transform: capitalize; border-radius: 7px; padding: 4px 2px; font-size: 0.68rem; font-weight: 700; cursor: pointer;
-		color: #e5e7eb; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.18); }
-	.sprole:hover { background: rgba(255, 255, 255, 0.18); }
-	.spmenu.orange .sprole:hover { background: rgba(239, 125, 34, 0.3); }
-	.spmenu.blue .sprole:hover { background: rgba(47, 127, 230, 0.3); }
-	.spawnhint { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 5px; padding: 5px 8px; border-radius: 8px;
-		font-size: 0.68rem; font-weight: 700; color: #f1f5f9; text-transform: capitalize; animation: hintpulse 1.4s ease-in-out infinite; }
-	.spawnhint.orange { background: rgba(239, 125, 34, 0.22); border: 1px solid rgba(239, 125, 34, 0.55); }
-	.spawnhint.blue { background: rgba(47, 127, 230, 0.22); border: 1px solid rgba(47, 127, 230, 0.55); }
 	.spcancel { flex: none; border-radius: 6px; padding: 2px 7px; font-size: 0.66rem; font-weight: 700; cursor: pointer; text-transform: none;
 		color: #e5e7eb; background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.22); }
 	.spcancel:hover { background: rgba(255, 255, 255, 0.2); }
-	@keyframes hintpulse { 0%, 100% { opacity: 0.85; } 50% { opacity: 1; } }
 
-	/* floating delete toolbar for a selected minion/token */
+	/* phone: toolbar for the selected piece, and the hints (desktop: .ptool / .prompt in ui/top-game.css) */
 	.pietool { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); z-index: 8; display: flex; align-items: center; gap: 10px;
 		padding: 6px 8px 6px 12px; border-radius: 999px; background: rgba(9, 13, 22, 0.9);
 		border: 1px solid rgba(255, 255, 255, 0.18); box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5); }
-	/* desktop: floats right above the selected piece */
-	.pietool.anchored { position: fixed; transform: translate(-50%, -100%); padding: 4px 6px 4px 10px; gap: 7px; }
-	.pietool.anchored::after { content: ''; position: absolute; left: 50%; bottom: -6px; width: 10px; height: 10px; transform: translateX(-50%) rotate(45deg);
-		background: rgba(9, 13, 22, 0.9); border-right: 1px solid rgba(255, 255, 255, 0.18); border-bottom: 1px solid rgba(255, 255, 255, 0.18); }
 	.pieflip { border: 1px solid rgba(240, 200, 120, 0.55); background: rgba(199, 154, 78, 0.24); color: #f6e3b4; border-radius: 999px; padding: 4px 12px; font-weight: 700; cursor: pointer; font-size: 0.76rem; }
 	.pieflip:hover { background: rgba(199, 154, 78, 0.4); }
 	.placehint { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); z-index: 9; display: flex; align-items: center; gap: 10px; padding: 6px 8px 6px 14px; border-radius: 999px;
@@ -1352,24 +1271,6 @@
 	.pietxt { font-size: 0.78rem; font-weight: 700; color: #e5e7eb; text-transform: capitalize; }
 	.piedel { border: 1px solid rgba(239, 68, 68, 0.5); background: rgba(220, 60, 60, 0.28); color: #ffb4b4; border-radius: 999px; padding: 4px 12px; font-weight: 700; cursor: pointer; font-size: 0.76rem; }
 	.piedel:hover { background: rgba(220, 60, 60, 0.45); }
-
-	/* activity log lives inside the HUD, filling the gap above the controls; retractable */
-	.logpanel { flex: 1; min-height: 56px; display: flex; flex-direction: column; overflow: hidden;
-		border-radius: 9px; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); }
-	.logpanel.collapsed { flex: none; min-height: 0; }
-	.loghdr { display: flex; align-items: stretch; }
-	.loghead { display: flex; align-items: center; justify-content: space-between; flex: 1; border: none; cursor: pointer;
-		padding: 5px 8px; background: rgba(255, 255, 255, 0.04); color: #93a3b8; font-weight: 700; font-size: 0.66rem; letter-spacing: 0.1em; text-transform: uppercase; }
-	.loghead:hover { background: rgba(255, 255, 255, 0.08); }
-	.undobtn { flex: none; border: none; border-left: 1px solid rgba(255, 255, 255, 0.08); cursor: pointer; padding: 5px 9px;
-		background: rgba(199, 154, 78, 0.16); color: #f0dcae; font-weight: 800; font-size: 0.66rem; letter-spacing: 0.04em; }
-	.undobtn:hover:not(:disabled) { background: rgba(199, 154, 78, 0.3); }
-	.undobtn:disabled { opacity: 0.35; cursor: not-allowed; color: #93a3b8; background: rgba(255, 255, 255, 0.03); }
-	.loghead .chev { letter-spacing: 0; }
-	.logbody { flex: 1; overflow-y: auto; padding: 5px 8px; display: flex; flex-direction: column; gap: 3px; }
-	.logline { font-size: 0.72rem; color: #cbd5e1; line-height: 1.3; }
-	.logline b { color: #f1f5f9; }
-	.logempty { font-size: 0.72rem; color: #64748b; }
 
 	/* ═══════════ phone layout (≤760px wide) ═══════════ */
 	.boardarea { position: absolute; inset: 0; }
