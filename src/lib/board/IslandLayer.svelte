@@ -10,9 +10,10 @@
 	// the hex id, so every player sees the same island.
 	// Clarity rules: small things stay small and low in contrast; anything tall stands on the
 	// RIM of its hex, never in the middle where a piece stands; no svg filters.
-	import { hexCenter, hexPoints, hexHash, hexNeighbour, hexNeighbours, borderPath, type Pt } from './hexgeo';
+	import { hexCenter, hexPoints, hexHash, hexNeighbour, borderPath, type Pt } from './hexgeo';
 	import { zoneType } from '../zones';
 	import { MINION_ART, type MinionRole, type MinionTeam } from './minionArt';
+	import { SCATTER_BY_KEY } from './scatter';
 
 	export let cells: Record<string, string> = {};
 	export let meta: Record<string, { m: string; dir: number }> = {};
@@ -25,6 +26,8 @@
 	export let thrones: Record<string, string> = {};
 	/** the coastline (svg path), shared with the sea */
 	export let coast = '';
+	/** terrain hex → a kind of scatter terrain (scatter.ts); none = a boulder */
+	export let scatter: Record<string, string> = {};
 
 	// minion spawn points: the emblem's radius on the hex (in hex sizes), and the two teams' inks
 	const EMBLEM = 0.6;
@@ -84,17 +87,8 @@
 			rock: t === 'terrain'
 		};
 	});
-	// ── terrain hexes ── most hold a boulder; now and then something stranger stands there instead
-	// (after the scatter terrain on the user's own table: crystal clusters, giant mushrooms, a fan
-	// plant, a toothed plant, dead trees, broken pillars, rune stones, a carved cube, an orb on its
-	// stalk). Terrain touching a base takes after it: cooling lava by the Atlanteans' machines, ice
-	// floes by the Titans. Chosen by hash, so every player sees the same island.
-	const CRYSTALS = [
-		'--c1:#ead4ff;--c2:#a86bea;--c3:#5a2a9c;--cg:#c08bff', // purple
-		'--c1:#ffd0cc;--c2:#ef4b4b;--c3:#8f1717;--cg:#ff7a6a', // red
-		'--c1:#fff5bb;--c2:#f5c62a;--c3:#96700c;--cg:#ffe066', // yellow
-		'--c1:#d0ffe0;--c2:#3fd47a;--c3:#167a3c;--cg:#7dffb0' // green
-	];
+	// ── terrain hexes ── a boulder, unless the map says otherwise: `scatter` (hex → key, set in the map
+	// editor's Scatter tool; the kinds are in scatter.ts) puts a piece of scatter terrain there instead.
 	// things that stand up straight: a column from the ground (radius r, design units) to a top drawn `lift` higher
 	const RAISED: Record<string, { r: number; lift: number; side: string; square?: boolean }> = {
 		pillar: { r: 11, lift: 15, side: '#5d626d' },
@@ -102,30 +96,12 @@
 		cube: { r: 11, lift: 11, side: '#1f6f73', square: true },
 		orb: { r: 4.6, lift: 17, side: '#3c8a3c' }
 	};
-	// what grows in the wild (terrain touching jungle) and what stands in the open; dealt out in turn so
-	// the island always shows the whole range instead of whatever the dice happened to repeat
-	const WILD = ['crystal', 'bigshroom', 'deadtree', 'anemone', 'maw', 'crystal', 'orb', 'deadtree', 'bigshroom'];
-	const OPEN = ['pillar', 'crystal', 'runestone', 'cube', 'orb', 'crystal'];
 	$: features = (() => {
 		const out: Record<string, { ref: string; style?: string }> = {};
-		const wild: string[] = [], open: string[] = [];
 		for (const id of ids) {
-			if (cells[id] !== 'terrain') continue;
-			const near = hexNeighbours(id).map((n) => cells[n]).filter(Boolean);
-			if (near.some((t) => t.startsWith('baseOrange'))) out[id] = { ref: 'lava' };
-			else if (near.some((t) => t.startsWith('baseBlue'))) out[id] = { ref: 'floe' };
-			else if (hexHash(id, 70) <= 0.44) (near.includes('forest') ? wild : open).push(id); // the rest stay plain boulders
+			const kind = cells[id] === 'terrain' ? SCATTER_BY_KEY[scatter[id]] : undefined;
+			if (kind && kind.ref !== 'mossy') out[id] = { ref: kind.ref, style: kind.style };
 		}
-		let colour = 0;
-		const deal = (list: string[], kinds: string[]) => {
-			list.sort((p, q) => hexHash(p, 71) - hexHash(q, 71) || (p < q ? -1 : 1));
-			list.forEach((id, n) => {
-				const ref = kinds[n % kinds.length];
-				out[id] = ref === 'crystal' ? { ref, style: CRYSTALS[colour++ % CRYSTALS.length] } : { ref };
-			});
-		};
-		deal(wild, WILD);
-		deal(open, OPEN);
 		return out;
 	})();
 	// rocks: a boulder per plain terrain hex (shadow, body, lit top), plus a pebble beside some; some are mossy
@@ -138,8 +114,8 @@
 			id: t.id,
 			body: blob(c, r, t.id, 100), top: blob(c, r * 0.7, t.id, 100), glint: blob(c, r * 0.4, t.id, 100),
 			pebble: hexHash(t.id, 9) > 0.45 ? blob({ x: t.c.x + Math.cos(pa) * size * 0.62, y: t.c.y + Math.sin(pa) * size * 0.62 }, size * 0.2, t.id, 200, 7) : '',
-			moss: hexHash(t.id, 10) > 0.62 ? blob({ x: c.x + (hexHash(t.id, 11) - 0.5) * r * 0.5, y: c.y + (hexHash(t.id, 12) - 0.5) * r * 0.5 }, r * 0.42, t.id, 300, 7) : '',
-			bloom: hexHash(t.id, 10) > 0.8 ? { x: c.x + (hexHash(t.id, 13) - 0.5) * r * 0.7, y: c.y + (hexHash(t.id, 14) - 0.5) * r * 0.7 } : null
+			moss: scatter[t.id] === 'mossy' ? blob({ x: c.x + (hexHash(t.id, 11) - 0.5) * r * 0.5, y: c.y + (hexHash(t.id, 12) - 0.5) * r * 0.5 }, r * 0.42, t.id, 300, 7) : '',
+			bloom: scatter[t.id] === 'mossy' && hexHash(t.id, 10) > 0.5 ? { x: c.x + (hexHash(t.id, 13) - 0.5) * r * 0.7, y: c.y + (hexHash(t.id, 14) - 0.5) * r * 0.7 } : null
 		};
 	});
 

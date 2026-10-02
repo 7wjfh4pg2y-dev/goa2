@@ -34,7 +34,7 @@
 		type ConnStatus,
 		type Team,
 		type DraftSystem
-		, boardLookOf, zoneGlowOf
+		, boardLookOf, zoneGlowOf, boardFxOf
 	} from '$lib/match';
 	import { HEROES } from '$lib/heroes';
 	import { initCards } from '$lib/cards/cardstate';
@@ -187,6 +187,7 @@
 	// the host's board options, as the lobby shows them
 	$: lobbyLook = boardLookOf({ boardLook: $state.boardLook });
 	$: lobbyGlow = zoneGlowOf({ zoneGlow: $state.zoneGlow });
+	$: lobbyFx = boardFxOf({ boardFx: $state.boardFx });
 	$: seatCount = $state.seats;
 	$: half = Math.floor(seatCount / 2);
 	// a player is "playing" once they hold a real seat (seat >= 0)
@@ -829,6 +830,11 @@
 						<span class="chips">
 							<button class="chip" class:on={lobbyGlow} disabled={!iAmHost || lobbyLook !== 'island'} on:click={() => session?.update({ zoneGlow: true })}>On</button>
 							<button class="chip" class:on={!lobbyGlow} disabled={!iAmHost || lobbyLook !== 'island'} on:click={() => session?.update({ zoneGlow: false })}>Off</button>
+						</span>
+						<span class="bolbl" title="The moving sea, the minions' turning rims and the battle zone's pulse">Moving effects</span>
+						<span class="chips">
+							<button class="chip" class:on={lobbyFx} disabled={!iAmHost} on:click={() => session?.update({ boardFx: true })}>On</button>
+							<button class="chip" class:on={!lobbyFx} disabled={!iAmHost} on:click={() => session?.update({ boardFx: false })}>Off</button>
 						</span>
 					</div>
 

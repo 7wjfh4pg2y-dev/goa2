@@ -14,6 +14,8 @@ export interface GameMap {
 	battleZone?: Array<{ hex: string; team: 'orange' | 'blue'; kind: 'melee' | 'ranged' | 'heavy' }>
 	/** Wave-counter track length for this map, by game length (set in the editor). */
 	waves?: { quick: number; long: number }
+	/** Scatter terrain: terrain hex → what stands there instead of a boulder (board/scatter.ts keys; set in the editor). */
+	scatter?: Record<string, string>
 }
 
 export interface MapChoice {
@@ -58,7 +60,8 @@ export function availableMaps(): MapChoice[] {
 	const board = (m: GameMap) => JSON.stringify([
 		sorted(m.cells),
 		sorted(m.meta).map(([k, v]) => { const x = v as { m: string; dir?: number; start?: boolean }; return [k, x.m, x.dir ?? 0, !!x.start] }),
-		(m.battleZone ?? []).map((b) => `${b.hex}|${b.team}|${b.kind}`).sort()
+		(m.battleZone ?? []).map((b) => `${b.hex}|${b.team}|${b.kind}`).sort(),
+		sorted(m.scatter)
 	])
 	const add = (id: string, label: string, data: GameMap) => {
 		let key = keyOf(label)

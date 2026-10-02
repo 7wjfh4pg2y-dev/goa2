@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { applyCardReq, canRespawn, lifeTier, cardInitiative, cardResolved, clearable, boardLookOf, zoneGlowOf, type MatchState, type Piece } from './match'
+import { applyCardReq, canRespawn, lifeTier, cardInitiative, cardResolved, clearable, boardLookOf, zoneGlowOf, boardFxOf, type MatchState, type Piece } from './match'
 import { newPlayerCardState } from './cards/cardstate'
 
 // A (orange) + C (orange, A's teammate) vs B (blue, level 3) and D (blue)
@@ -24,6 +24,8 @@ describe('the host\'s board options', () => {
 		expect(boardLookOf({ boardLook: 'nonsense' as never })).toBe('island')
 		expect(zoneGlowOf({})).toBe(true)
 		expect(zoneGlowOf({ zoneGlow: false })).toBe(false)
+		expect(boardFxOf({})).toBe(true)
+		expect(boardFxOf({ boardFx: false })).toBe(false)
 	})
 })
 

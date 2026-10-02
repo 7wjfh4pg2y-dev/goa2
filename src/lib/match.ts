@@ -323,6 +323,7 @@ export interface MatchState {
 	// host options for the board (lobby + in-game Game Lobby); unset = the defaults
 	boardLook?: BoardLook // the map's visuals: the island in its sea (default) or the flat classic tiles
 	zoneGlow?: boolean // the gold outline round the battle zone (default on; island look only)
+	boardFx?: boolean // moving effects — the sea, the minions' turning rims, the battle zone's pulse (default on)
 	rev: number // monotonic version for last-write-wins
 	updatedBy: string
 	updatedAt: number
@@ -456,6 +457,8 @@ export type BoardLook = 'island' | 'classic'
 export const boardLookOf = (s: Pick<MatchState, 'boardLook'>): BoardLook => (s.boardLook === 'classic' ? 'classic' : 'island')
 /** Whether the battle zone is outlined on the board (a host option; on unless switched off). */
 export const zoneGlowOf = (s: Pick<MatchState, 'zoneGlow'>): boolean => s.zoneGlow !== false
+/** Whether the board's moving effects run (a host option; on unless switched off). */
+export const boardFxOf = (s: Pick<MatchState, 'boardFx'>): boolean => s.boardFx !== false
 
 export function placeMinions(state: MatchState): Record<string, Piece> {
 	const pieces: Record<string, Piece> = {}
