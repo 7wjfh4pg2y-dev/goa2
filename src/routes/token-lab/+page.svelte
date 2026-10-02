@@ -20,6 +20,8 @@
 	const minions = (['orange', 'blue'] as const).flatMap((team) => (['melee', 'ranged', 'heavy'] as const).map((role) => ({ team, role })));
 	let ground: 'sand' | 'earth' | 'jungle' | 'dark' = 'sand';
 	const GROUND = { sand: '#e9d39a', earth: '#b98d57', jungle: '#5f9a3c', dark: '#141a26' };
+	// how far the board is turned: a token's hex frame turns with the map, the art on it stays upright
+	let turn = 0;
 </script>
 
 <svelte:head><title>GoA2 · Token lab</title></svelte:head>
@@ -33,7 +35,10 @@
 		<span class="seg">
 			{#each Object.keys(GROUND) as g}<button class:on={ground === g} on:click={() => (ground = g as typeof ground)}>{g}</button>{/each}
 		</span>
-		<span class="note">Each piece is shown large, and at the size it has on the board.</span>
+		<span class="seg">
+			{#each [0, 45, 90, 180] as t}<button class:on={turn === t} on:click={() => (turn = t)}>board {t}°</button>{/each}
+		</span>
+		<span class="note">Each piece is shown large, and at the size it has on the board. Turn the board: token hexes stay locked to the map, their art stays upright.</span>
 	</header>
 
 	<h2>Heroes <small>— the outer band is the player's colour, the inner band the team (copper = Atlanteans, ice = Titans)</small></h2>
@@ -49,21 +54,21 @@
 		{/each}
 	</div>
 
-	<h2>Hero tokens and markers <small>— tokens are hexes, markers are round; the rim is the owner's colour</small></h2>
+	<h2>Hero tokens and markers <small>— tokens are hexes locked to the map's hexes, markers are round; the rim is the owner's colour</small></h2>
 	<div class="grid">
 		{#each kit as k (k.key)}
 			<figure>
 				<div class="pad">
-					<svg class="big" viewBox="-60 -60 120 120"><KitToken size={72} token={k.token} letter={k.letter} color={k.color} team={k.team} /></svg>
-					<svg class="small" viewBox="-60 -60 120 120"><KitToken size={72} token={k.token} letter={k.letter} color={k.color} team={k.team} /></svg>
+					<svg class="big" viewBox="-60 -60 120 120"><KitToken size={72} token={k.token} letter={k.letter} color={k.color} team={k.team} rot={turn} uid="L{k.key}" /></svg>
+					<svg class="small" viewBox="-60 -60 120 120"><KitToken size={72} token={k.token} letter={k.letter} color={k.color} team={k.team} rot={turn} uid="S{k.key}" /></svg>
 				</div>
 				<figcaption>{k.name}<em>{k.hero}</em></figcaption>
 			</figure>
 		{/each}
 		<figure>
 			<div class="pad">
-				<svg class="big" viewBox="-60 -60 120 120"><KitToken size={72} token="token_blast" mine="down" peek="B" color="#16a34a" /></svg>
-				<svg class="small" viewBox="-60 -60 120 120"><KitToken size={72} token="token_dud" mine="down" color="#16a34a" /></svg>
+				<svg class="big" viewBox="-60 -60 120 120"><KitToken size={72} token="token_blast" mine="down" peek="B" color="#16a34a" rot={turn} uid="Lmine" /></svg>
+				<svg class="small" viewBox="-60 -60 120 120"><KitToken size={72} token="token_dud" mine="down" color="#16a34a" rot={turn} uid="Smine" /></svg>
 			</div>
 			<figcaption>mine, face down<em>min</em></figcaption>
 		</figure>

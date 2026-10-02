@@ -119,10 +119,10 @@ export const HEROES_ALPHA: Hero[] = [...HEROES].sort((a, b) => a.name.localeComp
 const HERO_FACE: Record<string, [number, number, number]> = {
 	arien: [0.655, 0.34, 3], bain: [0.555, 0.215, 4], brogan: [0.5, 0.33, 3], brynn: [0.535, 0.24, 3.5], cutter: [0.655, 0.31, 4],
 	dodger: [0.665, 0.33, 4.3], emmitt: [0.335, 0.47, 3.75], garrus: [0.5, 0.36, 3], gydion: [0.655, 0.4, 3.3], hanu: [0.745, 0.47, 4],
-	ignatia: [0.515, 0.47, 4.4], min: [0.47, 0.25, 4], misa: [0.72, 0.2, 4.3], mortimer: [0.565, 0.22, 4], mrak: [0.365, 0.38, 3.3],
+	ignatia: [0.515, 0.47, 4.4], min: [0.47, 0.25, 4], misa: [0.72, 0.2, 4.3], mortimer: [0.565, 0.22, 4], mrak: [0.405, 0.41, 2.7],
 	nebkher: [0.49, 0.455, 3.75], razzle: [0.635, 0.37, 4], rowenna: [0.715, 0.38, 3.3], sabina: [0.655, 0.25, 3.5], silverarrow: [0.585, 0.215, 4.3],
 	snorri: [0.565, 0.285, 3.5], swift: [0.565, 0.305, 4.4], takahide: [0.585, 0.28, 2.7], tali: [0.52, 0.19, 3.15], tigerclaw: [0.735, 0.265, 3],
-	trinkets: [0.385, 0.27, 3.75], ursafar: [0.47, 0.38, 2.3], wasp: [0.615, 0.23, 3], whisper: [0.49, 0.3, 3.5], widget: [0.335, 0.46, 3.5],
+	trinkets: [0.385, 0.27, 3.75], ursafar: [0.47, 0.38, 2.3], wasp: [0.485, 0.235, 3.4], whisper: [0.49, 0.3, 3.5], widget: [0.335, 0.46, 3.5],
 	wuk: [0.555, 0.33, 2.3], xargatha: [0.51, 0.405, 4]
 };
 const FACE_DEFAULT: [number, number, number] = [0.55, 0.32, 2.6];
