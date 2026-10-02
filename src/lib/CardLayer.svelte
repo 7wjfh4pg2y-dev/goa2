@@ -1459,7 +1459,7 @@
 
 <style>
 	/* right-side player panel */
-	.ppanel { position: absolute; top: 12px; right: 12px; bottom: 12px; z-index: 6; width: 244px; padding: 10px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; color: #e5e7eb; background: rgba(9,13,22,.72); backdrop-filter: blur(9px); border: 1px solid rgba(199,154,78,.4); border-radius: 14px; zoom: var(--uis, 1); }
+	.ppanel { position: absolute; top: 12px; right: 12px; bottom: 12px; z-index: 6; width: 244px; padding: 10px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; color: #e5e7eb; background: rgba(9,13,22,.9); border: 1px solid rgba(199,154,78,.4); border-radius: 14px; zoom: var(--uis, 1); }
 	.pptitle { font-size: .6rem; letter-spacing: .16em; text-transform: uppercase; font-weight: 800; color: #b8a06a; padding: 2px 4px 4px; display: flex; flex-direction: column; gap: 3px; }
 	.phasetag { font-size: .56rem; letter-spacing: .04em; font-weight: 700; color: #7d8ba0; text-transform: none; }
 	.phasetag.resolve { color: #efb46a; }
@@ -1470,7 +1470,7 @@
 	/* level-8 opponent: team colour stays on the left, purple washes to the right */
 	.prow.ultrow { border-color: rgba(165,110,230,.5); border-left-color: var(--tint);
 		background: linear-gradient(90deg, rgba(12,18,32,.5) 0%, rgba(120,60,190,.24) 52%, rgba(155,92,232,.36) 100%);
-		box-shadow: inset 0 0 0 1px rgba(165,110,230,.26), 0 0 15px rgba(165,110,230,.26); animation: ultpulse 3.4s ease-in-out infinite; }
+		box-shadow: inset 0 0 0 1px rgba(165,110,230,.26), 0 0 15px rgba(165,110,230,.26); }
 	.prow.ultrow:hover { background: linear-gradient(90deg, rgba(20,28,46,.6) 0%, rgba(130,70,200,.3) 52%, rgba(165,100,240,.42) 100%); }
 	.prow.ultrow::after { content: '★'; position: absolute; top: 5px; right: 8px; font-size: .7rem; color: #d9b6ff; text-shadow: 0 0 6px rgba(165,110,230,.9); }
 	.prow { position: relative; }
@@ -1540,7 +1540,7 @@
 	.ppanel.dense .pstat img { height: .72rem; }
 
 	/* overlay */
-	.scrim { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; background: rgba(3,6,12,.62); backdrop-filter: blur(3px); }
+	.scrim { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; background: rgba(3,6,12,.62); }
 	.modal.board { width: min(1040px, 96vw); background: linear-gradient(180deg, rgba(11,16,26,.8), rgba(11,16,26,.9) 55%, rgba(11,16,26,.95)), var(--bgimg) center 22% / cover no-repeat, #0b101a; }
 	.modal { zoom: var(--uis, 1); width: min(780px, 94vw); max-height: 90vh; overflow-y: auto; padding: 16px 18px; color: #e5e7eb; background: rgba(11,16,26,.94); border: 1px solid rgba(199,154,78,.5); border-radius: 16px; box-shadow: 0 24px 70px rgba(0,0,0,.7); }
 	.mhead { display: flex; align-items: center; gap: 11px; margin-bottom: 12px; }
@@ -1722,8 +1722,8 @@
 	.hs-lv { display: flex; gap: 3px; }
 	.hs-lv i { flex: 1; height: 6px; border-radius: 3px; background: rgba(255,255,255,.12); }
 	.hs-lv i.on { background: #b482f0; box-shadow: 0 0 5px rgba(180,130,240,.7); }
-	.hs-lv i.rdy { animation: hsrdy 1.2s ease-in-out infinite; }
-	@keyframes hsrdy { 50% { filter: brightness(1.6); box-shadow: 0 0 10px rgba(212,168,255,1); } }
+	.hs-lv i.rdy { box-shadow: 0 0 8px rgba(212,168,255,.9); animation: hsrdy 1.2s ease-in-out infinite; }
+	@keyframes hsrdy { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
 	.hs-seal { font-size: 1.1rem; }
 	/* level-up phase */
 	.dklv { display: flex; align-items: center; gap: 6px; margin: 0 0 8px; padding: 6px 10px; border-radius: 9px; font-size: .74rem; color: #93a3b8; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08); }
@@ -1737,8 +1737,8 @@
 	/* upgrades lie upside down, like on the table (item symbol upright) */
 	.dkcard :global(.cardface) { transition: transform .5s cubic-bezier(.3,.7,.2,1); }
 	.dkcard.zupg :global(.cardface), .dkzone.upg .dkcard :global(.cardface) { transform: rotate(180deg); }
-	.deckstack.lvup, .mdeck.lvup { animation: deckpulse 1.4s ease-in-out infinite; border-radius: 6px; }
-	@keyframes deckpulse { 0%, 100% { box-shadow: 0 0 0 2px rgba(240,192,96,.5); } 50% { box-shadow: 0 0 0 2px #f0c060, 0 0 18px rgba(240,192,96,.9); } }
+	.deckstack.lvup, .mdeck.lvup { box-shadow: 0 0 0 2px #f0c060, 0 0 14px rgba(240,192,96,.75); animation: deckpulse 1.4s ease-in-out infinite; border-radius: 6px; }
+	@keyframes deckpulse { 0%, 100% { opacity: 1; } 50% { opacity: .72; } }
 	/* keep the bottom of the last row reachable above the sticky bar */
 	.mob .dkzones, .mob .dkgrid, .mob .dkhand { margin-bottom: 12px; }
 
@@ -1757,7 +1757,7 @@
 	/* round-start banner */
 
 	.curtain { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; cursor: pointer;
-		background: radial-gradient(120% 90% at 50% 40%, rgba(20,14,6,.86), rgba(3,5,10,.96)); backdrop-filter: blur(6px); animation: curtainIn .35s ease; }
+		background: radial-gradient(120% 90% at 50% 40%, rgba(20,14,6,.86), rgba(3,5,10,.96)); animation: curtainIn .35s ease; }
 	@keyframes curtainIn { from { opacity: 0; } to { opacity: 1; } }
 	.curtain-inner { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 18px 16px; max-width: 100vw; }
 	/* one line at any width */
@@ -1787,7 +1787,7 @@
 	.curtain-hint { font-size: .7rem; letter-spacing: .18em; text-transform: uppercase; color: #8b7a52; }
 
 	/* examine */
-	.scrim2 { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; background: rgba(2,4,9,.8); backdrop-filter: blur(4px); }
+	.scrim2 { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; background: rgba(2,4,9,.8); }
 	.bigcard { width: min(360px, 62vw); filter: drop-shadow(0 20px 50px rgba(0,0,0,.7)); }
 	.exrow { display: flex; align-items: center; justify-content: center; }
 	.exrow.multi .bigcard { touch-action: pan-y; }
@@ -1808,11 +1808,8 @@
 	.fxgo { padding: 5px 14px; border-radius: 8px; cursor: pointer; font-size: .78rem; color: #1a0f06; background: linear-gradient(180deg, #f3d08a, #d4a64a); border: 1px solid #fbe7b0; }
 	.fxdisc { padding: 5px 16px; border-radius: 8px; cursor: pointer; font-size: .78rem; color: #fff; background: linear-gradient(180deg, #e0463c, #a82620); border: 1px solid rgba(255,170,160,.7); }
 	/* the very first step of the game: impossible to miss */
-	.act.spawnglow { animation: spawnglow 1.4s ease-in-out infinite; position: relative; }
-	@keyframes spawnglow {
-		0%, 100% { box-shadow: 0 3px 0 rgb(var(--tcr, 239 125 34) / .55), 0 0 6px 1px rgb(var(--tcr, 239 125 34) / .5); transform: scale(1); filter: brightness(1); }
-		50% { box-shadow: 0 3px 0 rgb(var(--tcr, 239 125 34) / .55), 0 0 22px 8px rgb(var(--tcr, 239 125 34) / .85), 0 0 4px 2px #fff8; transform: scale(1.06); filter: brightness(1.15); }
-	}
+	.act.spawnglow { box-shadow: 0 3px 0 rgb(var(--tcr, 239 125 34) / .55), 0 0 16px 5px rgb(var(--tcr, 239 125 34) / .7); animation: spawnglow 1.4s ease-in-out infinite; position: relative; }
+	@keyframes spawnglow { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.06); opacity: .82; } }
 	.act.discard { color: #fff; background: linear-gradient(180deg, #e0463c, #a82620); border-color: rgba(255,170,160,.7); box-shadow: 0 3px 0 #6e1812; }
 	.fxend { padding: 5px 12px; border-radius: 8px; cursor: pointer; font-size: .74rem; color: #ffc9c2; background: rgba(220,60,60,.2); border: 1px solid rgba(239,68,68,.5); }
 	/* a played card with a live effect: glows in its player's colour + duration badge */
@@ -1820,7 +1817,7 @@
 	/* live effect: the card glows in its player's colour */
 	/* drop-shadow on the wrapper follows the card's shape and isn't clipped by the flip face's overflow */
 	.fxwrap.fx { filter: drop-shadow(0 0 1.5px var(--fxc)) drop-shadow(0 0 4px var(--fxc)) drop-shadow(0 0 9px color-mix(in srgb, var(--fxc) 70%, transparent)); animation: fxglow 2.6s ease-in-out infinite; }
-	@keyframes fxglow { 50% { filter: drop-shadow(0 0 2px var(--fxc)) drop-shadow(0 0 7px var(--fxc)) drop-shadow(0 0 16px color-mix(in srgb, var(--fxc) 80%, transparent)); } }
+	@keyframes fxglow { 0%, 100% { opacity: 1; } 50% { opacity: .78; } }
 	/* activate-effect prompt in the dash action slot */
 	.fxq { font-size: .7rem; color: #f0dcae; letter-spacing: .03em; white-space: nowrap; }
 	.fxrow2 { display: flex; gap: 3px; }
@@ -1832,7 +1829,7 @@
 	.bigcard :global(.cardface) { border-radius: 4%; }
 
 	/* centered preview of a picked hand card */
-	.pvscrim { position: fixed; inset: 0; z-index: 30; background: rgba(3,6,12,.55); backdrop-filter: blur(3px); }
+	.pvscrim { position: fixed; inset: 0; z-index: 30; background: rgba(3,6,12,.55); }
 	.pvwrap { position: fixed; inset: 0 0 calc(var(--db, 12px) + var(--dh, 70px) + 14px * var(--uis, 1)) 0; z-index: 31; display: flex; align-items: center; justify-content: center; pointer-events: none; }
 	.pvcard { width: min(320px * var(--uis, 1), 56vw); border-radius: 5%; pointer-events: auto; perspective: 1400px; }
 	.pvflip { position: relative; width: 100%; aspect-ratio: 1192 / 1664; transform-style: preserve-3d; transition: transform .46s cubic-bezier(.4,.15,.2,1); }
@@ -1859,8 +1856,8 @@
 
 	/* bottom dashboard */
 	.dash { position: absolute; left: var(--dx, 224px); bottom: var(--db, 12px); width: 1180px; height: 78px; box-sizing: border-box; transform: scale(var(--ds, 1)); transform-origin: bottom left;
-		z-index: 11; display: flex; align-items: center; gap: 18px; padding: 0 14px; border-radius: 13px; color: #e5e7eb; backdrop-filter: blur(9px);
-		background: linear-gradient(90deg, rgb(var(--tcr) / .2), rgba(9,13,22,.84) 26%, rgba(9,13,22,.84) 74%, rgb(var(--tcr) / .16)); border: 1px solid rgb(var(--tcr) / .55); box-shadow: 0 12px 34px rgba(0,0,0,.5), inset 0 1px 0 rgb(var(--tcl) / .14); }
+		z-index: 11; display: flex; align-items: center; gap: 18px; padding: 0 14px; border-radius: 13px; color: #e5e7eb;
+		background: linear-gradient(90deg, rgb(var(--tcr) / .2), rgba(9,13,22,.93) 26%, rgba(9,13,22,.93) 74%, rgb(var(--tcr) / .16)); border: 1px solid rgb(var(--tcr) / .55); box-shadow: 0 12px 34px rgba(0,0,0,.5), inset 0 1px 0 rgb(var(--tcl) / .14); }
 	.dleft { flex: none; display: flex; align-items: center; gap: 10px; }
 	.dright { flex: 1; min-width: 0; align-self: stretch; display: flex; align-items: center; gap: 12px; }
 	.dact { flex: none; width: 132px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
@@ -1868,7 +1865,7 @@
 	.act.takeback { padding: 7px 14px; font-size: .86rem; color: #fff; background: linear-gradient(180deg, #e0463c, #a82620); border-color: rgba(255,170,160,.7); box-shadow: 0 3px 0 #6e1812, 0 0 12px rgba(239,68,68,.45); }
 	.act.takeback:hover { filter: brightness(1.1); }
 	/* level-8 aura on your own dash — present but not blinding */
-	.dash.ultdash { border-color: rgba(165,110,230,.6); box-shadow: 0 12px 34px rgba(0,0,0,.5), 0 0 22px rgba(165,110,230,.28); animation: ultpulse 3.4s ease-in-out infinite; }
+	.dash.ultdash { border-color: rgba(165,110,230,.6); box-shadow: 0 12px 34px rgba(0,0,0,.5), 0 0 22px rgba(165,110,230,.28); }
 	@keyframes ultpulse { 0%, 100% { box-shadow: 0 12px 34px rgba(0,0,0,.5), 0 0 18px rgba(165,110,230,.22); } 50% { box-shadow: 0 12px 34px rgba(0,0,0,.5), 0 0 30px rgba(165,110,230,.42); } }
 	/* single-row profile: avatar · name/hero · stats (to cut dashboard height) */
 	.dself { display: flex; align-items: center; gap: 10px; flex: none; }
@@ -1903,8 +1900,8 @@
 	.radbtn:hover { background: rgba(199,154,78,.24); color: #f6e3b4; }
 	.radbtn.on { background: rgba(199,154,78,.3); border-color: rgba(230,190,110,.8); color: #fff3d6; }
 	.radbtn.pingbtn { width: 24px; padding: 0; align-self: center; }
-	.radbtn.pingbtn.on { animation: pingarm 1s ease-in-out infinite; }
-	@keyframes pingarm { 50% { box-shadow: 0 0 0 3px rgba(230,190,110,.35), 0 0 12px rgba(230,190,110,.6); } }
+	.radbtn.pingbtn.on { box-shadow: 0 0 0 3px rgba(230,190,110,.35), 0 0 12px rgba(230,190,110,.6); animation: pingarm 1s ease-in-out infinite; }
+	@keyframes pingarm { 0%, 100% { opacity: 1; } 50% { opacity: .72; } }
 	.radpop { position: absolute; left: 0; bottom: calc(100% + 10px); z-index: 14; width: 196px; padding: 9px; border-radius: 12px;
 		background: rgba(11,16,26,.96); border: 1px solid rgba(199,154,78,.5); box-shadow: 0 16px 40px rgba(0,0,0,.6); }
 	.radgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
@@ -2060,7 +2057,7 @@
 	.mini.off { opacity: .5; }
 	.mcard { grid-column: 4; grid-row: 1 / 3; align-self: center; width: 40px; }
 	/* this player has a lingering effect running (maybe from an earlier turn's card): the whole card glows in their colour */
-	.mpc.fxon { border-color: var(--fxc); animation: mpcfx 2.6s ease-in-out infinite; }
+	.mpc.fxon { border-color: var(--fxc); box-shadow: inset 3px 0 0 var(--tc), inset 0 0 0 1px var(--fxc), inset 0 0 14px color-mix(in srgb, var(--fxc) 50%, transparent); }
 	@keyframes mpcfx {
 		0%, 100% { box-shadow: inset 3px 0 0 var(--tc), inset 0 0 0 1px var(--fxc), inset 0 0 10px color-mix(in srgb, var(--fxc) 40%, transparent); }
 		50% { box-shadow: inset 3px 0 0 var(--tc), inset 0 0 0 1px var(--fxc), inset 0 0 18px color-mix(in srgb, var(--fxc) 65%, transparent); }

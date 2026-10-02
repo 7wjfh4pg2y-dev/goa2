@@ -42,8 +42,8 @@
 	--danger-hi: #ffa3a3;
 
 	/* ---- surfaces ---- */
-	--glass: linear-gradient(180deg, rgba(14, 40, 66, 0.86), rgba(6, 21, 38, 0.9));
-	--glass-blur: blur(16px) saturate(1.15);
+	--glass: linear-gradient(180deg, rgba(14, 40, 66, 0.94), rgba(6, 21, 38, 0.96));
+	--glass-blur: none;
 	--well: rgba(2, 11, 22, 0.55); /* recessed areas inside a panel */
 	--raise: rgba(255, 255, 255, 0.05); /* raised areas inside a panel */
 	--hair: rgba(255, 255, 255, 0.11); /* neutral hairline */
@@ -200,8 +200,6 @@
 .tide .panel {
 	position: relative;
 	background: var(--glass);
-	-webkit-backdrop-filter: var(--glass-blur);
-	backdrop-filter: var(--glass-blur);
 	border: 1px solid var(--brass-line);
 	border-radius: var(--r-lg);
 	box-shadow:
@@ -393,8 +391,6 @@
 /* a ghost button sitting on artwork gets a glass backing */
 .tide .btn-ghost.on-art {
 	background: rgba(4, 15, 28, 0.62);
-	-webkit-backdrop-filter: var(--glass-blur);
-	backdrop-filter: var(--glass-blur);
 	border-color: rgba(255, 255, 255, 0.3);
 	color: var(--ink);
 }
@@ -886,8 +882,6 @@
 	text-decoration: none;
 	color: var(--ink);
 	background: var(--glass);
-	-webkit-backdrop-filter: var(--glass-blur);
-	backdrop-filter: var(--glass-blur);
 	border: 1px solid var(--brass-line);
 	border-radius: var(--r-lg);
 	box-shadow:
@@ -950,8 +944,6 @@
 	padding: 8px 18px 8px 10px;
 	border-radius: var(--r-md);
 	background: var(--glass);
-	-webkit-backdrop-filter: var(--glass-blur);
-	backdrop-filter: var(--glass-blur);
 	border: 1px solid var(--brass-line);
 	border-left: 4px solid var(--tc);
 	box-shadow: var(--sh-2);

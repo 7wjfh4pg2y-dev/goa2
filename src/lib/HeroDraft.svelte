@@ -330,7 +330,7 @@
 					<span class="btxt short">{overtime ? 'Lock in!' : bannerShort}</span>
 					{#if countdown}<span class="sep"></span><span class="clock" class:urgent={secsLeft != null && secsLeft <= 10}>{countdown}</span>{/if}
 					{#if !complete}<span class="sep modesep"></span><span class="mode">{DRAFT_LABELS[d.system]}</span>{/if}
-					{#if countdown}<span class="left" style="--p:{(timeFrac * 100).toFixed(1)}%"></span>{/if}
+					{#if countdown}<span class="left" style="--p:{timeFrac.toFixed(3)}"></span>{/if}
 				</div>
 				{#if toastAction && toastHero}
 					<div class="toast dtoast t-{toastAction.team}" class:ban={toastAction.type === 'ban'}>
@@ -495,7 +495,7 @@
 	.draft .leave { position: absolute; left: 0; top: 4px; z-index: 30; pointer-events: auto; gap: 8px; }
 	.topmid { display: flex; flex-direction: column; align-items: center; gap: 12px; min-width: 0; max-width: calc(100% - 276px); }
 	.turn { --tc: var(--orange); position: relative; display: flex; align-items: center; gap: 14px; max-width: 100%; min-height: 52px; padding: 0 26px; overflow: hidden;
-		border-radius: var(--r-pill); background: rgba(3,11,21,0.74); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+		border-radius: var(--r-pill); background: rgba(3,11,21,0.88);
 		border: 1px solid var(--brass-line); box-shadow: var(--sh-1), inset 0 1px 0 rgba(255,255,255,0.06);
 		font-size: 24px; line-height: 1; letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; pointer-events: auto; }
 	.turn.t-blue { --tc: var(--blue); }
@@ -509,17 +509,17 @@
 	.clock { flex: none; font-size: 27px; color: var(--brass-hi); font-variant-numeric: tabular-nums; min-width: 2.3em; text-align: center; }
 	.mode { flex: none; color: var(--ink-2); font-size: var(--fs-small); letter-spacing: 0.14em; }
 	/* time left, as a line along the bottom of the pill */
-	.left { position: absolute; left: 0; bottom: 0; height: 3px; width: var(--p, 100%); background: var(--brass); transition: width 1s linear; }
+	.left { position: absolute; left: 0; bottom: 0; height: 3px; width: 100%; transform-origin: 0 50%; transform: scaleX(var(--p, 1)); background: var(--brass); transition: transform 1s linear; }
 	/* last 10 s: the words and the clock redden */
 	.turn.urgent { border-color: rgba(229,72,77,0.7); }
 	.turn.urgent .btxt, .clock.urgent { color: var(--danger-hi); }
 	.turn.urgent .left { background: var(--danger); }
 	/* all-pick grace/overtime: the whole pill goes red and pulses */
-	.turn.overtime { border-color: var(--danger); background: rgba(60,10,14,0.78); animation: otpulse 1s ease-in-out infinite; }
+	.turn.overtime { border-color: var(--danger); background: rgba(60,10,14,0.9); box-shadow: 0 0 0 1px rgba(229,72,77,0.6), 0 0 22px rgba(229,72,77,0.5); animation: otpulse 1s ease-in-out infinite; }
 	.turn.overtime .btxt, .turn.overtime .clock { color: var(--danger-hi); }
 	.turn.overtime .dot { background: var(--danger); box-shadow: 0 0 10px var(--danger); }
 	.turn.overtime .left { background: var(--danger); }
-	@keyframes otpulse { 0%, 100% { box-shadow: 0 0 0 1px rgba(229,72,77,0.4), 0 0 14px rgba(229,72,77,0.35); } 50% { box-shadow: 0 0 0 1px rgba(229,72,77,0.65), 0 0 28px rgba(229,72,77,0.6); } }
+	@keyframes otpulse { 0%, 100% { opacity: 1; } 50% { opacity: .72; } }
 
 	/* pick / ban announcement */
 	.draft .dtoast { --tc: var(--orange); --tc-hi: var(--orange-hi); gap: 16px; padding: 8px 24px 8px 8px; border-left-width: 5px; white-space: nowrap; pointer-events: auto;
@@ -581,7 +581,7 @@
 	.rightcol { position: absolute; top: 16px; right: 16px; bottom: 16px; width: 456px; display: flex; flex-direction: column; gap: 12px; }
 	.browsewrap { flex: 1; min-height: 0; display: flex; gap: 8px; }
 	.draft .filters { flex: none; display: flex; flex-direction: column; align-items: stretch; gap: 3px; padding: 3px;
-		background: rgba(3,11,21,0.6); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); transition: opacity 0.15s; }
+		background: rgba(3,11,21,0.82); transition: opacity 0.15s; }
 	.draft .filters.off { opacity: 0.35; pointer-events: none; }
 	.draft .ftab { flex: 1 1 0; width: 44px; min-width: 0; min-height: 0; max-height: 60px; padding: 0; gap: 2px; font-size: 15px; color: var(--ink); background: rgba(255,255,255,0.045); }
 	.draft .ftab:hover { background: rgba(255,255,255,0.12); }
@@ -623,8 +623,7 @@
 	.draft .lockin.ban { background: linear-gradient(180deg, #f2777b 0%, var(--danger) 50%, #b3262b 100%); border-color: #ffb3b5 #e5484d #8f1c21; text-shadow: 0 1px 2px rgba(70,0,0,0.55);
 		box-shadow: 0 8px 24px rgba(0,0,0,0.45), 0 0 0 1px rgba(0,0,0,0.35), 0 0 26px rgba(229,72,77,0.35), inset 0 1px 0 rgba(255,255,255,0.4); }
 	/* not yours to press right now ("Waiting…"): a quiet placeholder rather than a faded team button */
-	.draft .lockin:disabled { opacity: 1; filter: none; background: rgba(3,11,21,0.62); border: 1px dashed rgba(255,255,255,0.26); color: var(--ink-3); text-shadow: none; box-shadow: none;
-		-webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+	.draft .lockin:disabled { opacity: 1; filter: none; background: rgba(3,11,21,0.62); border: 1px dashed rgba(255,255,255,0.26); color: var(--ink-3); text-shadow: none; box-shadow: none; }
 	/* locked in: done, so it stops shouting — an outline in your team's colour */
 	.draft .lockin.done:disabled { border-style: solid; background: linear-gradient(180deg, var(--tc-glass), rgba(3,11,21,0.5)), var(--deep); border-color: var(--tc-line); color: var(--tc-hi); text-shadow: none; box-shadow: none; }
 	.oath { position: absolute; left: 0; right: 0; bottom: 0; box-sizing: border-box; display: flex; flex-direction: column; gap: 6px; padding: 8px 8px 7px; border-radius: 14px;
@@ -671,7 +670,7 @@
 	/* choosing right now (turn-based drafts): the edge breathes */
 	.pcard.active { border-color: var(--tc); box-shadow: 0 0 0 1px var(--tc), 0 0 18px var(--tc-line); animation: breathe 2s ease-in-out infinite; }
 	.pcard.active .pn { color: var(--brass-hi); }
-	@keyframes breathe { 50% { box-shadow: 0 0 0 1px var(--tc), 0 0 6px var(--tc-glass); } }
+	@keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: .72; } }
 	.vs { flex: none; display: flex; align-items: center; gap: 10px; color: var(--brass); font-size: var(--fs-h2); line-height: 1; }
 	.vs img { width: 40px; height: 40px; }
 	.banrail { flex: none; display: flex; align-items: center; gap: 6px; justify-content: center; }
@@ -768,8 +767,7 @@
 		.ti { margin-top: 2px; font-size: var(--fs-h3); color: var(--brass-hi); opacity: 1; }
 		.idrule { display: none; }
 		.cols { display: block; margin-top: 10px; }
-		.stats { position: absolute; top: 64px; right: 12px; gap: 7px; padding: 10px 12px; border-radius: 14px; background: var(--glass); border: 1px solid var(--brass-line);
-			-webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: var(--sh-1); }
+		.stats { position: absolute; top: 64px; right: 12px; gap: 7px; padding: 10px 12px; border-radius: 14px; background: var(--glass); border: 1px solid var(--brass-line); box-shadow: var(--sh-1); }
 		.statrow { grid-template-columns: 18px auto auto; gap: 8px; }
 		.sicon { width: 18px; height: 18px; }
 		.slabel { display: none; }

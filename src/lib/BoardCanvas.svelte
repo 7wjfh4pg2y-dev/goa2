@@ -698,7 +698,7 @@
 	.ping .pdot { fill: var(--pc); stroke: #fff; stroke-width: 1.5; animation: pdot 3.5s ease forwards; }
 	@keyframes pring { 0% { transform: scale(.25); opacity: 1; } 100% { transform: scale(1.6); opacity: 0; } }
 	@keyframes pdot { 0% { opacity: 0; } 8% { opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; } }
-	.selring { animation: spin 8s linear infinite; transform-box: fill-box; transform-origin: center; }
+	.selring { transform-box: fill-box; transform-origin: center; }
 	/* minion rims (see `rimPieces`): drawn three times too big and scaled down, so they stay sharp when the board is zoomed in */
 	.rims { position: absolute; inset: 0; transform-origin: 0 0; pointer-events: none; }
 	.rim { position: absolute; }

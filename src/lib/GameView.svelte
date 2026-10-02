@@ -1142,7 +1142,7 @@
 	.exitbtn { border-radius: 7px; cursor: pointer; font-size: 0.9rem; line-height: 1; padding: 0; color: #fca5a5; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.4); }
 	.exitbtn:hover { background: rgba(80, 20, 24, 0.7); }
 
-	.modal-scrim { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; background: rgba(3, 8, 14, 0.6); backdrop-filter: blur(3px); }
+	.modal-scrim { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; background: rgba(3, 8, 14, 0.6); }
 	.modal { width: min(360px, 90vw); background: rgba(12, 18, 32, 0.92); border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 16px; padding: 20px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6); }
 	.modal h3 { font-family: 'Modesto Poster', serif; font-size: 1.4rem; margin: 0 0 6px; }
 	.piedefeat:disabled { opacity: .55; cursor: default; }
@@ -1175,14 +1175,14 @@
 	.ab { font: inherit; border-radius: 8px; padding: 5px 16px; cursor: pointer; border: 1px solid transparent; }
 	.ab.yes { background: var(--tc); color: #fff; }
 	.ab.no { background: rgba(220, 60, 60, 0.3); border-color: rgba(239, 68, 68, 0.7); color: #ffc9c2; }
-	@keyframes atkpulse { 50% { box-shadow: 0 0 40px rgba(239, 68, 68, 0.6), 0 10px 28px rgba(0,0,0,.6); } }
+	@keyframes atkpulse { 0%, 100% { opacity: 1; } 50% { opacity: .8; } }
 	.pieimm { font-size: 0.76rem; color: #2a2f38; padding: 4px 13px; border-radius: 999px; white-space: nowrap; letter-spacing: .04em; text-shadow: 0 1px 0 rgba(255,255,255,.6);
 		background: linear-gradient(180deg, #ffffff, #d4d9df 48%, #a3acb7); border: 2px solid #d9a845; box-shadow: 0 0 0 1px #6b4a10, 0 2px 6px rgba(0,0,0,.45), inset 0 1px 0 #fff; }
 	/* minion battle removal: a bigger panel at the top, in the losing team's colour */
 	.battlebox { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 9; min-width: 380px; max-width: 92vw; box-sizing: border-box;
 		display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 18px 12px; border-radius: 14px; text-align: center; color: #f6ead2;
 		background: linear-gradient(180deg, color-mix(in srgb, var(--lc) 30%, rgba(11, 16, 26, .95)), rgba(11, 16, 26, .95)); border: 2px solid var(--lc);
-		box-shadow: 0 0 26px color-mix(in srgb, var(--lc) 45%, transparent), 0 10px 28px rgba(0, 0, 0, .55); animation: bbIn .35s cubic-bezier(.3, 1.4, .5, 1) both, bbGlow 2s ease-in-out .4s infinite; }
+		box-shadow: 0 0 26px color-mix(in srgb, var(--lc) 45%, transparent), 0 10px 28px rgba(0, 0, 0, .55); animation: bbIn .35s cubic-bezier(.3, 1.4, .5, 1) both; }
 	@keyframes bbIn { from { opacity: 0; transform: translateX(-50%) translateY(-14px) scale(.9); } to { opacity: 1; transform: translateX(-50%); } }
 	@keyframes bbGlow { 50% { box-shadow: 0 0 40px color-mix(in srgb, var(--lc) 70%, transparent), 0 10px 28px rgba(0, 0, 0, .55); } }
 	.battlebox b { font-weight: normal; } .battlebox .to { color: #ffb27a; } .battlebox .tb { color: #8cc0ff; }
@@ -1261,7 +1261,7 @@
 
 	/* left-side HUD panel — tightened */
 	.hud { position: absolute; top: 12px; left: 12px; bottom: 12px; z-index: 6; width: 204px; display: flex; flex-direction: column; gap: 6px;
-		overflow-y: auto; background: rgba(9, 13, 22, 0.74); backdrop-filter: blur(8px); border: 1px solid rgba(199, 154, 78, 0.4);
+		overflow-y: auto; background: rgba(9, 13, 22, 0.9); border: 1px solid rgba(199, 154, 78, 0.4);
 		border-radius: 12px; padding: 9px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), inset 0 0 26px rgba(199, 154, 78, 0.06); }
 	/* zoomed as a whole; its insets are design px, so the real-px dash is divided back */
 	.gamewrap:not(.mob) .hud { zoom: var(--uis, 1); }
@@ -1339,7 +1339,7 @@
 
 	/* floating delete toolbar for a selected minion/token */
 	.pietool { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); z-index: 8; display: flex; align-items: center; gap: 10px;
-		padding: 6px 8px 6px 12px; border-radius: 999px; background: rgba(9, 13, 22, 0.9); backdrop-filter: blur(8px);
+		padding: 6px 8px 6px 12px; border-radius: 999px; background: rgba(9, 13, 22, 0.9);
 		border: 1px solid rgba(255, 255, 255, 0.18); box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5); }
 	/* desktop: floats right above the selected piece */
 	.pietool.anchored { position: fixed; transform: translate(-50%, -100%); padding: 4px 6px 4px 10px; gap: 7px; }
@@ -1415,13 +1415,13 @@
 	@container (max-width: 58px) { .mib.ult .ul-long { display: none; } .mib.ult .ul-short { display: inline; } }
 	.mib.ult .ulk { position: absolute; top: -5px; right: -4px; font-size: 8px; filter: grayscale(1); }
 	/* ready to unlock: gold edge, pulsing — tap opens the unlock confirmation */
-	.mib.ult.ready { color: #f6e3b4; background: rgba(120, 60, 190, 0.28); border-color: #f0c060; animation: ultrdy 1.3s ease-in-out infinite; }
-	@keyframes ultrdy { 0%, 100% { box-shadow: 0 0 4px rgba(240, 192, 96, 0.5); } 50% { box-shadow: 0 0 14px rgba(240, 192, 96, 1); } }
+	.mib.ult.ready { color: #f6e3b4; background: rgba(120, 60, 190, 0.28); border-color: #f0c060; box-shadow: 0 0 10px rgba(240, 192, 96, 0.85); animation: ultrdy 1.3s ease-in-out infinite; }
+	@keyframes ultrdy { 0%, 100% { opacity: 1; } 50% { opacity: .72; } }
 	.mib.ult .ulk.rdy { filter: none; color: #f0c060; font-size: 10px; }
 	/* unlocked: purple with the same breathing glow as the desktop dash */
 	.mib.ult.on { color: #fff; background: linear-gradient(160deg, #9a5ce6, #5b2aa0); border-color: rgba(210, 175, 255, 0.85); text-shadow: 0 0 6px rgba(255, 255, 255, 0.6);
-		animation: ultbtn 2.4s ease-in-out infinite; }
-	@keyframes ultbtn { 0%, 100% { box-shadow: 0 0 6px rgba(165, 110, 230, 0.5), inset 0 0 6px rgba(255, 255, 255, 0.15); } 50% { box-shadow: 0 0 16px rgba(185, 130, 250, 0.95), inset 0 0 8px rgba(255, 255, 255, 0.3); } }
+		box-shadow: 0 0 12px rgba(185, 130, 250, 0.8), inset 0 0 7px rgba(255, 255, 255, 0.22); animation: ultbtn 2.4s ease-in-out infinite; }
+	@keyframes ultbtn { 0%, 100% { opacity: 1; } 50% { opacity: .72; } }
 	.mpill.gold { background: rgba(199, 154, 78, 0.14); border-color: rgba(199, 154, 78, 0.45); padding-left: 3px; }
 	.gc { width: 18px; height: 18px; border-radius: 50%; display: inline-grid; place-items: center; background: radial-gradient(circle at 35% 30%, #ffe7a1, #d4a64a 60%, #9a6f22); border: 1px solid #fbe7b0; }
 	.mscrim { position: fixed; inset: 0; z-index: 30; background: rgba(2, 5, 10, 0.55); }

@@ -43,8 +43,7 @@
 
 <style>
 	.sea { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
-	.stagebox { position: absolute; inset: 0; transition: filter .6s ease; }
-	.sea.near .stagebox { filter: saturate(.92) brightness(.62); }
+	.stagebox { position: absolute; inset: 0; }
 	.scrim { position: absolute; inset: 0; transition: opacity .6s ease; }
 	/* far: dark water behind the left column, clear over the island */
 	.sea.far .scrim { background:
@@ -52,11 +51,11 @@
 		radial-gradient(120% 100% at 70% 48%, transparent 55%, rgba(3, 11, 21, .5) 100%); }
 	.sea.far.mobile .scrim { background:
 		linear-gradient(180deg, rgba(4, 17, 32, .72) 0%, rgba(4, 17, 32, .25) 34%, rgba(4, 17, 32, .2) 60%, rgba(4, 17, 32, .8) 100%); }
-	.sea.near .scrim { background: radial-gradient(110% 95% at 50% 45%, rgba(4, 17, 32, .28) 0%, rgba(3, 11, 21, .7) 100%); }
+	.sea.near .scrim { background: radial-gradient(110% 95% at 50% 45%, rgba(4, 17, 32, .56) 0%, rgba(3, 11, 21, .84) 100%); }
 
 	.clouds { position: absolute; inset: 0; }
 	/* a wisp = three overlapping soft ellipses, moved as one by a transform (GPU only) */
-	.c { position: absolute; left: 0; width: 46vmax; height: 13vmax; opacity: .62; will-change: transform;
+	.c { position: absolute; left: 0; width: 46vmax; height: 13vmax; opacity: .62; 
 		background:
 			radial-gradient(closest-side, rgba(255, 255, 255, .34), rgba(255, 255, 255, 0) 100%) 0% 55% / 62% 70% no-repeat,
 			radial-gradient(closest-side, rgba(255, 255, 255, .28), rgba(255, 255, 255, 0) 100%) 58% 30% / 56% 62% no-repeat,
