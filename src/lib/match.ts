@@ -320,6 +320,9 @@ export interface MatchState {
 	// which team's tie-breaker side is up at the start of the game
 	startFlip: { side: Team; at: number } | null
 	gameId?: string // set by the host when the draft starts: one id per game (the quiet recorder keys on it)
+	// host options for the board (lobby + in-game Game Lobby); unset = the defaults
+	boardLook?: BoardLook // the map's visuals: the island in its sea (default) or the flat classic tiles
+	zoneGlow?: boolean // the gold outline round the battle zone (default on; island look only)
 	rev: number // monotonic version for last-write-wins
 	updatedBy: string
 	updatedAt: number
@@ -448,6 +451,12 @@ export function spawnMinion(state: MatchState, team: Team, role: 'melee' | 'rang
 /** Initial minion wave: place a movable minion on each hex the map author
  * flagged as a starting spawn (map.battleZone, set in the editor). No guessing —
  * a map with no battleZone simply spawns no minions until it's set up. */
+export type BoardLook = 'island' | 'classic'
+/** The map visuals everyone sees (a host option; anything unset or unknown = the island). */
+export const boardLookOf = (s: Pick<MatchState, 'boardLook'>): BoardLook => (s.boardLook === 'classic' ? 'classic' : 'island')
+/** Whether the battle zone is outlined on the board (a host option; on unless switched off). */
+export const zoneGlowOf = (s: Pick<MatchState, 'zoneGlow'>): boolean => s.zoneGlow !== false
+
 export function placeMinions(state: MatchState): Record<string, Piece> {
 	const pieces: Record<string, Piece> = {}
 	for (const m of state.map?.battleZone ?? []) {

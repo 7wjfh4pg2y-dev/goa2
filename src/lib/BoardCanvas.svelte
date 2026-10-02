@@ -168,6 +168,24 @@
 	// island look: the coastline (shared by the sea and the land) and every hex's zone name
 	$: coast = look === 'island' ? loopsPath(outlineLoops(Object.keys(cells), size), 0.9) : '';
 	$: zoneNames = look === 'island' ? zoneTable(map as Parameters<typeof zoneTable>[0]) : {};
+	// The island is thousands of shapes, so it lives in its OWN svg and the view is applied to
+	// that element as a CSS transform: panning / zooming slides one finished layer about on the
+	// GPU instead of re-processing every shape (measured: 4–5× slower the other way). The same
+	// matrix as `viewTf`, re-expressed in css px ("xMidYMid meet": px = s·user + o).
+	let wrapW = 0, wrapH = 0;
+	$: landTf = (() => {
+		if (!viewM || !wrapW || !wrapH) return '';
+		const s = Math.min(wrapW / bounds.w, wrapH / bounds.h);
+		const ox = (wrapW - s * bounds.w) / 2 - s * bounds.a, oy = (wrapH - s * bounds.h) / 2 - s * bounds.b;
+		const { a, b, c, d, e, f } = viewM;
+		return `matrix(${a},${b},${c},${d},${s * e + ox - (a * ox + c * oy)},${s * f + oy - (b * ox + d * oy)})`;
+	})();
+	// while the view is moving the layer is only slid about (it may soften when zoomed in);
+	// a moment after it settles the browser redraws it crisp at the new size
+	let moving = false;
+	let movingT: ReturnType<typeof setTimeout> | null = null;
+	function viewMoved() { moving = true; if (movingT) clearTimeout(movingT); movingT = setTimeout(() => (moving = false), 240); }
+	$: if (viewM && look === 'island') viewMoved();
 
 	let svgEl: SVGSVGElement;
 	let viewG: SVGGElement;
@@ -413,7 +431,7 @@
 	onMount(() => { if (interactive) wrapEl?.addEventListener('wheel', onWheel, { passive: false }); });
 	// Esc puts a picked-up piece back down
 	function onKey(e: KeyboardEvent) { if (e.key === 'Escape' && (selected || dragId)) release(); }
-	onDestroy(() => { wrapEl?.removeEventListener('wheel', onWheel); clearLongPress(); });
+	onDestroy(() => { wrapEl?.removeEventListener('wheel', onWheel); clearLongPress(); if (movingT) clearTimeout(movingT); });
 
 	function centerOf(id: string) {
 		const [c, r] = id.split('_').map(Number);
@@ -525,13 +543,20 @@
 	on:pointerup={up}
 	on:pointercancel={up}
 	on:pointerleave={() => { if (!dragId) hoverHex = null; hoverName = null; }}
+	bind:clientWidth={wrapW}
+	bind:clientHeight={wrapH}
 	class:holding={!!ghostPiece}
 	class:pinging={pingArmed}
 	role="img"
 	aria-label={map.name ? `Game board: ${map.name}` : 'Game board'}
 >
-	{#if look === 'island' && viewM}<Ocean {bounds} view={viewM} {coast} {size} still={seaStill} />{/if}
-	<svg viewBox={vb} preserveAspectRatio="xMidYMid meet" bind:this={svgEl}>
+	{#if look === 'island' && viewM}
+		<Ocean {bounds} view={viewM} {coast} {size} still={seaStill} />
+		<svg class="land" class:moving viewBox={vb} preserveAspectRatio="xMidYMid meet" style:transform={landTf} aria-hidden="true">
+			<IslandLayer {cells} {meta} {size} rot={rotEff} zones={zoneNames} {glowZone} thrones={throneAt} {coast} />
+		</svg>
+	{/if}
+	<svg class="pieces" viewBox={vb} preserveAspectRatio="xMidYMid meet" bind:this={svgEl}>
 		<defs>
 			<linearGradient id="shield-silver" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff" /><stop offset=".45" stop-color="#cfd5dc" /><stop offset="1" stop-color="#7d8792" /></linearGradient>
 			<linearGradient id="mine-bone" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4ecd9" /><stop offset="1" stop-color="#c7b894" /></linearGradient>
@@ -552,9 +577,7 @@
 			</symbol>
 		</defs>
 		<g bind:this={viewG} transform={viewTf}>
-			{#if look === 'island'}
-				<IslandLayer {cells} {meta} {size} rot={rotEff} zones={zoneNames} {glowZone} thrones={throneAt} {coast} />
-			{:else}
+			{#if look !== 'island'}
 			{#each hexes as h (h.id)}
 				{#if isSpawn(h.t) || isThrone(h.t)}
 					<image href={zoneTile(isSpawn(h.t) ? zoneOf(h.id) : baseTileFor(h.t))} x={h.x - SQRT3 * size * 0.53} y={h.y - size * 1.06}
@@ -653,6 +676,8 @@
 	.board-wrap.interactive { cursor: grab; }
 	.board-wrap.interactive:active { cursor: grabbing; }
 	svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+	svg.land { transform-origin: 0 0; pointer-events: none; overflow: visible; }
+	svg.land.moving { will-change: transform; }
 	.piece.selectable { cursor: pointer; }
 	/* holding something: the closed hand everywhere over the board, and the picked-up
 	   piece dims while its ghost rides the cursor */
