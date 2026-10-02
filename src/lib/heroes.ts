@@ -127,6 +127,8 @@ const HERO_FACE: Record<string, [number, number, number]> = {
 };
 const FACE_DEFAULT: [number, number, number] = [0.55, 0.32, 2.6];
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
+/** Where a hero's face sits in their art: [x, y] as fractions of the painting, and the portrait zoom. */
+export const heroFace = (id: string): [number, number, number] => HERO_FACE[id] ?? FACE_DEFAULT;
 
 /** Inline CSS for a round portrait (a square element): the avatar art zoomed
  * and positioned so the hero's face sits in the middle. */
