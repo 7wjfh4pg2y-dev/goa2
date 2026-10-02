@@ -1,25 +1,37 @@
 // Desktop / tablet game layout (phones ≤760px have their own layout).
 // Everything is designed at 1440×900 and scaled by ONE factor `s` taken from the
-// window, so the HUD, player panel, dash and hand keep the same proportions on a
-// small laptop, a big monitor and an iPad. On narrow (portrait) screens the dash
-// can't fit beside the HUD, so it spans the full width and both side panels sit
-// above it.
+// window, so the top bar, the helm console, the hand and the overlays keep the same
+// proportions on a small laptop, a big monitor and an iPad.
+//
+// The design canvas is the window measured in design px: `w / s` wide, `h / s` tall.
+// Because `s` never exceeds `w / 1440`, the canvas is NEVER narrower than 1440 (wider
+// on wide screens, taller on tall ones): the top bar and the console are laid out from
+// the centre line and always fit, so nothing needs a second scale.
+//
+//   y 8..64    top bar: ☰ · enemy chips · scoreline · your team's chips · view
+//   y 70..118  initiative rail (after the reveal)
+//   bottom     helm console, DASH_W × DASH_H, centred, EDGE from the bottom
 export const DESIGN_W = 1440, DESIGN_H = 900;
-export const DASH_W = 1180, DASH_H = 78;
-export const HUD_W = 204, PANEL_W = 244, EDGE = 12;
-/** inner edges of the side panels, in design px (panel + margin + breathing room) */
-export const HUD_R = 224, PANEL_L = 268;
+/** the helm console (the old "dash") */
+export const DASH_W = 1180, DASH_H = 112;
+export const EDGE = 12;
+/** the top bar and the rail under it, in design px from the top */
+export const TOP_Y = 8, TOP_H = 56, RAIL_Y = 70, RAIL_H = 48;
+/** a roster-chip zone: its inner edge is this far from the centre line, and it is this wide */
+export const CHIPS_IN = 284, CHIPS_W = 372;
 
 export interface UiLayout {
 	/** the one UI scale (1 at 1440×900) */
 	s: number;
-	/** the dash's own scale (≤ s; smaller only when it has to span a narrow screen) */
+	/** the console's scale — always `s` now (kept for older callers) */
 	dashS: number;
+	/** the console's left edge, px */
 	dashX: number;
+	/** the console's height, px */
 	dashH: number;
-	/** distance from the window bottom to the dash, px */
+	/** distance from the window bottom to the console, px */
 	dashBot: number;
-	/** the dash runs under the HUD / player panel, so they stop above it */
+	/** always false: there are no side panels any more (kept for older callers) */
 	underHud: boolean;
 	underPanel: boolean;
 }
@@ -27,21 +39,12 @@ export interface UiLayout {
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
 export function uiScale(w: number, h: number): number {
-	return clamp(Math.min(w / DESIGN_W, h / DESIGN_H), 0.7, 2.2);
+	return clamp(Math.min(w / DESIGN_W, h / DESIGN_H), 0.5, 2.2);
 }
 
 export function uiLayout(w: number, h: number): UiLayout {
 	const s = uiScale(w, h);
-	const hudR = HUD_R * s, edge = EDGE * s;
-	let dashS = s, dashX: number, underHud = false;
-	if (hudR + DASH_W * s + edge <= w) {
-		dashX = hudR + (w - hudR - edge - DASH_W * s) / 2;
-	} else {
-		underHud = true;
-		dashS = Math.min(s, (w - 2 * edge) / DASH_W);
-		dashX = (w - DASH_W * dashS) / 2;
-	}
-	return { s, dashS, dashX, dashH: DASH_H * dashS, dashBot: edge, underHud, underPanel: dashX + DASH_W * dashS > w - PANEL_L * s };
+	return { s, dashS: s, dashX: (w - DASH_W * s) / 2, dashH: DASH_H * s, dashBot: EDGE * s, underHud: false, underPanel: false };
 }
 
 /** CSS custom properties for the layout (set on a wrapper; children read them) */

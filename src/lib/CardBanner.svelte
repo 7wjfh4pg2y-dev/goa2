@@ -41,13 +41,13 @@
 		<span class="body" style="background-image: linear-gradient(90deg, #0d121c 34%, rgba(13,18,28,.6) 64%, rgba(13,18,28,.2)), url({art})">
 			<span class="l1"><span class="nm">{c.name}</span><em>{sub}</em></span>
 			{#if isUlt}
-				<span class="seg">{#each Array(8) as _, k (k)}<i class:on={k < level}></i>{/each}<b>{unlocked ? 'Unlocked' : `${Math.min(level, 8)}/8`}</b></span>
+				<span class="lvseg">{#each Array(8) as _, k (k)}<i class:on={k < level}></i>{/each}<b>{unlocked ? 'Unlocked' : `${Math.min(level, 8)}/8`}</b></span>
 			{:else}
 				<span class="st">
-					{#if c.initiative != null}<span class="chip">{c.initiative}<img src={ic('initiative')} alt="Initiative" /></span>{/if}
-					{#if c.secondaryMovement}<span class="chip">{c.secondaryMovement}<img src={ic('movement')} alt="Movement" /></span>{/if}
-					{#if c.secondaryDefense}<span class="chip">{c.secondaryDefense}<img src={ic('defense')} alt="Defense" /></span>{/if}
-					{#if c.modifier}<span class="chip">{c.modifierValue}<img src={ic(`${c.modifier.toLowerCase()}_${clr}`)} alt={c.modifier} /></span>{/if}
+					{#if c.initiative != null}<span class="cchip">{c.initiative}<img src={ic('initiative')} alt="Initiative" /></span>{/if}
+					{#if c.secondaryMovement}<span class="cchip">{c.secondaryMovement}<img src={ic('movement')} alt="Movement" /></span>{/if}
+					{#if c.secondaryDefense}<span class="cchip">{c.secondaryDefense}<img src={ic('defense')} alt="Defense" /></span>{/if}
+					{#if c.modifier}<span class="cchip">{c.modifierValue}<img src={ic(`${c.modifier.toLowerCase()}_${clr}`)} alt={c.modifier} /></span>{/if}
 				</span>
 			{/if}
 		</span>
@@ -77,12 +77,12 @@
 	.nm { min-width: 0; font-size: calc(var(--bh) * .34); line-height: 1.1; color: #f1f5f9; text-shadow: 0 1px 2px #000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 	.l1 em { flex: none; font-style: normal; font-size: calc(var(--bh) * .23); color: #93a3b8; text-shadow: 0 1px 2px #000; }
 	.st { display: flex; gap: 3px; }
-	.chip { display: inline-flex; align-items: center; gap: 1px; padding: 0 calc(var(--bh) * .1); border-radius: 4px; font-size: calc(var(--bh) * .27); line-height: calc(var(--bh) * .38); color: #fff; background: rgba(0,0,0,.62); border: 1px solid rgba(255,255,255,.12); }
-	.chip img { width: calc(var(--bh) * .33); height: calc(var(--bh) * .3); object-fit: contain; }
+	.cchip { display: inline-flex; align-items: center; gap: 1px; padding: 0 calc(var(--bh) * .1); border-radius: 4px; font-size: calc(var(--bh) * .27); line-height: calc(var(--bh) * .38); color: #fff; background: rgba(0,0,0,.62); border: 1px solid rgba(255,255,255,.12); }
+	.cchip img { width: calc(var(--bh) * .33); height: calc(var(--bh) * .3); object-fit: contain; }
 	.itm { position: absolute; right: calc(var(--bh) * .18); top: 50%; transform: translateY(-50%); width: calc(var(--bh) * .7); height: calc(var(--bh) * .56); display: grid; place-items: center; border-radius: 5px; background: #3f7fe0; box-shadow: 0 0 6px rgba(63,127,224,.6); }
 	.itm img { width: 76%; height: 70%; object-fit: contain; }
-	.seg { display: inline-flex; align-items: center; gap: 2px; }
-	.seg i { width: calc(var(--bh) * .3); height: calc(var(--bh) * .18); background: rgba(255,255,255,.12); transform: skewX(-18deg); border-radius: 1px; }
-	.seg i.on { background: linear-gradient(180deg, #d4a8ff, #8a4fd6); box-shadow: 0 0 5px rgba(180,130,240,.8); }
-	.seg b { font-weight: normal; margin-left: 6px; font-size: calc(var(--bh) * .24); color: #d7c4f5; }
+	.lvseg { display: inline-flex; align-items: center; gap: 2px; }
+	.lvseg i { width: calc(var(--bh) * .3); height: calc(var(--bh) * .18); background: rgba(255,255,255,.12); transform: skewX(-18deg); border-radius: 1px; }
+	.lvseg i.on { background: linear-gradient(180deg, #d4a8ff, #8a4fd6); box-shadow: 0 0 5px rgba(180,130,240,.8); }
+	.lvseg b { font-weight: normal; margin-left: 6px; font-size: calc(var(--bh) * .24); color: #d7c4f5; }
 </style>
