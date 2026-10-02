@@ -16,6 +16,7 @@ import { teamName, teamAdj, placeName } from './teams'
 import type { GameMap } from './maps'
 import type { MatchState, Piece, Team } from './match'
 import { zoneTable, hexCube, cubeDist } from './zones'
+import { isTurret } from './tokens'
 
 export const LANE = ['Orange Beach', 'Center', 'Blue Beach'] as const
 export const START_LANE = 1
@@ -96,32 +97,40 @@ export function autoPick(s: MatchState): string | null {
 // ── spawning ────────────────────────────────────────────────────────────────
 const BLOCKED = new Set(['terrain'])
 /** A fresh wave on a zone's spawn points (spawnOrange / spawnBlue hexes; minion type
- *  from the map's meta, melee by default). A spawn point that's taken → the nearest
- *  free hex in the same zone. */
-export function spawnWave(map: GameMap | null, zone: string, pieces: Record<string, Piece>, tag: string): Record<string, Piece> {
+ *  from the map's meta, melee by default). A token on a spawn point is removed first and
+ *  the minion spawns there (`cleared` = those tokens' ids). A spawn point held by anything
+ *  else — a unit, or Trinkets' Turret, which is an object and not a token — sends its
+ *  minion to the nearest empty hex in the same zone. (`cards` tells whose companion is the Turret.) */
+export function spawnWave(map: GameMap | null, zone: string, pieces: Record<string, Piece>, tag: string, cards?: Record<string, { hero: string }> | null): { minions: Record<string, Piece>; cleared: string[] } {
 	const cells = map?.cells ?? {}
 	const zones = zoneTable(map)
-	const taken = new Set(Object.values(pieces).filter((p) => !p.attachedTo).map((p) => p.hex))
+	const onBoard = Object.values(pieces).filter((p) => !p.attachedTo)
+	const isToken = (p: Piece) => p.kind === 'token' && !isTurret(p, cards)
+	const taken = new Set(onBoard.map((p) => p.hex)) // anything at all: a displaced minion needs an EMPTY hex
+	const blocked = new Set(onBoard.filter((p) => !isToken(p)).map((p) => p.hex)) // only these hold a spawn point
 	const free = Object.keys(cells).filter((h) => zones[h] === zone && !BLOCKED.has(cells[h])).sort()
-	const out: Record<string, Piece> = {}
+	const minions: Record<string, Piece> = {}
+	const cleared: string[] = []
 	const spawns = Object.keys(cells).filter((h) => zones[h] === zone && (cells[h] === 'spawnOrange' || cells[h] === 'spawnBlue')).sort()
-	// the untaken spawn points first, so a displaced minion never steals another's point
-	spawns.sort((a, b) => Number(taken.has(a)) - Number(taken.has(b)))
+	// the open spawn points first, so a displaced minion never steals another's point
+	spawns.sort((a, b) => Number(blocked.has(a)) - Number(blocked.has(b)))
 	for (const sp of spawns) {
 		let hex: string | undefined = sp
-		if (taken.has(sp)) {
+		if (blocked.has(sp)) {
 			const c = hexCube(sp)
 			hex = free.filter((h) => !taken.has(h)).sort((a, b) => cubeDist(hexCube(a), c) - cubeDist(hexCube(b), c))[0]
 			if (!hex) continue
+		} else {
+			for (const p of onBoard) if (p.hex === sp && isToken(p)) cleared.push(p.id)
 		}
 		taken.add(hex)
 		const team: Team = cells[sp] === 'spawnOrange' ? 'orange' : 'blue'
 		const m = map?.meta?.[sp]?.m
 		const role = m === 'ranged' || m === 'heavy' ? m : 'melee'
 		const id = `minion_${sp}_${tag}`
-		out[id] = { id, hex, team, kind: 'minion', role }
+		minions[id] = { id, hex, team, kind: 'minion', role }
 	}
-	return out
+	return { minions, cleared }
 }
 
 // ── pushing ────────────────────────────────────────────────────────────────
@@ -146,7 +155,9 @@ export function pushLane(s: MatchState, winner: Team): Partial<MatchState> {
 	}
 	patch.lane = lane
 	if (waves <= 0) return { ...patch, wonBy: { team: winner, reason: 'won the Final Push' }, pushNews: news(null, 'won the Final Push') }
-	patch.pieces = { ...pieces, ...spawnWave(s.map, LANE[lane], pieces, `${s.round}_${s.turn}_${waves}`) }
+	const wave = spawnWave(s.map, LANE[lane], pieces, `${s.round}_${s.turn}_${waves}`, s.cards)
+	for (const id of wave.cleared) delete pieces[id] // tokens on the new zone's spawn points make way
+	patch.pieces = { ...pieces, ...wave.minions }
 	patch.pushNews = news(LANE[lane], null)
 	return patch
 }

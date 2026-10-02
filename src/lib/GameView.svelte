@@ -19,7 +19,7 @@
 	import { uiLayout, layoutVars } from '$lib/layout';
 	import { placeToken, moveToken, effectiveHex, MINES, tokenName, tokensLeft, removalOptions, applyRemoval, removalLog, canRemove, type ArmToken, type RemovalOption } from '$lib/tokens';
 	import {
-		colorHex, movePiece, teamForSeat, throneHex, minionCoins, heroDefeatSummary, canRespawn, freeSpawns, teamOf, clearAround,
+		colorHex, movePiece, teamForSeat, throneHex, minionCoins, heroDefeatSummary, canRespawn, freeSpawns, teamOf, clearable,
 		type MatchState, type Player, type MatchSession, type Team, type ConnStatus
 	} from '$lib/match';
 
@@ -145,7 +145,7 @@
 		immune: p.role === 'heavy' && heavyImmune($ms, p.id) ? true : undefined,
 		// hover label (mouse): the same name the toolbar shows, heroes/minions in their team colour
 		name: labelOf(p), nameColor: teamText(p),
-		locked: p.role === 'heavy' && !iAmHost && heavyImmune($ms, p.id) ? true : undefined
+		locked: clearing || (p.role === 'heavy' && !iAmHost && heavyImmune($ms, p.id)) ? true : undefined
 	}));
 
 	let board: BoardCanvas;
@@ -156,7 +156,7 @@
 	$: areas = [...Object.entries($ms.radii ?? {}).flatMap(([pid, r]) => {
 		const hero = $ms.pieces?.[pid];
 		return hero && r > 0 ? [{ hex: hero.hex, r, color: colorHex(hero.color ?? '') }] : [];
-	}), ...battleMarks, ...spawnMarks];
+	}), ...battleMarks, ...spawnMarks, ...clearMarks];
 
 	// ── minion battle / lane (battle.ts) ──
 	// the minions the battle's loser may take off glow red on the board
@@ -308,6 +308,12 @@
 		// tapping any piece (heroes included) just picks it up to move it — a
 		// player's board opens from the right-hand HUD instead. Minions / tokens
 		// also get the delete toolbar (heroes don't).
+		if (clearing) {
+			// Clear: a tap on a token next to your hero ticks / unticks it (nothing is picked up)
+			if (id && clearCands.some((p) => p.id === id)) clearSel = clearSel.includes(id) ? clearSel.filter((x) => x !== id) : [...clearSel, id];
+			if (id) queueMicrotask(() => board?.release()); // so the same token can be tapped again
+			return;
+		}
 		if (placing) return;
 		selPieceId = pc ? id : null;
 	}
@@ -346,19 +352,30 @@
 	}
 	function closeConfirm() { confirmKind = null; actId = null; selPieceId = null; }
 	// your OWN hero: take it off the board (a card effect), say who defeated you (they get the
-	// reward, their teammates the assists), or Clear after an attack card (enemy tokens next to you)
+	// reward, their teammates the assists), or Clear instead of an attack (choose which of the
+	// tokens next to you leave — yours, a friend's or the enemy's; rulebook p.13)
 	$: ownHeroSel = !!selPiece && selPiece.kind === 'hero' && selPiece.id === clientId;
 	$: ownCs = $ms.cards?.[clientId];
 	$: ownCardIdx = ownCs ? (ownCs.turns?.[$ms.turn - 1] ?? ownCs.pending) : null;
 	$: ownAttack = !!ownCs && ownCardIdx != null && ownCardIdx >= 0 && heroCards(ownCs.hero)[ownCardIdx]?.primaryAction === 'ATTACK';
-	$: clearCount = ownHeroSel && ownAttack ? clearAround($ms, clientId).removed.length : 0;
+	$: clearCount = ownHeroSel && ownAttack ? clearable($ms, clientId).length : 0;
+	// Clear mode: the tokens next to you glow; tap the ones to remove, then confirm
+	let clearing = false;
+	let clearSel: string[] = [];
+	$: clearCands = clearing ? clearable($ms, clientId) : [];
+	$: clearPick = clearSel.filter((id) => clearCands.some((p) => p.id === id)); // still there and still adjacent
+	$: clearMarks = clearCands.map((p) => ({ hex: p.hex, r: 0, color: clearPick.includes(p.id) ? '#ff5a4d' : '#ffe7a8' }));
+	$: if (clearing && !ownAttack) cancelClear(); // the turn moved on
+	function startClear() { board?.release(); selPieceId = null; actId = null; cancelPlace(); clearSel = []; clearing = true; }
+	function cancelClear() { clearing = false; clearSel = []; }
+	function clearAll() { clearSel = clearCands.map((p) => p.id); }
 	let pickKiller = false;
 	$: killers = pickKiller ? Object.keys($ms.cards ?? {}).filter((id) => id !== clientId && teamOf($ms, id) && teamOf($ms, id) !== teamOf($ms, clientId)) : [];
 	function selfRemoveAsk() { if (!selPiece) return; actId = selPiece.id; confirmKind = 'selfremove'; board?.release(); }
 	function doSelfRemove() { session.cardAction({ kind: 'removeHero', pid: clientId }); closeConfirm(); }
 	function selfDefeatAsk() { board?.release(); pickKiller = true; }
 	function selfDefeat(killer: string) { session.cardAction({ kind: 'defeatHero', pid: killer, target: clientId }); pickKiller = false; selPieceId = null; }
-	function doClear() { board?.release(); session.cardAction({ kind: 'clearAround', pid: clientId }); selPieceId = null; }
+	function doClear() { if (clearPick.length) session.cardAction({ kind: 'clearAround', pid: clientId, ids: clearPick }); cancelClear(); }
 	// attacks in flight (match.ts): the defender answers, the attacker waits
 	$: attacks = $ms.attacks ?? {};
 	$: incoming = attacks[clientId] && !attacks[clientId].defending ? attacks[clientId] : null;
@@ -542,11 +559,19 @@
 	</div>
 {/snippet}
 
-<svelte:window on:keydown={(e) => { if (e.key !== 'Escape') return; if (confirmLeave) confirmLeave = false; else { pendingSpawn = null; pendingToken = null; pingArmed = false; } }} on:pointerdown={(e) => { viewsOutside(e); }} bind:innerWidth={gvw} bind:innerHeight={gvh} />
+<svelte:window on:keydown={(e) => { if (e.key !== 'Escape') return; if (confirmLeave) confirmLeave = false; else { pendingSpawn = null; pendingToken = null; pingArmed = false; if (clearing) cancelClear(); } }} on:pointerdown={(e) => { viewsOutside(e); }} bind:innerWidth={gvw} bind:innerHeight={gvh} />
 
 <div class="gamewrap" class:mob={mobile} class:dashfull={!mobile && lay.underHud} style={mobile ? '' : layoutVars(lay)}>
 	{#if $ms.wonBy}
 		<button class="placehint won" on:click={() => (victoryClosed = false)} title="Show the victory screen again">🏆 {teamName($ms.wonBy.team)} win — {$ms.wonBy.reason}</button>
+	{:else if clearing}
+		<!-- Clear action: choose which of the tokens next to your hero leave the board -->
+		<div class="placehint clr">
+			<span>{clearCands.length ? 'Clear — tap the glowing tokens next to you' : 'Clear — no tokens next to you'}</span>
+			{#if clearCands.length > 1}<button class="spcancel" on:click={clearAll}>All</button>{/if}
+			<button class="spcancel red" on:click={doClear} disabled={!clearPick.length}>Remove {clearPick.length}</button>
+			<button class="spcancel" on:click={cancelClear}>Cancel</button>
+		</div>
 	{:else if battle && !pendingToken && !pendingRespawn && !(mobile && pendingSpawn)}
 		<!-- the battle's removal step: who removes how many of THEIR OWN minions, impossible to miss -->
 		<div class="battlebox" style="--lc:{battle.loser === 'blue' ? '#2f7fe6' : '#ef7d22'}; --lt:{battle.loser === 'blue' ? '#8cc0ff' : '#ffb27a'}">
@@ -661,7 +686,7 @@
 				<button class="piedefeat" on:click={defeatSel}>Defeat <span class="gc sm"></span>{minionCoins(selPiece.role)}</button>
 			{/if}
 			{#if ownHeroSel}
-				{#if ownAttack}<button class="piedefeat" on:click={doClear} disabled={!clearCount} title="After an attack card: every enemy token next to you leaves the board">Clear{clearCount ? ` (${clearCount})` : ''}</button>{/if}
+				{#if ownAttack}<button class="piedefeat" on:click={startClear} disabled={!clearCount} title="Clear instead of attacking: choose which tokens next to you leave the board">Clear{clearCount ? ` (${clearCount})` : ''}</button>{/if}
 				<button class="piedel" on:click={selfRemoveAsk} title="A card effect takes your hero off the board — no rewards; back with your next card">Remove</button>
 				<button class="piedel" on:click={selfDefeatAsk} title="You were defeated (not by an Attack): choose who gets the reward">☠ Defeat</button>
 			{/if}
@@ -1105,6 +1130,8 @@
 	.piex:hover { color: #fff; }
 	.placehint.atk { border-color: rgba(239, 68, 68, 0.6); flex-wrap: wrap; justify-content: center; }
 	.spcancel.red { border-color: rgba(239, 68, 68, 0.7); color: #ffb4b4; }
+	.spcancel:disabled { opacity: .45; cursor: default; }
+	.placehint.clr { border-color: rgba(255, 90, 77, 0.6); }
 	.atkask { position: absolute; top: 64px; left: 50%; transform: translateX(-50%); z-index: 12; display: flex; align-items: center; gap: 12px; padding: 8px 10px 8px 16px; border-radius: 12px;
 		background: rgba(30, 8, 8, 0.94); border: 1px solid rgba(239, 68, 68, 0.75); color: #ffe1dc; font-size: 0.9rem; box-shadow: 0 0 26px rgba(239, 68, 68, 0.35), 0 10px 28px rgba(0,0,0,.6); animation: atkpulse 1.2s ease-in-out infinite; }
 	.atkask b { font-weight: normal; color: #fff; }

@@ -21,6 +21,10 @@ export const HERO_KIT: Record<string, string[]> = {
 	widget: ['companion']
 }
 export const COMPANIONS: Record<string, string> = { widget: 'Pyro', trinkets: 'Turret' }
+/** Trinkets' Turret is an object, not a token: Clear can't remove it and a respawning minion
+ *  doesn't sweep it off its spawn point. (`cards` = the match's card states, to tell whose it is.) */
+export const isTurret = (p: Piece, cards?: Record<string, { hero: string }> | null): boolean =>
+	p.token === 'companion' && (p.label === 'Turret' || (!!p.owner && cards?.[p.owner]?.hero === 'trinkets'))
 
 /** Min's mines: double-sided, placed face down (skull up), flipped to reveal. */
 export const MINES = new Set(['token_blast', 'token_dud'])
