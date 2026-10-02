@@ -500,7 +500,7 @@
 {#snippet pieceBody(p: Piece, c: { x: number; y: number }, sel: boolean, cid: string)}
 		{#if p.letter || p.mine === 'down' || p.token}
 			<!-- a hero's own piece: a hex token, or a round marker (board/KitToken) -->
-			<KitToken x={c.x} y={c.y} {size} token={p.token} color={p.color} team={p.team} {sel} mine={p.mine} peek={p.peek} letter={p.letter} label={p.label} sym={p.sym} />
+			<KitToken x={c.x} y={c.y} {size} token={p.token} color={p.color} team={p.team} {sel} mine={p.mine} peek={p.peek} letter={p.letter} label={p.label} sym={p.sym} rot={rotEff} uid={cid} />
 		{:else if p.role}
 			<!-- the face and emblem; the rim with its turning pips is in the `.rims` layer underneath (the ghost carries its own) -->
 			<use href={minionRef(p.team, p.role, cid === 'ghost' ? 'token' : 'top')} pointer-events="none"
