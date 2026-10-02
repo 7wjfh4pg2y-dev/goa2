@@ -127,8 +127,18 @@ const HERO_FACE: Record<string, [number, number, number]> = {
 };
 const FACE_DEFAULT: [number, number, number] = [0.55, 0.32, 2.6];
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
-/** Where a hero's face sits in their art: [x, y] as fractions of the painting, and the portrait zoom. */
-export const heroFace = (id: string): [number, number, number] => HERO_FACE[id] ?? FACE_DEFAULT;
+// The same faces in the big splash paintings (`heroSplash`, 1456×720 — the avatars are a 59% crop of them, Tigerclaw's mirrored):
+// [x, y] as fractions of the painting. Made by matching each avatar inside its splash; use these wherever the art is shown LARGE
+// (the matchup slices), because the small avatar art goes soft when it is blown up.
+const HERO_SPLASH_FACE: Record<string, [number, number]> = {
+	arien: [0.563, 0.404], bain: [0.396, 0.386], brogan: [0.477, 0.37], brynn: [0.703, 0.366], cutter: [0.601, 0.386], dodger: [0.571, 0.376],
+	emmitt: [0.385, 0.421], garrus: [0.559, 0.36], gydion: [0.615, 0.373], hanu: [0.564, 0.454], ignatia: [0.557, 0.426], min: [0.585, 0.356],
+	misa: [0.664, 0.364], mortimer: [0.413, 0.338], mrak: [0.473, 0.413], nebkher: [0.674, 0.39], razzle: [0.784, 0.455], rowenna: [0.422, 0.345],
+	sabina: [0.557, 0.361], silverarrow: [0.464, 0.346], snorri: [0.523, 0.365], swift: [0.573, 0.366], takahide: [0.59, 0.368], tali: [0.384, 0.375],
+	tigerclaw: [0.17, 0.326], trinkets: [0.227, 0.373], ursafar: [0.445, 0.456], wasp: [0.41, 0.424], whisper: [0.413, 0.374], widget: [0.415, 0.47],
+	wuk: [0.594, 0.326], xargatha: [0.579, 0.365]
+};
+export const splashFace = (id: string): [number, number] => HERO_SPLASH_FACE[id] ?? [0.55, 0.38];
 
 /** Inline CSS for a round portrait (a square element): the avatar art zoomed
  * and positioned so the hero's face sits in the middle. */

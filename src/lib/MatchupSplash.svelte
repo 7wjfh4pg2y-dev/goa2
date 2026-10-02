@@ -11,7 +11,7 @@
 	import { startingHand } from '$lib/cards/cardstate';
 	import { prewarm, preloadArt } from '$lib/cards/render';
 	import {
-		heroById, heroAvatar, heroLogo, heroFace, traitIcon, TRAIT_LABELS, type Trait
+		heroById, heroSplash, heroLogo, splashFace, traitIcon, TRAIT_LABELS, type Trait
 	} from '$lib/heroes';
 
 	export let orange: string[];
@@ -57,18 +57,18 @@
 	$: phone = vw <= 760;
 	$: sw = phone ? rowW || 370 : ((rowW || 616) - (n - 1) * 12) / n; // one slice's width
 	$: sh = phone ? ((rowH || 280) - (n - 1) * 9) / n : rowH || 610; // … and height
-	// the hero's painting (2:1 avatar art — the face positions are measured on it) inside a box of
+	// the hero's big painting (2:1; never the small avatar art — it goes soft at this size) inside a box of
 	// the given shape (width / height): zoomed, the face brought to (atX, atY) where the picture allows
 	const c01 = (v: number) => Math.min(1, Math.max(0, v));
 	function art(id: string, aspect: number, zoom: number, atY: number, atX: number) {
-		const [fx, fy] = heroFace(id);
+		const [fx, fy] = splashFace(id);
 		const hi = Math.max(1, aspect / 2) * zoom, wi = 2 * hi; // the picture's size, in box heights
 		const px = wi - aspect < 0.001 ? 0.5 : c01((atX * aspect - fx * wi) / (aspect - wi));
 		const py = hi - 1 < 0.001 ? 0.5 : c01((atY - fy * hi) / (1 - hi));
 		const size = aspect <= 2 ? `auto ${(hi * 100).toFixed(1)}%` : `${((wi / aspect) * 100).toFixed(1)}% auto`;
-		return `background-image:url('${heroAvatar(id)}');background-size:${size};background-position:${(px * 100).toFixed(1)}% ${(py * 100).toFixed(1)}%;`;
+		return `background-image:url('${heroSplash(id)}');background-size:${size};background-position:${(px * 100).toFixed(1)}% ${(py * 100).toFixed(1)}%;`;
 	}
-	$: artOf = (id: string) => (phone ? art(id, sw / (sh + 32), 1.1, 0.42, 0.66) : art(id, (sw + 100) / sh, 1.16, 0.28, 0.5));
+	$: artOf = (id: string) => (phone ? art(id, sw / (sh + 32), 1.12, 0.45, 0.68) : art(id, (sw + 100) / sh, 1.08, 0.36, 0.5));
 
 	// the teams' symbols, as on the tie-breaker coin: a twelve-tooth gear, and a five-point star in a ring
 	const GEAR = (() => {
