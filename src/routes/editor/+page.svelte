@@ -3,6 +3,7 @@
 	import { base } from '$app/paths';
 	import { role } from '$lib/role';
 	import boardUrl from '$lib/images/board/forgotten_island.webp';
+	import { SCATTER, SCATTER_BY_KEY } from '$lib/board/scatter';
 
 	const BOARD = 2000;
 	const SQRT3 = Math.sqrt(3);
@@ -66,7 +67,15 @@
 	let waveQuick = 3, waveLong = 5; // wave-counter track length by game length
 	let selected: HexType | 'erase' = 'beach';
 	let minionKind: Minion = 'melee';
-	let tool: 'paint' | 'rotate' | 'battle' = 'paint';
+	let tool: 'paint' | 'rotate' | 'battle' | 'scatter' = 'paint';
+	// scatter terrain: what stands on a terrain hex instead of the plain boulder (hex → kind; '' = the boulder)
+	let scatter: Record<string, string> = {};
+	let scatterKey = SCATTER[1]?.key ?? '';
+	function setScatter(id: string) {
+		if (cells[id] !== 'terrain') return;
+		if (!scatterKey || scatter[id] === scatterKey) delete scatter[id]; else scatter[id] = scatterKey;
+		scatter = scatter;
+	}
 
 	let showImage = true, showEmpty = true, tileMode = true, painting = false, loaded = false;
 
@@ -140,6 +149,7 @@
 			else if (meta[id]) delete meta[id];
 			cells = cells; meta = meta;
 		}
+		if (cells[id] !== 'terrain' && scatter[id]) { delete scatter[id]; scatter = scatter; } // only terrain holds scatter
 	}
 	function rotateHex(id: string, back = false) {
 		if (!isSpawn(cells[id])) return;
@@ -155,15 +165,17 @@
 		e.preventDefault();
 		if (tool === 'rotate') rotateHex(id, e.shiftKey);
 		else if (tool === 'battle') toggleBattle(id);
+		else if (tool === 'scatter') setScatter(id);
 		else { painting = true; paint(id); }
 	}
 	const hexEnter = (id: string) => { if (tool === 'paint' && painting) paint(id); };
 
 	const WORK = 'goa2-map-work-v1', MAPS = 'goa2-maps-v1';
 	let saved: Record<string, unknown> = {};
-	function snapshot() { return { name, grid: { size, originX, originY, rot, cols, rows }, cells, meta, battleZone, waves: { quick: waveQuick, long: waveLong } }; }
+	function snapshot() { return { name, grid: { size, originX, originY, rot, cols, rows }, cells, meta, battleZone, waves: { quick: waveQuick, long: waveLong }, scatter }; }
 	function applyMap(m: Record<string, unknown>) {
 		cells = (m.cells as typeof cells) ?? {}; meta = (m.meta as typeof meta) ?? {};
+		scatter = { ...((m.scatter as Record<string, string>) ?? {}) };
 		const g = (m.grid as Record<string, number>) ?? {};
 		size = g.size ?? size; originX = g.originX ?? originX; originY = g.originY ?? originY;
 		rot = g.rot ?? rot; cols = g.cols ?? cols; rows = g.rows ?? rows;
@@ -178,10 +190,10 @@
 		if (paintedCount && !confirm('Load this map into the editor? Your current working map will be replaced (saved maps are untouched).')) return;
 		applyMap(data);
 	}
-	function newMap() { if (confirm('Start a new blank map?')) { cells = {}; meta = {}; name = 'untitled'; } }
-	function clearPaint() { if (confirm('Clear all painted hexes on this map?')) { cells = {}; meta = {}; } }
+	function newMap() { if (confirm('Start a new blank map?')) { cells = {}; meta = {}; scatter = {}; name = 'untitled'; } }
+	function clearPaint() { if (confirm('Clear all painted hexes on this map?')) { cells = {}; meta = {}; scatter = {}; } }
 
-	$: workJson = JSON.stringify({ name, grid: { size, originX, originY, rot, cols, rows }, cells, meta, battleZone, waves: { quick: waveQuick, long: waveLong } });
+	$: workJson = JSON.stringify({ name, grid: { size, originX, originY, rot, cols, rows }, cells, meta, battleZone, waves: { quick: waveQuick, long: waveLong }, scatter });
 	let savedAt = 0, saveError = false;
 	$: if (loaded && workJson) { try { localStorage.setItem(WORK, workJson); savedAt = Date.now(); saveError = false; } catch { saveError = true; } }
 	$: savedClock = savedAt ? new Date(savedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '';
@@ -237,6 +249,11 @@
 						<polygon points={poly(h.cx, h.cy, size, erot)} style="fill:{colorOf(cells[h.id])}" class="cell painted" role="button" tabindex="-1" aria-label="hex"
 							on:pointerdown={(e) => hexDown(e, h.id)} on:pointerenter={() => hexEnter(h.id)} />
 					{/if}
+					{#if scatter[h.id] && SCATTER_BY_KEY[scatter[h.id]]}
+						<!-- scatter terrain on this hex: a swatch and its name (the island draws the real thing) -->
+						<circle cx={h.cx} cy={h.cy - size * 0.12} r={size * 0.3} fill={SCATTER_BY_KEY[scatter[h.id]].dot} stroke="#fff" stroke-width="3" style="pointer-events:none" />
+						<text x={h.cx} y={h.cy + size * 0.5} text-anchor="middle" font-size={size * 0.27} fill="#fff" stroke="#0b1220" stroke-width="5" paint-order="stroke" style="pointer-events:none">{SCATTER_BY_KEY[scatter[h.id]].label.split(' ')[0]}</text>
+					{/if}
 				{:else if showEmpty}
 					<polygon points={poly(h.cx, h.cy, size, erot)} class="cell empty" role="button" tabindex="-1" aria-label="hex"
 						on:pointerdown={(e) => hexDown(e, h.id)} on:pointerenter={() => hexEnter(h.id)} />
@@ -276,8 +293,19 @@
 			<button class="tg" class:on={tool === 'paint'} on:click={() => (tool = 'paint')}>🖌 Paint</button>
 			<button class="tg" class:on={tool === 'rotate'} on:click={() => (tool = 'rotate')}>🔄 Facing</button>
 			<button class="tg" class:on={tool === 'battle'} on:click={() => (tool = 'battle')}>⚔ Battle zone</button>
+			<button class="tg" class:on={tool === 'scatter'} on:click={() => (tool = 'scatter')}>🗿 Scatter</button>
 		</div>
 		{#if tool === 'rotate'}<p class="tip">Click a spawn hex to turn it 60° (Shift-click reverses).</p>{/if}
+		{#if tool === 'scatter'}
+			<div class="scat">
+				<button class="sw" class:on={scatterKey === ''} on:click={() => (scatterKey = '')}><span class="dot" style="background:#434853"></span>Plain rock</button>
+				{#each SCATTER as k}
+					<button class="sw" class:on={scatterKey === k.key} on:click={() => (scatterKey = k.key)}><span class="dot" style="background:{k.dot}"></span>{k.label}</button>
+				{/each}
+			</div>
+			<p class="tip">Click a <b>Terrain</b> hex to put the chosen piece there (click it again, or use Plain rock, to go back to a boulder). {Object.keys(scatter).length} placed.
+				<a class="prev" href="{base}/map-lab?map=__editor" target="_blank" rel="noreferrer">See it on the island ↗</a></p>
+		{/if}
 		{#if tool === 'battle'}<p class="tip">Click spawn hexes to add/remove them from the starting wave (gold ring). Each gets a minion of its painted type at game start.</p>{/if}
 
 		<div class="bz">
@@ -381,6 +409,10 @@
 	.mk.on { border-color: #fff; }
 	.tools .tg { background: #1f2937; border: 2px solid transparent; }
 	.tools .tg.on { border-color: #38bdf8; background: #0b3a52; }
+	.tools { flex-wrap: wrap; }
+	.scat { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin: 4px 0 6px; }
+	.scat .sw { font-size: 12px; padding: 5px 8px; }
+	.tip .prev { color: #fde68a; margin-left: 4px; white-space: nowrap; }
 	.bz { border: 1px solid #374151; border-radius: 8px; padding: 8px 10px; margin: 8px 0; font-size: 12.5px; }
 	.bz b { font-size: 13px; }
 	.bzrow { margin-top: 4px; } .bzrow .o { color: #f2985a; font-weight: 700; } .bzrow .b { color: #6ea8f0; font-weight: 700; }

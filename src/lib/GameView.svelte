@@ -19,7 +19,7 @@
 	import { uiLayout, layoutVars } from '$lib/layout';
 	import { placeToken, moveToken, effectiveHex, MINES, tokenName, tokensLeft, removalOptions, applyRemoval, removalLog, canRemove, type ArmToken, type RemovalOption } from '$lib/tokens';
 	import {
-		colorHex, movePiece, teamForSeat, throneHex, minionCoins, heroDefeatSummary, canRespawn, freeSpawns, teamOf, clearable, boardLookOf, zoneGlowOf, type BoardLook,
+		colorHex, movePiece, teamForSeat, throneHex, minionCoins, heroDefeatSummary, canRespawn, freeSpawns, teamOf, clearable, boardLookOf, zoneGlowOf, boardFxOf, type BoardLook,
 		type MatchState, type Player, type MatchSession, type Team, type ConnStatus
 	} from '$lib/match';
 
@@ -156,6 +156,8 @@
 	$: glowZone = boardLook === 'island' && zoneGlow && !$ms.wonBy ? battleZone($ms) : null;
 	function setBoardLook(v: BoardLook) { if (iAmHost) session.update({ boardLook: v }); }
 	function setZoneGlow(v: boolean) { if (iAmHost) session.update({ zoneGlow: v }); }
+	$: boardFx = boardFxOf($ms);
+	function setBoardFx(v: boolean) { if (iAmHost) session.update({ boardFx: v }); }
 	// every lingering card effect in play (switched on from a played card)
 	$: activeFx = $ms.effects ?? [];
 	// area radii (set from each player's dash): centred on that player's hero, in their colour
@@ -653,7 +655,7 @@
 	<div class="ocean"></div>
 	<!-- on a phone the board sits between the top bar + player strip and the dash -->
 	<div class="boardarea" class:mob={mobile}>
-	<BoardCanvas bind:this={board} map={$ms.map ?? {}} look={boardLook} {glowZone} rotation={orientation} interactive={true} {placing} {placeGhost} holdColor={myHoldColor} onCancelPlace={cancelPlace} {areas} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} pings={boardPings} onPing={doPing} {pingArmed} />
+	<BoardCanvas bind:this={board} map={$ms.map ?? {}} look={boardLook} {glowZone} effects={boardFx} rotation={orientation} interactive={true} {placing} {placeGhost} holdColor={myHoldColor} onCancelPlace={cancelPlace} {areas} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} pings={boardPings} onPing={doPing} {pingArmed} />
 	</div>
 
 	<CardLayer bind:this={cardLayer} {mobile} {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} onRespawn={placeMyHero} onEnter={placeMyHero} onArmToken={armToken} holdingToken={!!pendingToken} {pingArmed} onPing={pingButton} bind:previewId />
@@ -828,6 +830,13 @@
 						<span class="mpacts">
 							<button class="act sm" class:primary={zoneGlow} disabled={!iAmHost || boardLook !== 'island'} on:click={() => setZoneGlow(true)}>On</button>
 							<button class="act sm" class:primary={!zoneGlow} disabled={!iAmHost || boardLook !== 'island'} on:click={() => setZoneGlow(false)}>Off</button>
+						</span>
+					</div>
+					<div class="mprow">
+						<span class="mpname">Moving effects<span class="mphero">the sea · turning minion rims · the outline's pulse</span></span>
+						<span class="mpacts">
+							<button class="act sm" class:primary={boardFx} disabled={!iAmHost} on:click={() => setBoardFx(true)}>On</button>
+							<button class="act sm" class:primary={!boardFx} disabled={!iAmHost} on:click={() => setBoardFx(false)}>Off</button>
 						</span>
 					</div>
 				</div>

@@ -1,9 +1,11 @@
 <script lang="ts">
-	import { portraitRect } from '$lib/heroes';
 	import { onMount, onDestroy } from 'svelte';
 	import Ocean from '$lib/board/Ocean.svelte';
 	import IslandLayer from '$lib/board/IslandLayer.svelte';
-	import MinionDefs from '$lib/board/MinionDefs.svelte';
+	import PieceDefs from '$lib/board/PieceDefs.svelte';
+	import HeroToken from '$lib/board/HeroToken.svelte';
+	import KitToken from '$lib/board/KitToken.svelte';
+	import { tokenImg } from '$lib/board/tokenArt';
 	import { outlineLoops, loopsPath } from '$lib/board/hexgeo';
 	import { zoneTable } from '$lib/zones';
 
@@ -13,6 +15,7 @@
 	export let map: {
 		cells?: Record<string, string>;
 		meta?: Record<string, { m: string; dir: number }>;
+		scatter?: Record<string, string>;
 		grid?: { size?: number };
 		name?: string;
 	} = {};
@@ -50,6 +53,8 @@
 	export let glowZone: string | null = null;
 	// island look: a still sea (no animation)
 	export let seaStill = false;
+	// the board's moving effects — the sea, the minions' turning rims, the battle zone's pulse (a host option)
+	export let effects = true;
 
 	const SQRT3 = Math.sqrt(3);
 	const tileSprites = import.meta.glob('./images/tiles/*.png', { eager: true, import: 'default' }) as Record<string, string>;
@@ -58,8 +63,6 @@
 	// `part`: 'top' = face + emblem (its rim turns in the `.rims` layer), 'rim' = that rim, 'token' = the whole piece, still
 	const minionRef = (team: string, role?: string, part: 'top' | 'rim' | 'token' = 'top') =>
 		`#mn-${part}-${team === 'blue' ? 'blue' : 'orange'}-${role === 'ranged' || role === 'heavy' ? role : 'melee'}`;
-	const tokenArt = import.meta.glob('./cards/images/*.png', { eager: true, import: 'default' }) as Record<string, string>;
-	const tokenImg = (name?: string) => (name ? tokenArt[`./cards/images/${name}.png`] : undefined);
 
 	$: cells = map.cells ?? {};
 	$: meta = map.meta ?? {};
@@ -495,30 +498,9 @@
 </script>
 
 {#snippet pieceBody(p: Piece, c: { x: number; y: number }, sel: boolean, cid: string)}
-		{#if p.letter}
-			<!-- companion (Turret / Pyro): player-colour disc, its letter, team ring -->
-			<circle cx={c.x} cy={c.y} r={size * 0.6} fill={p.color ?? pieceColor(p.team)} stroke={sel ? '#fde047' : pieceColor(p.team)} stroke-width={size * 0.16} />
-			<text x={c.x} y={c.y} text-anchor="middle" dominant-baseline="central" font-size={size * 0.7} font-weight="900" fill="#0b1220" pointer-events="none">{p.letter}</text>
-		{:else if p.mine === 'down'}
-			<!-- a mine, face down: the owner's colour, brass ring, skull & crossbones emblem -->
-			{@const R = size * 0.6}
-			<circle cx={c.x} cy={c.y} r={R} fill={p.color ?? pieceColor(p.team)} />
-			<circle cx={c.x} cy={c.y} r={R} fill="url(#mine-shade)" />
-			<circle cx={c.x} cy={c.y} r={R * 0.86} fill="none" stroke="#c79a4e" stroke-opacity=".85" stroke-width={R * 0.035} />
-			<circle cx={c.x} cy={c.y} r={R} fill="none" stroke={sel ? '#fde047' : '#12161e'} stroke-width={R * 0.12} />
-			<use href="#mine-skull" x={c.x - R} y={c.y - R} width={R * 2} height={R * 2} pointer-events="none" />
-			{#if p.peek}
-				<!-- only its owner sees which mine this is -->
-				<circle cx={c.x + size * 0.46} cy={c.y + size * 0.42} r={size * 0.2} fill="#0b1220" stroke="#f4ecd8" stroke-width={size * 0.04} pointer-events="none" />
-				<text x={c.x + size * 0.46} y={c.y + size * 0.43} text-anchor="middle" dominant-baseline="central" font-size={size * 0.24} fill="#f4ecd8" pointer-events="none">{p.peek}</text>
-			{/if}
-		{:else if p.token}
-			<circle cx={c.x} cy={c.y} r={size * 0.6} fill="rgba(9,13,22,.82)" stroke={sel ? '#fde047' : pieceColor(p.team)} stroke-width={size * 0.12} />
-			{#if tokenImg(p.token) ?? p.sym}
-				<image href={tokenImg(p.token) ?? p.sym} x={c.x - size * 0.5} y={c.y - size * 0.5} width={size} height={size} preserveAspectRatio="xMidYMid meet" pointer-events="none" />
-			{:else if p.label}
-				<text x={c.x} y={c.y} text-anchor="middle" dominant-baseline="central" font-size={size * 0.6} font-weight="800" fill="#f6ead2" pointer-events="none">{p.label[0]}</text>
-			{/if}
+		{#if p.letter || p.mine === 'down' || p.token}
+			<!-- a hero's own piece: a hex token, or a round marker (board/KitToken) -->
+			<KitToken x={c.x} y={c.y} {size} token={p.token} color={p.color} team={p.team} {sel} mine={p.mine} peek={p.peek} letter={p.letter} label={p.label} sym={p.sym} />
 		{:else if p.role}
 			<!-- the face and emblem; the rim with its turning pips is in the `.rims` layer underneath (the ghost carries its own) -->
 			<use href={minionRef(p.team, p.role, cid === 'ghost' ? 'token' : 'top')} pointer-events="none"
@@ -533,27 +515,7 @@
 				</g>
 			{/if}
 		{:else}
-			<!-- hero piece = the player icon: face portrait, team ring, player-colour outer ring -->
-			<!-- built like the minion tokens (dark rim, the team's copper / ice), but bigger, with the player's
-			     colour as the outer band and the face filling the middle -->
-			{@const R = size * 0.78}
-			<circle cx={c.x} cy={c.y} r={R} fill="#0d1118" />
-			<circle cx={c.x} cy={c.y} r={R * 0.95} fill={p.color ?? pieceColor(p.team)} />
-			<circle cx={c.x} cy={c.y} r={R * 0.885} fill="none" stroke="#fff" stroke-opacity=".3" stroke-width={R * 0.035} stroke-linecap="round"
-				stroke-dasharray="{R * 1.15} {R * 6}" transform="rotate(-150 {c.x} {c.y})" pointer-events="none" />
-			<circle cx={c.x} cy={c.y} r={R * 0.82} fill="#0d1118" />
-			<circle cx={c.x} cy={c.y} r={R * 0.795} fill={p.team === 'orange' ? 'url(#mn-face-orange)' : p.team === 'blue' ? 'url(#mn-face-blue)' : '#9aa4b2'} />
-			<circle cx={c.x} cy={c.y} r={R * 0.715} fill="#0d1118" />
-			{#if p.hero}
-				{@const pr = portraitRect(p.hero, c.x, c.y, R * 1.39)}
-				<clipPath id="pc-{cid}"><circle cx={c.x} cy={c.y} r={R * 0.695} /></clipPath>
-				<image href={pr.href} x={pr.x} y={pr.y} width={pr.w} height={pr.h} clip-path="url(#pc-{cid})" preserveAspectRatio="none" pointer-events="none" />
-				<circle cx={c.x} cy={c.y} r={R * 0.675} fill="none" stroke="#000" stroke-opacity=".28" stroke-width={R * 0.045} pointer-events="none" />
-			{:else if p.sym}
-				<image href={p.sym} x={c.x - size * 0.46} y={c.y - size * 0.46} width={size * 0.92} height={size * 0.92} preserveAspectRatio="xMidYMid meet" pointer-events="none" style="filter:drop-shadow(0 1px 2px rgba(0,0,0,.6))" />
-			{:else if p.label}
-				<text x={c.x} y={c.y} text-anchor="middle" dominant-baseline="central" font-size={size * 0.72} font-weight="800" fill="#0b1220" stroke="rgba(255,255,255,.6)" stroke-width={size * 0.02} pointer-events="none">{p.label}</text>
-			{/if}
+			<HeroToken x={c.x} y={c.y} r={size * 0.78} hero={p.hero} team={p.team} color={p.color} uid={cid} sym={p.sym} label={p.label} />
 		{/if}
 {/snippet}
 
@@ -569,15 +531,16 @@
 	on:pointerleave={() => { if (!dragId) hoverHex = null; hoverName = null; }}
 	bind:clientWidth={wrapW}
 	bind:clientHeight={wrapH}
+	class:calm={!effects}
 	class:holding={!!ghostPiece}
 	class:pinging={pingArmed}
 	role="img"
 	aria-label={map.name ? `Game board: ${map.name}` : 'Game board'}
 >
 	{#if look === 'island' && viewM}
-		<Ocean {bounds} view={viewM} {coast} {size} still={seaStill} />
+		<Ocean {bounds} view={viewM} {coast} {size} still={seaStill || !effects} />
 		<svg class="land" class:moving viewBox={vb} preserveAspectRatio="xMidYMid meet" style:transform={landTf} aria-hidden="true">
-			<IslandLayer {cells} {meta} {size} rot={rotEff} zones={zoneNames} thrones={throneAt} {coast} />
+			<IslandLayer {cells} {meta} {size} rot={rotEff} zones={zoneNames} thrones={throneAt} {coast} scatter={map.scatter ?? {}} />
 		</svg>
 		<!-- the battle zone's outline is its own svg so that its pulse is an opacity animation on a whole element
 		     (GPU work); pulsing a path inside the land svg re-styled and repainted that layer every frame -->
@@ -605,24 +568,7 @@
 	{/if}
 	<svg class="pieces" viewBox={vb} preserveAspectRatio="xMidYMid meet" bind:this={svgEl}>
 		<defs>
-			<MinionDefs />
-			<linearGradient id="shield-silver" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff" /><stop offset=".45" stop-color="#cfd5dc" /><stop offset="1" stop-color="#7d8792" /></linearGradient>
-			<linearGradient id="mine-bone" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4ecd9" /><stop offset="1" stop-color="#c7b894" /></linearGradient>
-			<radialGradient id="mine-shade"><stop offset=".55" stop-color="#000" stop-opacity="0" /><stop offset="1" stop-color="#000" stop-opacity=".42" /></radialGradient>
-			<!-- skull & crossbones for face-down mines (100×100 design space) -->
-			<symbol id="mine-skull" viewBox="0 0 100 100">
-				<g transform="translate(50 50) scale(.8) translate(-50 -46)">
-					<g stroke="#12161e" stroke-width="4.4" fill="#12161e"><g transform="translate(50 57) rotate(28)"><rect x="-29" y="-2.6" width="58" height="5.2" rx="2.2"/><circle cx="-31" cy="-3.3" r="4"/><circle cx="-31" cy="3.3" r="4"/><circle cx="31" cy="-3.3" r="4"/><circle cx="31" cy="3.3" r="4"/></g><g transform="translate(50 57) rotate(-28)"><rect x="-29" y="-2.6" width="58" height="5.2" rx="2.2"/><circle cx="-31" cy="-3.3" r="4"/><circle cx="-31" cy="3.3" r="4"/><circle cx="31" cy="-3.3" r="4"/><circle cx="31" cy="3.3" r="4"/></g></g>
-					<g fill="url(#mine-bone)"><g transform="translate(50 57) rotate(28)"><rect x="-29" y="-2.6" width="58" height="5.2" rx="2.2"/><circle cx="-31" cy="-3.3" r="4"/><circle cx="-31" cy="3.3" r="4"/><circle cx="31" cy="-3.3" r="4"/><circle cx="31" cy="3.3" r="4"/></g><g transform="translate(50 57) rotate(-28)"><rect x="-29" y="-2.6" width="58" height="5.2" rx="2.2"/><circle cx="-31" cy="-3.3" r="4"/><circle cx="-31" cy="3.3" r="4"/><circle cx="31" cy="-3.3" r="4"/><circle cx="31" cy="3.3" r="4"/></g></g>
-					<path d="M50 12 C35 12 25 22 25 36 C25 42 27 46 29 49 C30 51 30 53 29.5 55 C29 58 31 60 34 60.5 C36 61 37.5 62.5 38 64.5 L39 70 C39.4 71.6 40.8 72.6 42.4 72.6 L57.6 72.6 C59.2 72.6 60.6 71.6 61 70 L62 64.5 C62.5 62.5 64 61 66 60.5 C69 60 71 58 70.5 55 C70 53 70 51 71 49 C73 46 75 42 75 36 C75 22 65 12 50 12 Z" fill="#12161e" stroke="#12161e" stroke-width="4.4" stroke-linejoin="round"/>
-					<path d="M50 12 C35 12 25 22 25 36 C25 42 27 46 29 49 C30 51 30 53 29.5 55 C29 58 31 60 34 60.5 C36 61 37.5 62.5 38 64.5 L39 70 C39.4 71.6 40.8 72.6 42.4 72.6 L57.6 72.6 C59.2 72.6 60.6 71.6 61 70 L62 64.5 C62.5 62.5 64 61 66 60.5 C69 60 71 58 70.5 55 C70 53 70 51 71 49 C73 46 75 42 75 36 C75 22 65 12 50 12 Z" fill="url(#mine-bone)"/>
-					<path d="M31.5 38.5 C34 36 40 35.5 45 37.5 C46.5 38.2 47 39.8 46.4 41.4 L44 47 C43 49.2 40.6 50.2 38.3 49.6 C34.5 48.6 31.8 45.5 31.2 41.6 C31 40.4 31.1 39.3 31.5 38.5 Z" fill="#12161e"/><path d="M68.5 38.5 C66.0 36 60.0 35.5 55.0 37.5 C53.5 38.2 53.0 39.8 53.6 41.4 L56.0 47 C57.0 49.2 59.4 50.2 61.7 49.6 C65.5 48.6 68.2 45.5 68.8 41.6 C69.0 40.4 68.9 39.3 68.5 38.5 Z" fill="#12161e"/>
-					<path d="M50 49 C48.6 51.5 46.6 54.8 46.2 57 C46 58.3 47.2 59 48.3 58.4 L50 57.5 L51.7 58.4 C52.8 59 54 58.3 53.8 57 C53.4 54.8 51.4 51.5 50 49 Z" fill="#12161e"/>
-					<path d="M39.6 65.6 H60.4 M42.6 62.8 V72 M46.3 62.4 V72.4 M50 62.3 V72.6 M53.7 62.4 V72.4 M57.4 62.8 V72" stroke="#12161e" stroke-width="1.3" fill="none"/>
-					<path d="M31 56 C33 58.5 35.5 59.5 37.5 59.5" stroke="#12161e" stroke-opacity=".55" stroke-width="1.4" fill="none" stroke-linecap="round"/><path d="M69.0 56 C67.0 58.5 64.5 59.5 62.5 59.5" stroke="#12161e" stroke-opacity=".55" stroke-width="1.4" fill="none" stroke-linecap="round"/>
-					<path d="M33 24 C37 18.5 43 16 48 15.6" stroke="#fff" stroke-opacity=".5" stroke-width="1.6" fill="none" stroke-linecap="round"/>
-				</g>
-			</symbol>
+			<PieceDefs />
 		</defs>
 		<g bind:this={viewG} transform={viewTf}>
 			{#if look !== 'island'}
@@ -687,7 +633,9 @@
 					<!-- a marker riding on a hero (poison / bounty): a small badge that moves with them -->
 					<g class="piece" class:selectable={!!onMovePiece} class:selected={sel} class:lifted={sel && !!hoverHex} role="button" tabindex="-1" data-piece={p.id} aria-label="{p.token ?? 'marker'} on a hero"
 						transform={rotEff ? `rotate(${-rotEff} ${c.x} ${c.y})` : undefined}>
-						<circle cx={c.x} cy={c.y} r={size * 0.3} fill="rgba(9,13,22,.9)" stroke={sel ? '#fde047' : '#f4ecd8'} stroke-width={size * 0.06} />
+						<circle cx={c.x} cy={c.y} r={size * 0.35} fill={sel ? '#fde047' : '#0d1118'} />
+						<circle cx={c.x} cy={c.y} r={size * 0.315} fill={p.color ?? '#f4ecd8'} />
+						<circle cx={c.x} cy={c.y} r={size * 0.27} fill="#0d1118" />
 						{#if tokenImg(p.token)}
 							<image href={tokenImg(p.token)} x={c.x - size * 0.27} y={c.y - size * 0.27} width={size * 0.54} height={size * 0.54} preserveAspectRatio="xMidYMid meet" pointer-events="none" />
 						{/if}
@@ -755,5 +703,6 @@
 	.rim .turn svg { position: absolute; inset: -100%; width: 300%; height: 300%; scale: 0.33333; }
 	@keyframes rimturn { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 	@media (prefers-reduced-motion: reduce) { .rim .turn { animation: none; } }
+	.board-wrap.calm .rim .turn, .board-wrap.calm svg.zone { animation: none; } /* the host switched effects off */
 	@keyframes spin { to { transform: rotate(360deg); } }
 </style>

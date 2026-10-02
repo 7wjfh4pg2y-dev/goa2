@@ -1,10 +1,10 @@
 <script lang="ts">
 	// Map lab: the board on its own, to judge a new look before it goes into the game.
 	// No game, no network — sample pieces only. Options can be preset in the address:
-	// ?look=classic|island &team=orange|blue &pieces=0 &zone=Center &still=1
+	// ?look=classic|island &team=orange|blue &pieces=0 &zone=Center &fx=0 &map=__editor
 	import { onMount } from 'svelte';
 	import BoardCanvas from '$lib/BoardCanvas.svelte';
-	import { availableMaps, type GameMap, type MapChoice } from '$lib/maps';
+	import { availableMaps, editorMap, type GameMap, type MapChoice } from '$lib/maps';
 	import { LANE } from '$lib/battle';
 	import { throneHex } from '$lib/match';
 	import { heroLogo, heroById } from '$lib/heroes';
@@ -18,6 +18,7 @@
 	let showPieces = true;
 	let zone: string = 'Center';
 	let still = false;
+	let effects = true;
 	let ready = false;
 
 	$: map = (maps.find((m) => m.id === mapId)?.data ?? {}) as GameMap;
@@ -50,12 +51,15 @@
 
 	onMount(() => {
 		maps = availableMaps();
+		const work = editorMap(); // whatever is open in the map editor right now
+		if (work?.cells && Object.keys(work.cells).length) maps = [...maps, { id: '__editor', label: 'Editor (working map)', data: work }];
 		mapId = maps[0]?.id ?? '';
 		const q = new URLSearchParams(location.search);
 		if (q.get('look') === 'classic') look = 'classic';
 		if (q.get('team') === 'orange') team = 'orange';
 		if (q.get('pieces') === '0') showPieces = false;
 		if (q.get('still') === '1') still = true;
+		if (q.get('fx') === '0') effects = false;
 		if (q.has('zone')) zone = q.get('zone') ?? '';
 		if (q.get('map') && maps.some((m) => m.id === q.get('map'))) mapId = q.get('map')!;
 		ready = true;
@@ -67,7 +71,7 @@
 <div class="lab">
 	{#if ready}
 		<BoardCanvas bind:this={board} {map} {look} rotation={team === 'orange' ? 180 : 0} pieces={showPieces ? pieces : []} {thrones}
-			glowZone={zone || null} seaStill={still} onMovePiece={move} />
+			glowZone={zone || null} seaStill={still} {effects} onMovePiece={move} />
 	{/if}
 	<div class="bar">
 		<b>Map lab</b>
@@ -89,7 +93,7 @@
 			<label>Map <select bind:value={mapId}>{#each maps as m}<option value={m.id}>{m.label}</option>{/each}</select></label>
 		{/if}
 		<label class="chk"><input type="checkbox" bind:checked={showPieces} /> Pieces</label>
-		<label class="chk"><input type="checkbox" bind:checked={still} /> Still sea</label>
+		<label class="chk"><input type="checkbox" bind:checked={effects} /> Effects</label>
 		<span class="seg">
 			<button on:click={() => board?.zoomBtn(1.25)}>+</button>
 			<button on:click={() => board?.zoomBtn(0.8)}>−</button>
