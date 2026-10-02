@@ -1451,13 +1451,13 @@
 	{/if}
 
 	{#snippet roster(side: 'l' | 'r', list: Player[])}
-		<div class="roster {side}" class:compact={list.length > 2}>
+		<div class="roster {side}" class:compact={list.length > 2} class:tiny={list.length > 4}>
 			{#each list as p (p.id)}
 				{@const cs = viewCards[p.id]}
 				{@const st = chipCard(p, cs)}
 				<div class="rchip" class:me={p.id === clientId} class:open={dosL === p.id || dosR === p.id} class:out={!!$ms.defeated?.[p.id]} style={teamVars(pTeam(p))} role="button" tabindex="0"
 					title="{p.name}{cs ? ` · ${heroName(cs.hero)}` : ''}" on:click={() => openBoard(p.id)} on:keydown={(e) => (e.key === 'Enter' || e.key === ' ') && openBoard(p.id)}>
-					<PlayerIcon hero={cs?.hero ?? ''} team={pTeam(p)} color={colorHex(p.color)} size="38px" ring={2.5} />
+					<PlayerIcon hero={cs?.hero ?? ''} team={pTeam(p)} color={colorHex(p.color)} size={list.length > 4 ? '31px' : '38px'} ring={2.5} />
 					{#if cs}<b class="lv" class:ult={cs.ultimate}>{levelOf(cs)}</b>{/if}
 					<span class="who"><b>{p.name}</b><small>{cs ? heroName(cs.hero) : ''}</small></span>
 					{#if cs && st.k === 'up' && st.idx != null}
@@ -2033,6 +2033,10 @@
 	/* three or more a side: the token and the card say it (the name is in the tooltip and on the board) */
 	.roster.compact .who { display: none; }
 	.roster.compact .rchip { flex: 0 1 88px; justify-content: space-between; }
+	/* five a side (8–10 seats): everything a little smaller so five still fit the zone */
+	.roster.tiny { gap: 4px; }
+	.roster.tiny .rchip { padding: 0 4px 0 1px; gap: 2px; }
+	.roster.tiny .rchip .lv { left: 22px; width: 17px; height: 17px; font-size: 11px; }
 	/* this turn's card as a tiny card: empty · face down · face up with its initiative · defeated */
 	.cst { flex: none; width: 26px; height: 37px; box-sizing: border-box; padding: 0; border-radius: 4px; display: grid; place-items: center; font-size: 16px; color: var(--ink-3); border: 1.5px dashed rgba(255,255,255,.25); background: none; }
 	.cst.back { border: 0; color: var(--ink-dark); background: linear-gradient(180deg, #2c333f 0 16%, #f4efe3 16% 84%, #2c333f 84%); box-shadow: 0 0 0 1px #05101c; }
