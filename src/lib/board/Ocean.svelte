@@ -9,6 +9,12 @@
 	// different sizes and angles, sliding past each other, which is what makes water look
 	// like water instead of a pattern. Round the island: the shelf (pale bands hugging the
 	// coast) and the foam washing in and out.
+	//
+	// COST (this runs on every screen, on every PC): the canvas is kept SMALL — about 0.65
+	// megapixels whatever the window or pixel density, stretched by CSS (water is soft, it
+	// does not show) — the shelf's six wide strokes are drawn once per view into a spare
+	// canvas and copied, and the sea moves 20 times a second. A full-size canvas redrawn 30
+	// times a second with those strokes was the single biggest load on weak machines.
 	import { onMount } from 'svelte';
 	import { intHash } from './hexgeo';
 
@@ -29,6 +35,9 @@
 	let coastPath: Path2D | null = null;
 	$: coastPath = typeof Path2D !== 'undefined' && coast ? new Path2D(coast) : null;
 	let streaks: CanvasPattern | null = null, swells: CanvasPattern | null = null;
+	/** the shelf bands, drawn once per view (they do not move) */
+	let shelf: HTMLCanvasElement | null = null, shelfKey = '';
+	const BUDGET = 650_000; // canvas pixels
 	const STREAK_N = 512, SWELL_N = 256;
 
 	// ── textures (made once): fractal value noise that tiles seamlessly, 0..1
@@ -119,13 +128,26 @@
 		layer(swells, SWELL_N, u * 26, 1.5, 12, t * u * 0.1, t * u * 0.035, 0.5);
 
 		// ── the shelf: the sea floor rising to the island, as soft bands hugging the coast
+		//    (kept in a spare canvas: redrawn only when the view changes)
 		ctx.globalAlpha = 1;
 		if (coastPath) {
-			for (const [w, c] of [[6.2, 'rgba(60,196,222,.07)'], [4.9, 'rgba(70,204,226,.09)'], [3.8, 'rgba(84,212,230,.11)'], [2.8, 'rgba(104,222,234,.13)'], [1.95, 'rgba(130,230,238,.16)'], [1.3, 'rgba(166,240,242,.22)']] as Array<[number, string]>) {
-				ctx.lineWidth = size * w;
-				ctx.strokeStyle = c;
-				ctx.stroke(coastPath);
+			const key = [A, B, C, D, E, F, canvas.width, canvas.height, size, coast.length].join();
+			if (!shelf) shelf = document.createElement('canvas');
+			if (key !== shelfKey) {
+				shelfKey = key;
+				shelf.width = canvas.width; shelf.height = canvas.height;
+				const sc = shelf.getContext('2d')!;
+				sc.setTransform(dpr * A, dpr * B, dpr * C, dpr * D, dpr * E, dpr * F);
+				sc.lineCap = 'round'; sc.lineJoin = 'round';
+				for (const [w, c] of [[6.2, 'rgba(60,196,222,.07)'], [4.9, 'rgba(70,204,226,.09)'], [3.8, 'rgba(84,212,230,.11)'], [2.8, 'rgba(104,222,234,.13)'], [1.95, 'rgba(130,230,238,.16)'], [1.3, 'rgba(166,240,242,.22)']] as Array<[number, string]>) {
+					sc.lineWidth = size * w;
+					sc.strokeStyle = c;
+					sc.stroke(coastPath);
+				}
 			}
+			ctx.setTransform(1, 0, 0, 1, 0, 0);
+			ctx.drawImage(shelf, 0, 0);
+			ctx.setTransform(dpr * A, dpr * B, dpr * C, dpr * D, dpr * E, dpr * F);
 		}
 
 		// ── light on the water: the same streaks twice, at different sizes and angles, crossing
@@ -154,14 +176,18 @@
 		ctx.fillRect(0, 0, W, H);
 	}
 
-	// without animation: redraw whenever something the picture depends on changes
-	$: if (canvas && (still || reduce)) { void view; void bounds; void coastPath; void W; void H; void size; draw(); }
+	// redraw as soon as something the picture depends on changes (pan / zoom must not lag behind
+	// the island); one draw per frame at most
+	let queued = 0;
+	function soon() { if (!queued && typeof requestAnimationFrame !== 'undefined') queued = requestAnimationFrame(() => { queued = 0; draw(); }); }
+	$: if (canvas) { void view; void bounds; void coastPath; void W; void H; void size; void still; soon(); }
 
 	onMount(() => {
 		reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 		const fit = () => {
-			dpr = Math.min(window.devicePixelRatio || 1, 1.5); // the sea is soft: no need for full retina
 			W = canvas.clientWidth; H = canvas.clientHeight;
+			// `dpr` = canvas pixels per css px: never more than the screen's, and capped by the pixel budget
+			dpr = Math.min(window.devicePixelRatio || 1, 1.5, Math.sqrt(BUDGET / Math.max(1, W * H)));
 			canvas.width = Math.max(1, Math.round(W * dpr));
 			canvas.height = Math.max(1, Math.round(H * dpr));
 			draw();
@@ -169,7 +195,7 @@
 		const ro = new ResizeObserver(fit);
 		ro.observe(canvas);
 		fit();
-		// A plain 30-a-second timer, NOT requestAnimationFrame: a rAF loop makes the page produce a full frame at
+		// A plain 20-a-second timer (the water drifts well under a pixel per step), NOT requestAnimationFrame: a rAF loop makes the page produce a full frame at
 		// the display's rate (60+/s) even on the ticks where the sea isn't redrawn, and every such frame also
 		// re-ticks the board's GPU animations on the main thread (measured: about twice the idle work).
 		let last = performance.now();
@@ -179,8 +205,8 @@
 			t += Math.min(0.1, (now - last) / 1000);
 			last = now;
 			draw();
-		}, 33);
-		return () => { clearInterval(timer); ro.disconnect(); };
+		}, 50);
+		return () => { clearInterval(timer); ro.disconnect(); if (queued) cancelAnimationFrame(queued); };
 	});
 </script>
 

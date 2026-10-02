@@ -1002,11 +1002,7 @@
 	.s-col .home { width: 168px; margin: 0 0 20px -10px; transition: width 0.6s cubic-bezier(0.2, 0.85, 0.2, 1), margin 0.6s cubic-bezier(0.2, 0.85, 0.2, 1); }
 	.s-col.compact .home { width: 124px; margin-bottom: 14px; }
 	.s-col.landing .home { width: 420px; margin: 0 0 30px -16px; }
-	.s-col.landing .logo { animation: crestBreathe 3.6s ease-in-out infinite; }
-	@keyframes crestBreathe {
-		0%, 100% { filter: drop-shadow(0 20px 46px rgba(0, 0, 0, 0.65)) drop-shadow(0 0 26px rgba(216, 179, 106, 0.16)); }
-		50% { filter: drop-shadow(0 20px 46px rgba(0, 0, 0, 0.65)) drop-shadow(0 0 46px rgba(216, 179, 106, 0.36)); }
-	}
+	.s-col.landing .logo { filter: drop-shadow(0 20px 46px rgba(0, 0, 0, 0.65)) drop-shadow(0 0 34px rgba(216, 179, 106, 0.26)); }
 	.stage { position: relative; width: 100%; transition: height 0.32s cubic-bezier(0.2, 0.8, 0.2, 1); }
 	.s-col.landing .stage { min-height: var(--h-btn-lg); } /* (room for Enter before the step is measured: no jump on load) */
 	.step { position: absolute; top: 0; left: 0; right: 0; display: flex; flex-direction: column; gap: 16px; }
@@ -1177,8 +1173,7 @@
 		.chead { flex: none; flex-direction: row; gap: 12px; margin: 0; padding: 12px 12px 8px; }
 		.chead .home { width: 46px; }
 		.cbody { flex: 1; min-height: 0; overflow-y: auto; padding: 2px 12px 14px; }
-		.cform { gap: 13px; padding: 14px; border-radius: var(--r-lg); border: 1px solid var(--brass-line); background: var(--glass);
-			-webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: var(--sh-2), inset 0 1px 0 rgba(255, 255, 255, 0.07); }
+		.cform { gap: 13px; padding: 14px; border-radius: var(--r-lg); border: 1px solid var(--brass-line); background: var(--glass); box-shadow: var(--sh-2), inset 0 1px 0 rgba(255, 255, 255, 0.07); }
 		.cgrid, .ccol { display: contents; }
 		.cform .vrule, .crule { display: none; }
 		.g-map { order: 9; }
