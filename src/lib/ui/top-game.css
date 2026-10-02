@@ -48,9 +48,10 @@
 .top .coin { display: inline-block; flex: none; width: 17px; height: 17px; border-radius: 50%;
 	background: radial-gradient(circle at 35% 30%, #fff1b8, #e8b64a 55%, #a87716); box-shadow: inset 0 0 0 1.5px rgba(120, 80, 10, 0.7); }
 
-/* ---- the prompt line: under the scoreline (below the initiative rail once the cards are revealed) ---- */
-.top .prompts { position: absolute; left: 50%; top: 72px; transform: translateX(-50%); z-index: 9; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
-.top .prompts.low { top: 124px; }
+/* ---- the prompt line: under the scoreline, or under the initiative rail while that is up (GameView sets `top`).
+   Stacking, shared with CardLayer's helm layer: log 5 · scoreline / menu / view / hand 6 · chips + console 7 ·
+   player boards 8 · rail 9 · prompts + piece toolbar 10 · menu, deck and dialogs 20+ ---- */
+.top .prompts { position: absolute; left: 50%; top: 72px; transform: translateX(-50%); z-index: 10; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
 .top .prompt { position: relative; pointer-events: auto; display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 6px 0 16px; border-radius: 12px; white-space: nowrap;
 	font-size: 17px; color: var(--ink); background: var(--hull); border: 1px solid var(--brass-line); box-shadow: var(--sh-hud); }
 .top .prompt > span:first-child { margin-right: 6px; }
@@ -68,10 +69,11 @@
 @keyframes top-ask { 50% { opacity: 0.25; } }
 
 /* ---- the piece toolbar: actions only, right above the selected piece ---- */
-.top .ptool { position: fixed; transform: translate(-50%, -100%); z-index: 9; display: flex; align-items: center; gap: 6px; padding: 5px; border-radius: 12px; white-space: nowrap;
+.top .ptool { position: fixed; transform: translate(-50%, -100%); z-index: 10; display: flex; align-items: center; gap: 6px; padding: 5px; border-radius: 12px; white-space: nowrap;
 	font-size: 15px; background: var(--hull); border: 1px solid var(--brass-line); box-shadow: var(--sh-hud); }
-.top .ptool.free { position: absolute; left: 50%; top: 72px; transform: translateX(-50%); } /* its piece is off screen */
+.top .ptool.free { position: absolute; left: 50%; transform: translateX(-50%); } /* its piece is off screen: the line under the prompts */
 .top .ptool .lbl { padding: 0 4px 0 8px; text-transform: capitalize; }
+.top .ptool .lbl:only-child { padding: 0 8px; line-height: 32px; } /* touch: a piece with a name and nothing to do */
 .top .ptool .gain { display: inline-flex; align-items: center; gap: 4px; }
 .top .ptool .gain em { font-style: normal; color: var(--ink-3); }
 .top .ptool .gain img { width: 18px; height: 18px; object-fit: contain; }

@@ -13,6 +13,8 @@
 	export let undo: (() => void) | null = null;
 	export let canUndo = false;
 	export let onFx: (id: string) => void = () => {};
+	/** design px from the top that the open log must stay under (a player board hanging on the left); 0 = free */
+	export let top = 0;
 
 	$: last = log[log.length - 1];
 	const hhmm = (t: number) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -26,7 +28,7 @@
 </script>
 
 {#if open}
-	<div class="logpanel">
+	<div class="logpanel" style:max-height={top ? `calc(100% - ${136 + top}px)` : null}>
 		<div class="hd">
 			<span class="t-label">Log</span>
 			{#if undo}<button class="pbtn" on:click={undo} disabled={!canUndo} title={canUndo ? `Undo: ${last?.text ?? ''}` : 'Nothing to undo this turn'}><TopIcon name="undo" />Undo</button>{/if}

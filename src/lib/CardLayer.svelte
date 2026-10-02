@@ -39,6 +39,14 @@
 	export let pingArmed = false; // the next board tap pings
 	export let onPing: () => void = () => {}; // arm a ping (pressed again: ping your own hero)
 	export let mobile = false; // phone layout (set by GameView at ≤760px wide): strip + compact dash
+	// what the helm is showing, for GameView's half of the screen (it binds these): the initiative rail, and how
+	// far down each open player board reaches, in design px (0 = closed) — its prompts, toolbar, log and view
+	// controls keep clear of them
+	export let railOn = false;
+	export let boardL = 0;
+	export let boardR = 0;
+	// the deck is open and hides the board: GameView rests the sea and the minion rims under it
+	export let covered = false;
 
 	const ORANGE = '#ef7d22';
 	const BLUE = '#2f7fe6';
@@ -638,9 +646,19 @@
 		if (pTeam(p) === viewTeam) dosR = dosR === pid ? null : pid;
 		else dosL = dosL === pid ? null : pid;
 	}
+	// a board is a fixed design: 70 from the top, DOS_H tall, DOS_REM more once it has a row of removed cards
+	const DOS_TOP = 70, DOS_H = 378, DOS_REM = 78;
+	const boardEnd = (pid: string | null, cs: PlayerCardState | undefined) => (pid && cs ? DOS_TOP + DOS_H + (cs.removed.length ? DOS_REM : 0) : 0);
+	$: railOn = !mobile && rail.length > 0;
+	$: covered = deckOpen && !!mine;
+	$: boardL = mobile ? 0 : boardEnd(dosL, dosL ? viewCards[dosL] : undefined);
+	$: boardR = mobile ? 0 : boardEnd(dosR, dosR ? viewCards[dosR] : undefined);
+	// Escape (desktop): the card on top closes first, then the armed card and the boards (the deck has its own keys)
 	function onKey(e: KeyboardEvent) {
-		if (e.key !== 'Escape' || mobile || deckOpen || examine || selected != null) return;
-		armed = null; dosL = dosR = null;
+		if (e.key !== 'Escape' || mobile || deckOpen) return;
+		if (examine) examine = null;
+		else if (selected != null) closePreview();
+		else { armed = null; dosL = dosR = null; }
 	}
 
 	// arm, then commit: a click lifts a hand card and the action button becomes Commit;
@@ -2046,7 +2064,7 @@
 	.cst.dead svg { width: 19px; height: 19px; }
 
 	/* ── initiative rail: the revealed cards in order, under the scoreline ── */
-	.rail { position: absolute; top: 70px; left: 50%; transform: translateX(-50%); max-width: 760px; height: 48px; z-index: 9; display: flex; align-items: center; gap: 6px; }
+	.rail { position: absolute; top: 70px; left: 50%; transform: translateX(-50%); max-width: 696px; /* between two open player boards */ height: 48px; z-index: 9; display: flex; align-items: center; gap: 6px; }
 	.ini { flex: 0 1 auto; min-width: 0; height: 38px; display: flex; align-items: center; gap: 6px; padding: 0 12px 0 0; border-radius: 9px; overflow: hidden; white-space: nowrap; cursor: pointer; pointer-events: auto;
 		font-size: 15px; color: var(--ink); background: #071a2d; border: 1px solid var(--brass-line); box-shadow: var(--shhud); }
 	.ini .flag { align-self: stretch; flex: none; width: 38px; display: grid; place-items: center; padding-bottom: 4px; font-weight: 400; font-size: 23px; color: #fff; text-shadow: 0 2px 0 #000, 0 0 4px #000;
@@ -2072,7 +2090,7 @@
 	.dx { position: absolute; right: 8px; top: 8px; width: 32px; height: 32px; }
 	.dx svg { width: 15px; height: 15px; }
 	.dos-body { display: flex; flex-direction: column; gap: 14px; padding: 12px 16px 16px; }
-	.dos-row { position: relative; display: flex; align-items: center; gap: 10px; }
+	.dos-row { position: relative; display: flex; align-items: center; gap: 10px; min-height: 28px; }
 	.dossier .dcount.discwrap { position: static; }
 	.dossier .discpop { left: 0; right: 0; bottom: auto; top: calc(100% + 8px); max-width: none; }
 	.sp { flex: 1; }
