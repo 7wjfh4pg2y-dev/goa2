@@ -18,5 +18,5 @@ vite.config.ts.timestamp-*
 /rulebook.pdf
 /docs/rulebook.txt
 
-# the minion 3D models (35 MB) that tools/minion_art.py reads — kept locally
-/3d tiles/
+# the user's reference material, kept locally: the minion 3D models (35 MB) that tools/minion_art.py reads, and photos of their physical board
+/references/

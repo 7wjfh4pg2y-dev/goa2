@@ -5,12 +5,12 @@
 	// living jungle (palms, trees, bushes, ferns, mushrooms, logs, flowers), shells and
 	// driftwood on the beaches, grass and old paving in the centre, the Atlanteans' riveted
 	// brass deck and the Titans' ice, the cracks between zones and a glow round the battle zone.
-	// Static — nothing here animates except the battle-zone glow — and it takes no pointer
+	// Static — nothing here animates (the battle zone's pulsing outline is its own layer in BoardCanvas) — and it takes no pointer
 	// events (the board works hexes out from coordinates). Everything is placed by a hash of
 	// the hex id, so every player sees the same island.
 	// Clarity rules: small things stay small and low in contrast; anything tall stands on the
 	// RIM of its hex, never in the middle where a piece stands; no svg filters.
-	import { hexCenter, hexPoints, hexHash, hexNeighbour, outlineLoops, loopsPath, borderPath, type Pt } from './hexgeo';
+	import { hexCenter, hexPoints, hexHash, hexNeighbour, hexNeighbours, borderPath, type Pt } from './hexgeo';
 	import { zoneType } from '../zones';
 	import { MINION_ART, type MinionRole, type MinionTeam } from './minionArt';
 
@@ -19,9 +19,8 @@
 	export let size = 60;
 	/** the board's rotation on screen, so light and shadows always fall the same way */
 	export let rot = 0;
-	/** hex → zone name (zones.ts) for the cracks and the glow */
+	/** hex → zone name (zones.ts) for the cracks */
 	export let zones: Record<string, string> = {};
-	export let glowZone: string | null = null;
 	/** hex → team for the two throne hexes */
 	export let thrones: Record<string, string> = {};
 	/** the coastline (svg path), shared with the sea */
@@ -29,7 +28,7 @@
 
 	// minion spawn points: the emblem's radius on the hex (in hex sizes), and the two teams' inks
 	const EMBLEM = 0.6;
-	const INK = { orange: { ink: '#4a2208', halo: '#ffd9a8', badge: '#3a1c07' }, blue: { ink: '#123c70', halo: '#f2fbff', badge: '#0c2444' } };
+	const INK = { orange: { ink: '#4a2208', halo: '#ffd9a8' }, blue: { ink: '#123c70', halo: '#f2fbff' } };
 	const roleOf = (m?: string): MinionRole => (m === 'ranged' || m === 'heavy' ? m : 'melee');
 
 	// ── palette: [hue, saturation, lightness] of the tile and of the darker seam under it
@@ -85,8 +84,52 @@
 			rock: t === 'terrain'
 		};
 	});
-	// rocks: a boulder per terrain hex (shadow, body, lit top), plus a pebble beside some
-	$: rocks = tiles.filter((t) => t.rock).map((t) => {
+	// ── terrain hexes ── most hold a boulder; now and then something stranger stands there instead
+	// (after the scatter terrain on the user's own table: crystal clusters, giant mushrooms, a fan
+	// plant, a toothed plant, dead trees, broken pillars, rune stones, a carved cube, an orb on its
+	// stalk). Terrain touching a base takes after it: cooling lava by the Atlanteans' machines, ice
+	// floes by the Titans. Chosen by hash, so every player sees the same island.
+	const CRYSTALS = [
+		'--c1:#ead4ff;--c2:#a86bea;--c3:#5a2a9c;--cg:#c08bff', // purple
+		'--c1:#ffd0cc;--c2:#ef4b4b;--c3:#8f1717;--cg:#ff7a6a', // red
+		'--c1:#fff5bb;--c2:#f5c62a;--c3:#96700c;--cg:#ffe066', // yellow
+		'--c1:#d0ffe0;--c2:#3fd47a;--c3:#167a3c;--cg:#7dffb0' // green
+	];
+	// things that stand up straight: a column from the ground (radius r, design units) to a top drawn `lift` higher
+	const RAISED: Record<string, { r: number; lift: number; side: string; square?: boolean }> = {
+		pillar: { r: 11, lift: 15, side: '#5d626d' },
+		runestone: { r: 9.5, lift: 21, side: '#566070' },
+		cube: { r: 11, lift: 11, side: '#1f6f73', square: true },
+		orb: { r: 4.6, lift: 17, side: '#3c8a3c' }
+	};
+	// what grows in the wild (terrain touching jungle) and what stands in the open; dealt out in turn so
+	// the island always shows the whole range instead of whatever the dice happened to repeat
+	const WILD = ['crystal', 'bigshroom', 'deadtree', 'anemone', 'maw', 'crystal', 'orb', 'deadtree', 'bigshroom'];
+	const OPEN = ['pillar', 'crystal', 'runestone', 'cube', 'orb', 'crystal'];
+	$: features = (() => {
+		const out: Record<string, { ref: string; style?: string }> = {};
+		const wild: string[] = [], open: string[] = [];
+		for (const id of ids) {
+			if (cells[id] !== 'terrain') continue;
+			const near = hexNeighbours(id).map((n) => cells[n]).filter(Boolean);
+			if (near.some((t) => t.startsWith('baseOrange'))) out[id] = { ref: 'lava' };
+			else if (near.some((t) => t.startsWith('baseBlue'))) out[id] = { ref: 'floe' };
+			else if (hexHash(id, 70) <= 0.44) (near.includes('forest') ? wild : open).push(id); // the rest stay plain boulders
+		}
+		let colour = 0;
+		const deal = (list: string[], kinds: string[]) => {
+			list.sort((p, q) => hexHash(p, 71) - hexHash(q, 71) || (p < q ? -1 : 1));
+			list.forEach((id, n) => {
+				const ref = kinds[n % kinds.length];
+				out[id] = ref === 'crystal' ? { ref, style: CRYSTALS[colour++ % CRYSTALS.length] } : { ref };
+			});
+		};
+		deal(wild, WILD);
+		deal(open, OPEN);
+		return out;
+	})();
+	// rocks: a boulder per plain terrain hex (shadow, body, lit top), plus a pebble beside some; some are mossy
+	$: rocks = tiles.filter((t) => t.rock && !features[t.id]).map((t) => {
 		const r = size * (0.66 + 0.1 * hexHash(t.id, 5));
 		const o = { x: (hexHash(t.id, 6) - 0.5) * size * 0.16, y: (hexHash(t.id, 7) - 0.5) * size * 0.16 };
 		const c = { x: t.c.x + o.x, y: t.c.y + o.y };
@@ -94,7 +137,9 @@
 		return {
 			id: t.id,
 			body: blob(c, r, t.id, 100), top: blob(c, r * 0.7, t.id, 100), glint: blob(c, r * 0.4, t.id, 100),
-			pebble: hexHash(t.id, 9) > 0.45 ? blob({ x: t.c.x + Math.cos(pa) * size * 0.62, y: t.c.y + Math.sin(pa) * size * 0.62 }, size * 0.2, t.id, 200, 7) : ''
+			pebble: hexHash(t.id, 9) > 0.45 ? blob({ x: t.c.x + Math.cos(pa) * size * 0.62, y: t.c.y + Math.sin(pa) * size * 0.62 }, size * 0.2, t.id, 200, 7) : '',
+			moss: hexHash(t.id, 10) > 0.62 ? blob({ x: c.x + (hexHash(t.id, 11) - 0.5) * r * 0.5, y: c.y + (hexHash(t.id, 12) - 0.5) * r * 0.5 }, r * 0.42, t.id, 300, 7) : '',
+			bloom: hexHash(t.id, 10) > 0.8 ? { x: c.x + (hexHash(t.id, 13) - 0.5) * r * 0.7, y: c.y + (hexHash(t.id, 14) - 0.5) * r * 0.7 } : null
 		};
 	});
 
@@ -102,12 +147,23 @@
 	// `ref` names a drawing in <defs> (all in a 60-unit hex design space); `k` scales it to
 	// the board. A tall thing casts a shadow: round (`sr`, design units) or its own shape
 	// (`shade` → the drawing "<ref>-shade").
-	type Deco = { key: string; ref: string; x: number; y: number; r: number; k: number; sr?: number; shade?: boolean };
+	type Deco = { key: string; ref: string; x: number; y: number; r: number; k: number; sr?: number; shade?: boolean; style?: string; upright?: boolean };
 	const U = 1 / 60;
 	$: scenery = (() => {
 		const low: Deco[] = [], tall: Deco[] = [], patches: Array<{ key: string; x: number; y: number; rx: number; ry: number; r: number; fill: string }> = [];
 		const at = (c: Pt, deg: number, dist: number) => ({ x: c.x + Math.cos((deg * Math.PI) / 180) * dist, y: c.y + Math.sin((deg * Math.PI) / 180) * dist });
 		for (const t of tiles) {
+			const f = features[t.id];
+			if (f) {
+				const k = size * U, r0 = Math.round(hexHash(t.id, 301) * 360);
+				const item: Deco = { key: `${t.id}:f`, ref: f.ref, x: t.c.x, y: t.c.y, r: r0, k, style: f.style };
+				const big = 1 + 0.16 * hexHash(t.id, 302); // no two quite the same size
+				if (f.ref === 'lava' || f.ref === 'floe') low.push(item); // lying flat
+				else if (RAISED[f.ref]) tall.push({ ...item, r: 0, k: k * 1.25 * big });
+				else if (f.ref === 'crystal') tall.push({ ...item, upright: true, k: k * 1.12 * big }); // it carries its own ground glow
+				else tall.push({ ...item, k: k * (f.ref === 'maw' ? 1.3 : f.ref === 'deadtree' ? 1.12 : 1.2) * big, sr: f.ref === 'deadtree' ? undefined : f.ref === 'maw' ? 22 : 23, shade: f.ref === 'deadtree' });
+				continue;
+			}
 			if (t.emblem || t.rock || t.spawn) continue;
 			const h = (n: number) => hexHash(t.id, n);
 			const put = (list: Deco[], n: number, ref: string, p: Pt, scale: number, o: { sr?: number; shade?: boolean; r?: number } = {}) =>
@@ -186,9 +242,9 @@
 	})();
 
 	$: cracks = borderPath(ids, (id) => (cells[id] ? zones[id] ?? '' : undefined), size);
-	// the battle zone's light hugs the ground you can stand on (rocks belong to the zone but aren't lit)
-	$: glow = glowZone ? loopsPath(outlineLoops(ids.filter((id) => zones[id] === glowZone && cells[id] !== 'terrain'), size), 0.45) : '';
-	const tf = (d: Deco) => `translate(${d.x.toFixed(1)} ${d.y.toFixed(1)}) rotate(${d.r}) scale(${d.k.toFixed(3)})`;
+	// where a drawing goes; an upright one keeps its head up-screen however the board is turned (so `rot` and `down` are passed in to be tracked)
+	const tf = (d: Deco, rot = 0, down = { x: 0, y: 1 }) =>
+		d.upright ? `translate(${(d.x + down.x * d.k * 14).toFixed(1)} ${(d.y + down.y * d.k * 14).toFixed(1)}) rotate(${-rot}) scale(${d.k.toFixed(3)})` : `translate(${d.x.toFixed(1)} ${d.y.toFixed(1)}) rotate(${d.r}) scale(${d.k.toFixed(3)})`;
 	const PENTA = 'M0 -29L17 23.5L-27.6 -9L27.6 -9L-17 23.5Z'; // a five-point star drawn in one line
 </script>
 
@@ -375,6 +431,106 @@
 		{#each [[-36, 0.72], [42, 0.6], [3, 1]] as [a, s]}<path transform="rotate({a}) scale({s})" d="M0 2L-5 -8L0 -25L5 -8Z" />{/each}
 	</g>
 
+	<!-- ── terrain features ── -->
+	<radialGradient id="isl-cap" cx="0.42" cy="0.38" r="0.75"><stop offset="0" stop-color="#f79ab2" /><stop offset=".6" stop-color="#d1456f" /><stop offset="1" stop-color="#8c2247" /></radialGradient>
+	<radialGradient id="isl-orbglow" cx="0.4" cy="0.36" r="0.8"><stop offset="0" stop-color="#f1fff6" /><stop offset=".45" stop-color="#5ff09a" /><stop offset="1" stop-color="#1a8a48" /></radialGradient>
+	<!-- a crystal cluster standing on a mossy mound (drawn upright, like the pillars); its colours come from
+	     --c1 (lit side), --c2 (shaded side), --c3 (edges), --cg (the glow on the ground) -->
+	<g id="isl-crystal">
+		<ellipse cy="7" rx="26" ry="14" style="fill:var(--cg)" fill-opacity=".22" />
+		<ellipse cy="6" rx="20" ry="10.5" fill="#35542a" /><ellipse cx="-2" cy="4.5" rx="15" ry="7" fill="#4f7a39" />
+		{#each [[-36, 0.62, -10], [26, 0.8, 9], [-13, 1, -3], [10, 0.92, 4], [44, 0.5, 14]] as [a, k, x]}
+			<g transform="translate({x} 3) rotate({a}) scale({k})">
+				<path d="M-6 0L-7.2 -22L0 -35L0 0Z" style="fill:var(--c1)" /><path d="M6 0L7.2 -22L0 -35L0 0Z" style="fill:var(--c2)" />
+				<path d="M-7.2 -22L0 -18L7.2 -22M0 -18V0" fill="none" style="stroke:var(--c3)" stroke-opacity=".45" stroke-width="1" />
+				<path d="M-6 0L-7.2 -22L0 -35L7.2 -22L6 0Z" fill="none" style="stroke:var(--c3)" stroke-width="1.3" stroke-linejoin="round" />
+				<path d="M-3.4 -5L-3.9 -19" stroke="#fff" stroke-opacity=".85" stroke-width="1.3" stroke-linecap="round" />
+			</g>
+		{/each}
+	</g>
+	<!-- a giant mushroom and two small ones -->
+	<g id="isl-bigshroom">
+		<circle cx="15" cy="14" r="8.6" fill="url(#isl-cap)" stroke="#6a1c36" stroke-width="1.2" /><circle cx="13" cy="12" r="1.7" fill="#fff0e2" /><circle cx="18" cy="16" r="1.3" fill="#fff0e2" />
+		<circle cx="-16" cy="12" r="6.6" fill="url(#isl-cap)" stroke="#6a1c36" stroke-width="1.1" /><circle cx="-17" cy="10.5" r="1.4" fill="#fff0e2" />
+		<circle r="19.5" fill="url(#isl-cap)" stroke="#6a1c36" stroke-width="1.6" />
+		<circle r="15.5" fill="none" stroke="#ffd9e4" stroke-opacity=".3" stroke-width="1.3" />
+		{#each [[-7, -8, 3.2], [6, -10, 2.4], [10, 1, 3], [1, 2, 2.2], [-10, 4, 2.6], [-2, 11, 2.9], [8, 11, 1.8], [-13, -3, 1.7]] as [x, y, r]}<circle cx={x} cy={y} {r} fill="#fff0e2" fill-opacity=".92" />{/each}
+	</g>
+	<!-- a dead tree from above: bare forked branches round a stump -->
+	<g id="isl-deadtree" fill="none" stroke-linecap="round" stroke-linejoin="round">
+		{#each [0, 68, 141, 207, 289] as a}
+			<g transform="rotate({a})">
+				<path d="M0 0C4 -8 2 -16 6 -24" stroke="#43301f" stroke-width="4.6" />
+				<path d="M3.6 -13C9 -16 13 -15 17 -19M5 -20C2 -25 3 -29 0 -32M6 -24C10 -27 12 -31 15 -32" stroke="#43301f" stroke-width="2.4" />
+				<path d="M0 0C4 -8 2 -16 6 -24" stroke="#80603f" stroke-width="1.5" />
+			</g>
+		{/each}
+		<circle r="6.4" fill="#43301f" stroke="none" /><circle cx="-1" cy="-1" r="3.2" fill="#74573a" stroke="none" />
+	</g>
+	<g id="isl-deadtree-shade" fill="none" stroke="currentColor" stroke-linecap="round">
+		{#each [0, 68, 141, 207, 289] as a}<path transform="rotate({a})" d="M0 0C4 -8 2 -16 6 -24M3.6 -13C9 -16 13 -15 17 -19M6 -24C10 -27 12 -31 15 -32" stroke-width="4.6" />{/each}
+	</g>
+	<!-- the purple fan plant: a burst of spines with bright tips -->
+	<g id="isl-anemone">
+		<circle r="13" fill="#35134a" />
+		{#each Array(20) as _, n}<path transform="rotate({n * 18})" d="M0 -5L1.7 -24L0 -28.5L-1.7 -24Z" fill={n % 2 ? '#c552e6' : '#8f3fc6'} />{/each}
+		{#each Array(20) as _, n}<circle transform="rotate({n * 18 + 9})" cx="0" cy="-19.5" r="1.35" fill="#ffb8f2" />{/each}
+		<circle r="6.8" fill="#f08bd8" /><circle r="3.1" fill="#fff0fb" />
+	</g>
+	<!-- the toothed plant: leaves, a purple bulb, a ring of teeth round a dark mouth -->
+	<g id="isl-maw">
+		{#each [28, 118, 208, 298] as a}<path transform="rotate({a})" d="M0 0Q11 -9 26 -3Q13 5 0 0Z" fill="#3b8638" stroke="#1f5425" stroke-width="1" />{/each}
+		<circle r="15.5" fill="#7c3192" stroke="#3a1147" stroke-width="1.5" />
+		{#each [20, 92, 164, 236, 308] as a}<circle transform="rotate({a})" cx="0" cy="-12.7" r="1.5" fill="#e59af0" fill-opacity=".8" />{/each}
+		<circle r="10.2" fill="#24081a" />
+		{#each Array(10) as _, n}<path transform="rotate({n * 36})" d="M-2.1 -10.6L0 -5.2L2.1 -10.6Z" fill="#fff6e0" />{/each}
+		<circle r="3.4" fill="#e23b5a" />
+	</g>
+	<!-- cooling lava: a dark crust split by glowing cracks -->
+	<g id="isl-lava">
+		<circle r="36" fill="#ff5a1f" fill-opacity=".16" />
+		<path d="M-29 -9L-20 -25L-2 -31L18 -26L30 -11L31 9L20 25L2 31L-18 27L-30 12Z" fill="#1d1614" stroke="#0c0908" stroke-width="2" stroke-linejoin="round" />
+		<path d="M-22 -8L-9 -4L-3 -17L9 -11L21 -15M-9 -4L-12 10L-23 14M-12 10L2 15L5 27M2 15L15 6L26 10M15 6L9 -11" fill="none" stroke="#ff5a1f" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" />
+		<path d="M-22 -8L-9 -4L-3 -17L9 -11L21 -15M-9 -4L-12 10L-23 14M-12 10L2 15L5 27M2 15L15 6L26 10M15 6L9 -11" fill="none" stroke="#ffd166" stroke-width=".9" stroke-linecap="round" stroke-linejoin="round" />
+		<path d="M-24 -13L-17 -23L-4 -27" fill="none" stroke="#5a4a44" stroke-opacity=".7" stroke-width="1.4" stroke-linecap="round" />
+	</g>
+	<!-- an ice floe: snow on pale ice -->
+	<g id="isl-floe">
+		<path d="M-30 -8L-21 -26L-1 -32L19 -27L31 -10L30 10L19 26L0 32L-19 27L-31 11Z" fill="#cfeaff" stroke="#6fb1e0" stroke-width="2" stroke-linejoin="round" />
+		<path d="M-22 -6L-15 -19L0 -24L15 -19L23 -6L21 9L12 20L-2 23L-15 19L-23 8Z" fill="#f4fbff" />
+		<path d="M-12 -3L-2 2L4 -8M-2 2L-5 13M8 5L17 2" fill="none" stroke="#8cc6ee" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+		<ellipse cx="7" cy="13" rx="7" ry="3" fill="#b9dcf2" fill-opacity=".7" />
+	</g>
+	<!-- the TOPS of things that stand up (the column under each is drawn by the layer, so it leans away from the light) -->
+	<g id="isl-pillar-top">
+		<circle r="11" fill="#aab0bb" stroke="#3c4049" stroke-width="1.3" /><circle r="7" fill="none" stroke="#7d838e" stroke-width="1.2" />
+		<path d="M-11 -2L-4 1L-1 -5L5 -2" fill="none" stroke="#3c4049" stroke-opacity=".7" stroke-width="1.1" stroke-linecap="round" />
+		<path d="M4 4L11 7L8 11L2 9Z" fill="#6f7580" />
+	</g>
+	<g id="isl-runestone-top">
+		<path d="M-8.5 -4L-3 -10L5 -9L9.5 -2L7 7L-2 10L-9 5Z" fill="#9aa6b6" stroke="#333b47" stroke-width="1.3" stroke-linejoin="round" />
+		<path d="M-2 -6V5M-2 -6L3 -2L-2 1M2 5L-2 1" fill="none" stroke="#7df3ff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+		<path d="M-2 -6V5M-2 -6L3 -2L-2 1M2 5L-2 1" fill="none" stroke="#e4fdff" stroke-width=".5" stroke-linecap="round" stroke-linejoin="round" />
+	</g>
+	<g id="isl-cube-top">
+		<rect x="-11" y="-11" width="22" height="22" rx="2.2" fill="#3fb8b0" stroke="#0f4a4d" stroke-width="1.4" />
+		<rect x="-7" y="-7" width="14" height="14" rx="1.4" fill="none" stroke="#a6fff5" stroke-opacity=".8" stroke-width="1.3" />
+		<path d="M-3 -3H3V3H-3ZM0 -7V-3M0 3V7M-7 0H-3M3 0H7" fill="none" stroke="#a6fff5" stroke-opacity=".8" stroke-width="1.1" />
+	</g>
+	<g id="isl-orb-top">
+		<circle r="19" fill="#7dffb0" fill-opacity=".24" /><circle r="13" fill="#7dffb0" fill-opacity=".26" />
+		<circle r="9.2" fill="url(#isl-orbglow)" stroke="#0f5c2e" stroke-width="1.1" />
+		<path d="M-4.6 -3.4A5.8 5.8 0 0 1 .4 -6.2" fill="none" stroke="#fff" stroke-opacity=".9" stroke-width="1.5" stroke-linecap="round" />
+	</g>
+	<!-- …and what stands at their feet -->
+	<g id="isl-orb-foot">
+		{#each [20, 140, 260] as a}<path transform="rotate({a})" d="M0 0Q8 -7 19 -2Q9 4 0 0Z" fill="#3b8638" stroke="#1f5425" stroke-width=".9" />{/each}
+		<circle r="7" fill="#2f6f30" />
+	</g>
+	<g id="isl-pillar-foot"><circle r="13.5" fill="#4a4f59" /><path d="M13 9L21 12L18 18L11 15Z" fill="#6f7580" stroke="#3c4049" stroke-width="1" stroke-linejoin="round" /></g>
+	<g id="isl-runestone-foot"><ellipse rx="13" ry="11" fill="#3f5a34" /></g>
+	<g id="isl-cube-foot"><rect x="-13" y="-13" width="26" height="26" rx="3" fill="#35542a" /></g>
+
 	<!-- hero spawn points, after the two faces of the tie-breaker coin: the Atlanteans' copper
 	     gear on slate, the Titans' five-point star in a ring on red stone -->
 	<g id="isl-emblem-orange">
@@ -420,7 +576,7 @@
 	{/each}
 
 	<!-- small things lying on the ground -->
-	{#each scenery.low as d (d.key)}<use href="#isl-{d.ref}" transform={tf(d)} />{/each}
+	{#each scenery.low as d (d.key)}<use href="#isl-{d.ref}" transform={tf(d)} style={d.style} />{/each}
 
 	<!-- spawn points and thrones keep their plates -->
 	{#each tiles as t (t.id)}
@@ -432,15 +588,11 @@
 			{@const a = MINION_ART[t.spawn.team][t.spawn.role]}
 			{@const k = (size * EMBLEM) / a.r}
 			{@const ink = INK[t.spawn.team]}
-			<!-- a minion spawn point: a plate of the team's ground with that minion engraved on it (facing the way it
-			     will march), and a small badge for its type that always sits at the foot of the hex, upright -->
+			<!-- a minion spawn point: a plate of the team's ground with that minion engraved on it, facing the way it
+			     will march (the minion pieces themselves carry turning pips, so the two can't be confused) -->
 			<polygon points={hexPoints(t.c, size * 0.86)} fill="none" stroke={ink.halo} stroke-opacity=".34" stroke-width={size * 0.035} stroke-linejoin="round" />
 			<use href="#mn-art-{t.spawn.team}-{t.spawn.role}" transform="translate({t.c.x.toFixed(1)} {t.c.y.toFixed(1)}) rotate({t.spawn.dir * 60 - 30}) scale({k.toFixed(4)}) translate({-a.cx} {-a.cy})"
 				fill={ink.ink} fill-rule="evenodd" stroke={ink.halo} stroke-opacity=".6" stroke-width={(size * 0.035 / k).toFixed(2)} stroke-linejoin="round" paint-order="stroke" />
-			<g transform="translate({(t.c.x + down.x * size * 0.74).toFixed(1)} {(t.c.y + down.y * size * 0.74).toFixed(1)}) rotate({-rot}) scale({(size * 0.2 / 10).toFixed(3)})">
-				<circle r="10" fill={ink.badge} stroke={ink.halo} stroke-opacity=".85" stroke-width="1.3" />
-				<use href="#mn-role-{t.spawn.role}" fill="#fff" stroke="#fff" transform="scale(.74)" />
-			</g>
 		{/if}
 	{/each}
 
@@ -455,30 +607,32 @@
 		<path d={r.body} fill="#434853" stroke="#22262e" stroke-width={size * 0.06} stroke-linejoin="round" />
 		<path d={r.top} transform="translate({(-down.x * size * 0.13).toFixed(1)} {(-down.y * size * 0.13).toFixed(1)})" fill="#6a707c" stroke="#7d8490" stroke-width={size * 0.05} stroke-linejoin="round" />
 		<path d={r.glint} transform="translate({(-down.x * size * 0.22).toFixed(1)} {(-down.y * size * 0.22).toFixed(1)})" fill="#8b919c" fill-opacity=".75" />
+		{#if r.moss}<path d={r.moss} transform="translate({(-down.x * size * 0.15).toFixed(1)} {(-down.y * size * 0.15).toFixed(1)})" fill="#5f9440" fill-opacity=".9" stroke="#3b6a2a" stroke-width={size * 0.02} stroke-linejoin="round" />{/if}
+		{#if r.bloom}
+			<circle cx={r.bloom.x - down.x * size * 0.15} cy={r.bloom.y - down.y * size * 0.15} r={size * 0.045} fill="#e23b4e" /><circle cx={r.bloom.x - down.x * size * 0.15 + size * 0.09} cy={r.bloom.y - down.y * size * 0.15 + size * 0.05} r={size * 0.035} fill="#ff7a6a" />
+		{/if}
 	{/each}
 
 	<!-- things that stand up: each casts a shadow down-screen, then is drawn -->
 	{#each scenery.tall as d (d.key)}
+		{@const up = RAISED[d.ref]}
+		{#if up}
+			<!-- a standing thing: its foot, its shadow, the column (a thick line from foot to top), then the top, upright -->
+			{@const tx = d.x - down.x * up.lift * d.k}
+			{@const ty = d.y - down.y * up.lift * d.k}
+			<use href="#isl-{d.ref}-foot" transform="translate({d.x.toFixed(1)} {d.y.toFixed(1)}) rotate({-rot}) scale({d.k.toFixed(3)})" />
+			<line x1={(d.x + down.x * size * 0.12).toFixed(1)} y1={(d.y + down.y * size * 0.12).toFixed(1)} x2={(d.x + down.x * size * 0.3).toFixed(1)} y2={(d.y + down.y * size * 0.3).toFixed(1)}
+				stroke="#08141c" stroke-opacity=".34" stroke-width={(up.r * 2 * d.k).toFixed(1)} stroke-linecap={up.square ? 'square' : 'round'} />
+			<line x1={d.x.toFixed(1)} y1={d.y.toFixed(1)} x2={tx.toFixed(1)} y2={ty.toFixed(1)} stroke={up.side} stroke-width={(up.r * 2 * d.k).toFixed(1)} stroke-linecap={up.square ? 'square' : 'round'} />
+			<use href="#isl-{d.ref}-top" transform="translate({tx.toFixed(1)} {ty.toFixed(1)}) rotate({-rot}) scale({d.k.toFixed(3)})" />
+		{:else}
 		{#if d.shade}
-			<use href="#isl-{d.ref}-shade" transform="translate({(d.x + down.x * size * 0.1).toFixed(1)} {(d.y + down.y * size * 0.1).toFixed(1)}) rotate({d.r}) scale({d.k.toFixed(3)})" fill="#08141c" fill-opacity=".34" />
+			<use href="#isl-{d.ref}-shade" transform="translate({(d.x + down.x * size * 0.1).toFixed(1)} {(d.y + down.y * size * 0.1).toFixed(1)}) rotate({d.r}) scale({d.k.toFixed(3)})" fill="#08141c" fill-opacity=".34" color="#08141c" stroke-opacity=".34" />
 		{:else if d.sr}
 			<circle cx={(d.x + down.x * size * 0.09).toFixed(1)} cy={(d.y + down.y * size * 0.09).toFixed(1)} r={(d.sr * d.k).toFixed(1)} fill="#0c2410" fill-opacity=".34" />
 		{/if}
-		<use href="#isl-{d.ref}" transform={tf(d)} />
+		<use href="#isl-{d.ref}" transform={tf(d, rot, down)} style={d.style} />
+		{/if}
 	{/each}
 
-	<!-- the battle zone, softly lit -->
-	{#if glow}
-		<path class="zglow wide" d={glow} fill="none" stroke="#ffc93a" stroke-width={size * 0.5} stroke-linejoin="round" />
-		<path d={glow} fill="none" stroke="#5a3608" stroke-opacity=".6" stroke-width={size * 0.2} stroke-linejoin="round" />
-		<path class="zglow" d={glow} fill="none" stroke="#ffd95e" stroke-width={size * 0.11} stroke-linejoin="round" />
-	{/if}
 </g>
-
-<style>
-	.zglow { opacity: .85; animation: zglow 3.2s ease-in-out infinite; }
-	.zglow.wide { opacity: .3; animation-name: zglowwide; }
-	@keyframes zglow { 0%, 100% { opacity: .7; } 50% { opacity: 1; } }
-	@keyframes zglowwide { 0%, 100% { opacity: .2; } 50% { opacity: .42; } }
-	@media (prefers-reduced-motion: reduce) { .zglow { animation: none; } }
-</style>

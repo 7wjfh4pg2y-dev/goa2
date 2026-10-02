@@ -111,25 +111,27 @@ export const HEROES_ALPHA: Hero[] = [...HEROES].sort((a, b) => a.name.localeComp
 
 // ── round portraits: frame each hero's FACE, not the middle of the painting ──
 // Avatar art is 2:1 landscape; a centred circle crop often cuts the face off or
-// shows armour. Each entry is where the face sits, as fractions of the art's
-// width/height; portraits zoom in on that point.
-const HERO_FACE: Record<string, [number, number]> = {
-	arien: [0.65, 0.3], bain: [0.52, 0.11], brogan: [0.49, 0.3], brynn: [0.48, 0.23], cutter: [0.66, 0.29],
-	dodger: [0.66, 0.4], emmitt: [0.31, 0.42], garrus: [0.48, 0.33], gydion: [0.66, 0.36], hanu: [0.73, 0.4],
-	ignatia: [0.51, 0.46], min: [0.42, 0.22], misa: [0.7, 0.19], mortimer: [0.58, 0.19], mrak: [0.41, 0.33],
-	nebkher: [0.44, 0.3], razzle: [0.6, 0.33], rowenna: [0.72, 0.37], sabina: [0.64, 0.28], silverarrow: [0.52, 0.24],
-	snorri: [0.56, 0.29], swift: [0.58, 0.33], takahide: [0.53, 0.24], tali: [0.44, 0.26], tigerclaw: [0.72, 0.24],
-	trinkets: [0.39, 0.26], ursafar: [0.45, 0.33], wasp: [0.6, 0.17], whisper: [0.49, 0.29], widget: [0.33, 0.45],
-	wuk: [0.53, 0.16], xargatha: [0.5, 0.27]
+// shows armour. Each entry is [x, y, zoom]: where the face sits, as fractions of the
+// art's width/height, and how far to zoom in so the face fills about 60% of the token
+// (a small face in a busy painting needs more; a zoom of z shows 1/z of the art's height).
+// Measured on a gridded contact sheet of all 32 avatars; one shared zoom left faces near
+// the top edge (Bain, Wuk, Tali…) off-centre, because the crop ran out of picture.
+const HERO_FACE: Record<string, [number, number, number]> = {
+	arien: [0.655, 0.34, 3], bain: [0.555, 0.215, 4], brogan: [0.5, 0.33, 3], brynn: [0.535, 0.24, 3.5], cutter: [0.655, 0.31, 4],
+	dodger: [0.665, 0.33, 4.3], emmitt: [0.335, 0.47, 3.75], garrus: [0.5, 0.36, 3], gydion: [0.655, 0.4, 3.3], hanu: [0.745, 0.47, 4],
+	ignatia: [0.515, 0.47, 4.4], min: [0.47, 0.25, 4], misa: [0.72, 0.2, 4.3], mortimer: [0.565, 0.22, 4], mrak: [0.365, 0.38, 3.3],
+	nebkher: [0.49, 0.455, 3.75], razzle: [0.635, 0.37, 4], rowenna: [0.715, 0.38, 3.3], sabina: [0.655, 0.25, 3.5], silverarrow: [0.585, 0.215, 4.3],
+	snorri: [0.565, 0.285, 3.5], swift: [0.565, 0.305, 4.4], takahide: [0.585, 0.28, 2.7], tali: [0.52, 0.19, 3.15], tigerclaw: [0.735, 0.265, 3],
+	trinkets: [0.385, 0.27, 3.75], ursafar: [0.47, 0.38, 2.3], wasp: [0.615, 0.23, 3], whisper: [0.49, 0.3, 3.5], widget: [0.335, 0.46, 3.5],
+	wuk: [0.555, 0.33, 2.3], xargatha: [0.51, 0.405, 4]
 };
-const FACE_ZOOM = 2.3; // tuned per hero against a rendered contact sheet of every token crop
+const FACE_DEFAULT: [number, number, number] = [0.55, 0.32, 2.6];
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
 /** Inline CSS for a round portrait (a square element): the avatar art zoomed
  * and positioned so the hero's face sits in the middle. */
 export function portraitCss(id: string): string {
-	const [fx, fy] = HERO_FACE[id] ?? [0.55, 0.32];
-	const z = FACE_ZOOM;
+	const [fx, fy, z] = HERO_FACE[id] ?? FACE_DEFAULT;
 	const px = clamp01((0.5 - 2 * z * fx) / (1 - 2 * z)) * 100;
 	const py = clamp01((0.5 - z * fy) / (1 - z)) * 100;
 	return `background-image:url('${heroAvatar(id)}');background-size:${200 * z}% ${100 * z}%;background-position:${px.toFixed(1)}% ${py.toFixed(1)}%;`;
@@ -138,8 +140,8 @@ export function portraitCss(id: string): string {
 /** SVG equivalent: where to draw the avatar image so the face is centred in a
  * circle of diameter `d` centred on (cx, cy). Clip the image to that circle. */
 export function portraitRect(id: string, cx: number, cy: number, d: number) {
-	const [fx, fy] = HERO_FACE[id] ?? [0.55, 0.32];
-	const w = 2 * d * FACE_ZOOM, h = d * FACE_ZOOM;
+	const [fx, fy, z] = HERO_FACE[id] ?? FACE_DEFAULT;
+	const w = 2 * d * z, h = d * z;
 	const x = Math.min(cx - d / 2, Math.max(cx + d / 2 - w, cx - fx * w));
 	const y = Math.min(cy - d / 2, Math.max(cy + d / 2 - h, cy - fy * h));
 	return { href: heroAvatar(id), x, y, w, h };

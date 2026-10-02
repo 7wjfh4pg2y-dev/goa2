@@ -169,17 +169,18 @@
 		const ro = new ResizeObserver(fit);
 		ro.observe(canvas);
 		fit();
-		let raf = 0, last = 0;
-		const frame = (now: number) => {
-			raf = requestAnimationFrame(frame);
+		// A plain 30-a-second timer, NOT requestAnimationFrame: a rAF loop makes the page produce a full frame at
+		// the display's rate (60+/s) even on the ticks where the sea isn't redrawn, and every such frame also
+		// re-ticks the board's GPU animations on the main thread (measured: about twice the idle work).
+		let last = performance.now();
+		const timer = setInterval(() => {
+			const now = performance.now();
 			if (still || reduce || document.hidden) { last = now; return; }
-			if (now - last < 31) return; // ~30 fps is plenty for water
 			t += Math.min(0.1, (now - last) / 1000);
 			last = now;
 			draw();
-		};
-		raf = requestAnimationFrame(frame);
-		return () => { cancelAnimationFrame(raf); ro.disconnect(); };
+		}, 33);
+		return () => { clearInterval(timer); ro.disconnect(); };
 	});
 </script>
 
