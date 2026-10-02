@@ -262,6 +262,15 @@
 	}
 	export function getView(): BoardView { return { spin: ((spin % 360) + 360) % 360, scale, panX, panY }; }
 	export function setView(v: BoardView) { spin = v.spin; scale = clamp(v.scale, 0.4, 8); panX = v.panX; panY = v.panY; clampPan(); }
+	/** Stage the board as a picture (the pre-game backdrop): its centre at (fx, fy) of the box — 0.5, 0.5 is the
+	 *  middle — at zoom `s` (1 = the whole board fits). Not clamped: it may sit partly off screen. */
+	export function place(fx: number, fy: number, s: number) { staged = { fx, fy, s }; }
+	// (kept and re-applied whenever the box is measured or resized)
+	let staged: { fx: number; fy: number; s: number } | null = null;
+	$: if (staged && fit) {
+		spin = 0; scale = staged.s;
+		panX = ((staged.fx - 0.5) * wrapW) / fit.s; panY = ((staged.fy - 0.5) * wrapH) / fit.s;
+	}
 
 	function onWheel(e: WheelEvent) {
 		if (!interactive) return;

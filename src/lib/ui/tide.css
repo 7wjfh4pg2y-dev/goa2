@@ -1,0 +1,1076 @@
+/* THE TIDE — the pre-game design language (deep sea · navy glass · brass · copper vs ice).
+   Generated once from the approved mock by tools/build_tide_css.mjs, then maintained by hand.
+   EVERYTHING is scoped under .tide (wrap a screen in <div class="tide">), so nothing here can
+   reach the in-game HUD. Tokens are custom properties on .tide; screens add layout only. */
+.tide {
+	/* ---- sea (backgrounds, deepest → lightest) ---- */
+	--abyss: #030b15;
+	--deep: #06182a;
+	--navy: #0a2238;
+	--navy-2: #103252;
+	--tide: #17527c;
+	--surf: #2f93c4;
+	--foam: #cfeaf5;
+
+	/* ---- brass (trim, labels, primary action) ---- */
+	--brass: #d8b36a;
+	--brass-hi: #f4dfa8;
+	--brass-lo: #a8853f;
+	--brass-line: rgba(216, 179, 106, 0.38);
+	--brass-faint: rgba(216, 179, 106, 0.14);
+
+	/* ---- ink (text) ---- */
+	--ink: #f5f1e8;
+	--ink-2: #bccbd9;
+	--ink-3: #8a9fb3;
+	--ink-dark: #1b1204; /* text on brass */
+
+	/* ---- teams: Atlanteans = copper orange, Titans = ice blue ---- */
+	--orange: #ef7d22;
+	--orange-hi: #ffb878;
+	--orange-line: rgba(239, 125, 34, 0.55);
+	--orange-glass: rgba(239, 125, 34, 0.13);
+	--blue: #2f7fe6;
+	--blue-hi: #9ccbff;
+	--blue-line: rgba(47, 127, 230, 0.65);
+	--blue-glass: rgba(47, 127, 230, 0.16);
+
+	/* ---- status ---- */
+	--ready: #16a34a;
+	--ready-hi: #6ee7a0;
+	--danger: #e5484d;
+	--danger-hi: #ffa3a3;
+
+	/* ---- surfaces ---- */
+	--glass: linear-gradient(180deg, rgba(14, 40, 66, 0.86), rgba(6, 21, 38, 0.9));
+	--glass-blur: blur(16px) saturate(1.15);
+	--well: rgba(2, 11, 22, 0.55); /* recessed areas inside a panel */
+	--raise: rgba(255, 255, 255, 0.05); /* raised areas inside a panel */
+	--hair: rgba(255, 255, 255, 0.11); /* neutral hairline */
+
+	/* ---- radii ---- */
+	--r-sm: 8px;
+	--r-md: 12px;
+	--r-lg: 18px;
+	--r-pill: 999px;
+
+	/* ---- elevation ---- */
+	--sh-1: 0 2px 6px rgba(0, 6, 14, 0.4);
+	--sh-2: 0 20px 56px rgba(0, 6, 14, 0.55);
+	--sh-brass: 0 0 0 1px var(--brass), 0 0 22px rgba(216, 179, 106, 0.3);
+
+	/* ---- spacing (4-pt) ---- */
+	--s1: 4px;
+	--s2: 8px;
+	--s3: 12px;
+	--s4: 16px;
+	--s5: 24px;
+	--s6: 32px;
+	--s7: 48px;
+	--s8: 64px;
+
+	/* ---- type scale (desktop / tablet) ---- */
+	--fs-hero: 92px; /* a hero's name on the draft */
+	--fs-display: 54px; /* room code, landing line */
+	--fs-h1: 38px; /* page title */
+	--fs-h2: 27px; /* panel title, choice title */
+	--fs-h3: 21px; /* team name, seat name */
+	--fs-body: 19px; /* the font draws lowercase as small caps, so sizes run large */
+	--fs-small: 16px; /* helper text — the floor for sentences */
+	--fs-label: 14px; /* tracked caps labels */
+	--fs-micro: 12px; /* one-word tags only ("soon", "host") */
+
+	/* ---- control sizes ---- */
+	--h-ctl: 44px; /* segmented option, small button */
+	--h-btn: 52px;
+	--h-btn-lg: 64px;
+
+	/* ---- motion ---- */
+	--ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+	--t-fast: 120ms;
+	--t-med: 240ms;
+	--t-slow: 520ms;
+}
+/* phones: one step down on the big sizes, never below 15 for sentences */
+@media (max-width: 760px) {
+	.tide {
+		--fs-hero: 46px;
+		--fs-display: 36px;
+		--fs-h1: 28px;
+		--fs-h2: 22px;
+		--fs-h3: 18px;
+		--fs-body: 17px;
+		--fs-small: 15px;
+		--fs-label: 13px;
+		--fs-micro: 12px;
+		--h-ctl: 44px;
+		--h-btn: 50px;
+		--h-btn-lg: 56px;
+		--r-lg: 16px;
+	}
+}
+.tide {
+	color: var(--ink);
+	font-size: var(--fs-body);
+	line-height: 1.3;
+	letter-spacing: 0.02em;
+}
+.tide button, .tide input { font: inherit; letter-spacing: inherit; color: inherit; }
+.tide button { cursor: pointer; }
+.tide p { margin: 0; }
+.tide .ico {
+	width: 1.15em;
+	height: 1.15em;
+	flex: none;
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 2;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+.tide .ico.fill {
+	fill: currentColor;
+	stroke: none;
+}
+/* ------------------------------------------------------------------ type */
+.tide .t-hero {
+	font-size: var(--fs-hero);
+	line-height: 0.92;
+	letter-spacing: 0.01em;
+	text-shadow: 0 3px 18px rgba(0, 0, 0, 0.6);
+}
+.tide .t-display {
+	font-size: var(--fs-display);
+	line-height: 1;
+	letter-spacing: 0.03em;
+}
+.tide .t-h1 {
+	font-size: var(--fs-h1);
+	line-height: 1.05;
+	margin: 0;
+	font-weight: 400;
+}
+.tide .t-h2 {
+	font-size: var(--fs-h2);
+	line-height: 1.1;
+	margin: 0;
+	font-weight: 400;
+}
+.tide .t-h3 {
+	font-size: var(--fs-h3);
+	line-height: 1.15;
+	margin: 0;
+	font-weight: 400;
+}
+.tide .t-body {
+	font-size: var(--fs-body);
+}
+.tide .t-small {
+	font-size: var(--fs-small);
+	color: var(--ink-2);
+}
+.tide .t-label {
+	font-size: var(--fs-label);
+	letter-spacing: 0.16em;
+	text-transform: uppercase;
+	color: var(--brass);
+}
+.tide .t-mono {
+	letter-spacing: 0.12em;
+}
+.tide .c-ink {
+	color: var(--ink);
+}
+.tide .c-muted {
+	color: var(--ink-2);
+}
+.tide .c-faint {
+	color: var(--ink-3);
+}
+.tide .c-brass {
+	color: var(--brass-hi);
+}
+.tide .c-orange {
+	color: var(--orange-hi);
+}
+.tide .c-blue {
+	color: var(--blue-hi);
+}
+/* ----------------------------------------------------------------- panel */
+.tide .panel {
+	position: relative;
+	background: var(--glass);
+	-webkit-backdrop-filter: var(--glass-blur);
+	backdrop-filter: var(--glass-blur);
+	border: 1px solid var(--brass-line);
+	border-radius: var(--r-lg);
+	box-shadow:
+		var(--sh-2),
+		inset 0 1px 0 rgba(255, 255, 255, 0.07);
+	padding: var(--s6);
+}
+.tide .panel--tight {
+	padding: var(--s4);
+}
+.tide .panel--bar {
+	/* a slim strip: action bars, the draft's team rows */
+	padding: var(--s3) var(--s4);
+	border-radius: var(--r-md);
+}
+.tide .panel-title {
+	display: flex;
+	align-items: center;
+	gap: var(--s3);
+	margin: 0 0 var(--s4);
+}
+.tide .well {
+	background: var(--well);
+	border: 1px solid var(--hair);
+	border-radius: var(--r-md);
+	padding: var(--s4);
+}
+/* team-tinted section (lobby team panel, matchup side, a draft row) */
+.tide .team,
+.tide .is-orange {
+	--tc: var(--orange);
+	--tc-hi: var(--orange-hi);
+	--tc-line: var(--orange-line);
+	--tc-glass: var(--orange-glass);
+}
+.tide .team--blue,
+.tide .is-blue {
+	--tc: var(--blue);
+	--tc-hi: var(--blue-hi);
+	--tc-line: var(--blue-line);
+	--tc-glass: var(--blue-glass);
+}
+.tide .team {
+	position: relative;
+	border-radius: var(--r-md);
+	border: 1px solid var(--tc-line);
+	background:
+		linear-gradient(180deg, var(--tc-glass), transparent 70%),
+		var(--well);
+	padding: var(--s4);
+	overflow: hidden;
+}
+.tide .team::before {
+	content: '';
+	position: absolute;
+	inset: 0 0 auto 0;
+	height: 3px;
+	background: var(--tc);
+}
+.tide .team-head {
+	display: flex;
+	align-items: center;
+	gap: var(--s3);
+	margin-bottom: var(--s3);
+	color: var(--tc-hi);
+	font-size: var(--fs-h3);
+}
+.tide .team-head img {
+	width: 34px;
+	height: 34px;
+}
+.tide .team-head .count {
+	margin-left: auto;
+	color: var(--ink-2);
+	font-size: var(--fs-body);
+}
+/* --------------------------------------------------------------- rules */
+.tide .rule {
+	height: 1px;
+	border: 0;
+	margin: var(--s5) 0;
+	background: linear-gradient(90deg, transparent, var(--brass-line) 12%, var(--brass-line) 88%, transparent);
+}
+.tide .rule--flush {
+	margin: 0;
+}
+/* the tide line: where the two teams meet. One per screen at most. */
+.tide .tideline {
+	height: 2px;
+	border: 0;
+	margin: 0;
+	background: linear-gradient(90deg, var(--orange) 0%, var(--brass) 50%, var(--blue) 100%);
+	opacity: 0.9;
+}
+/* --------------------------------------------------------------- buttons */
+.tide .btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 10px;
+	min-height: var(--h-btn);
+	padding: 0 26px;
+	border-radius: var(--r-md);
+	border: 1px solid transparent;
+	font-size: var(--fs-h3);
+	line-height: 1;
+	white-space: nowrap;
+	text-decoration: none;
+	transition:
+		transform var(--t-fast) var(--ease),
+		filter var(--t-fast) var(--ease),
+		box-shadow var(--t-fast) var(--ease),
+		border-color var(--t-fast) var(--ease);
+}
+.tide .btn:hover,
+.tide .btn.is-hover {
+	transform: translateY(-1px);
+	filter: brightness(1.1);
+}
+.tide .btn:active,
+.tide .btn.is-pressed {
+	transform: translateY(1px);
+	filter: brightness(0.88);
+	box-shadow: none;
+}
+.tide .btn:focus-visible,
+.tide .btn.is-focus {
+	outline: 2px solid var(--foam);
+	outline-offset: 3px;
+}
+.tide .btn:disabled,
+.tide .btn.is-disabled {
+	opacity: 0.42;
+	filter: saturate(0.5);
+	cursor: not-allowed;
+	transform: none;
+	box-shadow: none;
+}
+/* the one main action of a screen: solid brass */
+.tide .btn-primary {
+	background: linear-gradient(180deg, #f6e2ad 0%, var(--brass) 48%, #b98e42 100%);
+	border-color: #f9ebc6 #c9a355 #8a6a2c;
+	color: var(--ink-dark);
+	box-shadow:
+		0 6px 18px rgba(0, 0, 0, 0.4),
+		0 0 0 1px rgba(0, 0, 0, 0.35),
+		inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+.tide .btn-primary:disabled,
+.tide .btn-primary.is-disabled {
+	/* not yet: a hollow brass outline that fills when the action unlocks */
+	opacity: 1;
+	filter: none;
+	background: rgba(216, 179, 106, 0.07);
+	border: 1px dashed var(--brass-line);
+	color: var(--brass-lo);
+}
+/* the way in (Enter, Begin the battle): the two teams meeting — copper orange into ice blue */
+.tide .btn-duo {
+	background: linear-gradient(100deg, #f08a2c 0%, #e2742a 30%, #7b5aa8 58%, #2f7fe6 100%);
+	border-color: rgba(255, 255, 255, 0.42) rgba(255, 255, 255, 0.2) rgba(0, 0, 0, 0.3);
+	color: #fff;
+	text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+	box-shadow:
+		0 8px 22px rgba(0, 0, 0, 0.45),
+		0 0 0 1px rgba(0, 0, 0, 0.35),
+		inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+/* a second action: navy with a brass edge */
+.tide .btn-secondary {
+	background: linear-gradient(180deg, rgba(26, 68, 104, 0.9), rgba(13, 40, 66, 0.9));
+	border-color: var(--brass-line);
+	color: var(--ink);
+	box-shadow:
+		var(--sh-1),
+		inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+/* back / leave / cancel: quiet outline */
+.tide .btn-ghost {
+	background: rgba(255, 255, 255, 0.03);
+	border-color: rgba(255, 255, 255, 0.22);
+	color: var(--ink-2);
+}
+.tide .btn-ghost:hover,
+.tide .btn-ghost.is-hover {
+	border-color: rgba(255, 255, 255, 0.42);
+	color: var(--ink);
+}
+/* a ghost button sitting on artwork gets a glass backing */
+.tide .btn-ghost.on-art {
+	background: rgba(4, 15, 28, 0.62);
+	-webkit-backdrop-filter: var(--glass-blur);
+	backdrop-filter: var(--glass-blur);
+	border-color: rgba(255, 255, 255, 0.3);
+	color: var(--ink);
+}
+/* close the room / kick / ban */
+.tide .btn-danger {
+	background: rgba(229, 72, 77, 0.1);
+	border-color: rgba(229, 72, 77, 0.6);
+	color: var(--danger-hi);
+}
+/* ready up */
+.tide .btn-ready {
+	background: linear-gradient(180deg, #22b85a, var(--ready) 55%, #0f7f39);
+	border-color: #5ee08f #16a34a #0c6a30;
+	color: #fff;
+	box-shadow:
+		0 6px 18px rgba(0, 0, 0, 0.4),
+		0 0 0 1px rgba(0, 0, 0, 0.35),
+		inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+.tide .btn-ready.is-on {
+	/* "✓ Ready" — already done: outlined, so it stops shouting */
+	background: rgba(22, 163, 74, 0.16);
+	border-color: var(--ready);
+	color: var(--ready-hi);
+	box-shadow: none;
+}
+/* team-coloured commit (Lock In, Select Hero) */
+.tide .btn-team {
+	background: linear-gradient(180deg, #ffa24d 0%, var(--orange) 50%, #cf6412 100%);
+	border-color: #ffc790 #ef7d22 #a84e0c;
+	color: #fff;
+	text-shadow: 0 1px 2px rgba(80, 30, 0, 0.55);
+	box-shadow:
+		0 8px 24px rgba(0, 0, 0, 0.45),
+		0 0 0 1px rgba(0, 0, 0, 0.35),
+		0 0 26px rgba(239, 125, 34, 0.35),
+		inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+.tide .btn-team.is-blue {
+	background: linear-gradient(180deg, #62a6f5 0%, var(--blue) 50%, #1f5fb8 100%);
+	border-color: #a9d0ff #2f7fe6 #174a94;
+	text-shadow: 0 1px 2px rgba(0, 20, 70, 0.55);
+	box-shadow:
+		0 8px 24px rgba(0, 0, 0, 0.45),
+		0 0 0 1px rgba(0, 0, 0, 0.35),
+		0 0 26px rgba(47, 127, 230, 0.4),
+		inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+.tide .btn-sm {
+	min-height: var(--h-ctl);
+	padding: 0 16px;
+	font-size: var(--fs-body);
+	border-radius: 10px;
+}
+.tide .btn-lg {
+	min-height: var(--h-btn-lg);
+	padding: 0 40px;
+	font-size: var(--fs-h2);
+	border-radius: 14px;
+}
+.tide .btn-block {
+	display: flex;
+	width: 100%;
+}
+.tide .btn-icon {
+	/* square icon-only button (kick, copy) */
+	min-height: 40px;
+	width: 40px;
+	padding: 0;
+	border-radius: 10px;
+	font-size: var(--fs-body);
+}
+/* ---------------------------------------------------------------- fields */
+.tide .fld {
+	display: flex;
+	flex-direction: column;
+	gap: var(--s2);
+	min-width: 0;
+}
+.tide .fld > .t-label {
+	display: flex;
+	align-items: baseline;
+	gap: var(--s3);
+}
+.tide .fld > .t-label .hint {
+	margin-left: auto;
+	letter-spacing: 0.02em;
+	text-transform: none;
+	color: var(--ink-3);
+	font-size: var(--fs-small);
+}
+.tide .field {
+	width: 100%;
+	height: var(--h-btn);
+	padding: 0 var(--s4);
+	border-radius: var(--r-md);
+	border: 1px solid rgba(255, 255, 255, 0.2);
+	background: var(--well);
+	color: var(--ink);
+	font-size: var(--fs-h3);
+	box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.4);
+	outline: none;
+	transition:
+		border-color var(--t-fast),
+		box-shadow var(--t-fast);
+}
+.tide .field::placeholder {
+	color: var(--ink-3);
+}
+.tide .field:focus,
+.tide .field.is-focus {
+	border-color: var(--brass);
+	box-shadow:
+		inset 0 2px 6px rgba(0, 0, 0, 0.4),
+		0 0 0 3px rgba(216, 179, 106, 0.22);
+}
+.tide .field.is-error {
+	border-color: var(--danger);
+}
+.tide .field--code {
+	text-transform: uppercase;
+	letter-spacing: 0.3em;
+	font-size: var(--fs-h2);
+}
+.tide .msg-error {
+	color: var(--danger-hi);
+	font-size: var(--fs-small);
+}
+/* ------------------------------------------------- segmented choice / chip
+   .seg  = pick exactly one (joined buttons in a recessed track)
+   .chip = independent toggle (stars) or a one-of list that may wrap (maps)   */
+.tide .seg {
+	display: inline-flex;
+	gap: 3px;
+	padding: 3px;
+	border-radius: var(--r-md);
+	background: var(--well);
+	border: 1px solid var(--hair);
+	box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.35);
+}
+.tide .seg--fill {
+	display: flex;
+}
+.tide .seg--fill > .seg-opt {
+	flex: 1 1 0;
+	min-width: 0;
+}
+.tide .seg-opt,
+.tide .chip {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	min-height: var(--h-ctl);
+	min-width: 56px;
+	padding: 0 18px;
+	border: 1px solid transparent;
+	border-radius: 9px;
+	background: transparent;
+	color: var(--ink-2);
+	font-size: var(--fs-body);
+	white-space: nowrap;
+	transition:
+		background var(--t-fast),
+		color var(--t-fast),
+		border-color var(--t-fast);
+}
+.tide .chip {
+	background: var(--well);
+	border-color: var(--hair);
+	border-radius: var(--r-md);
+}
+.tide .seg-opt:hover,
+.tide .chip:hover,
+.tide .seg-opt.is-hover,
+.tide .chip.is-hover {
+	color: var(--ink);
+	background: var(--raise);
+}
+.tide .seg-opt:active,
+.tide .chip:active,
+.tide .seg-opt.is-pressed,
+.tide .chip.is-pressed {
+	background: rgba(0, 0, 0, 0.3);
+}
+.tide .seg-opt.is-on,
+.tide .chip.is-on {
+	/* chosen: solid brass with dark ink. (Never blue or orange: those two colours only ever mean a team.) */
+	color: var(--ink-dark);
+	background: linear-gradient(180deg, #f3dca0 0%, var(--brass) 55%, #b98e42 100%);
+	border-color: #f9ebc6 #c9a355 #8a6a2c;
+	box-shadow:
+		0 2px 6px rgba(0, 0, 0, 0.45),
+		inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+/* icon-only option (the draft's filter strip) */
+.tide .seg-opt--ico {
+	width: 40px;
+	min-width: 40px;
+	min-height: 40px;
+	padding: 0;
+	gap: 1px;
+	font-size: var(--fs-small);
+}
+.tide .seg-opt--ico img {
+	width: 26px;
+	height: 26px;
+	filter: brightness(1.35) saturate(1.1); /* the role art is dark; lift it on navy */
+}
+.tide .seg-opt b {
+	font-weight: 400;
+}
+.tide .seg-opt:disabled,
+.tide .chip:disabled {
+	cursor: not-allowed;
+	color: var(--ink-3);
+	opacity: 0.55;
+	background: transparent;
+}
+/* a choice the host made that guests can only read: keep the chosen one legible */
+.tide .seg.is-readonly .seg-opt.is-on:disabled {
+	opacity: 1;
+	color: var(--ink);
+	background: rgba(23, 82, 124, 0.5);
+	border-color: var(--brass-line);
+}
+/* "coming soon": visibly there, visibly not yet — dashed, dim, tagged */
+.tide .seg-opt.is-soon,
+.tide .chip.is-soon {
+	opacity: 1;
+	color: var(--ink-3);
+	border: 1px dashed rgba(255, 255, 255, 0.18);
+	background: transparent;
+	flex-direction: column;
+	gap: 2px;
+	line-height: 1;
+}
+.tide .is-soon > .soon {
+	font-size: var(--fs-micro);
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	color: var(--brass-lo);
+}
+/* --------------------------------------------------------------- tag / pill */
+.tide .tag {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	height: 22px;
+	padding: 0 8px;
+	border-radius: 6px;
+	border: 1px solid var(--brass-line);
+	background: var(--brass-faint);
+	color: var(--brass-hi);
+	font-size: var(--fs-micro);
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	white-space: nowrap;
+}
+.tide .tag--ready {
+	border-color: rgba(22, 163, 74, 0.7);
+	background: rgba(22, 163, 74, 0.18);
+	color: var(--ready-hi);
+}
+.tide .tag--quiet {
+	border-color: var(--hair);
+	background: transparent;
+	color: var(--ink-3);
+}
+.tide .pill {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 32px;
+	padding: 0 14px;
+	border-radius: var(--r-pill);
+	border: 1px solid var(--hair);
+	background: var(--well);
+	color: var(--ink-2);
+	font-size: var(--fs-small);
+	white-space: nowrap;
+}
+.tide .pill .dot {
+	width: 9px;
+	height: 9px;
+	border-radius: 50%;
+	background: var(--ink-3);
+}
+.tide .pill--ok {
+	color: var(--ready-hi);
+	border-color: rgba(22, 163, 74, 0.45);
+}
+.tide .pill--ok .dot {
+	background: #2ecc71;
+	box-shadow: 0 0 8px #2ecc71;
+}
+.tide .pill--warn {
+	color: #ffd27a;
+	border-color: rgba(234, 179, 8, 0.5);
+}
+.tide .pill--warn .dot {
+	background: #eab308;
+}
+.tide .pill--bad {
+	color: var(--danger-hi);
+	border-color: rgba(229, 72, 77, 0.5);
+}
+.tide .pill--bad .dot {
+	background: var(--danger);
+}
+/* ------------------------------------------------------- token + seat tile
+   The player token is the board's hero token without a hero yet:
+   outer band = the player's colour, inner band = the team, initial inside.  */
+.tide .token {
+	--pc: #94a3b8;
+	position: relative;
+	flex: none;
+	width: 52px;
+	height: 52px;
+	border-radius: 50%;
+	display: grid;
+	place-items: center;
+	font-size: 22px;
+	line-height: 1;
+	color: var(--ink);
+	background: radial-gradient(circle at 50% 30%, #1d3f60, #0a1b2d 75%);
+	border: 5px solid var(--pc);
+	box-shadow:
+		0 0 0 1.5px #040c16,
+		inset 0 0 0 1.5px #040c16,
+		inset 0 0 0 4px var(--tc, var(--ink-3)),
+		0 3px 8px rgba(0, 0, 0, 0.5);
+}
+.tide .token--sm {
+	width: 40px;
+	height: 40px;
+	font-size: 17px;
+	border-width: 4px;
+	box-shadow:
+		0 0 0 1.5px #040c16,
+		inset 0 0 0 1.5px #040c16,
+		inset 0 0 0 3.5px var(--tc, var(--ink-3));
+}
+.tide .token .badge {
+	position: absolute;
+	right: -8px;
+	bottom: -8px;
+	width: 22px;
+	height: 22px;
+	border-radius: 50%;
+	display: grid;
+	place-items: center;
+	background: var(--ready);
+	color: #fff;
+	border: 2px solid #06182a;
+	font-size: 12px;
+}
+.tide .token .crown {
+	position: absolute;
+	left: 50%;
+	top: -19px;
+	transform: translateX(-50%);
+	color: var(--brass-hi);
+	font-size: 17px;
+	filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.7));
+}
+.tide .seat {
+	display: flex;
+	align-items: center;
+	gap: var(--s4);
+	min-height: 78px;
+	padding: var(--s3) var(--s4);
+	border-radius: var(--r-md);
+	border: 1px solid var(--hair);
+	background: rgba(2, 11, 22, 0.5);
+	text-align: left;
+	width: 100%;
+	min-width: 0;
+}
+.tide .seat-body {
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+	min-width: 0;
+	flex: 1;
+}
+.tide .seat-name {
+	font-size: var(--fs-h3);
+	color: var(--ink);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.tide .seat-name small {
+	font-size: var(--fs-small);
+	color: var(--ink-2);
+}
+.tide .seat-tags {
+	display: flex;
+	gap: 6px;
+	flex-wrap: wrap;
+}
+.tide .seat--me {
+	border-color: var(--brass);
+	box-shadow: inset 0 0 0 1px var(--brass-line);
+	background: linear-gradient(90deg, var(--brass-faint), rgba(2, 11, 22, 0.5) 60%);
+}
+.tide .seat--ready {
+	border-color: rgba(22, 163, 74, 0.6);
+}
+.tide .seat--me.seat--ready {
+	border-color: var(--brass);
+}
+.tide .seat--open {
+	border-style: dashed;
+	border-color: rgba(255, 255, 255, 0.22);
+	background: transparent;
+	color: var(--ink-3);
+	font-size: var(--fs-body);
+}
+.tide .seat--open .token {
+	border: 2px dashed rgba(255, 255, 255, 0.3);
+	background: transparent;
+	box-shadow: none;
+	color: var(--ink-3);
+}
+.tide .seat--open:hover,
+.tide .seat--open.is-hover {
+	border-color: var(--tc, var(--brass));
+	color: var(--ink);
+	background: var(--raise);
+}
+.tide .seat--open:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+/* ------------------------------------------------------------- swatches */
+.tide .swatches {
+	display: flex;
+	gap: 6px;
+}
+.tide .swatch {
+	--sc: #94a3b8;
+	flex: 1 1 0;
+	max-width: 44px;
+	min-width: 0;
+	aspect-ratio: 1;
+	padding: 0;
+	border-radius: 50%;
+	border: 2px solid rgba(0, 0, 0, 0.45);
+	background: var(--sc);
+	box-shadow:
+		inset 0 2px 3px rgba(255, 255, 255, 0.25),
+		inset 0 -3px 4px rgba(0, 0, 0, 0.25),
+		0 0 0 1px rgba(255, 255, 255, 0.3);
+	transition: transform var(--t-fast) var(--ease);
+}
+.tide .swatch:hover,
+.tide .swatch.is-hover {
+	transform: scale(1.12);
+}
+.tide .swatch.is-on {
+	box-shadow:
+		inset 0 2px 3px rgba(255, 255, 255, 0.25),
+		0 0 0 2px var(--deep),
+		0 0 0 4px var(--brass-hi);
+}
+.tide .swatch:disabled {
+	/* taken by someone else: faded and struck through */
+	opacity: 0.45;
+	cursor: not-allowed;
+	transform: none;
+	background:
+		linear-gradient(135deg, transparent 44%, rgba(3, 11, 21, 0.95) 44% 56%, transparent 56%),
+		var(--sc);
+	box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.3);
+}
+/* ---------------------------------------------------------- choice card
+   The big two-way choices: Player / Admin, Create / Join, Run a game / Map editor */
+.tide .choice {
+	display: flex;
+	align-items: center;
+	gap: var(--s5);
+	width: 100%;
+	min-height: 112px;
+	padding: var(--s4) var(--s5);
+	text-align: left;
+	text-decoration: none;
+	color: var(--ink);
+	background: var(--glass);
+	-webkit-backdrop-filter: var(--glass-blur);
+	backdrop-filter: var(--glass-blur);
+	border: 1px solid var(--brass-line);
+	border-radius: var(--r-lg);
+	box-shadow:
+		var(--sh-2),
+		inset 0 1px 0 rgba(255, 255, 255, 0.07);
+	transition:
+		transform var(--t-med) var(--ease),
+		border-color var(--t-med),
+		box-shadow var(--t-med);
+}
+.tide .choice-ic {
+	flex: none;
+	width: 64px;
+	height: 64px;
+	border-radius: 50%;
+	display: grid;
+	place-items: center;
+	font-size: 28px;
+	color: var(--brass-hi);
+	background: radial-gradient(circle at 50% 30%, #1d4468, #0a1f35 75%);
+	border: 1px solid var(--brass);
+	box-shadow:
+		0 0 0 4px rgba(216, 179, 106, 0.12),
+		inset 0 2px 4px rgba(255, 255, 255, 0.1);
+}
+.tide .choice-txt {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	flex: 1;
+	min-width: 0;
+}
+.tide .choice-go {
+	color: var(--brass);
+	font-size: 24px;
+	transition: transform var(--t-med) var(--ease);
+}
+.tide .choice:hover,
+.tide .choice.is-hover {
+	border-color: var(--brass);
+	box-shadow: var(--sh-2), var(--sh-brass);
+}
+.tide .choice:hover .choice-go,
+.tide .choice.is-hover .choice-go {
+	transform: translateX(4px);
+	color: var(--brass-hi);
+}
+.tide .choice:active,
+.tide .choice.is-pressed {
+	transform: scale(0.99);
+	filter: brightness(0.9);
+}
+/* ---------------------------------------------------------------- toast */
+.tide .toast {
+	--tc: var(--brass);
+	display: inline-flex;
+	align-items: center;
+	gap: var(--s3);
+	min-height: 56px;
+	padding: 8px 18px 8px 10px;
+	border-radius: var(--r-md);
+	background: var(--glass);
+	-webkit-backdrop-filter: var(--glass-blur);
+	backdrop-filter: var(--glass-blur);
+	border: 1px solid var(--brass-line);
+	border-left: 4px solid var(--tc);
+	box-shadow: var(--sh-2);
+	font-size: var(--fs-body);
+}
+.tide .toast img {
+	width: 72px;
+	height: 40px;
+	object-fit: cover;
+	border-radius: 6px;
+}
+.tide .toast .who {
+	display: block;
+	font-size: var(--fs-small);
+	color: var(--tc-hi, var(--ink-2));
+}
+.tide .toast--plain {
+	padding-left: 16px;
+}
+/* -------------------------------------------------------- small pieces */
+/* label on the left, a control on the right (host options) */
+.tide .optrow {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--s4);
+	min-height: 52px;
+}
+.tide .optrow > .name {
+	font-size: var(--fs-body);
+	color: var(--ink);
+	white-space: nowrap;
+}
+/* a number with a caption (waves / life / seats) */
+.tide .figure {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 2px;
+	flex: 1 1 0;
+	padding: 10px 4px;
+	border-radius: var(--r-md);
+	background: var(--well);
+	border: 1px solid var(--hair);
+}
+.tide .figure b {
+	font-weight: 400;
+	font-size: var(--fs-h1);
+	line-height: 1;
+	color: var(--brass-hi);
+}
+.tide .figure span {
+	font-size: var(--fs-small);
+	color: var(--ink-2);
+	text-align: center;
+	white-space: nowrap;
+}
+/* picture in a brass frame (map preview) */
+.tide .frame {
+	position: relative;
+	border-radius: var(--r-md);
+	overflow: hidden;
+	border: 1px solid var(--brass);
+	box-shadow:
+		0 0 0 3px rgba(216, 179, 106, 0.14),
+		var(--sh-1);
+}
+.tide .frame img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+.tide .frame-cap {
+	position: absolute;
+	inset: auto 0 0 0;
+	display: flex;
+	align-items: center;
+	gap: var(--s2);
+	padding: 26px 14px 10px;
+	background: linear-gradient(180deg, transparent, rgba(3, 11, 21, 0.9));
+	font-size: var(--fs-h3);
+}
+.tide .stars {
+	display: inline-flex;
+	gap: 2px;
+	color: var(--brass-hi);
+}
+/* ---------------------------------------------------------------- motion
+   Screens arrive with `reveal`: fade + 12px rise, 520ms. The sea drifts.
+   Under "reduce motion" nothing travels: fades only, the sea holds still.   */
+@media (prefers-reduced-motion: reduce) {
+	.tide *,
+	.tide *::before,
+	.tide *::after {
+		animation: none !important;
+		transition-duration: 0.01ms !important;
+	}
+	.tide .btn:hover,
+	.tide .herotile:hover,
+	.tide .swatch:hover {
+		transform: none;
+	}
+}
+
+@keyframes tide-reveal {
+	from {
+		opacity: 0;
+		transform: translateY(12px);
+	}
+}
+
+@keyframes tide-drift {
+	to {
+		transform: translate3d(-1.5%, -1%, 0) scale(1.03);
+	}
+}
+
+@keyframes tide-pulse {
+	50% {
+		box-shadow: 0 0 0 6px transparent;
+	}
+}
