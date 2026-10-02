@@ -5,7 +5,7 @@
 	import { browser } from '$app/environment';
 	import { base } from '$app/paths';
 	import { writable, get, type Readable } from 'svelte/store';
-	import logoImage from '$lib/images/goa-logo.png';
+	import logoImage from '$lib/images/goa-logo.webp';
 	import coinOrange from '$lib/images/tiebreaker_orange.png';
 	import coinBlue from '$lib/images/tiebreaker_blue.png';
 	import { reveal } from '$lib/transitions';
