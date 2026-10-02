@@ -9,7 +9,9 @@
 // the centre line and always fit, so nothing needs a second scale.
 //
 //   y 8..64    top bar: ☰ · enemy chips · scoreline · your team's chips · view
-//   y 70..118  initiative rail (after the reveal)
+//   y 70..118  initiative rail (after the reveal); the prompt line sits here, or under the rail while it is up
+//   between    the board: the island at rest fits BOARD_TOP .. BOARD_BOTTOM from the edges
+//   bottom     log tab, bottom-left, above the console
 //   bottom     helm console, DASH_W × DASH_H, centred, EDGE from the bottom
 export const DESIGN_W = 1440, DESIGN_H = 900;
 /** the helm console (the old "dash") */
@@ -17,6 +19,8 @@ export const DASH_W = 1180, DASH_H = 112;
 export const EDGE = 12;
 /** the top bar and the rail under it, in design px from the top */
 export const TOP_Y = 8, TOP_H = 56, RAIL_Y = 70, RAIL_H = 48;
+/** the island at rest keeps clear of the top bar + the rail's lane, and of the console + the tips of the tucked hand over it */
+export const BOARD_TOP = RAIL_Y + RAIL_H, BOARD_BOTTOM = 160;
 /** a roster-chip zone: its inner edge is this far from the centre line, and it is this wide */
 export const CHIPS_IN = 284, CHIPS_W = 372;
 

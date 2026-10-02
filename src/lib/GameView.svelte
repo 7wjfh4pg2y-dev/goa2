@@ -22,7 +22,7 @@
 	import lifeSplit from '$lib/images/life_split.png';
 	import { heroCards } from '$lib/cards/deck';
 	import { ultimateIndex, allowedMoves } from '$lib/cards/cardstate';
-	import { uiLayout, layoutVars } from '$lib/layout';
+	import { uiLayout, layoutVars, TOP_Y, TOP_H, RAIL_Y, RAIL_H, BOARD_TOP, BOARD_BOTTOM } from '$lib/layout';
 	import { placeToken, moveToken, effectiveHex, MINES, tokenName, tokensLeft, removalOptions, applyRemoval, removalLog, canRemove, type ArmToken, type RemovalOption } from '$lib/tokens';
 	import {
 		colorHex, movePiece, teamForSeat, throneHex, minionCoins, heroDefeatSummary, canRespawn, freeSpawns, teamOf, clearable, boardLookOf, zoneGlowOf, boardFxOf, type BoardLook,
@@ -442,16 +442,16 @@
 	// re-placed when something could have moved it — the pieces, the window, any input that pans / zooms / turns
 	// the board — then frame by frame only for as long as it is still moving. (It used to be read every frame
 	// while a piece was selected; a running rAF loop makes the page produce every frame.)
-	let tipPos: { x: number; y: number } | null = null;
+	let tipPos: { x: number; y: number; below: number } | null = null; // x · just above the piece · just under it (px)
 	let tipRaf = 0;
 	let tipFor: string | null = null;
 	function placeTip() {
 		tipRaf = 0;
 		const p = tipId && !mobile ? board?.clientPos(tipId) : null;
 		const x = p ? Math.round(p.x) : null, y = p ? Math.round(p.y - p.r - 8) : null;
-		if (x == null || y == null) { if (tipPos) tipPos = null; return; }
+		if (!p || x == null || y == null) { if (tipPos) tipPos = null; return; }
 		if (tipPos && tipPos.x === x && tipPos.y === y) return; // at rest
-		tipPos = { x, y };
+		tipPos = { x, y, below: Math.round(p.y + p.r + 8) };
 		tipRaf = requestAnimationFrame(placeTip); // it moved: look again next frame
 	}
 	const tipNudge = () => { if (tipId && !mobile && !tipRaf) tipRaf = requestAnimationFrame(placeTip); };
@@ -555,19 +555,51 @@
 
 	// ── desktop / tablet: top bar (☰ · scoreline · view), log tab, prompt line, piece toolbar ──
 	let viewOpen = false;
-	// the island's resting view fits between the top bar (with the initiative rail under it) and the bottom console
-	$: boardInset = mobile ? null : { t: 118 * lay.s, b: 132 * lay.s };
-	// once the cards are revealed the initiative rail sits under the scoreline, so the prompts drop below it
-	$: railOn = $ms.revealAt != null && !$ms.battlePhase;
+	// the island's resting view fits between the top bar (with the initiative rail's lane under it) and the tips of
+	// the tucked hand over the console (layout.ts)
+	$: boardInset = mobile ? null : { t: BOARD_TOP * lay.s, b: BOARD_BOTTOM * lay.s };
+	// what CardLayer is showing (it tells us): the initiative rail, and how far down each open player board reaches
+	let railOn = false, boardL = 0, boardR = 0;
+	let covered = false; // the deck hides the board: nothing under it needs to move
+	// the prompt line sits under the top bar, or under the rail while that is up
+	$: promptTop = railOn ? RAIL_Y + RAIL_H + 6 : TOP_Y + TOP_H + 8;
+	$: promptRows = ($ms.wonBy || clearing ? 1
+		: battle && !pendingToken && !pendingRespawn ? 1
+		: (outgoing.length || hostWatch.length) && !pendingToken && !pendingRespawn ? outgoing.length + hostWatch.length
+		: myDefeat && !iCanRespawn && !pendingRespawn && !pendingToken ? 1 : 0)
+		+ (incoming ? 1 : 0) + (placing ? 1 : 0) + (lifeOut && !iAmHost ? 1 : 0);
 	// the log's "effects in play": every hero with a live card effect
 	$: liveFx = abilityRows.flatMap((r) => r.fx ? [{ id: r.id, name: `${r.name} · ${r.fx.name}`, when: FX_SHORT[effectLabel(r.fx, $ms.round, $ms.turn)],
 		dots: FX_COLORS.filter(([c]) => r.lit.has(c)).map(([, hex]) => hex) }] : []);
 	function readFx(id: string) { const r = abilityRows.find((x) => x.id === id); if (r?.fx) cardLayer?.showCard(r.fx.hero, r.fx.idx, r.fx.pid, r.all); }
-	// the toolbar holds actions only (the piece's name is its hover label), so it shows only when there is one
+	// the toolbar holds actions only (the piece's name is its hover label), so it shows only when there is one —
+	// except on a touch screen, which has no hover: there it also names the piece
+	const touch = typeof matchMedia === 'function' && matchMedia('(hover: none)').matches;
 	$: toolHas = !!selPiece && (canFlip || selImmune || canBattleSel || ownHeroSel
 		|| (canDefeatSel && (selPiece.kind === 'hero' || !selImmune || iAmHost))
 		|| (canRemoveSel && selPiece.kind !== 'hero' && (!selImmune || iAmHost)));
-	$: tipStyle = tipPos ? `left:${tipPos.x / lay.s}px; top:${tipPos.y / lay.s}px` : '';
+	// the toolbar stands just above its piece — under it when the top bar, the rail or a prompt is in the way — and
+	// is kept between the open player boards (all in design px: the layer is zoomed by the UI scale)
+	const TOOL_H = 44;
+	let toolHalf = 0; // half the toolbar's width, measured when it appears
+	function toolFit(node: HTMLElement, _key: unknown) {
+		const read = () => {
+			const layer = node.parentElement;
+			// as a share of the layer, so it does not matter how this browser reports sizes under `zoom`
+			toolHalf = layer?.offsetWidth ? ((node.offsetWidth / layer.offsetWidth) * (gvw / lay.s)) / 2 : 0;
+		};
+		read();
+		return { update: read };
+	}
+	$: tipStyle = (() => {
+		const floor = promptTop + promptRows * 50; // the first free line under the bar / rail / prompts
+		if (!tipPos) return `top:${floor}px`; // its piece is off screen
+		const s = lay.s, cw = gvw / s;
+		const lo = (boardL ? 12 + 352 : 0) + 8 + toolHalf, hi = cw - (boardR ? 12 + 352 : 0) - 8 - toolHalf;
+		const x = lo <= hi ? Math.min(hi, Math.max(lo, tipPos.x / s)) : tipPos.x / s;
+		const under = tipPos.y / s - TOOL_H < floor;
+		return `left:${x}px; top:${(under ? tipPos.below : tipPos.y) / s}px${under ? '; transform:translate(-50%, 0)' : ''}`;
+	})();
 </script>
 
 <!-- battle zone + host push override (desktop HUD and the phone waves sheet) -->
@@ -680,10 +712,10 @@
 	<div class="ocean"></div>
 	<!-- on a phone the board sits between the top bar + player strip and the dash -->
 	<div class="boardarea" class:mob={mobile}>
-	<BoardCanvas bind:this={board} map={$ms.map ?? {}} look={boardLook} {glowZone} effects={boardFx} inset={boardInset} rotation={orientation} interactive={true} {placing} {placeGhost} holdColor={myHoldColor} onCancelPlace={cancelPlace} {areas} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} pings={boardPings} onPing={doPing} {pingArmed} />
+	<BoardCanvas bind:this={board} map={$ms.map ?? {}} look={boardLook} {glowZone} effects={boardFx && !covered} inset={boardInset} rotation={orientation} interactive={true} {placing} {placeGhost} holdColor={myHoldColor} onCancelPlace={cancelPlace} {areas} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} pings={boardPings} onPing={doPing} {pingArmed} />
 	</div>
 
-	<CardLayer bind:this={cardLayer} {mobile} {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} onRespawn={placeMyHero} onEnter={placeMyHero} onArmToken={armToken} holdingToken={!!pendingToken} {pingArmed} onPing={pingButton} bind:previewId />
+	<CardLayer bind:this={cardLayer} {mobile} {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} onRespawn={placeMyHero} onEnter={placeMyHero} onArmToken={armToken} holdingToken={!!pendingToken} {pingArmed} onPing={pingButton} bind:previewId bind:railOn bind:boardL bind:boardR bind:covered />
 
 	<!-- phone: the selected piece's toolbar, under the player strip -->
 	{#if !mobile}
@@ -987,7 +1019,7 @@
 			{flips} {tieFlip} {lifeArt} {tieArt} onLife={toggleLife} onWave={toggleWave} onTie={flipTie} />
 		<button class="hbtn viewbtn" class:is-on={viewOpen} on:click={() => (viewOpen = !viewOpen)} title="View" aria-label="View"><TopIcon name="compass" /></button>
 		{#if viewOpen}
-			<div class="viewcol">
+			<div class="viewcol" style:top={boardR ? `${boardR + 8}px` : null}>
 				<button class="hbtn" on:click={() => board?.reset()} title="Recentre" aria-label="Recentre"><TopIcon name="target" /></button>
 				<button class="hbtn" on:click={() => board?.rotateBy(-45)} title="Turn left" aria-label="Turn left"><TopIcon name="rotl" /></button>
 				<button class="hbtn" on:click={() => board?.rotateBy(45)} title="Turn right" aria-label="Turn right"><TopIcon name="rotr" /></button>
@@ -996,10 +1028,10 @@
 			</div>
 		{/if}
 
-		<TopLog bind:open={logOpen} {log} fx={liveFx} undo={iAmHost ? doUndo : null} canUndo={$canUndo} onFx={readFx} />
+		<TopLog bind:open={logOpen} {log} fx={liveFx} undo={iAmHost ? doUndo : null} canUndo={$canUndo} onFx={readFx} top={boardL ? boardL + 8 : 0} />
 
 		<!-- one line per thing that needs an answer; empty while nothing does -->
-		<div class="prompts" class:low={railOn}>
+		<div class="prompts" style:top="{promptTop}px">
 			{#if $ms.wonBy}
 				<button class="prompt" on:click={() => (victoryClosed = false)}>{teamName($ms.wonBy.team)} win</button>
 			{:else if clearing}
@@ -1048,7 +1080,7 @@
 
 		<!-- the piece toolbar: actions only, above the selected piece; a confirm takes its place -->
 		{#if confirmKind && actPiece}
-			<div class="ptool confirm" class:free={!tipPos} style={tipStyle}>
+			<div class="ptool confirm" class:free={!tipPos} style={tipStyle} use:toolFit={`${confirmKind}${actId}`}>
 				{#if (confirmKind === 'attack' || confirmKind === 'defeat') && attackSum}
 					<span class="lbl" style:color={teamText(actPiece)}>{whoOf(actPiece.id)}</span>
 					<span class="gain" title="You get {attackSum.coins}{attackSum.assists.length ? `, each teammate ${attackSum.assist}` : ''}">
@@ -1066,8 +1098,9 @@
 				{/if}
 				<button class="pbtn x" on:click={closeConfirm} aria-label="Cancel"><TopIcon name="x" /></button>
 			</div>
-		{:else if selPiece && toolHas}
-			<div class="ptool" class:free={!tipPos} style={tipStyle} aria-label={selLabel}>
+		{:else if selPiece && (toolHas || touch)}
+			<div class="ptool" class:free={!tipPos} style={tipStyle} aria-label={selLabel} use:toolFit={`${selPieceId}${clearCount}${canFlip}${canBattleSel}`}>
+				{#if touch}<span class="lbl" style:color={teamText(selPiece)}>{selLabel}</span>{/if}
 				{#if canFlip}<button class="pbtn go" on:click={flipMine}>Flip</button>{/if}
 				{#if selImmune}<span class="imm" title="Heavy minions can't be moved, defeated or removed while another minion of their team is in the battle zone">Immune</span>{/if}
 				{#if canDefeatSel && selPiece.kind === 'hero'}
