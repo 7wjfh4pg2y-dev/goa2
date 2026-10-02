@@ -1,13 +1,12 @@
 <script lang="ts">
 	// The pre-game backdrop: the real island in its moving sea (the same BoardCanvas the game
 	// uses, as a picture — no pieces, no interaction), a few wisps of cloud drifting over it,
-	// and a scrim that keeps whatever sits on top readable. Each screen asks for a `scene`;
-	// the island glides from one staging to the next.
-	//   landing — the island large on the right (phones: filling the screen behind the crest)
-	//   menu    — the same, a little further off
-	//   form    — open water: the island pushed away behind the panel and dimmed (create / join / admin)
-	//   lobby   — as form (the lobby shows its own map picture)
-	import { onMount, onDestroy } from 'svelte';
+	// and a scrim that keeps whatever sits on top readable. The island NEVER moves or changes
+	// size between screens (the user's rule: the map stays put, the crest and the menus move);
+	// a `scene` only changes the scrim and the clouds.
+	//   landing, menu — the island clear on the right (phones: filling the screen behind the crest)
+	//   form, lobby   — the same picture, dimmed behind the panel
+	import { onMount } from 'svelte';
 	import BoardCanvas from '$lib/BoardCanvas.svelte';
 	import type { GameMap } from '$lib/maps';
 
@@ -18,36 +17,12 @@
 	export let effects = true;
 
 	let board: BoardCanvas;
-	// where the island's centre sits (fractions of the screen) and how big it is, per scene
-	type Stage = { x: number; y: number; s: number };
-	const STAGE: Record<string, { desk: Stage; phone: Stage }> = {
-		landing: { desk: { x: 0.68, y: 0.5, s: 1.02 }, phone: { x: 0.5, y: 0.6, s: 1.5 } },
-		menu: { desk: { x: 0.7, y: 0.5, s: 0.94 }, phone: { x: 0.5, y: 0.72, s: 1.3 } },
-		form: { desk: { x: 0.5, y: 0.52, s: 1.5 }, phone: { x: 0.5, y: 0.5, s: 2.1 } },
-		lobby: { desk: { x: 0.5, y: 0.52, s: 1.5 }, phone: { x: 0.5, y: 0.5, s: 2.1 } }
-	};
-	$: target = STAGE[scene][mobile ? 'phone' : 'desk'];
-	let cur: Stage | null = null;
-	let raf = 0;
-	// glide to the new staging (a short tween; the board itself only gets a new matrix)
-	function glide(to: Stage) {
-		cancelAnimationFrame(raf);
-		if (!board) return;
-		const reduce = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-		if (!cur || reduce) { cur = { ...to }; board.place(to.x, to.y, to.s); return; }
-		const from = { ...cur }, t0 = performance.now(), D = 900;
-		const step = (now: number) => {
-			const k = Math.min(1, (now - t0) / D), e = 1 - Math.pow(1 - k, 3);
-			cur = { x: from.x + (to.x - from.x) * e, y: from.y + (to.y - from.y) * e, s: from.s + (to.s - from.s) * e };
-			board?.place(cur.x, cur.y, cur.s);
-			if (k < 1) raf = requestAnimationFrame(step);
-		};
-		raf = requestAnimationFrame(step);
-	}
+	// where the island's centre sits (fractions of the screen) and how big it is — one staging for every scene
+	const DESK = { x: 0.69, y: 0.5, s: 0.98 }, PHONE = { x: 0.5, y: 0.6, s: 1.5 };
+	$: stage = mobile ? PHONE : DESK;
 	let ready = false;
-	$: if (ready && board && map) { void mobile; glide(target); }
+	$: if (ready && board && map) board.place(stage.x, stage.y, stage.s);
 	onMount(() => { ready = true; });
-	onDestroy(() => { if (raf) cancelAnimationFrame(raf); }); // (never set on the server)
 	$: far = scene === 'landing' || scene === 'menu';
 </script>
 
@@ -68,7 +43,7 @@
 
 <style>
 	.sea { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
-	.stagebox { position: absolute; inset: 0; transition: filter .9s ease; }
+	.stagebox { position: absolute; inset: 0; transition: filter .6s ease; }
 	.sea.near .stagebox { filter: saturate(.92) brightness(.62); }
 	.scrim { position: absolute; inset: 0; transition: opacity .6s ease; }
 	/* far: dark water behind the left column, clear over the island */
