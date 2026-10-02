@@ -10,7 +10,7 @@
 	} from '$lib/heroes';
 	import {
 		teamRosters, teamForSeat, draftTurn, draftActor, draftBlocked, draftComplete,
-		draftAdvance, draftSetPick, DRAFT_LABELS, DRAFT_TURN_MS,
+		draftAdvance, draftSetPick, colorHex, DRAFT_LABELS, DRAFT_TURN_MS,
 		type MatchState, type Player, type MatchSession, type Team, type DraftAction
 	} from '$lib/match';
 	import coinOrange from '$lib/images/tiebreaker_orange.png';
@@ -38,6 +38,7 @@
 	$: myPick = d ? d.picks[clientId] : undefined; // all-pick: my committed hero
 
 	const nameOf = (id: string) => $players.find((p) => p.id === id)?.name ?? 'Player';
+	const colorOf = (id: string) => colorHex($players.find((p) => p.id === id)?.color ?? '');
 
 	// hero grid: always alphabetical. A filter tab (complexity tier or role) keeps
 	// the matching heroes lit and greys out / disables the rest.
@@ -469,7 +470,7 @@
 
 	<!-- every hero locked: Team vs Team war banners; the host begins from here -->
 	{#if complete}
-		<MatchupSplash orange={rosters.orange} blue={rosters.blue} picks={d.picks} {nameOf} {clientId} {iAmHost} onStart={startGame} />
+		<MatchupSplash orange={rosters.orange} blue={rosters.blue} picks={d.picks} {nameOf} {colorOf} {clientId} {iAmHost} onStart={startGame} />
 	{/if}
 </div>
 {/if}
