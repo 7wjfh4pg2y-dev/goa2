@@ -10,8 +10,9 @@
 	// the hex id, so every player sees the same island.
 	// Clarity rules: small things stay small and low in contrast; anything tall stands on the
 	// RIM of its hex, never in the middle where a piece stands; no svg filters.
-	import { hexCenter, hexPoints, hexHash, hexNeighbour, outlineLoops, loopsPath, borderPath, SQRT3, type Pt } from './hexgeo';
+	import { hexCenter, hexPoints, hexHash, hexNeighbour, outlineLoops, loopsPath, borderPath, type Pt } from './hexgeo';
 	import { zoneType } from '../zones';
+	import { MINION_ART, type MinionRole, type MinionTeam } from './minionArt';
 
 	export let cells: Record<string, string> = {};
 	export let meta: Record<string, { m: string; dir: number }> = {};
@@ -26,7 +27,10 @@
 	/** the coastline (svg path), shared with the sea */
 	export let coast = '';
 
-	const minionSprites = import.meta.glob('../images/minions/*.png', { eager: true, import: 'default' }) as Record<string, string>;
+	// minion spawn points: the emblem's radius on the hex (in hex sizes), and the two teams' inks
+	const EMBLEM = 0.6;
+	const INK = { orange: { ink: '#4a2208', halo: '#ffd9a8', badge: '#3a1c07' }, blue: { ink: '#123c70', halo: '#f2fbff', badge: '#0c2444' } };
+	const roleOf = (m?: string): MinionRole => (m === 'ranged' || m === 'heavy' ? m : 'melee');
 
 	// ── palette: [hue, saturation, lightness] of the tile and of the darker seam under it
 	type Z = 'beach' | 'middle' | 'forest' | 'terrain' | 'baseOrange' | 'baseBlue';
@@ -49,7 +53,6 @@
 		const z = zoneType(cells, id);
 		return (z in PAL ? z : 'middle') as Z;
 	};
-	const isSpawn = (t: string) => t === 'spawnOrange' || t === 'spawnBlue';
 
 	// screen-down, in board coordinates (the board may be turned): shadows fall this way
 	$: down = { x: Math.sin((rot * Math.PI) / 180), y: Math.cos((rot * Math.PI) / 180) };
@@ -67,13 +70,16 @@
 
 	$: ids = Object.keys(cells);
 	$: tiles = ids.map((id) => {
-		const c = hexCenter(id, size), t = cells[id], z = zoneOf(id);
+		const c = hexCenter(id, size), t = cells[id];
+		const team: MinionTeam | null = t === 'spawnOrange' ? 'orange' : t === 'spawnBlue' ? 'blue' : null;
+		// a spawn point is a full hex of its team's ground (copper deck / ice), whatever zone it lies in
+		const z: Z = team === 'orange' ? 'baseOrange' : team === 'blue' ? 'baseBlue' : zoneOf(id);
 		const v = Math.floor(hexHash(id, 1) * VARIANTS.length);
 		return {
 			id, c, z, v,
 			full: hexPoints(c, size * 1.012),
 			inner: hexPoints(c, size * 0.83),
-			spawn: isSpawn(t) ? { href: minionSprites[`../images/minions/${t === 'spawnOrange' ? 'orange' : 'blue'}_${meta[id]?.m ?? 'melee'}.png`], dir: meta[id]?.dir ?? 0, team: t === 'spawnOrange' ? 'orange' : 'blue' } : null,
+			spawn: team ? { team, role: roleOf(meta[id]?.m), dir: meta[id]?.dir ?? 0 } : null,
 			// a base's hero spawn points carry the team's emblem (gear / star); the throne is one of them
 			emblem: t === 'baseOrangeSpawn' ? 'orange' : t === 'baseBlueSpawn' ? 'blue' : thrones[id] ?? null,
 			rock: t === 'terrain'
@@ -102,7 +108,7 @@
 		const low: Deco[] = [], tall: Deco[] = [], patches: Array<{ key: string; x: number; y: number; rx: number; ry: number; r: number; fill: string }> = [];
 		const at = (c: Pt, deg: number, dist: number) => ({ x: c.x + Math.cos((deg * Math.PI) / 180) * dist, y: c.y + Math.sin((deg * Math.PI) / 180) * dist });
 		for (const t of tiles) {
-			if (t.emblem || t.rock) continue;
+			if (t.emblem || t.rock || t.spawn) continue;
 			const h = (n: number) => hexHash(t.id, n);
 			const put = (list: Deco[], n: number, ref: string, p: Pt, scale: number, o: { sr?: number; shade?: boolean; r?: number } = {}) =>
 				list.push({ key: `${t.id}:${n}`, ref, x: p.x, y: p.y, r: o.r ?? Math.round(h(300 + n) * 360), k: size * U * scale, sr: o.sr, shade: o.shade });
@@ -182,7 +188,6 @@
 	$: cracks = borderPath(ids, (id) => (cells[id] ? zones[id] ?? '' : undefined), size);
 	// the battle zone's light hugs the ground you can stand on (rocks belong to the zone but aren't lit)
 	$: glow = glowZone ? loopsPath(outlineLoops(ids.filter((id) => zones[id] === glowZone && cells[id] !== 'terrain'), size), 0.45) : '';
-	const W = SQRT3; // hex width in sizes
 	const tf = (d: Deco) => `translate(${d.x.toFixed(1)} ${d.y.toFixed(1)}) rotate(${d.r}) scale(${d.k.toFixed(3)})`;
 	const PENTA = 'M0 -29L17 23.5L-27.6 -9L27.6 -9L-17 23.5Z'; // a five-point star drawn in one line
 </script>
@@ -424,9 +429,18 @@
 			<circle cx={t.c.x + down.x * size * 0.07} cy={t.c.y + down.y * size * 0.07} r={size * 0.68} fill="#000" fill-opacity=".32" />
 			<use href="#isl-emblem-{t.emblem}" transform="translate({t.c.x.toFixed(1)} {t.c.y.toFixed(1)}) scale({(size / 60).toFixed(3)})" />
 		{:else if t.spawn}
-			<circle cx={t.c.x + down.x * size * 0.07} cy={t.c.y + down.y * size * 0.07} r={size * 0.64} fill="#000" fill-opacity=".28" />
-			<image href={t.spawn.href} x={t.c.x - W * size * 0.385} y={t.c.y - W * size * 0.385} width={W * size * 0.77} height={W * size * 0.77} preserveAspectRatio="xMidYMid meet"
-				transform={t.spawn.dir ? `rotate(${t.spawn.dir * 60} ${t.c.x} ${t.c.y})` : undefined} />
+			{@const a = MINION_ART[t.spawn.team][t.spawn.role]}
+			{@const k = (size * EMBLEM) / a.r}
+			{@const ink = INK[t.spawn.team]}
+			<!-- a minion spawn point: a plate of the team's ground with that minion engraved on it (facing the way it
+			     will march), and a small badge for its type that always sits at the foot of the hex, upright -->
+			<polygon points={hexPoints(t.c, size * 0.86)} fill="none" stroke={ink.halo} stroke-opacity=".34" stroke-width={size * 0.035} stroke-linejoin="round" />
+			<use href="#mn-art-{t.spawn.team}-{t.spawn.role}" transform="translate({t.c.x.toFixed(1)} {t.c.y.toFixed(1)}) rotate({t.spawn.dir * 60 - 30}) scale({k.toFixed(4)}) translate({-a.cx} {-a.cy})"
+				fill={ink.ink} fill-rule="evenodd" stroke={ink.halo} stroke-opacity=".6" stroke-width={(size * 0.035 / k).toFixed(2)} stroke-linejoin="round" paint-order="stroke" />
+			<g transform="translate({(t.c.x + down.x * size * 0.74).toFixed(1)} {(t.c.y + down.y * size * 0.74).toFixed(1)}) rotate({-rot}) scale({(size * 0.2 / 10).toFixed(3)})">
+				<circle r="10" fill={ink.badge} stroke={ink.halo} stroke-opacity=".85" stroke-width="1.3" />
+				<use href="#mn-role-{t.spawn.role}" fill="#fff" stroke="#fff" transform="scale(.74)" />
+			</g>
 		{/if}
 	{/each}
 

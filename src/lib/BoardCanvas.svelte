@@ -3,6 +3,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import Ocean from '$lib/board/Ocean.svelte';
 	import IslandLayer from '$lib/board/IslandLayer.svelte';
+	import MinionDefs from '$lib/board/MinionDefs.svelte';
 	import { outlineLoops, loopsPath } from '$lib/board/hexgeo';
 	import { zoneTable } from '$lib/zones';
 
@@ -53,9 +54,9 @@
 	const SQRT3 = Math.sqrt(3);
 	const tileSprites = import.meta.glob('./images/tiles/*.png', { eager: true, import: 'default' }) as Record<string, string>;
 	const minionSprites = import.meta.glob('./images/minions/*.png', { eager: true, import: 'default' }) as Record<string, string>;
-	const minionTokens = import.meta.glob('./images/minion_tokens/*.png', { eager: true, import: 'default' }) as Record<string, string>;
-	const minionToken = (team: string, role?: string) =>
-		minionTokens[`./images/minion_tokens/${team === 'blue' ? 'blue' : 'orange'}_${role ?? 'melee'}.png`];
+	// a minion piece = the drawn token from MinionDefs (`#mn-token-<team>-<role>`, radius 100)
+	const minionRef = (team: string, role?: string) =>
+		`#mn-token-${team === 'blue' ? 'blue' : 'orange'}-${role === 'ranged' || role === 'heavy' ? role : 'melee'}`;
 	const tokenArt = import.meta.glob('./cards/images/*.png', { eager: true, import: 'default' }) as Record<string, string>;
 	const tokenImg = (name?: string) => (name ? tokenArt[`./cards/images/${name}.png`] : undefined);
 
@@ -506,9 +507,10 @@
 				<text x={c.x} y={c.y} text-anchor="middle" dominant-baseline="central" font-size={size * 0.6} font-weight="800" fill="#f6ead2" pointer-events="none">{p.label[0]}</text>
 			{/if}
 		{:else if p.role}
-			<image href={minionToken(p.team, p.role)} x={c.x - size * 0.7} y={c.y - size * 0.7} width={size * 1.4} height={size * 1.4} preserveAspectRatio="xMidYMid meet" pointer-events="none"
-				transform={minionRot(p, c.x, c.y, rotEff, teamSpawnDir)} />
-			<circle cx={c.x} cy={c.y} r={size * 0.66} fill="transparent" stroke={sel ? '#fde047' : pieceColor(p.team)} stroke-width={size * 0.14} />
+			<use href={minionRef(p.team, p.role)} pointer-events="none"
+				transform="{minionRot(p, c.x, c.y, rotEff, teamSpawnDir) ?? ''} translate({c.x} {c.y}) scale({(size * 0.72) / 100})" />
+			<!-- the click target, and the ring when it is picked up -->
+			<circle cx={c.x} cy={c.y} r={size * 0.7} fill="transparent" stroke={sel ? '#fde047' : 'none'} stroke-width={size * 0.1} />
 			{#if p.immune}
 				<!-- immune heavy: a silver shield with gold trim on the rim (same as the toolbar chip) -->
 				<g transform="translate({c.x + size * 0.5} {c.y - size * 0.52}) scale({size / 150}) translate(-50 -50)" pointer-events="none" style="filter:drop-shadow(0 1px 2px rgba(0,0,0,.75))">
@@ -558,6 +560,7 @@
 	{/if}
 	<svg class="pieces" viewBox={vb} preserveAspectRatio="xMidYMid meet" bind:this={svgEl}>
 		<defs>
+			<MinionDefs />
 			<linearGradient id="shield-silver" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff" /><stop offset=".45" stop-color="#cfd5dc" /><stop offset="1" stop-color="#7d8792" /></linearGradient>
 			<linearGradient id="mine-bone" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4ecd9" /><stop offset="1" stop-color="#c7b894" /></linearGradient>
 			<radialGradient id="mine-shade"><stop offset=".55" stop-color="#000" stop-opacity="0" /><stop offset="1" stop-color="#000" stop-opacity=".42" /></radialGradient>
