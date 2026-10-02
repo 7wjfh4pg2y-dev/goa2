@@ -13,6 +13,7 @@
 	import { availableMaps, type MapChoice, type GameMap } from '$lib/maps';
 	import { announceRoom, browseRooms, type RoomInfo } from '$lib/lobby';
 	import { claimIdentity, tabClientId, writeTicket, clearTicket, type ResumeTicket } from '$lib/identity';
+	import { colorMoves } from '$lib/seatcolor';
 	import {
 		joinMatch,
 		initialMatchState,
@@ -221,6 +222,19 @@
 		return PLAYER_COLORS.find((c) => !takenColors.has(c.id) && c.id !== color)?.id
 			?? PLAYER_COLORS.find((c) => !takenColors.has(c.id))?.id ?? PLAYER_COLORS[0].id;
 	}
+	// Two players sitting down together can both take the first free colour (each picked
+	// before the other's presence arrived). Settle it the same way on every client
+	// (seatcolor.ts: whoever took the colour first keeps it, the other moves on) — but only
+	// once my own presence shows the colour I hold, so a move is never made twice. Not in
+	// the game: by then the hero pieces carry their colours.
+	$: if (session && me && !$state.started && color !== 'spectator' && me.color === color) settleColor($players);
+	function settleColor(list: Player[]) {
+		const to = colorMoves(list, PLAYER_COLORS.map((c) => c.id))[session!.clientId];
+		if (!to) return;
+		color = to;
+		session!.setSelf({ color: to });
+		writeActive({ color: to });
+	}
 	$: orangeSeats = Array.from({ length: half }, (_, i) => i);
 	$: blueSeats = Array.from({ length: seatCount - half }, (_, i) => half + i);
 	$: orangeCount = seated.filter((p) => p.seat < half).length;
@@ -265,11 +279,19 @@
 		});
 	}
 
-	function bail(msg: string) {
+	// put the room down — EVERY way out goes through here, so a join or resume that was
+	// still in progress ends with it (a `joining` left true kept the Join button on
+	// "Joining…" for the rest of the page's life)
+	function closeSession() {
 		session?.leave();
 		session = null;
 		roomHandle?.leave();
 		roomHandle = null;
+		joining = false;
+		resumeSeed = null;
+	}
+	function bail(msg: string) {
+		closeSession();
 		clearActive();
 		notice = msg;
 		mode = 'menu';
@@ -309,10 +331,7 @@
 		else goHome();
 	}
 	function goHome() {
-		session?.leave();
-		session = null;
-		roomHandle?.leave();
-		roomHandle = null;
+		closeSession();
 		clearActive();
 		signOut();
 		pw = ''; pwError = false; notice = '';
@@ -436,9 +455,7 @@
 		// a lone creator whose room emptied out while away just recreates it
 		if (resumeSeed) { const seed = resumeSeed; resumeSeed = null; recreateFrom(seed); return; }
 		const st = session ? get(session.status) : 'reconnecting';
-		session?.leave();
-		session = null;
-		joining = false;
+		closeSession();
 		joinError = st === 'connected'
 			? `No open game with code “${room}”.`
 			: `Couldn't reach the server — check your connection and try again.`;
@@ -447,6 +464,9 @@
 	}
 	// recreate a room from a stored seed (creator resuming an emptied room)
 	function recreateFrom(seed: MatchState) {
+		// leave the probing session first: the Supabase client has ONE channel per room, and a second
+		// session would be handed the first one's (already subscribed → "cannot add presence callbacks")
+		session?.leave();
 		session = joinMatch(room, { name, color: 'spectator' }, { seed });
 		roomHandle = announceRoom({ room, host: name, seats: seed.seats, count: 0, started: false });
 		writeActive({ creator: true, seed });
@@ -490,10 +510,7 @@
 		bindSession(false);
 	}
 	function leaveRoom() {
-		session?.leave();
-		session = null;
-		roomHandle?.leave();
-		roomHandle = null;
+		closeSession();
 		clearActive();
 		mode = 'menu';
 		randomRoom();
