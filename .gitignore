@@ -13,3 +13,7 @@ vite.config.ts.timestamp-*
 
 # Local-only screenshot/preview routes (not deployed)
 /src/routes/preview-*/
+
+# local rulebook copies (the PDF is 101 MB; never commit)
+/rulebook.pdf
+/docs/rulebook.txt
