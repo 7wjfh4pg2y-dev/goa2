@@ -19,7 +19,7 @@
 	import { uiLayout, layoutVars } from '$lib/layout';
 	import { placeToken, moveToken, effectiveHex, MINES, tokenName, tokensLeft, removalOptions, applyRemoval, removalLog, canRemove, type ArmToken, type RemovalOption } from '$lib/tokens';
 	import {
-		colorHex, movePiece, teamForSeat, throneHex, minionCoins, heroDefeatSummary, canRespawn, freeSpawns, teamOf, clearable,
+		colorHex, movePiece, teamForSeat, throneHex, minionCoins, heroDefeatSummary, canRespawn, freeSpawns, teamOf, clearable, boardLookOf, zoneGlowOf, type BoardLook,
 		type MatchState, type Player, type MatchSession, type Team, type ConnStatus
 	} from '$lib/match';
 
@@ -150,6 +150,12 @@
 
 	let board: BoardCanvas;
 	let cardLayer: CardLayer;
+	// the host's board options: map visuals, and the outline round the battle zone (it follows the lane)
+	$: boardLook = boardLookOf($ms);
+	$: zoneGlow = zoneGlowOf($ms);
+	$: glowZone = boardLook === 'island' && zoneGlow && !$ms.wonBy ? battleZone($ms) : null;
+	function setBoardLook(v: BoardLook) { if (iAmHost) session.update({ boardLook: v }); }
+	function setZoneGlow(v: boolean) { if (iAmHost) session.update({ zoneGlow: v }); }
 	// every lingering card effect in play (switched on from a played card)
 	$: activeFx = $ms.effects ?? [];
 	// area radii (set from each player's dash): centred on that player's hero, in their colour
@@ -561,7 +567,7 @@
 
 <svelte:window on:keydown={(e) => { if (e.key !== 'Escape') return; if (confirmLeave) confirmLeave = false; else { pendingSpawn = null; pendingToken = null; pingArmed = false; if (clearing) cancelClear(); } }} on:pointerdown={(e) => { viewsOutside(e); }} bind:innerWidth={gvw} bind:innerHeight={gvh} />
 
-<div class="gamewrap" class:mob={mobile} class:dashfull={!mobile && lay.underHud} style={mobile ? '' : layoutVars(lay)}>
+<div class="gamewrap" class:sea={boardLook === 'island'} class:mob={mobile} class:dashfull={!mobile && lay.underHud} style={mobile ? '' : layoutVars(lay)}>
 	{#if $ms.wonBy}
 		<button class="placehint won" on:click={() => (victoryClosed = false)} title="Show the victory screen again">🏆 {teamName($ms.wonBy.team)} win — {$ms.wonBy.reason}</button>
 	{:else if clearing}
@@ -647,7 +653,7 @@
 	<div class="ocean"></div>
 	<!-- on a phone the board sits between the top bar + player strip and the dash -->
 	<div class="boardarea" class:mob={mobile}>
-	<BoardCanvas bind:this={board} map={$ms.map ?? {}} rotation={orientation} interactive={true} {placing} {placeGhost} holdColor={myHoldColor} onCancelPlace={cancelPlace} {areas} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} pings={boardPings} onPing={doPing} {pingArmed} />
+	<BoardCanvas bind:this={board} map={$ms.map ?? {}} look={boardLook} {glowZone} rotation={orientation} interactive={true} {placing} {placeGhost} holdColor={myHoldColor} onCancelPlace={cancelPlace} {areas} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} pings={boardPings} onPing={doPing} {pingArmed} />
 	</div>
 
 	<CardLayer bind:this={cardLayer} {mobile} {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} onRespawn={placeMyHero} onEnter={placeMyHero} onArmToken={armToken} holdingToken={!!pendingToken} {pingArmed} onPing={pingButton} bind:previewId />
@@ -806,6 +812,24 @@
 							{/each}
 						</div>
 					{:else}<span class="empty-note">None</span>{/if}
+				</div>
+
+				<div class="mpsec">
+					<div class="mplbl">Board{#if !iAmHost}<span class="ct">host's choice</span>{/if}</div>
+					<div class="mprow">
+						<span class="mpname">Map visuals</span>
+						<span class="mpacts">
+							<button class="act sm" class:primary={boardLook === 'island'} disabled={!iAmHost} on:click={() => setBoardLook('island')}>Island</button>
+							<button class="act sm" class:primary={boardLook === 'classic'} disabled={!iAmHost} on:click={() => setBoardLook('classic')}>Classic</button>
+						</span>
+					</div>
+					<div class="mprow">
+						<span class="mpname">Battle zone outline</span>
+						<span class="mpacts">
+							<button class="act sm" class:primary={zoneGlow} disabled={!iAmHost || boardLook !== 'island'} on:click={() => setZoneGlow(true)}>On</button>
+							<button class="act sm" class:primary={!zoneGlow} disabled={!iAmHost || boardLook !== 'island'} on:click={() => setZoneGlow(false)}>Off</button>
+						</span>
+					</div>
 				</div>
 
 				{#if mySeat < 0}<p class="mphint">You're spectating. Request an open/away seat above — the host approves takeovers.</p>{/if}
@@ -1067,6 +1091,9 @@
 <style>
 	/* clip (not just hidden): a tucked hand extends past the bottom edge, and
 	   overflow:hidden would still let focus/scrollIntoView scroll the whole view */
+	.gamewrap.sea { background: #0b4f80; } /* island look: deep water behind everything (the phone bars sit outside the board) */
+	.managepanel .act:disabled { cursor: default; opacity: .75; }
+	.managepanel .act:disabled:not(.primary) { opacity: .4; }
 	.gamewrap { position: fixed; inset: 0; color: #f1f5f9; overflow: hidden; overflow: clip; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 	/* ocean backdrop — deep water with layered swells + moving caustics so the hex island reads as floating on sea */
 	.ocean { position: absolute; inset: 0;

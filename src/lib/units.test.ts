@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { applyCardReq, canRespawn, lifeTier, cardInitiative, cardResolved, clearable, type MatchState, type Piece } from './match'
+import { applyCardReq, canRespawn, lifeTier, cardInitiative, cardResolved, clearable, boardLookOf, zoneGlowOf, type MatchState, type Piece } from './match'
 import { newPlayerCardState } from './cards/cardstate'
 
 // A (orange) + C (orange, A's teammate) vs B (blue, level 3) and D (blue)
@@ -16,6 +16,16 @@ function game(): MatchState {
 		cards: { A: lvl(2), C: lvl(1), B: { ...lvl(3), pending: 4 }, D: lvl(1) }
 	} as unknown as MatchState
 }
+
+describe('the host\'s board options', () => {
+	it('default to the island with the battle zone outlined; old or odd values fall back to the defaults', () => {
+		expect(boardLookOf({})).toBe('island')
+		expect(boardLookOf({ boardLook: 'classic' })).toBe('classic')
+		expect(boardLookOf({ boardLook: 'nonsense' as never })).toBe('island')
+		expect(zoneGlowOf({})).toBe(true)
+		expect(zoneGlowOf({ zoneGlow: false })).toBe(false)
+	})
+})
 
 describe('defeating and removing units', () => {
 	it('the level tiers: 1–3 → 1, 4–6 → 2, 7–8 → 3', () => {
