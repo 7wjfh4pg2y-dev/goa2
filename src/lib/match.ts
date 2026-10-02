@@ -507,6 +507,7 @@ export interface Player {
 	color: string // a PLAYER_COLORS id, or 'spectator'
 	ready: boolean // lobby ready toggle
 	seat: number // seat index (0-based); < 0 means unseated / spectating
+	colorAt?: number // when they took that colour (their clock): two players on one colour → the first keeps it (seatcolor.ts)
 }
 
 // ---- Hero draft engine -----------------------------------------------------
@@ -780,6 +781,14 @@ export interface MatchSession {
 	pings: Readable<Ping[]>
 }
 
+// One live session per room for a player (a tab). The Supabase client hands out ONE
+// channel per topic: a second joinMatch for a room this tab is still in (a rejoin whose
+// caller never left the first session) would get the first session's channel back —
+// presence listeners can't be added to a subscribed channel ("cannot add `presence`
+// callbacks … after `subscribe()`"), and two sessions would then fight over it. So the
+// earlier session is left first. Keyed by player too: in tests many players share a room.
+const liveSessions = new Map<string, () => void>()
+
 /**
  * Join or create a match room and keep a live, shared MatchState in sync.
  *
@@ -795,6 +804,8 @@ export function joinMatch(
 	opts: { seed?: MatchState } = {}
 ): MatchSession {
 	const clientId = stableClientId()
+	const sessionKey = `${room}\n${clientId}`
+	liveSessions.get(sessionKey)?.()
 
 	const creating = !!opts.seed
 	// A joiner's placeholder uses rev -1 so ANY incoming state (even rev 0) wins.
@@ -951,7 +962,8 @@ export function joinMatch(
 						name: (meta.name as string) ?? 'Player',
 						color: (meta.color as string) ?? 'spectator',
 						ready: (meta.ready as boolean) ?? false,
-						seat: typeof meta.seat === 'number' ? meta.seat : -1
+						seat: typeof meta.seat === 'number' ? meta.seat : -1,
+						...(typeof meta.colorAt === 'number' ? { colorAt: meta.colorAt } : {})
 					})
 				}
 				players.set(list)
@@ -1155,7 +1167,9 @@ export function joinMatch(
 	}
 
 	const setSelf = (info: { name?: string; color?: string; ready?: boolean; seat?: number }) => {
-		me = { ...me, ...info }
+		// a new colour is stamped with the time it was taken (see Player.colorAt)
+		const stamp = info.color !== undefined && info.color !== me.color ? { colorAt: Date.now() } : {}
+		me = { ...me, ...info, ...stamp }
 		scheduleTrack()
 	}
 
@@ -1276,15 +1290,19 @@ export function joinMatch(
 	}
 
 	const leave = () => {
+		if (left) return // a second leave must not reach the channel a NEWER session of this room now holds
 		if (graceTimer) clearTimeout(graceTimer)
 		if (trackTimer) clearTimeout(trackTimer)
 		if (stateTimer) clearTimeout(stateTimer)
 		if (hostTimer) clearTimeout(hostTimer)
+		if (reclaimTimer) clearTimeout(reclaimTimer)
 		clearWatchdog()
 		clearJoinDeadline()
 		left = true
+		if (liveSessions.get(sessionKey) === leave) liveSessions.delete(sessionKey)
 		void dropChannel(channel)
 	}
+	liveSessions.set(sessionKey, leave)
 
 	return { state, players, update, act, setSelf, cardAction, kick, flipJoin, joinFlip, undo, canUndo, requestSeat, resolveSeat, seatGranted, seatDenied, kicked, notFound, status: conn, leave, clientId, hostNow, ping, pings }
 }
