@@ -10,9 +10,13 @@
 	import type { PushNews } from '$lib/battle';
 	import type { PlayerCardState } from '$lib/cards/cardstate';
 	import type { GameStatsData } from '$lib/GameStats.svelte';
+	import { teamAdj } from '$lib/teams';
+	import { uiLayout, layoutVars } from '$lib/layout';
 
-	let w = 1440;
+	let w = 1440, h = 900;
 	$: mobile = w <= 760;
+	// the same UI scale the game puts on its wrapper (not on phones), so the splashes are sized as in a game
+	$: vars = mobile ? '' : layoutVars(uiLayout(w, h));
 	const id = (p: string) => `${p}_${Date.now()}`;
 
 	// minion battle
@@ -25,9 +29,15 @@
 
 	// the wave advances
 	let push: PushNews | null = null;
-	function pushed(winner: Team, to: string | null, won: string | null = null) {
-		push = { id: id('p'), winner, from: 'Center', to, wavesBefore: 5, wavesAfter: won === 'won the Final Push' ? 0 : 4, won, at: Date.now() };
+	let wonT: ReturnType<typeof setTimeout> | null = null;
+	function pushed(winner: Team, to: string | null, why: string | null = null) {
+		push = { id: id('p'), winner, from: 'Center', to, wavesBefore: 5, wavesAfter: why === 'won the Final Push' ? 0 : 4, won: why, at: Date.now() };
+		// a game-winning push: the victory card follows 5 s later, as in the game (GameView's `victoryHold`)
+		if (wonT) clearTimeout(wonT);
+		won = null;
+		if (why) wonT = setTimeout(() => (won = { team: winner, reason: why }), 5000);
 	}
+	const throneOf = (loser: Team) => `pushed into the ${teamAdj(loser)} Throne`;
 
 	// a hero falls (sample heroes / players)
 	const names: Record<string, string> = { a: 'Zara', b: 'Priya', c: 'Mo', d: 'Sam' }; // a, c orange · b, d blue
@@ -66,7 +76,7 @@
 	};
 </script>
 
-<svelte:window bind:innerWidth={w} />
+<svelte:window bind:innerWidth={w} bind:innerHeight={h} />
 <svelte:head><title>Splash demo · GoA2</title></svelte:head>
 
 <div class="page">
@@ -95,8 +105,15 @@
 			<button class="o" on:click={() => pushed('orange', 'Blue Beach')}>Atlanteans push</button>
 			<button class="b" on:click={() => pushed('blue', 'Orange Beach')}>Titans push</button>
 		</div>
+	</section>
+	<section>
+		<h2>The game-winning push</h2>
 		<div class="row">
-			<button class="o" on:click={() => pushed('orange', null, 'pushed into the Titan Throne')}>Atlanteans: the throne falls</button>
+			<button class="o" on:click={() => pushed('orange', null, throneOf('blue'))}>Atlanteans: the throne falls</button>
+			<button class="b" on:click={() => pushed('blue', null, throneOf('orange'))}>Titans: the throne falls</button>
+		</div>
+		<div class="row">
+			<button class="o" on:click={() => pushed('orange', null, 'won the Final Push')}>Atlanteans: final push</button>
 			<button class="b" on:click={() => pushed('blue', null, 'won the Final Push')}>Titans: final push</button>
 		</div>
 	</section>
@@ -132,6 +149,7 @@
 	</section>
 </div>
 
+<div class="scale" style={vars}>
 <BattleSplash {news} {mobile} myTeam={me} />
 <PushSplash news={push} {mobile} myTeam={me} />
 <DefeatSplash news={kill} {cards} names={(i) => names[i] ?? i} {lifeArt} {mobile} myTeam={me} />
@@ -140,8 +158,10 @@
 {#if won}
 	{#key won}<VictorySplash round={6} team={won.team} reason={won.reason} myTeam={me} {mobile} stats={sample} onClose={() => (won = null)} />{/key}
 {/if}
+</div>
 
 <style>
+	.scale { display: contents; }
 	.page { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 16px; box-sizing: border-box; color: #f6ead2; }
 	h1 { margin: 0; font-weight: normal; font-size: 2rem; }
 	h2 { margin: 0 0 8px; font-weight: normal; font-size: 1rem; letter-spacing: .2em; text-transform: uppercase; color: #d9c79a; text-align: center; }
