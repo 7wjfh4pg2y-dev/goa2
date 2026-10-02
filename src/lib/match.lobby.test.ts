@@ -83,6 +83,48 @@ describe('lobby: second player picks a colour', () => {
 		vi.useRealTimers();
 	});
 
+	it('a whole table rejoining at once (nobody holds the state) learns the room is gone instead of waiting forever', async () => {
+		vi.useFakeTimers();
+		// two tabs refresh within a second of each other: each sees the other in presence,
+		// each asks for the state, neither has any to give
+		const a = joinMatch('ALLGONE', { name: 'A', color: 'spectator' }, {});
+		await vi.advanceTimersByTimeAsync(500);
+		const b = joinMatch('ALLGONE', { name: 'B', color: 'spectator' }, {});
+		expect(get(a.players)).toHaveLength(2);
+		await vi.advanceTimersByTimeAsync(4000);
+		expect(get(a.notFound)).toBe(true);
+		expect(get(b.notFound)).toBe(true);
+		expect(get(a.state).rev).toBe(-1);
+		a.leave(); b.leave();
+		vi.useRealTimers();
+	});
+
+	it('a prober keeps waiting while someone who may hold the state is present — but not forever', async () => {
+		vi.useFakeTimers();
+		// a ghost: still in presence (the server has not noticed its socket died), never answers
+		buses['match:GHOSTLY'] = { channels: [], presence: { ghost: { name: 'Ghost', color: 'teal', seat: 0 } } };
+		const joiner = joinMatch('GHOSTLY', { name: 'Solo', color: 'spectator' }, {});
+		await vi.advanceTimersByTimeAsync(15000);
+		expect(get(joiner.notFound)).toBe(false); // still asking
+		await vi.advanceTimersByTimeAsync(8000);
+		expect(get(joiner.notFound)).toBe(true); // 20 s without an answer: the join ends
+		joiner.leave();
+		vi.useRealTimers();
+	});
+
+	it('a joiner who arrives while the host is answering still gets the state', async () => {
+		vi.useFakeTimers();
+		const host = joinMatch('LIVE', { name: 'Host', color: 'spectator' }, { seed: initialMatchState({ players: 4 }) });
+		expect(buses['match:LIVE'].presence[host.clientId].probing).toBeUndefined(); // a holder never says probing
+		const joiner = joinMatch('LIVE', { name: 'P2', color: 'spectator' }, {});
+		await vi.advanceTimersByTimeAsync(1000);
+		expect(get(joiner.state).rev).toBeGreaterThanOrEqual(0);
+		expect(buses['match:LIVE'].presence[joiner.clientId].probing).toBeUndefined(); // and stops saying it once served
+		expect(get(joiner.notFound)).toBe(false);
+		host.leave(); joiner.leave();
+		vi.useRealTimers();
+	});
+
 	it('kick actually targets only the named client', () => {
 		const host = joinMatch('ROOM2', { name: 'Host', color: 'spectator' }, { seed: initialMatchState({ players: 4 }) });
 		const joiner = joinMatch('ROOM2', { name: 'P2', color: 'spectator' }, {});
