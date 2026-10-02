@@ -2,7 +2,7 @@
 
     python tools/minion_art.py            (needs: pip install numpy pillow)
 
-Reads   3d tiles/GOA2-Plain-Minion-*.stl   (the user's models; not committed — 35 MB)
+Reads   references/GOA2-Plain-Minion-*.stl (the user's models; not committed — 35 MB)
 Writes  src/lib/board/minionArt.ts          the six emblems as svg path data
         src/lib/images/minions/*.png        the flat spawn-tile sprites (classic board, editor, wave icon)
 
@@ -18,7 +18,7 @@ import numpy as np
 from PIL import Image, ImageChops, ImageDraw
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SRC = os.path.join(ROOT, '3d tiles', 'GOA2-Plain-Minion-%s.stl')
+SRC = os.path.join(ROOT, 'references', 'GOA2-Plain-Minion-%s.stl')
 # the models' own names: Orange Heavy / Melee / Ranged, Blue Large / Medium / Small
 FILES = {('orange', 'melee'): 'Orange-M', ('orange', 'ranged'): 'Orange-R', ('orange', 'heavy'): 'Orange-H',
          ('blue', 'melee'): 'Blue-M', ('blue', 'ranged'): 'Blue-S', ('blue', 'heavy'): 'Blue-L'}

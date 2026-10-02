@@ -55,8 +55,9 @@
 	const tileSprites = import.meta.glob('./images/tiles/*.png', { eager: true, import: 'default' }) as Record<string, string>;
 	const minionSprites = import.meta.glob('./images/minions/*.png', { eager: true, import: 'default' }) as Record<string, string>;
 	// a minion piece = the drawn token from MinionDefs (`#mn-token-<team>-<role>`, radius 100)
-	const minionRef = (team: string, role?: string) =>
-		`#mn-token-${team === 'blue' ? 'blue' : 'orange'}-${role === 'ranged' || role === 'heavy' ? role : 'melee'}`;
+	// `part`: 'top' = face + emblem (its rim turns in the `.rims` layer), 'rim' = that rim, 'token' = the whole piece, still
+	const minionRef = (team: string, role?: string, part: 'top' | 'rim' | 'token' = 'top') =>
+		`#mn-${part}-${team === 'blue' ? 'blue' : 'orange'}-${role === 'ranged' || role === 'heavy' ? role : 'melee'}`;
 	const tokenArt = import.meta.glob('./cards/images/*.png', { eager: true, import: 'default' }) as Record<string, string>;
 	const tokenImg = (name?: string) => (name ? tokenArt[`./cards/images/${name}.png`] : undefined);
 
@@ -169,18 +170,30 @@
 	// island look: the coastline (shared by the sea and the land) and every hex's zone name
 	$: coast = look === 'island' ? loopsPath(outlineLoops(Object.keys(cells), size), 0.9) : '';
 	$: zoneNames = look === 'island' ? zoneTable(map as Parameters<typeof zoneTable>[0]) : {};
+	// the battle zone's outline hugs the ground you can stand on (rocks belong to the zone but aren't lit)
+	$: zoneGlow = look === 'island' && glowZone ? loopsPath(outlineLoops(Object.keys(cells).filter((id) => zoneNames[id] === glowZone && cells[id] !== 'terrain'), size), 0.45) : '';
 	// The island is thousands of shapes, so it lives in its OWN svg and the view is applied to
 	// that element as a CSS transform: panning / zooming slides one finished layer about on the
 	// GPU instead of re-processing every shape (measured: 4–5× slower the other way). The same
 	// matrix as `viewTf`, re-expressed in css px ("xMidYMid meet": px = s·user + o).
 	let wrapW = 0, wrapH = 0;
-	$: landTf = (() => {
-		if (!viewM || !wrapW || !wrapH) return '';
+	$: fit = (() => {
+		if (!wrapW || !wrapH) return null;
 		const s = Math.min(wrapW / bounds.w, wrapH / bounds.h);
-		const ox = (wrapW - s * bounds.w) / 2 - s * bounds.a, oy = (wrapH - s * bounds.h) / 2 - s * bounds.b;
-		const { a, b, c, d, e, f } = viewM;
+		return { s, ox: (wrapW - s * bounds.w) / 2 - s * bounds.a, oy: (wrapH - s * bounds.h) / 2 - s * bounds.b };
+	})();
+	$: landTf = (() => {
+		if (!viewM || !fit) return '';
+		const { s, ox, oy } = fit, { a, b, c, d, e, f } = viewM;
 		return `matrix(${a},${b},${c},${d},${s * e + ox - (a * ox + c * oy)},${s * f + oy - (b * ox + d * oy)})`;
 	})();
+	// Minion rims: each minion's dark rim with its turning pips is a small html element in a layer UNDER the
+	// pieces svg, moved by the same CSS transform as the land. A CSS rotation on an html element runs on the GPU
+	// for free; the same animation on a <g> inside the pieces svg made the browser redo that svg ten times a
+	// second (measured: idle frames went from 4 ms to 14 ms on a slowed-down phone profile).
+	$: rimPieces = pieces.filter((p) => p.role && !p.attachTo);
+	// the minions' ground shadow (island look) falls down-SCREEN, so in the turned layer it is offset the other way
+	$: rimShade = (() => { const t = (rotEff * Math.PI) / 180, vx = 0.035, vy = 0.09; return { x: (vx * Math.cos(t) + vy * Math.sin(t)) * 100, y: (-vx * Math.sin(t) + vy * Math.cos(t)) * 100 }; })();
 	// while the view is moving the layer is only slid about (it may soften when zoomed in);
 	// a moment after it settles the browser redraws it crisp at the new size
 	let moving = false;
@@ -507,7 +520,8 @@
 				<text x={c.x} y={c.y} text-anchor="middle" dominant-baseline="central" font-size={size * 0.6} font-weight="800" fill="#f6ead2" pointer-events="none">{p.label[0]}</text>
 			{/if}
 		{:else if p.role}
-			<use href={minionRef(p.team, p.role)} pointer-events="none"
+			<!-- the face and emblem; the rim with its turning pips is in the `.rims` layer underneath (the ghost carries its own) -->
+			<use href={minionRef(p.team, p.role, cid === 'ghost' ? 'token' : 'top')} pointer-events="none"
 				transform="{minionRot(p, c.x, c.y, rotEff, teamSpawnDir) ?? ''} translate({c.x} {c.y}) scale({(size * 0.72) / 100})" />
 			<!-- the click target, and the ring when it is picked up -->
 			<circle cx={c.x} cy={c.y} r={size * 0.7} fill="transparent" stroke={sel ? '#fde047' : 'none'} stroke-width={size * 0.1} />
@@ -520,13 +534,21 @@
 			{/if}
 		{:else}
 			<!-- hero piece = the player icon: face portrait, team ring, player-colour outer ring -->
-			{@const R = size * 0.68}
-			<circle cx={c.x} cy={c.y} r={R} fill={p.color ?? pieceColor(p.team)} />
-			<circle cx={c.x} cy={c.y} r={R * 0.84} fill={pieceColor(p.team)} />
+			<!-- built like the minion tokens (dark rim, the team's copper / ice), but bigger, with the player's
+			     colour as the outer band and the face filling the middle -->
+			{@const R = size * 0.78}
+			<circle cx={c.x} cy={c.y} r={R} fill="#0d1118" />
+			<circle cx={c.x} cy={c.y} r={R * 0.95} fill={p.color ?? pieceColor(p.team)} />
+			<circle cx={c.x} cy={c.y} r={R * 0.885} fill="none" stroke="#fff" stroke-opacity=".3" stroke-width={R * 0.035} stroke-linecap="round"
+				stroke-dasharray="{R * 1.15} {R * 6}" transform="rotate(-150 {c.x} {c.y})" pointer-events="none" />
+			<circle cx={c.x} cy={c.y} r={R * 0.82} fill="#0d1118" />
+			<circle cx={c.x} cy={c.y} r={R * 0.795} fill={p.team === 'orange' ? 'url(#mn-face-orange)' : p.team === 'blue' ? 'url(#mn-face-blue)' : '#9aa4b2'} />
+			<circle cx={c.x} cy={c.y} r={R * 0.715} fill="#0d1118" />
 			{#if p.hero}
-				{@const pr = portraitRect(p.hero, c.x, c.y, R * 1.36)}
-				<clipPath id="pc-{cid}"><circle cx={c.x} cy={c.y} r={R * 0.68} /></clipPath>
+				{@const pr = portraitRect(p.hero, c.x, c.y, R * 1.39)}
+				<clipPath id="pc-{cid}"><circle cx={c.x} cy={c.y} r={R * 0.695} /></clipPath>
 				<image href={pr.href} x={pr.x} y={pr.y} width={pr.w} height={pr.h} clip-path="url(#pc-{cid})" preserveAspectRatio="none" pointer-events="none" />
+				<circle cx={c.x} cy={c.y} r={R * 0.675} fill="none" stroke="#000" stroke-opacity=".28" stroke-width={R * 0.045} pointer-events="none" />
 			{:else if p.sym}
 				<image href={p.sym} x={c.x - size * 0.46} y={c.y - size * 0.46} width={size * 0.92} height={size * 0.92} preserveAspectRatio="xMidYMid meet" pointer-events="none" style="filter:drop-shadow(0 1px 2px rgba(0,0,0,.6))" />
 			{:else if p.label}
@@ -555,8 +577,31 @@
 	{#if look === 'island' && viewM}
 		<Ocean {bounds} view={viewM} {coast} {size} still={seaStill} />
 		<svg class="land" class:moving viewBox={vb} preserveAspectRatio="xMidYMid meet" style:transform={landTf} aria-hidden="true">
-			<IslandLayer {cells} {meta} {size} rot={rotEff} zones={zoneNames} {glowZone} thrones={throneAt} {coast} />
+			<IslandLayer {cells} {meta} {size} rot={rotEff} zones={zoneNames} thrones={throneAt} {coast} />
 		</svg>
+		<!-- the battle zone's outline is its own svg so that its pulse is an opacity animation on a whole element
+		     (GPU work); pulsing a path inside the land svg re-styled and repainted that layer every frame -->
+		{#if zoneGlow}
+			<svg class="land zone" class:moving viewBox={vb} preserveAspectRatio="xMidYMid meet" style:transform={landTf} aria-hidden="true">
+				<path d={zoneGlow} fill="none" stroke="#ffc93a" stroke-opacity=".34" stroke-width={size * 0.5} stroke-linejoin="round" />
+				<path d={zoneGlow} fill="none" stroke="#5a3608" stroke-opacity=".6" stroke-width={size * 0.2} stroke-linejoin="round" />
+				<path d={zoneGlow} fill="none" stroke="#ffd95e" stroke-width={size * 0.11} stroke-linejoin="round" />
+			</svg>
+		{/if}
+	{/if}
+	{#if fit && viewM}
+		<div class="rims" style:transform={landTf} aria-hidden="true">
+			{#each rimPieces as p (p.id)}
+				{@const base = centerOf(p.hex)}
+				{@const off = pieceOffset[p.id] ?? { x: 0, y: 0 }}
+				{@const d = size * 1.44 * fit.s}
+				<span class="rim" class:lifted={(selected === p.id || dragId === p.id) && !!hoverHex}
+					style="left:{((base.x + off.x) * fit.s + fit.ox - d / 2).toFixed(2)}px; top:{((base.y + off.y) * fit.s + fit.oy - d / 2).toFixed(2)}px; width:{d.toFixed(2)}px; height:{d.toFixed(2)}px">
+					{#if look === 'island'}<i class="sh" style="translate:{rimShade.x.toFixed(1)}% {rimShade.y.toFixed(1)}%"></i>{/if}
+					<span class="turn" class:ccw={p.team === 'blue'}><svg viewBox="-100 -100 200 200"><use href={minionRef(p.team, p.role, 'rim')} /></svg></span>
+				</span>
+			{/each}
+		</div>
 	{/if}
 	<svg class="pieces" viewBox={vb} preserveAspectRatio="xMidYMid meet" bind:this={svgEl}>
 		<defs>
@@ -624,9 +669,9 @@
 					aria-label={p.role ? `${p.team === "blue" ? "Titan" : "Atlantean"} ${p.role} minion` : (p.label ?? "piece")}
 					transform={rotEff ? `rotate(${-rotEff} ${c.x} ${c.y})` : undefined}
 				>
-					{#if look === 'island'}<circle cx={c.x + size * 0.05} cy={c.y + size * 0.13} r={size * 0.68} fill="#000" fill-opacity=".34" pointer-events="none" />{/if}
+					{#if look === 'island' && !p.role}<circle cx={c.x + size * 0.05} cy={c.y + size * 0.13} r={size * (p.token || p.letter ? 0.7 : 0.77)} fill="#000" fill-opacity=".34" pointer-events="none" />{/if}
 					{#if sel}
-						<circle class="selring" cx={c.x} cy={c.y} r={size * 0.82} fill="none" stroke="#fde047" stroke-width={size * 0.1} stroke-dasharray="{size * 0.32} {size * 0.22}" pointer-events="none" />
+						<circle class="selring" cx={c.x} cy={c.y} r={size * 0.88} fill="none" stroke="#fde047" stroke-width={size * 0.1} stroke-dasharray="{size * 0.32} {size * 0.22}" pointer-events="none" />
 					{/if}
 					{@render pieceBody(p, c, sel, p.id)}
 				</g>
@@ -681,6 +726,9 @@
 	svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 	svg.land { transform-origin: 0 0; pointer-events: none; overflow: visible; }
 	svg.land.moving { will-change: transform; }
+	svg.zone { animation: zonepulse 1.6s ease-in-out infinite alternate; }
+	@keyframes zonepulse { from { opacity: .68; } to { opacity: 1; } }
+	@media (prefers-reduced-motion: reduce) { svg.zone { animation: none; } }
 	.piece.selectable { cursor: pointer; }
 	/* holding something: the closed hand everywhere over the board, and the picked-up
 	   piece dims while its ghost rides the cursor */
@@ -694,5 +742,18 @@
 	@keyframes pring { 0% { transform: scale(.25); opacity: 1; } 100% { transform: scale(1.6); opacity: 0; } }
 	@keyframes pdot { 0% { opacity: 0; } 8% { opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; } }
 	.selring { animation: spin 8s linear infinite; transform-box: fill-box; transform-origin: center; }
+	/* minion rims (see `rimPieces`): drawn three times too big and scaled down, so they stay sharp when the board is zoomed in */
+	.rims { position: absolute; inset: 0; transform-origin: 0 0; pointer-events: none; }
+	.rim { position: absolute; }
+	.rim.lifted { opacity: .4; }
+	.rim .sh { position: absolute; inset: 1.4%; border-radius: 50%; background: rgba(0, 0, 0, .34); }
+	/* the turn is a `transform` animation on an HTML element — that is what the browser hands to the GPU. Measured
+	   dead ends: animating the `rotate` property (ran on the main thread: 720 ms of work per second, idle), and
+	   spinning a <g> inside the pieces svg (re-processed that svg on every step) */
+	.rim .turn { position: absolute; inset: 0; animation: rimturn 18s linear infinite; }
+	.rim .turn.ccw { animation-direction: reverse; }
+	.rim .turn svg { position: absolute; inset: -100%; width: 300%; height: 300%; scale: 0.33333; }
+	@keyframes rimturn { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+	@media (prefers-reduced-motion: reduce) { .rim .turn { animation: none; } }
 	@keyframes spin { to { transform: rotate(360deg); } }
 </style>
