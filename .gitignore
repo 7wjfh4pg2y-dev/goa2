@@ -17,3 +17,6 @@ vite.config.ts.timestamp-*
 # local rulebook copies (the PDF is 101 MB; never commit)
 /rulebook.pdf
 /docs/rulebook.txt
+
+# the minion 3D models (35 MB) that tools/minion_art.py reads — kept locally
+/3d tiles/
