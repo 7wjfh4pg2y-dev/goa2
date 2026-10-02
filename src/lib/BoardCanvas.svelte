@@ -1,6 +1,10 @@
 <script lang="ts">
 	import { portraitRect } from '$lib/heroes';
 	import { onMount, onDestroy } from 'svelte';
+	import Ocean from '$lib/board/Ocean.svelte';
+	import IslandLayer from '$lib/board/IslandLayer.svelte';
+	import { outlineLoops, loopsPath } from '$lib/board/hexgeo';
+	import { zoneTable } from '$lib/zones';
 
 	// A reusable renderer for a painted hex map (the "3D" board). Supports
 	// pan / zoom (in and out) / rotate as a purely local view transform, applied
@@ -39,6 +43,12 @@
 	export let pingArmed = false;
 	// hexes that hold a team's throne (gear/star) — drawn on top of the base tile
 	export let thrones: Array<{ hex: string; team: string }> = [];
+	// 'classic' = the flat tiles; 'island' = the island drawn from the map data, in a moving sea
+	export let look: 'classic' | 'island' = 'classic';
+	// island look: the zone (zones.ts name, e.g. 'Center') to light up as the battle zone
+	export let glowZone: string | null = null;
+	// island look: a still sea (no animation)
+	export let seaStill = false;
 
 	const SQRT3 = Math.sqrt(3);
 	const tileSprites = import.meta.glob('./images/tiles/*.png', { eager: true, import: 'default' }) as Record<string, string>;
@@ -148,12 +158,16 @@
 	function baseM(): DOMMatrix {
 		return new DOMMatrix().translateSelf(cx, cy).scaleSelf(scale).rotateSelf(rotEff).translateSelf(-cx, -cy);
 	}
-	$: viewTf = (() => {
+	$: viewM = (() => {
 		void scale; void panX; void panY; void rotEff; void cx; void cy;
-		if (typeof DOMMatrix === 'undefined') return ''; // SSR safety
+		if (typeof DOMMatrix === 'undefined') return null; // SSR safety
 		const m = new DOMMatrix().translateSelf(panX, panY).multiplySelf(baseM());
-		return `matrix(${m.a},${m.b},${m.c},${m.d},${m.e},${m.f})`;
+		return { a: m.a, b: m.b, c: m.c, d: m.d, e: m.e, f: m.f };
 	})();
+	$: viewTf = viewM ? `matrix(${viewM.a},${viewM.b},${viewM.c},${viewM.d},${viewM.e},${viewM.f})` : '';
+	// island look: the coastline (shared by the sea and the land) and every hex's zone name
+	$: coast = look === 'island' ? loopsPath(outlineLoops(Object.keys(cells), size), 0.9) : '';
+	$: zoneNames = look === 'island' ? zoneTable(map as Parameters<typeof zoneTable>[0]) : {};
 
 	let svgEl: SVGSVGElement;
 	let viewG: SVGGElement;
@@ -516,6 +530,7 @@
 	role="img"
 	aria-label={map.name ? `Game board: ${map.name}` : 'Game board'}
 >
+	{#if look === 'island' && viewM}<Ocean {bounds} view={viewM} {coast} {size} still={seaStill} />{/if}
 	<svg viewBox={vb} preserveAspectRatio="xMidYMid meet" bind:this={svgEl}>
 		<defs>
 			<linearGradient id="shield-silver" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff" /><stop offset=".45" stop-color="#cfd5dc" /><stop offset="1" stop-color="#7d8792" /></linearGradient>
@@ -537,6 +552,9 @@
 			</symbol>
 		</defs>
 		<g bind:this={viewG} transform={viewTf}>
+			{#if look === 'island'}
+				<IslandLayer {cells} {meta} {size} rot={rotEff} zones={zoneNames} {glowZone} thrones={throneAt} {coast} />
+			{:else}
 			{#each hexes as h (h.id)}
 				{#if isSpawn(h.t) || isThrone(h.t)}
 					<image href={zoneTile(isSpawn(h.t) ? zoneOf(h.id) : baseTileFor(h.t))} x={h.x - SQRT3 * size * 0.53} y={h.y - size * 1.06}
@@ -554,6 +572,7 @@
 				{/if}
 				<polygon points={poly(h.x, h.y, size)} fill="none" stroke="rgba(6,10,18,.7)" stroke-width="4" stroke-linejoin="round" />
 			{/each}
+			{/if}
 
 			<!-- the hex a held object would land on, in the viewer's colour -->
 			{#if ghostPiece && hoverHex}
@@ -579,6 +598,7 @@
 					aria-label={p.role ? `${p.team === "blue" ? "Titan" : "Atlantean"} ${p.role} minion` : (p.label ?? "piece")}
 					transform={rotEff ? `rotate(${-rotEff} ${c.x} ${c.y})` : undefined}
 				>
+					{#if look === 'island'}<circle cx={c.x + size * 0.05} cy={c.y + size * 0.13} r={size * 0.68} fill="#000" fill-opacity=".34" pointer-events="none" />{/if}
 					{#if sel}
 						<circle class="selring" cx={c.x} cy={c.y} r={size * 0.82} fill="none" stroke="#fde047" stroke-width={size * 0.1} stroke-dasharray="{size * 0.32} {size * 0.22}" pointer-events="none" />
 					{/if}

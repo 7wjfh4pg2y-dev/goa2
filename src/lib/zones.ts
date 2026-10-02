@@ -20,7 +20,7 @@ const dist = (a: [number, number, number], b: [number, number, number]) =>
 	Math.max(Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1]), Math.abs(a[2] - b[2]));
 
 // underlying zone for a hex (spawn tiles borrow the majority zone around them)
-function zoneType(cells: Record<string, string>, id: string): string {
+export function zoneType(cells: Record<string, string>, id: string): string {
 	const t = cells[id];
 	if (ZONE_TYPES.includes(t)) return t;
 	const [c, r] = id.split('_').map(Number);
