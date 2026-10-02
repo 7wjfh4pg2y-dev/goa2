@@ -279,11 +279,19 @@
 		});
 	}
 
-	function bail(msg: string) {
+	// put the room down — EVERY way out goes through here, so a join or resume that was
+	// still in progress ends with it (a `joining` left true kept the Join button on
+	// "Joining…" for the rest of the page's life)
+	function closeSession() {
 		session?.leave();
 		session = null;
 		roomHandle?.leave();
 		roomHandle = null;
+		joining = false;
+		resumeSeed = null;
+	}
+	function bail(msg: string) {
+		closeSession();
 		clearActive();
 		notice = msg;
 		mode = 'menu';
@@ -323,10 +331,7 @@
 		else goHome();
 	}
 	function goHome() {
-		session?.leave();
-		session = null;
-		roomHandle?.leave();
-		roomHandle = null;
+		closeSession();
 		clearActive();
 		signOut();
 		pw = ''; pwError = false; notice = '';
@@ -450,9 +455,7 @@
 		// a lone creator whose room emptied out while away just recreates it
 		if (resumeSeed) { const seed = resumeSeed; resumeSeed = null; recreateFrom(seed); return; }
 		const st = session ? get(session.status) : 'reconnecting';
-		session?.leave();
-		session = null;
-		joining = false;
+		closeSession();
 		joinError = st === 'connected'
 			? `No open game with code “${room}”.`
 			: `Couldn't reach the server — check your connection and try again.`;
@@ -507,10 +510,7 @@
 		bindSession(false);
 	}
 	function leaveRoom() {
-		session?.leave();
-		session = null;
-		roomHandle?.leave();
-		roomHandle = null;
+		closeSession();
 		clearActive();
 		mode = 'menu';
 		randomRoom();
