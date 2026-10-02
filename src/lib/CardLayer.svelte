@@ -1118,7 +1118,7 @@
 	{/if}
 
 	{#if lvConfirm && mine && mobile}
-		<div class="lvwrap"><LevelConfirm cs={mine} idx={lvConfirm.idx} kind={lvConfirm.kind} teamStyle={teamVars(myTeam)} onConfirm={confirmLevel} onCancel={() => (lvConfirm = null)} /></div>
+		<div class="lvwrap"><LevelConfirm cs={mine} bind:idx={lvConfirm.idx} kind={lvConfirm.kind} teamStyle={teamVars(myTeam)} onConfirm={confirmLevel} onCancel={() => (lvConfirm = null)} /></div>
 	{/if}
 
 	<!-- ───────── centered preview of a picked hand card ───────── -->
