@@ -4,8 +4,13 @@ import { get } from 'svelte/store';
 // ---- a mock that keeps realtime-js's CHANNEL LIST behaviour (one browser tab) ----
 // supabase.channel(topic) hands back the channel it already has on that topic; a
 // channel that is not closed is never joined again; presence listeners can only be
-// added before subscribe(); removeChannel() closes at once and drops it from the list.
-const realtime = vi.hoisted(() => ({ channels: [] as any[] }));
+// added before subscribe(); removeChannel() closes at once and drops it from the list
+// (verified against @supabase/phoenix: leave() sets state=leaving BEFORE its canPush()
+// check, so the leave push is acknowledged synchronously and onClose → _remove runs
+// right away, socket open or not).
+// `realtime.slow` = the next channels do not join by themselves: the test drives their
+// status through `_status()` (a join that stalls, an error before SUBSCRIBED…).
+const realtime = vi.hoisted(() => ({ channels: [] as any[], slow: false }));
 const presence: Record<string, Record<string, any>> = {};
 
 function makeChannel(topic: string, config: any) {
@@ -17,16 +22,20 @@ function makeChannel(topic: string, config: any) {
 		topic: `realtime:${topic}`,
 		state: 'closed',
 		on(type: string, _filter: any, cb: (a: any) => void) {
-			if (type === 'presence' && ch.state !== 'closed') throw new Error(`cannot add \`presence\` callbacks for ${ch.topic} after \`subscribe()\`.`);
+			if (type === 'presence' && (ch.state === 'joined' || ch.state === 'joining')) throw new Error(`cannot add \`presence\` callbacks for ${ch.topic} after \`subscribe()\`.`);
 			handlers.push({ type, cb });
 			return ch;
 		},
 		subscribe(cb: (s: string) => void) {
 			if (ch.state !== 'closed') return ch;
-			ch.state = 'joined';
 			status = cb;
-			cb('SUBSCRIBED');
+			if (realtime.slow) { ch.state = 'joining'; return ch; }
+			ch._status('SUBSCRIBED');
 			return ch;
+		},
+		_status(s: string) {
+			if (s === 'SUBSCRIBED') ch.state = 'joined';
+			status?.(s);
 		},
 		send: () => Promise.resolve('ok'), // one tab: nobody else to deliver to
 		track(meta: any) {
@@ -73,6 +82,7 @@ const { joinMatch, initialMatchState } = await import('./match');
 const me = { name: 'Solo', color: 'spectator' };
 
 beforeEach(() => {
+	realtime.slow = false;
 	for (const ch of [...realtime.channels]) ch._close();
 	for (const t in presence) delete presence[t];
 });
@@ -102,21 +112,65 @@ describe('the same tab joins the same room again', () => {
 		vi.useRealTimers();
 	});
 
-	it('leaving and joining again right away works, and a left session stays out of the way', async () => {
+	it('a second session for the room retires the first, even when its caller never left it', async () => {
 		vi.useFakeTimers();
 		const a = joinMatch('BACK', me, { seed: initialMatchState({ players: 4 }) });
 		const chA = realtime.channels[0];
-		a.leave();
+		expect(get(a.status)).toBe('connected');
+		// no a.leave(): the new session must put the old one down itself
 		const b = joinMatch('BACK', me, { seed: initialMatchState({ players: 4 }) });
 		expect(realtime.channels).toHaveLength(1);
 		expect(realtime.channels[0]).not.toBe(chA);
 		expect(get(b.status)).toBe('connected');
-		a.leave(); // a late second leave of the old session must not take the new one down
+		// a late leave of the retired session must not take the new one down
+		a.leave();
+		a.leave();
 		await vi.advanceTimersByTimeAsync(20000);
 		expect(get(b.status)).toBe('connected');
 		expect(realtime.channels).toHaveLength(1);
+		expect(get(b.players).map((p) => p.id)).toEqual([b.clientId]);
 		b.leave();
 		expect(realtime.channels).toHaveLength(0);
+		vi.useRealTimers();
+	});
+
+	it('a prober says so in presence, and stops once the state has arrived', async () => {
+		vi.useFakeTimers();
+		const s = joinMatch('TELL', me, {});
+		const mine = () => presence['match:TELL'][s.clientId];
+		expect(mine()).toMatchObject({ probing: true });
+		// the room answers (as the host's broadcast would)
+		const seed = initialMatchState({ players: 4 });
+		(s.state as any).set({ ...seed, rev: 3, host: 'h', hostEpoch: 0 });
+		await vi.advanceTimersByTimeAsync(1000);
+		expect(mine().probing).toBeUndefined();
+		s.leave();
+		vi.useRealTimers();
+	});
+});
+
+describe('the join deadline and the watchdog', () => {
+	it('a watchdog armed before the deadline rebuild does not tear the new channel down', async () => {
+		vi.useFakeTimers();
+		realtime.slow = true;
+		const s = joinMatch('SLOW', me, { seed: initialMatchState({ players: 4 }) });
+		const ch1 = realtime.channels[0];
+		expect(get(s.status)).toBe('connecting'); // never SUBSCRIBED yet
+		await vi.advanceTimersByTimeAsync(7000);
+		ch1._status('CHANNEL_ERROR'); // arms the watchdog (1.5 s → 8.5 s)
+		expect(get(s.status)).toBe('reconnecting');
+		await vi.advanceTimersByTimeAsync(1000); // 8 s: the join deadline rebuilds the channel
+		expect(realtime.channels).toHaveLength(1);
+		const ch2 = realtime.channels[0];
+		expect(ch2).not.toBe(ch1);
+		ch2._status('SUBSCRIBED');
+		expect(get(s.status)).toBe('connected');
+		// 8.5 s: the orphaned watchdog used to fire here and replace the healthy channel
+		await vi.advanceTimersByTimeAsync(4000);
+		expect(realtime.channels).toHaveLength(1);
+		expect(realtime.channels[0]).toBe(ch2);
+		expect(get(s.status)).toBe('connected');
+		s.leave();
 		vi.useRealTimers();
 	});
 });
@@ -142,6 +196,21 @@ describe('colours carry the moment they were taken', () => {
 		s.setSelf({ color: 'teal' });
 		await vi.advanceTimersByTimeAsync(1000);
 		expect(mine()).toMatchObject({ color: 'teal', colorAt: 1_003_000 });
+		s.leave();
+		vi.useRealTimers();
+	});
+
+	it('a stamp is never earlier than one already seen: a slow clock cannot jump the queue', async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(1_000_000); // this device is 10 minutes behind the others
+		const s = joinMatch('SKEW', me, { seed: initialMatchState({ players: 4 }) });
+		// someone else is already holding a colour, stamped on their (correct) clock
+		presence['match:SKEW'].other = { name: 'Early', color: 'crimson', seat: 1, colorAt: 1_600_000 };
+		realtime.channels[0].track(presence['match:SKEW'][s.clientId]); // a presence sync
+		expect(get(s.players).find((p) => p.id === 'other')?.colorAt).toBe(1_600_000);
+		s.setSelf({ seat: 0, color: 'crimson' });
+		await vi.advanceTimersByTimeAsync(1000);
+		expect(get(s.players).find((p) => p.id === s.clientId)?.colorAt).toBe(1_600_001);
 		s.leave();
 		vi.useRealTimers();
 	});

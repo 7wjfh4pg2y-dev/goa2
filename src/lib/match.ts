@@ -507,7 +507,10 @@ export interface Player {
 	color: string // a PLAYER_COLORS id, or 'spectator'
 	ready: boolean // lobby ready toggle
 	seat: number // seat index (0-based); < 0 means unseated / spectating
-	colorAt?: number // when they took that colour (their clock): two players on one colour → the first keeps it (seatcolor.ts)
+	// when they took that colour: their clock, pushed past every stamp they had seen by then
+	// (so it only falls back to raw clocks when neither saw the other). Two players on one
+	// colour → the earlier stamp keeps it (seatcolor.ts)
+	colorAt?: number
 }
 
 // ---- Hero draft engine -----------------------------------------------------
@@ -1007,17 +1010,56 @@ export function joinMatch(
 	state.subscribe(() => checkHost())
 	conn.subscribe(() => checkHost())
 
+	// Presence updates are throttled: Supabase Realtime rate-limits messages per
+	// channel, so rapid color switches (fast clicks) would otherwise flood track()
+	// and wedge the socket. We update `me` instantly and coalesce network pushes to
+	// at most one per TRACK_MIN ms, always sending the latest state (trailing edge).
+	// (Defined ahead of buildChannel(): the first SUBSCRIBED can run synchronously.)
+	let trackTimer: ReturnType<typeof setTimeout> | null = null
+	let lastTrack = 0
+	const TRACK_MIN = 320
+	// Our presence says `probing` while we hold no state yet (a joiner still asking the
+	// room for it), so another prober can tell a room where EVERYONE is asking — a group
+	// that refreshed together — from one whose holder is just slow to answer (startProbe).
+	let probingSent = false
+	const presenceMeta = () => {
+		probingSent = local.rev < 0
+		return probingSent ? { ...me, probing: true } : me
+	}
+	// announce at once, outside the throttle (joining, and the state arriving: the
+	// player's first own change right after must not have to wait for them)
+	const trackNow = () => { try { channel.track(presenceMeta()) } catch { /* ignore */ } }
+	const flushTrack = () => {
+		trackTimer = null
+		lastTrack = Date.now()
+		trackNow()
+	}
+	const scheduleTrack = () => {
+		if (trackTimer) return // a trailing flush is already queued; it sends latest me
+		const wait = TRACK_MIN - (Date.now() - lastTrack)
+		if (wait <= 0) flushTrack()
+		else trackTimer = setTimeout(flushTrack, wait)
+	}
+	// the moment the room's state arrives, presence must stop calling us a prober
+	state.subscribe((v) => { if (probingSent && v.rev >= 0 && get(conn) === 'connected') trackNow() })
+
 	// JOIN flow only: probe a few times for a host. We must NEVER create a room —
-	// if someone is present we keep asking for their state until it arrives; if the
-	// room is genuinely empty after several tries, report "not found".
+	// while someone who may hold the state is present we keep asking for it; if the
+	// room is empty — or everyone present is a prober like us, so nobody can ever
+	// answer (a whole table refreshing at once) — after several tries, report "not
+	// found". Someone present who never answers at all (a dead socket the server
+	// hasn't noticed yet) counts as nobody after PROBE_GIVE_UP_MS: a join must end.
+	const PROBE_GIVE_UP_MS = 20000
 	const startProbe = () => {
 		if (creating || local.rev >= 0) return
 		if (graceTimer) clearTimeout(graceTimer)
 		let empties = 0
+		const since = Date.now()
 		const probe = () => {
 			if (local.rev >= 0) return
-			const others = Object.keys(channel.presenceState()).filter((k) => k !== clientId).length
-			if (others > 0) {
+			const raw = channel.presenceState() as Record<string, Array<{ probing?: boolean }>>
+			const holders = Object.keys(raw).filter((k) => k !== clientId && !raw[k][0]?.probing).length
+			if (holders > 0 && Date.now() - since < PROBE_GIVE_UP_MS) {
 				empties = 0
 				channel.send({ type: 'broadcast', event: 'hello', payload: { id: clientId } })
 				graceTimer = setTimeout(probe, 1000)
@@ -1055,13 +1097,17 @@ export function joinMatch(
 	// rate-limit close, and a first join on a cold page load can stall.
 	let rebuilding = false
 	const hardReconnect = async () => {
-		watchdog = null
+		// whichever of the two timers got us here, the other must not fire into the rebuilt
+		// channel: a watchdog left pending (armed by an error on the old channel) used to be
+		// orphaned here (`watchdog = null` without clearing it) and tore down the replacement
+		clearWatchdog()
 		clearJoinDeadline()
 		if (rebuilding || left) return
 		rebuilding = true
 		backoff = Math.min(backoff * 2, 10000)
 		const old = channel
 		await dropChannel(old)
+		clearWatchdog() // the old channel's CLOSED (part of the drop) arms one too
 		rebuilding = false
 		if (!left) buildChannel()
 	}
@@ -1075,7 +1121,7 @@ export function joinMatch(
 			backoff = 1500
 			clearWatchdog()
 			clearJoinDeadline()
-			channel.track(me) // (re-)announce presence, also after a reconnect
+			trackNow() // (re-)announce presence, also after a reconnect
 			channel.send({ type: 'broadcast', event: 'hello', payload: { id: clientId } })
 			startProbe()
 			return
@@ -1147,28 +1193,12 @@ export function joinMatch(
 		update({ ...patch, log: [...local.log, entry].slice(-LOG_CAP) })
 	}
 
-	// Presence updates are throttled: Supabase Realtime rate-limits messages per
-	// channel, so rapid color switches (fast clicks) would otherwise flood track()
-	// and wedge the socket. We update `me` instantly and coalesce network pushes to
-	// at most one per TRACK_MIN ms, always sending the latest state (trailing edge).
-	let trackTimer: ReturnType<typeof setTimeout> | null = null
-	let lastTrack = 0
-	const TRACK_MIN = 320
-	const flushTrack = () => {
-		trackTimer = null
-		lastTrack = Date.now()
-		try { channel.track(me) } catch { /* ignore */ }
-	}
-	const scheduleTrack = () => {
-		if (trackTimer) return // a trailing flush is already queued; it sends latest me
-		const wait = TRACK_MIN - (Date.now() - lastTrack)
-		if (wait <= 0) flushTrack()
-		else trackTimer = setTimeout(flushTrack, wait)
-	}
-
 	const setSelf = (info: { name?: string; color?: string; ready?: boolean; seat?: number }) => {
-		// a new colour is stamped with the time it was taken (see Player.colorAt)
-		const stamp = info.color !== undefined && info.color !== me.color ? { colorAt: Date.now() } : {}
+		// A new colour is stamped with the moment it was taken (see Player.colorAt) — our
+		// clock, but never earlier than any stamp we have already seen in presence: whoever
+		// we could see holding a colour was there before us, whatever our clock says.
+		const after = Math.max(Date.now(), ...playerList.map((p) => (p.colorAt ?? 0) + 1))
+		const stamp = info.color !== undefined && info.color !== me.color ? { colorAt: after } : {}
 		me = { ...me, ...info, ...stamp }
 		scheduleTrack()
 	}
