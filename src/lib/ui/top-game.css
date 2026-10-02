@@ -72,9 +72,9 @@
 	font-size: 15px; background: var(--hull); border: 1px solid var(--brass-line); box-shadow: var(--sh-hud); }
 .top .ptool.free { position: absolute; left: 50%; top: 72px; transform: translateX(-50%); } /* its piece is off screen */
 .top .ptool .lbl { padding: 0 4px 0 8px; text-transform: capitalize; }
-.top .ptool .rw { display: inline-flex; align-items: center; gap: 4px; color: var(--ink); }
-.top .ptool .rw em { font-style: normal; color: var(--ink-3); }
-.top .ptool .rw img { width: 18px; height: 18px; object-fit: contain; }
+.top .ptool .gain { display: inline-flex; align-items: center; gap: 4px; }
+.top .ptool .gain em { font-style: normal; color: var(--ink-3); }
+.top .ptool .gain img { width: 18px; height: 18px; object-fit: contain; }
 .top .ptool .imm { display: inline-flex; align-items: center; height: 32px; padding: 0 12px; border-radius: 8px; font-size: 15px; color: #2a2f38;
 	background: linear-gradient(180deg, #ffffff, #d4d9df 48%, #a3acb7); border: 1px solid #d9a845; }
 

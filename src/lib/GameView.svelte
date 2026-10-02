@@ -438,25 +438,31 @@
 	}
 	// only Min (the mine's owner) and the host may flip a mine
 	$: canFlip = !!selPiece?.token && MINES.has(selPiece.token) && (selPiece.owner === clientId || iAmHost);
-	// desktop: the toolbar floats just above the selected piece (not across the board at the top)
+	// desktop: the toolbar floats just above the selected piece. It is placed when the piece is selected and
+	// re-placed when something could have moved it — the pieces, the window, any input that pans / zooms / turns
+	// the board — then frame by frame only for as long as it is still moving. (It used to be read every frame
+	// while a piece was selected; a running rAF loop makes the page produce every frame.)
 	let tipPos: { x: number; y: number } | null = null;
 	let tipRaf = 0;
+	let tipFor: string | null = null;
+	function placeTip() {
+		tipRaf = 0;
+		const p = tipId && !mobile ? board?.clientPos(tipId) : null;
+		const x = p ? Math.round(p.x) : null, y = p ? Math.round(p.y - p.r - 8) : null;
+		if (x == null || y == null) { if (tipPos) tipPos = null; return; }
+		if (tipPos && tipPos.x === x && tipPos.y === y) return; // at rest
+		tipPos = { x, y };
+		tipRaf = requestAnimationFrame(placeTip); // it moved: look again next frame
+	}
+	const tipNudge = () => { if (tipId && !mobile && !tipRaf) tipRaf = requestAnimationFrame(placeTip); };
 	function trackTip() {
 		if (typeof window === 'undefined') return;
-		cancelAnimationFrame(tipRaf);
-		if (!tipId || mobile) { tipPos = null; return; }
-		const loop = () => {
-			const p = tipId ? board?.clientPos(tipId) : null;
-			// only touch the toolbar when the piece actually moved (not 60 re-renders a second)
-			const x = p ? Math.round(p.x) : null, y = p ? Math.round(p.y - p.r - 8) : null;
-			if (x == null || y == null) { if (tipPos) tipPos = null; }
-			else if (!tipPos || tipPos.x !== x || tipPos.y !== y) tipPos = { x, y };
-			if (tipId) tipRaf = requestAnimationFrame(loop);
-		};
-		loop();
+		if (!tipId || mobile) { cancelAnimationFrame(tipRaf); tipRaf = 0; tipPos = null; tipFor = null; return; }
+		if (tipFor !== tipId) { tipFor = tipId; cancelAnimationFrame(tipRaf); placeTip(); } // just selected: at once
+		else tipNudge();
 	}
 	$: tipId = actId && confirmKind ? actId : selPieceId;
-	$: tipId, mobile, trackTip();
+	$: tipId, mobile, $ms.pieces, gvw, gvh, trackTip();
 	onDestroy(() => { if (typeof window !== 'undefined') cancelAnimationFrame(tipRaf); });
 	// hero / minion names read in their team colour (a lighter tint so they stay legible)
 	const teamText = (p: { kind?: string; role?: string; team: string } | null | undefined) =>
@@ -578,7 +584,7 @@
 	</div>
 {/snippet}
 
-<svelte:window on:keydown={(e) => { if (e.key !== 'Escape') return; if (confirmLeave) confirmLeave = false; else if (manageOpen) manageOpen = false; else { pendingSpawn = null; pendingToken = null; pingArmed = false; if (clearing) cancelClear(); } }} on:pointerdown={(e) => { viewsOutside(e); }} bind:innerWidth={gvw} bind:innerHeight={gvh} />
+<svelte:window on:keydown={(e) => { if (e.key !== 'Escape') return; if (confirmLeave) confirmLeave = false; else if (manageOpen) manageOpen = false; else { pendingSpawn = null; pendingToken = null; pingArmed = false; if (clearing) cancelClear(); } }} on:pointerdown={(e) => { viewsOutside(e); }} on:pointermove={tipNudge} on:wheel|passive={tipNudge} on:click={tipNudge} bind:innerWidth={gvw} bind:innerHeight={gvh} />
 
 <div class="gamewrap" class:sea={boardLook === 'island'} class:mob={mobile} style={mobile ? '' : layoutVars(lay)}>
 	{#if !mobile}
@@ -679,11 +685,11 @@
 
 	<CardLayer bind:this={cardLayer} {mobile} {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} onRespawn={placeMyHero} onEnter={placeMyHero} onArmToken={armToken} holdingToken={!!pendingToken} {pingArmed} onPing={pingButton} bind:previewId />
 
-	<!-- selected minion/token: offer delete (heroes aren't deletable) -->
+	<!-- phone: the selected piece's toolbar, under the player strip -->
 	{#if !mobile}
 		<!-- desktop / tablet: the toolbar lives in the top layer (below) -->
 	{:else if confirmKind && actPiece}
-		<div class="pietool confirm" class:anchored={!!tipPos} style={tipPos ? `left:${tipPos.x / lay.s}px; top:${tipPos.y / lay.s}px` : ''}>
+		<div class="pietool confirm">
 			{#if (confirmKind === 'attack' || confirmKind === 'defeat') && attackSum}
 				<span class="pietxt nc">{confirmKind === 'attack' ? 'Attack' : 'Defeat'} <b style:color={teamText(actPiece)}>{whoOf(actPiece.id)}</b>?</span>
 				<span class="rw" title="You get {attackSum.coins}{attackSum.assists.length ? `, each teammate ${attackSum.assist} assist` : ''}">
@@ -702,7 +708,7 @@
 			<button class="piex" on:click={closeConfirm} aria-label="Cancel">✕</button>
 		</div>
 	{:else if selPiece && (selPiece.role || selPiece.token || (selPiece.kind === 'hero' && (canDefeatSel || ownHeroSel)))}
-		<div class="pietool" class:anchored={!!tipPos} style={tipPos ? `left:${tipPos.x / lay.s}px; top:${tipPos.y / lay.s}px` : ''}>
+		<div class="pietool">
 			<span class="pietxt" style:color={teamText(selPiece)}>{selLabel}</span>
 			{#if canFlip}
 				<button class="pieflip" on:click={flipMine}>{selPiece.faceDown ? 'Flip — reveal' : 'Flip face down'}</button>
@@ -1033,7 +1039,7 @@
 			{/if}
 			{#if placing}
 				<div class="prompt place">
-					<span>{pendingRespawn ? 'Pick a spawn point' : pendingToken ? `Place ${pendingToken.token === 'companion' ? pendingToken.label : tokenName(pendingToken.token)}` : pendingSpawn ? `Place ${aMinion(pendingSpawn.team, pendingSpawn.role)}` : ''}</span>
+					<span>{pendingRespawn ? 'Pick a spawn point' : pendingToken ? `Place ${pendingToken.token === 'companion' ? pendingToken.label : tokenName(pendingToken.token)}` : pendingSpawn ? `Place ${pendingSpawn.role} minion` : ''}</span>
 					<button class="pbtn" on:click={cancelPlace}>Cancel</button>
 				</div>
 			{/if}
@@ -1045,10 +1051,10 @@
 			<div class="ptool confirm" class:free={!tipPos} style={tipStyle}>
 				{#if (confirmKind === 'attack' || confirmKind === 'defeat') && attackSum}
 					<span class="lbl" style:color={teamText(actPiece)}>{whoOf(actPiece.id)}</span>
-					<span class="rw" title="You get {attackSum.coins}{attackSum.assists.length ? `, each teammate ${attackSum.assist}` : ''}">
+					<span class="gain" title="You get {attackSum.coins}{attackSum.assists.length ? `, each teammate ${attackSum.assist}` : ''}">
 						<i class="coin"></i>+{attackSum.coins}{#if attackSum.assists.length}<em>/</em>+{attackSum.assist}{/if}
 					</span>
-					<span class="rw" title="The {teamName(attackSum.team)} lose {attackSum.lives} Life"><img src={lifeArt((attackSum.team ?? 'orange') as Team, 'front')} alt="" />−{attackSum.lives}</span>
+					<span class="gain" title="The {teamName(attackSum.team)} lose {attackSum.lives} Life"><img src={lifeArt((attackSum.team ?? 'orange') as Team, 'front')} alt="" />−{attackSum.lives}</span>
 					{#if confirmKind === 'attack'}<button class="pbtn go" on:click={doAttack}>Attack</button>
 					{:else}<button class="pbtn bad" on:click={doDefeatHero}>Defeat</button>{/if}
 				{:else if confirmKind === 'selfremove'}
@@ -1106,7 +1112,7 @@
 			radial-gradient(140% 120% at 50% -15%, #1a4a63 0%, #0c3247 38%, #071f30 70%, #04121d 100%);
 	}
 
-	/* recenter: brass accent so it's easy to find */
+	/* saved views (phone ☰ menu) */
 	.vslot { display: flex; gap: 5px; margin-bottom: 5px; }
 	.vgo { flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px; padding: 5px 8px; border-radius: 8px; cursor: pointer; color: #e5e7eb; font-size: 0.72rem;
 		background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.14); text-align: left; }
@@ -1116,7 +1122,6 @@
 	.vgo:disabled { cursor: default; color: #7b8697; }
 	.vsave { flex: none; padding: 0 8px; border-radius: 8px; cursor: pointer; font-size: 0.62rem; color: #f6e3b4; background: rgba(199, 154, 78, 0.16); border: 1px solid rgba(199, 154, 78, 0.45); }
 	.vsave:hover { background: rgba(199, 154, 78, 0.3); }
-	/* exit sits left of the map name */
 
 	.dlgs { display: contents; } /* desktop: carries the Tide look for the small dialogs (ui/top-game.css) */
 	.modal-scrim { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; background: rgba(3, 8, 14, 0.6); }
@@ -1192,8 +1197,7 @@
 	.mleave { background: #dc2626; color: #fff; }
 	.mleave:hover { background: #ef4444; }
 
-	/* room / connection cluster, tucked in the top-left corner */
-	/* in-game manage menu */
+	/* phone: the Game Lobby panel (desktop has ui/TopMenu.svelte) */
 	.reqbadge { min-width: 1.05rem; height: 1.05rem; padding: 0 4px; border-radius: 999px; background: #ef7d22; color: #1a0f06; font-size: 0.62rem; font-weight: 900; display: grid; place-items: center; }
 	.managepanel { width: min(460px, 94vw); max-height: 88vh; overflow-y: auto; color: #e5e7eb; background: rgba(11, 16, 26, 0.96); border: 1px solid rgba(199, 154, 78, 0.5); border-radius: 16px; padding: 16px 18px; box-shadow: 0 24px 70px rgba(0, 0, 0, 0.7); }
 	.mphead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
@@ -1229,14 +1233,12 @@
 	.conn.reconnecting, .conn.connecting { color: #fcd34d; }
 	.conn.closed { color: #fca5a5; } .conn.closed .cdot { background: #ef4444; }
 
-	/* left-side HUD panel — tightened */
-	/* zoomed as a whole; its insets are design px, so the real-px dash is divided back */
+	/* desktop: the small dialogs scale with the UI (everything else of the desktop HUD sits in the zoomed .top layer) */
 	.gamewrap:not(.mob) .modal { zoom: var(--uis, 1); }
 
 	.mab.live:hover { background: rgba(255, 255, 255, 0.12); }
 
-
-	/* 5 life tokens per row via 30px token + panel width */
+	/* life and wave tokens (phone sheet) */
 	.ltok { width: 30px; height: 29px; padding: 0; border: none; background: transparent no-repeat center / contain; cursor: pointer;
 		perspective: 80px; filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.55)); transition: transform 0.1s, filter 0.15s, opacity 0.15s; }
 	.ltok:hover { transform: translateY(-2px) scale(1.1); }
@@ -1244,7 +1246,6 @@
 	.ltok.dep:hover { opacity: 1; filter: grayscale(0.15) brightness(0.9); }
 	.ltok.flip { animation: coinflip 0.45s ease-in-out; }
 
-	/* 7 wave tokens per row via 20px token + panel width */
 	.wtok { width: 20px; height: 20px; padding: 0; border: none; border-radius: 50%; cursor: pointer;
 		background: rgba(0, 0, 0, 0.35) no-repeat center / 88%; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15);
 		filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5)); transition: transform 0.1s, filter 0.15s, opacity 0.15s; }
@@ -1255,19 +1256,14 @@
 
 	@keyframes coinflip { 0% { transform: rotateY(0); } 100% { transform: rotateY(360deg); } }
 
-	/* minion spawn controls */
 	.spcancel { flex: none; border-radius: 6px; padding: 2px 7px; font-size: 0.66rem; font-weight: 700; cursor: pointer; text-transform: none;
 		color: #e5e7eb; background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.22); }
 	.spcancel:hover { background: rgba(255, 255, 255, 0.2); }
 
-	/* floating delete toolbar for a selected minion/token */
+	/* phone: toolbar for the selected piece, and the hints (desktop: .ptool / .prompt in ui/top-game.css) */
 	.pietool { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); z-index: 8; display: flex; align-items: center; gap: 10px;
 		padding: 6px 8px 6px 12px; border-radius: 999px; background: rgba(9, 13, 22, 0.9);
 		border: 1px solid rgba(255, 255, 255, 0.18); box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5); }
-	/* desktop: floats right above the selected piece */
-	.pietool.anchored { position: fixed; transform: translate(-50%, -100%); padding: 4px 6px 4px 10px; gap: 7px; }
-	.pietool.anchored::after { content: ''; position: absolute; left: 50%; bottom: -6px; width: 10px; height: 10px; transform: translateX(-50%) rotate(45deg);
-		background: rgba(9, 13, 22, 0.9); border-right: 1px solid rgba(255, 255, 255, 0.18); border-bottom: 1px solid rgba(255, 255, 255, 0.18); }
 	.pieflip { border: 1px solid rgba(240, 200, 120, 0.55); background: rgba(199, 154, 78, 0.24); color: #f6e3b4; border-radius: 999px; padding: 4px 12px; font-weight: 700; cursor: pointer; font-size: 0.76rem; }
 	.pieflip:hover { background: rgba(199, 154, 78, 0.4); }
 	.placehint { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); z-index: 9; display: flex; align-items: center; gap: 10px; padding: 6px 8px 6px 14px; border-radius: 999px;
@@ -1275,8 +1271,6 @@
 	.pietxt { font-size: 0.78rem; font-weight: 700; color: #e5e7eb; text-transform: capitalize; }
 	.piedel { border: 1px solid rgba(239, 68, 68, 0.5); background: rgba(220, 60, 60, 0.28); color: #ffb4b4; border-radius: 999px; padding: 4px 12px; font-weight: 700; cursor: pointer; font-size: 0.76rem; }
 	.piedel:hover { background: rgba(220, 60, 60, 0.45); }
-
-	/* activity log lives inside the HUD, filling the gap above the controls; retractable */
 
 	/* ═══════════ phone layout (≤760px wide) ═══════════ */
 	.boardarea { position: absolute; inset: 0; }

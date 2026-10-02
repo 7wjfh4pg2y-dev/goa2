@@ -90,7 +90,7 @@
 	.is-right .lives.two { direction: ltr; }
 	.lt { width: 17px; height: 17px; padding: 0; border: 0; background: transparent no-repeat center / contain; }
 	.two .lt { width: 15px; height: 15px; }
-	.lt.lost { opacity: 0.5; }
+	.lt.lost { opacity: 0.62; }
 	.lt:hover, .wv:hover { transform: scale(1.18); }
 	.lt.flip, .wv.flip, .tie img.flip { animation: flip 0.45s ease-in-out; }
 	@keyframes flip { from { transform: rotateY(0); } to { transform: rotateY(360deg); } }
@@ -107,8 +107,8 @@
 	.tpips i.is-now { color: var(--ink-dark); background: linear-gradient(180deg, #fff3cf, var(--brass-hi) 50%, var(--brass)); border-color: #fff3cf; box-shadow: 0 0 10px rgba(244, 223, 168, 0.6); }
 
 	/* the lane: enemy beach · centre · your beach, the battle zone marked; then the waves left */
-	.lanerow { gap: 9px; }
-	.track { display: flex; align-items: center; }
+	.lanerow { gap: 9px; max-width: 100%; }
+	.track { flex: none; display: flex; align-items: center; }
 	.seg { width: 10px; height: 2px; background: var(--brass-line); }
 	.zone { position: relative; width: 15px; height: 17px; clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%); background: #cdb98a; opacity: 0.7; }
 	.zone.is-blue { background: #9fcdf5; }
