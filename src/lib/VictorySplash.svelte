@@ -58,7 +58,7 @@
 </script>
 
 {#if shown}
-<div class="vs" class:lost class:mob={mobile} class:hearts={byLife} class:report class:arrive style="--wc:{C[team]}; --wl:{L[team]}; {arriveVars}" role="dialog" aria-label="Game over">
+<div class="vs" class:lost class:mob={mobile} class:hearts={byLife} class:report class:arrive style="--wc:{C[team]}; --wl:{L[team]}; --n:{title.length}; {arriveVars}" role="dialog" aria-label="Game over">
 	<div class="bg"></div>
 	<div class="col">
 		{#if arrive}
@@ -104,7 +104,8 @@
 <style>
 	.vs { position: fixed; inset: 0; z-index: 70; overflow: hidden; color: #f6ead2; --z: var(--uis, 1); --td: 1.15s; }
 	.vs.mob { --z: .62; }
-	.bg { position: absolute; inset: 0; animation: fade .5s ease both; background: radial-gradient(70% 60% at 50% 45%, rgba(14, 14, 20, .95), rgba(2, 2, 4, .99)); }
+	/* opaque: the HUD and the board must not ghost through the card */
+	.bg { position: absolute; inset: 0; animation: fade .5s ease both; background: radial-gradient(70% 60% at 50% 45%, #0e0e14, #020204); }
 	/* one centred column; zoom scales it (percent insets are untouched by zoom) */
 	.col { position: absolute; left: 50%; top: 46%; translate: -50% -50%; zoom: var(--z); display: flex; flex-direction: column; align-items: center; gap: 12px; width: max-content; max-width: calc(96vw / var(--z)); }
 	.sign { height: 170px; display: grid; place-items: center; margin-bottom: 4px; }
@@ -131,8 +132,8 @@
 
 	/* ═════ arriving from the push ceremony: the same sea, the same crest ═════ */
 	.vs.arrive { --td: .6s; }
-	.arrive .bg { background: radial-gradient(75% 65% at 50% 42%, rgba(11, 36, 60, .97), rgba(3, 11, 21, 1)); animation-duration: .4s; }
-	.arrive.lost .bg { background: radial-gradient(75% 65% at 50% 42%, rgba(9, 19, 31, .98), rgba(2, 5, 10, 1)); }
+	.arrive .bg { background: radial-gradient(75% 65% at 50% 42%, #0b243c, #030b15); animation-duration: .4s; }
+	.arrive.lost .bg { background: radial-gradient(75% 65% at 50% 42%, #09131f, #02050a); }
 	/* .lift is as tall as the card, so 50% of it is the card's middle line = the ceremony's stage point */
 	.lift { position: absolute; inset: 0; pointer-events: none; animation: lift .95s cubic-bezier(.6, 0, .2, 1) .2s both; transition: opacity .4s ease; }
 	.grow { position: absolute; left: 50%; top: 5px; width: 160px; height: 160px; margin-left: -80px; animation: grow .95s cubic-bezier(.6, 0, .2, 1) .2s both; }
@@ -172,8 +173,9 @@
 	@keyframes gone { to { opacity: 0; } }
 	@keyframes crackIn { 0% { opacity: 1; scale: 1.15; filter: brightness(2); } 100% { opacity: 1; scale: 1; filter: brightness(.6) saturate(.6) drop-shadow(0 6px 10px rgba(0, 0, 0, .7)); } }
 
-	/* phones: the column is zoomed down (--z); keep the title on one line */
-	.mob .ttl { font-size: min(6rem, calc(15vw / var(--z))); }
+	/* phones: the column is zoomed down (--z); the title (--n letters ≈ .78em each, and it tracks in
+	   from 1.28× wide) stays on one line between 20 px gutters — "Atlanteans win" included */
+	.mob .ttl { font-size: min(6rem, calc((100vw - 40px) / var(--z) / (var(--n) * .86))); }
 	.mob .pair { gap: 40px; }
 	.mob .why { font-size: 1.3rem; }
 	.mob .close { zoom: 1; font-size: .92rem; padding: .6rem 1.1rem; white-space: nowrap; }

@@ -80,7 +80,7 @@ describe('battle report — from the journal of a real game', () => {
 		expect(st.players.map((p) => p.id)).toEqual(['a', 'b'])
 		expect(row(st, 'a')).toMatchObject({ name: 'Zaheen', hero: 'arien', team: 'orange', color: colorHex('crimson'), level: 1, kills: 1, deaths: 0, assists: 0, minions: 2, coins: 7 })
 		expect(row(st, 'b')).toMatchObject({ name: 'Priya', hero: 'brogan', team: 'blue', color: colorHex('teal'), level: 1, kills: 0, deaths: 1, assists: 0, minions: 0, coins: 0 })
-		expect(st.falls).toEqual([{ turn: 1, team: 'blue', who: 'Priya (Brogan)' }])
+		expect(st.falls).toEqual([{ turn: 1, team: 'blue', who: 'Priya (Brogan)', id: 'b' }])
 		// the same journal gives the same object back (the splash's prop stays put)
 		expect(t.stats()).toBe(st)
 	})
@@ -137,9 +137,9 @@ describe('battle report — from the journal of a real game', () => {
 		expect(row(st, 'a').coins).toBe(2 + 2 + 1) // two minions and a hero — the coin spent on level 2 still counts as earned
 		expect(row(st, 'b').coins).toBe(held('b'))
 		expect(st.falls).toEqual([
-			{ turn: 2, team: 'blue', who: 'Mo (Xargatha)' },
-			{ turn: 5, team: 'orange', who: 'Priya (Brogan)' },
-			{ turn: 8, team: 'orange', who: 'Priya (Brogan)' }
+			{ turn: 2, team: 'blue', who: 'Mo (Xargatha)', id: 'b' },
+			{ turn: 5, team: 'orange', who: 'Priya (Brogan)', id: 'c' },
+			{ turn: 8, team: 'orange', who: 'Priya (Brogan)', id: 'c' }
 		])
 		// team totals add up: every kill is someone's death
 		const sum = (k: 'kills' | 'deaths') => st.players.reduce((n, p) => n + p[k], 0)
@@ -220,6 +220,7 @@ describe('battle report — from the journal of a real game', () => {
 		expect(st.players.map((p) => p.id)).toEqual(['z', 'b'])
 		expect(row(st, 'z')).toMatchObject({ name: 'Lee', hero: 'arien', team: 'orange', kills: 1, deaths: 1, minions: 1, coins: 3 })
 		expect(st.falls.map((f) => f.who)).toEqual(['Priya (Brogan)', 'Lee (Arien)'])
+		expect(st.falls.map((f) => f.id)).toEqual(['b', 'z']) // the id is the report ROW's (the seat's player at the end)
 	})
 
 	it('a win the host undoes: the journal goes on and the report is the later, real one', () => {
