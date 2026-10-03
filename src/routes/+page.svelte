@@ -35,7 +35,6 @@
 		type ConnStatus,
 		type Team,
 		type DraftSystem
-		, boardLookOf, zoneGlowOf, boardFxOf
 	} from '$lib/match';
 	import { HEROES } from '$lib/heroes';
 	import { initCards } from '$lib/cards/cardstate';
@@ -186,9 +185,6 @@
 	$: me = session ? $players.find((p) => p.id === session!.clientId) : undefined;
 	$: iAmHost = session ? $state.host === session.clientId : false;
 	// the host's board options, as the lobby shows them
-	$: lobbyLook = boardLookOf({ boardLook: $state.boardLook });
-	$: lobbyGlow = zoneGlowOf({ zoneGlow: $state.zoneGlow });
-	$: lobbyFx = boardFxOf({ boardFx: $state.boardFx });
 	$: seatCount = $state.seats;
 	$: half = Math.floor(seatCount / 2);
 	// a player is "playing" once they hold a real seat (seat >= 0)
@@ -849,25 +845,6 @@
 						{/if}
 					</div>
 
-					<!-- the host's board options (everyone sees what was chosen) -->
-					<div class="boardopts">
-						<span class="bolbl">Map visuals</span>
-						<span class="chips">
-							<button class="chip" class:on={lobbyLook === 'island'} disabled={!iAmHost} on:click={() => session?.update({ boardLook: 'island' })}>Island</button>
-							<button class="chip" class:on={lobbyLook === 'classic'} disabled={!iAmHost} on:click={() => session?.update({ boardLook: 'classic' })}>Classic</button>
-						</span>
-						<span class="bolbl">Battle zone outline</span>
-						<span class="chips">
-							<button class="chip" class:on={lobbyGlow} disabled={!iAmHost || lobbyLook !== 'island'} on:click={() => session?.update({ zoneGlow: true })}>On</button>
-							<button class="chip" class:on={!lobbyGlow} disabled={!iAmHost || lobbyLook !== 'island'} on:click={() => session?.update({ zoneGlow: false })}>Off</button>
-						</span>
-						<span class="bolbl" title="The moving sea, the minions' turning rims and the battle zone's pulse">Moving effects</span>
-						<span class="chips">
-							<button class="chip" class:on={lobbyFx} disabled={!iAmHost} on:click={() => session?.update({ boardFx: true })}>On</button>
-							<button class="chip" class:on={!lobbyFx} disabled={!iAmHost} on:click={() => session?.update({ boardFx: false })}>Off</button>
-						</span>
-					</div>
-
 					<!-- one flat row: every button is its own flex item, so they share the width and never overlap -->
 					<div class="lobbybtns">
 						<!-- the host's way out is Close (ends the room for everyone); guests just Leave -->
@@ -991,13 +968,6 @@
 	.verpanel .vers button { flex: 1; }
 	.verpanel .pvlink { text-align: center; text-decoration: none; }
 	.row { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
-	.boardopts { display: grid; grid-template-columns: auto auto; align-items: center; justify-content: center; gap: 6px 12px; margin: 2px 0 4px; }
-	.boardopts .bolbl { text-align: right; }
-	.boardopts .bolbl { font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; color: #94a3b8; }
-	.boardopts .chips { display: inline-flex; gap: 5px; flex-wrap: nowrap; }
-	.boardopts .chip { padding: .22rem .7rem; font-size: .8rem; }
-	.boardopts .chip:disabled { cursor: default; }
-	.boardopts .chip:disabled:not(.on) { opacity: .4; }
 	.lobbybtns { display: flex; gap: 8px; align-items: stretch; }
 	.lobbybtns > button { flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 	.lobbybtns > .leave { margin-right: auto; }
