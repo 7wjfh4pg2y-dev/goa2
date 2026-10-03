@@ -1,45 +1,7 @@
-<script lang="ts">
-	// The sea the island sits in: one canvas behind the board. Everything is drawn in BOARD
-	// coordinates through the same view matrix as the board's svg, so the water pans, zooms
-	// and turns with the island. It never touches the svg above it, so the board itself is
-	// not repainted while the sea animates.
-	//
-	// The open water is two soft textures made once from noise — broad darker swells, and a
-	// broken net of pale streaks (light on the surface) — the streaks laid down twice at
-	// different sizes and angles, sliding past each other, which is what makes water look
-	// like water instead of a pattern. Round the island: the shelf (pale bands hugging the
-	// coast) and the foam washing in and out.
-	//
-	// COST (this runs on every screen, on every PC): the canvas is kept SMALL — about 0.65
-	// megapixels whatever the window or pixel density, stretched by CSS (water is soft, it
-	// does not show) — the shelf's six wide strokes are drawn once per view into a spare
-	// canvas and copied, and the sea moves 20 times a second. A full-size canvas redrawn 30
-	// times a second with those strokes was the single biggest load on weak machines.
-	import { onMount } from 'svelte';
+<script lang="ts" module>
 	import { intHash } from './hexgeo';
 
-	/** the board svg's viewBox */
-	export let bounds = { a: 0, b: 0, w: 100, h: 100 };
-	/** the board's view transform (pan / zoom / rotate), in viewBox units */
-	export let view = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
-	/** the island's coastline (svg path, board units) */
-	export let coast = '';
-	export let size = 60;
-	/** draw once per change instead of animating (also forced by "reduce motion") */
-	export let still = false;
-
-	let canvas: HTMLCanvasElement;
-	let W = 0, H = 0, dpr = 1;
-	let t = 0;
-	let reduce = false;
-	let coastPath: Path2D | null = null;
-	$: coastPath = typeof Path2D !== 'undefined' && coast ? new Path2D(coast) : null;
-	let streaks: CanvasPattern | null = null, swells: CanvasPattern | null = null;
-	/** the shelf bands, drawn once per view (they do not move) */
-	let shelf: HTMLCanvasElement | null = null, shelfKey = '';
-	const BUDGET = 650_000; // canvas pixels
 	const STREAK_N = 512, SWELL_N = 256;
-
 	// ── textures (made once): fractal value noise that tiles seamlessly, 0..1
 	function tileNoise(n: number, cellsAcross: number, octaves: number, seed: number): Float32Array {
 		const out = new Float32Array(n * n);
@@ -74,14 +36,66 @@
 		cx.putImageData(img, 0, 0);
 		return c;
 	}
-	function makeTextures(ctx: CanvasRenderingContext2D) {
+	// made ONCE per page and shared by every sea (the backdrop, the Create preview, the lobby, the game):
+	// building them is ~100 ms of work on a slow machine, which every board mount used to pay again
+	let shared: { streaks: HTMLCanvasElement; swells: HTMLCanvasElement } | null = null;
+	function sharedTextures() {
+		if (shared) return shared;
 		// streaks: the thin places where the noise crosses its middle make winding lines; a
 		// second, broader noise breaks them into patches so they never read as a net
 		const a = tileNoise(STREAK_N, 5, 4, 7), m = tileNoise(STREAK_N, 3, 3, 91);
-		streaks = ctx.createPattern(texture(STREAK_N, [226, 248, 255], (i) => smooth(0.9, 1, 1 - Math.abs(2 * a[i] - 1)) * smooth(0.4, 0.66, m[i])), 'repeat');
+		const streaks = texture(STREAK_N, [226, 248, 255], (i) => smooth(0.9, 1, 1 - Math.abs(2 * a[i] - 1)) * smooth(0.4, 0.66, m[i]));
 		// swells: wide, soft, darker water
 		const s = tileNoise(SWELL_N, 3, 3, 203);
-		swells = ctx.createPattern(texture(SWELL_N, [5, 52, 96], (i) => smooth(0.47, 0.72, s[i])), 'repeat');
+		const swells = texture(SWELL_N, [5, 52, 96], (i) => smooth(0.47, 0.72, s[i]));
+		return (shared = { streaks, swells });
+	}
+</script>
+
+<script lang="ts">
+	// The sea the island sits in: one canvas behind the board. Everything is drawn in BOARD
+	// coordinates through the same view matrix as the board's svg, so the water pans, zooms
+	// and turns with the island. It never touches the svg above it, so the board itself is
+	// not repainted while the sea animates.
+	//
+	// The open water is two soft textures made once from noise — broad darker swells, and a
+	// broken net of pale streaks (light on the surface) — the streaks laid down twice at
+	// different sizes and angles, sliding past each other, which is what makes water look
+	// like water instead of a pattern. Round the island: the shelf (pale bands hugging the
+	// coast) and the foam washing in and out.
+	//
+	// COST (this runs on every screen, on every PC): the canvas is kept SMALL — about 0.65
+	// megapixels whatever the window or pixel density, stretched by CSS (water is soft, it
+	// does not show) — the shelf's six wide strokes are drawn once per view into a spare
+	// canvas and copied, and the sea moves 20 times a second. A full-size canvas redrawn 30
+	// times a second with those strokes was the single biggest load on weak machines.
+	import { onMount } from 'svelte';
+
+	/** the board svg's viewBox */
+	export let bounds = { a: 0, b: 0, w: 100, h: 100 };
+	/** the board's view transform (pan / zoom / rotate), in viewBox units */
+	export let view = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
+	/** the island's coastline (svg path, board units) */
+	export let coast = '';
+	export let size = 60;
+	/** draw once per change instead of animating (also forced by "reduce motion") */
+	export let still = false;
+
+	let canvas: HTMLCanvasElement;
+	let W = 0, H = 0, dpr = 1;
+	let t = 0;
+	let reduce = false;
+	let coastPath: Path2D | null = null;
+	$: coastPath = typeof Path2D !== 'undefined' && coast ? new Path2D(coast) : null;
+	let streaks: CanvasPattern | null = null, swells: CanvasPattern | null = null;
+	/** the shelf bands, drawn once per view (they do not move) */
+	let shelf: HTMLCanvasElement | null = null, shelfKey = '';
+	const BUDGET = 650_000; // canvas pixels
+
+	function makeTextures(ctx: CanvasRenderingContext2D) {
+		const t = sharedTextures();
+		streaks = ctx.createPattern(t.streaks, 'repeat');
+		swells = ctx.createPattern(t.swells, 'repeat');
 	}
 
 	function draw() {

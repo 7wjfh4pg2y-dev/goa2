@@ -593,7 +593,9 @@
 	{/if}
 	<svg class="pieces" viewBox={vb} preserveAspectRatio="xMidYMid meet" bind:this={svgEl}>
 		<defs>
-			<PieceDefs />
+			<!-- only a board that can show pieces needs their drawings (the pre-game pictures don't): two copies of
+			     the same ids on one page make the browser re-resolve every <use> whenever a board mounts or goes -->
+			{#if interactive || pieces.length}<PieceDefs />{/if}
 		</defs>
 		<g bind:this={viewG} transform={viewTf}>
 			{#if look !== 'island'}
