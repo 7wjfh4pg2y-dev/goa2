@@ -46,9 +46,21 @@ export function goToVersion(v: SiteVersion) {
 	location.replace(`${BASES[v]}/${location.search}${location.hash}`)
 }
 
-/** On app start: if the GM picked the other version, move there. (Skipped in dev.) */
+// Preview mode (2.0's portal at /preview, its game at /sandbox): this TAB stays on whatever version it opened,
+// so the GM can look around a version that isn't live. Ends when the tab closes.
+const PREVIEW_KEY = 'goa2-preview'
+export function isPreview(): boolean {
+	try { return sessionStorage.getItem(PREVIEW_KEY) === '1' } catch { return false }
+}
+export function setPreview(on: boolean) {
+	try { if (on) sessionStorage.setItem(PREVIEW_KEY, '1'); else sessionStorage.removeItem(PREVIEW_KEY) } catch { /* ignore */ }
+}
+
+/** On app start: if the GM picked the other version, move there. (Skipped in dev and in preview mode.) */
 export async function followSiteVersion() {
 	if (!base) return // `npm run dev` serves one version only
+	if (/^\/(preview|sandbox)\b/.test(location.pathname.slice(base.length))) setPreview(true)
+	if (isPreview()) return
 	const v = await fetchSiteVersion()
 	if (v && v !== THIS_VERSION) goToVersion(v)
 }

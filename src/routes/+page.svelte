@@ -739,6 +739,7 @@
 								</div>
 								<p class="t-small c-muted">{siteVer ? `${siteVer} is live for everyone.` : 'Live version unknown (no setting yet).'} Switching sends every player to that version the next time they open or refresh the site.</p>
 								{#if verErr}<p class="msg-error">{verErr}</p>{/if}
+								<a class="btn btn-ghost" href={base + '/preview'}>2.0 preview — pick features</a>
 							</section>
 							<div class="row"><button class="btn btn-ghost on-art" on:click={goHome}>Sign out</button></div>
 						</div>
