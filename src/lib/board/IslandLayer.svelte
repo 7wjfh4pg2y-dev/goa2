@@ -572,9 +572,11 @@
 			{@const k = (size * EMBLEM) / a.r}
 			{@const ink = INK[t.spawn.team]}
 			<!-- a minion spawn point: a plate of the team's ground with that minion engraved on it, facing the way it
-			     will march (the minion pieces themselves carry turning pips, so the two can't be confused) -->
+			     will march (the minion pieces themselves carry turning pips, so the two can't be confused). The emblem's own
+			     path, not a <use> of the piece drawings: the island must draw on its own (pre-game boards have no pieces,
+			     and the lobby's picture is this svg alone) -->
 			<polygon points={hexPoints(t.c, size * 0.86)} fill="none" stroke={ink.halo} stroke-opacity=".34" stroke-width={size * 0.035} stroke-linejoin="round" />
-			<use href="#mn-art-{t.spawn.team}-{t.spawn.role}" transform="translate({t.c.x.toFixed(1)} {t.c.y.toFixed(1)}) rotate({t.spawn.dir * 60 - 30}) scale({k.toFixed(4)}) translate({-a.cx} {-a.cy})"
+			<path d={a.d} transform="translate({t.c.x.toFixed(1)} {t.c.y.toFixed(1)}) rotate({t.spawn.dir * 60 - 30}) scale({k.toFixed(4)}) translate({-a.cx} {-a.cy})"
 				fill={ink.ink} fill-rule="evenodd" stroke={ink.halo} stroke-opacity=".6" stroke-width={(size * 0.035 / k).toFixed(2)} stroke-linejoin="round" paint-order="stroke" />
 		{/if}
 	{/each}

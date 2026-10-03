@@ -284,6 +284,11 @@
 	/** A still PICTURE of this board's island (sea + land, no pieces) painted into `target` at w × h css px, the whole
 	 *  island fitted inside the box minus `inset` (px). The pre-game previews (Create, lobby) use the backdrop's board
 	 *  for this instead of building a second live board: one canvas instead of ~2k svg nodes. False if not ready. */
+	/** where the island is drawn on screen (client px), or null (classic look / not drawn yet) */
+	export function islandRect(): DOMRect | null {
+		const r = landEl?.querySelector('.island')?.getBoundingClientRect();
+		return r && r.width > 0 ? r : null;
+	}
 	let picImg: { xml: string; img: HTMLImageElement } | null = null;
 	export async function paintPicture(target: HTMLCanvasElement, w: number, h: number, inset = { t: 0, r: 0, b: 0, l: 0 }): Promise<boolean> {
 		if (look !== 'island' || !landEl || !hexes.length || w < 2 || h < 2) return false;
