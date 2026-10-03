@@ -13,7 +13,7 @@ import { supabase } from './supabase'
 
 export type SiteVersion = '1.0' | '2.0'
 export type Build = SiteVersion | 'release'
-export const THIS_VERSION = '1.0' as Build
+export const THIS_VERSION = 'release' as Build
 export const SITE_VERSIONS: SiteVersion[] = ['1.0', '2.0']
 const BASES: Record<SiteVersion, string> = { '1.0': '/goa2', '2.0': '/goa2/v2' }
 const TABLE = 'goa2_settings'
