@@ -20,6 +20,11 @@
 			{ id: 'matchup', title: 'Matchup slices', what: '"The battle lines are drawn": heroes slash in as leaning slices of their big paintings, team symbols loom behind, a blade lands between the teams.', see: [{ label: 'Play a 1-player game', href: app, note: 'Enter → Player → Create game → sit → Ready → Begin → pick a hero → Select Hero → Begin the battle' }] },
 			{ id: 'symbols', title: 'New hero symbols', what: 'Sharper hero symbols on every card back, the deck button and hero select; the gear-and-ice crest on the turn / round cards.', see: [{ label: 'Sandbox game', href: game() }, { label: 'Splash demo → Next turn', href: demo }] }
 		] },
+		{ name: 'The board', items: [
+			{ id: 'island', title: 'Island board', what: 'The map drawn as a living island — beaches, jungle, rock, the copper and ice bases — in a moving sea with foam along the coast. (1.0 plays on the classic board.)', see: [{ label: 'Sandbox game', href: game() }, { label: 'Map lab', href: `${base}/map-lab` }] },
+			{ id: 'zoneglow', title: 'Battle zone outline', what: 'A glowing outline round the zone where the minion battle is fought; it follows the lane.', see: [{ label: 'Map lab', href: `${base}/map-lab?zone=Center` }] },
+			{ id: 'motion', title: 'Moving effects', what: 'The moving sea and the minions\' turning rims, with a host switch to turn them off.', see: [{ label: 'Map lab', href: `${base}/map-lab` }] }
+		] },
 		{ name: 'In the game (desktop)', items: [
 			{ id: 'topbar', title: 'Top bar', what: 'One scoreline (each team\'s Life, round + turn pips, the lane, waves, tie-breaker coin), the ☰ menu, a slim log tab, one-line prompts and a smaller piece toolbar.', see: [{ label: 'Sandbox game', href: game() }] },
 			{ id: 'helm', title: 'Console, roster and player boards', what: 'Player chips along the top with this turn\'s card, drop-down player boards, the initiative rail after the reveal, and the bottom console with ONE action button. Hand cards: click to arm, click the button to commit.', see: [{ label: '4 players', href: game('?n=4') }, { label: '6 players', href: game('?n=6') }, { label: '10 players', href: game('?n=10') }] },
