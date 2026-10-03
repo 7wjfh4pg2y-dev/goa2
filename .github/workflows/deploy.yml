@@ -40,6 +40,24 @@ jobs:
       - name: Build
         run: npm run build
 
+      # Version 1.0 (branch `1.0`) is served side by side at /goa2/v1 — the GM's site
+      # version switch (src/lib/siteVersion.ts) sends everyone to whichever one is live.
+      - name: Checkout version 1.0
+        uses: actions/checkout@v4
+        with:
+          ref: '1.0'
+          path: v1src
+
+      - name: Build version 1.0
+        working-directory: v1src
+        env:
+          BASE_PATH: /goa2/v1
+        run: |
+          npm ci
+          npm run build
+          mkdir -p ../build/v1
+          cp -r build/. ../build/v1/
+
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
