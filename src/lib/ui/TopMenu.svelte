@@ -5,9 +5,20 @@
 	import PlayerIcon from '$lib/PlayerIcon.svelte';
 	import { heroById } from '$lib/heroes';
 	import { teamAdj } from '$lib/teams';
-	import type { BoardLook, ConnStatus, Player, Team } from '$lib/match';
+	import type { BoardLook, ConnStatus, LogEntry, Player, Team } from '$lib/match';
 
 	type Role = 'melee' | 'ranged' | 'heavy';
+	/** phone: one full-screen column, and it also carries what the desktop keeps elsewhere — the view
+	    controls, the log with the card effects in play, and the host's Undo */
+	export let phone = false;
+	export let log: LogEntry[] = [];
+	export let effects: Array<{ id: string; name: string; when: string; dots: string[] }> = [];
+	export let onEffect: (id: string) => void = () => {};
+	export let undo: (() => void) | null = null;
+	export let canUndo = false;
+	export let onReset: () => void = () => {};
+	export let onRotate: (deg: number) => void = () => {};
+	export let onZoom: (f: number) => void = () => {};
 	export let room: string;
 	export let mapName: string;
 	export let status: ConnStatus;
@@ -45,8 +56,8 @@
 	const CONN: Record<string, string> = { connecting: 'Connecting…', reconnecting: 'Reconnecting…', closed: 'Disconnected' };
 </script>
 
-<div class="menuscrim" on:click={onClose} on:keydown={() => {}} role="presentation">
-	<div class="menu" on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" aria-label="Menu" tabindex="-1">
+<div class="menuscrim" class:ph={phone} on:click={onClose} on:keydown={() => {}} role="presentation">
+	<div class="menu" class:ph={phone} on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" aria-label="Menu" tabindex="-1">
 		<div class="head">
 			<span class="ttl"><span class="t-label">{mapName}</span><b>Room {room}</b></span>
 			{#if CONN[status]}<span class="conn">{CONN[status]}</span>{/if}
@@ -64,6 +75,7 @@
 					</div>
 				{/if}
 			{/each}
+			<div class="seats">
 			{#each seats as s (s.seat)}
 				<div class="seatrow is-{s.team}" class:away={!s.present}>
 					{#if s.hero}<PlayerIcon hero={s.hero} team={s.team ?? 'orange'} color={s.color} size="38px" />{:else}<span class="nohero"></span>{/if}
@@ -77,6 +89,7 @@
 					{#if s.id}<i class="here" class:off={!s.present} title={s.present ? 'Here' : 'Away'}></i>{/if}
 				</div>
 			{/each}
+			</div>
 			{#if spectators.length}
 				<span class="t-label">Watching</span>
 				<div class="specs">
@@ -85,7 +98,7 @@
 					{/each}
 				</div>
 			{/if}
-			<button class="pbtn lg bad leave" on:click={onLeave}><TopIcon name="door" />Leave</button>
+			{#if !phone}<button class="pbtn lg bad leave" on:click={onLeave}><TopIcon name="door" />Leave</button>{/if}
 		</div>
 
 		<div class="colm">
@@ -103,6 +116,15 @@
 				<button class="switch" class:is-on={fx} role="switch" aria-checked={fx} aria-label="Moving effects" disabled={!host} on:click={() => onFx(!fx)}><i></i></button>
 			</div>
 			<span class="t-label">View</span>
+			{#if phone}
+				<div class="vctl">
+					<button class="pbtn lg" on:click={onReset} aria-label="Recentre"><TopIcon name="target" /></button>
+					<button class="pbtn lg" on:click={() => onRotate(-45)} aria-label="Turn left"><TopIcon name="rotl" /></button>
+					<button class="pbtn lg" on:click={() => onRotate(45)} aria-label="Turn right"><TopIcon name="rotr" /></button>
+					<button class="pbtn lg" on:click={() => onZoom(1.2)} aria-label="Zoom in"><TopIcon name="plus" /></button>
+					<button class="pbtn lg" on:click={() => onZoom(1 / 1.2)} aria-label="Zoom out"><TopIcon name="minus" /></button>
+				</div>
+			{/if}
 			<div class="views">
 				{#each views as v, i}
 					<span class="vcell">
@@ -122,15 +144,36 @@
 					{/each}
 				{/each}
 			</div>
-			{#if host && !won}
+			{#if host && (!won || undo)}
 				<span class="t-label">Host</span>
 				<div class="pushes">
-					{#each TEAMS as t}
-						<button class="pbtn lg is-{t}" class:arm={pushArm === t} on:click={() => onPush(t)}>{pushArm === t ? 'Confirm?' : `${teamAdj(t)} push`}</button>
-					{/each}
+					{#if !won}
+						{#each TEAMS as t}
+							<button class="pbtn lg is-{t}" class:arm={pushArm === t} on:click={() => onPush(t)}>{pushArm === t ? 'Confirm?' : `${teamAdj(t)} push`}</button>
+						{/each}
+					{/if}
+					{#if undo}<button class="pbtn lg bad" on:click={undo} disabled={!canUndo}><TopIcon name="undo" />Undo</button>{/if}
 				</div>
 			{/if}
 		</div>
+
+		{#if phone}
+			<!-- the log (the desktop has its own tab for it) and the card effects in play -->
+			<div class="colm chron">
+				<span class="t-label">Log</span>
+				<div class="lines">
+					{#each log.slice(-30) as e (e.id)}<p><b>{e.by}</b> {e.text}</p>{:else}<p>—</p>{/each}
+				</div>
+				{#each effects as f (f.id)}
+					<button class="fxrow" on:click={() => onEffect(f.id)}>
+						<span class="dots">{#each f.dots as c}<i style="background:{c}"></i>{/each}</span>
+						<span class="fxwho">{f.name}</span>
+						<small>{f.when}</small>
+					</button>
+				{/each}
+			</div>
+			<button class="pbtn lg bad leave" on:click={onLeave}><TopIcon name="door" />Leave</button>
+		{/if}
 	</div>
 </div>
 
@@ -180,4 +223,36 @@
 	.pushes { display: flex; gap: 6px; }
 	.pushes .pbtn { flex: 1; min-width: 0; justify-content: center; padding: 0 4px; border-color: var(--tc-line); color: var(--tc-hi); }
 	.pushes .pbtn.arm { color: #fff; border-color: var(--danger); background: rgba(229, 72, 77, 0.3); }
+	.pushes .pbtn.bad { color: var(--danger-hi); border-color: rgba(229, 72, 77, 0.6); }
+
+	/* ── phone: one full-screen column ── */
+	.menuscrim.ph { display: block; }
+	.menu.ph { position: absolute; inset: 0; width: auto; max-height: none; display: flex; flex-direction: column; gap: 14px; padding: 8px 10px calc(12px + env(safe-area-inset-bottom));
+		border: 0; border-radius: 0; box-shadow: none; font-size: 16px; background: linear-gradient(180deg, rgba(5, 16, 30, 0.985), rgba(6, 24, 42, 0.975)); }
+	.ph .head { gap: 10px; padding-bottom: 10px; }
+	.ph .ttl b { font-size: 28px; }
+	.ph .ttl .t-label { font-size: 12px; }
+	.ph .colm { gap: 7px; }
+	.ph .colm > .t-label:not(:first-child) { margin-top: 6px; }
+	.seats { display: contents; }
+	.ph .seats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+	.ph .seatrow { height: 48px; padding: 0 6px 0 5px; gap: 6px; }
+	.ph .seatrow .who { gap: 4px; }
+	.ph .seatrow .who b { font-size: 16px; }
+	.ph .seatrow .who small { font-size: 13px; }
+	.ph .optrow { min-height: 40px; }
+	.ph .optrow .seg-opt { min-height: 34px; padding: 0 12px; font-size: 15px; }
+	.vctl { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+	.vctl .pbtn { justify-content: center; padding: 0; }
+	.ph .spawns { grid-template-columns: repeat(6, 44px); }
+	.ph .pushes .pbtn { padding: 0 2px; font-size: 14px; gap: 4px; }
+	.chron .lines { max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 5px; padding: 8px 10px; border-radius: var(--r-md); background: var(--well); border: 1px solid var(--hair); }
+	.chron p { font-size: 14px; line-height: 1.25; color: var(--ink-2); }
+	.chron b { font-weight: 400; color: var(--ink); }
+	.fxrow { display: flex; align-items: center; gap: 9px; height: 36px; padding: 0 10px; border-radius: 8px; font-size: 15px; text-align: left; color: var(--ink); background: var(--well); border: 1px solid var(--hair); }
+	.fxrow .dots { display: flex; gap: 3px; }
+	.fxrow .dots i { width: 8px; height: 8px; border-radius: 50%; }
+	.fxrow .fxwho { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.fxrow small { font-size: 13px; color: var(--brass); }
+	.ph > .leave { flex: none; justify-content: center; min-height: 46px; margin-top: auto; }
 </style>
