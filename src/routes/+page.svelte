@@ -719,7 +719,7 @@
 						</div>
 					{:else if mode === 'choose'}
 						<div class="step" transition:reveal bind:clientHeight={h['choose']}>
-							<header class="head"><span class="t-label">Guards of Atlantis II</span><h1 class="t-h1">Choose your role</h1></header>
+							<header class="head deskhead"><span class="t-label">Guards of Atlantis II</span><h1 class="t-h1">Choose your role</h1></header>
 							<div class="choices">
 								<button class="choice card p" on:click={goPlayer}>
 									<span class="choice-ic"><Icon name="user" /></span>
@@ -778,7 +778,7 @@
 						</div>
 					{:else if mode === 'menu'}
 						<div class="step" transition:reveal bind:clientHeight={h['menu']}>
-							<header class="head"><span class="t-label">{$role === 'admin' ? 'Admin' : 'Player'}</span><h1 class="t-h1">Play a game</h1></header>
+							<header class="head deskhead"><span class="t-label">{$role === 'admin' ? 'Admin' : 'Player'}</span><h1 class="t-h1">Play a game</h1></header>
 							<div class="choices">
 								<button class="choice card p" on:click={() => (mode = 'create')}>
 									<span class="choice-ic"><Icon name="plus" /></span>
@@ -1236,6 +1236,7 @@
 		.enterstep { right: 0; width: auto; }
 		.crest-hint { font-size: 0.95rem; padding: 8px 18px; }
 		.head { align-items: center; text-align: center; align-self: center; padding: 8px 16px 10px; }
+		.head.deskhead { display: none; } /* the role and play menus speak for themselves on a phone */
 		.step .note { align-self: center; text-align: center; padding: 6px 14px; border-radius: var(--r-pill); background: rgba(4, 15, 28, 0.62); }
 		.step .formpanel { padding: 16px; gap: 14px; }
 		.step .openpanel { padding: 14px 16px 16px; }
