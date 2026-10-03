@@ -633,6 +633,7 @@
 					</div>
 					<p class="hint">{siteVer ? `${siteVer} is live for everyone.` : 'Live version unknown (no setting yet).'} Switching sends every player to that version the next time they open or refresh the site.</p>
 					{#if verErr}<p class="err">{verErr}</p>{/if}
+					<a class="ghost pvlink" href="/goa2/v2/preview">Preview 2.0 — pick features</a>
 				</div>
 				<div class="row center"><button class="ghost" on:click={goHome}>Sign out</button></div>
 			</div>
@@ -988,6 +989,7 @@
 	.verpanel .vlbl { font-size: 0.68rem; letter-spacing: 0.12em; text-transform: uppercase; color: #b8a06a; }
 	.verpanel .vers { display: flex; gap: 10px; }
 	.verpanel .vers button { flex: 1; }
+	.verpanel .pvlink { text-align: center; text-decoration: none; }
 	.row { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
 	.boardopts { display: grid; grid-template-columns: auto auto; align-items: center; justify-content: center; gap: 6px 12px; margin: 2px 0 4px; }
 	.boardopts .bolbl { text-align: right; }
