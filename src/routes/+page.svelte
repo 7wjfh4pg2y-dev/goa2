@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { teamName, aTeam } from '$lib/teams';
 	import { sweepJournals } from '$lib/recorder';
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount, onDestroy, tick } from 'svelte';
 	import { browser } from '$app/environment';
 	import { base } from '$app/paths';
 	import { writable, get, type Readable } from 'svelte/store';
@@ -78,6 +78,34 @@
 	let joinError = '';
 	let joining = false;
 	let seatNotice = ''; // transient toast for seat-takeover grant/deny
+	// a notice (room closed, kicked…) floats as a toast — it never pushes a window — and clears itself
+	let noticeTimer: ReturnType<typeof setTimeout> | null = null;
+	$: if (notice) { if (noticeTimer) clearTimeout(noticeTimer); noticeTimer = setTimeout(() => (notice = ''), 8000); }
+	// the crest glides between its big (landing) and small sizes: one transform animation from the old
+	// box to the new one (FLIP), so nothing re-lays out frame by frame
+	let homeEl: HTMLElement | null = null;
+	let crestWasBig: boolean | null = null;
+	$: crestFlip(mode === 'landing');
+	function crestFlip(big: boolean) {
+		const el = homeEl;
+		if (crestWasBig === null || big === crestWasBig || !el) { crestWasBig = big; return; }
+		crestWasBig = big;
+		const from = el.getBoundingClientRect();
+		tick().then(() => {
+			const to = el.getBoundingClientRect();
+			if (!to.width || !el.animate) return;
+			const dx = from.left - to.left, dy = from.top - to.top, k = from.width / to.width;
+			el.animate([{ transform: `translate(${dx}px, ${dy}px) scale(${k})` }, { transform: 'none' }],
+				{ duration: 650, easing: 'cubic-bezier(0.22, 0.8, 0.22, 1)' });
+		});
+	}
+	// the Create screen's map window: step through the maps
+	function cycleMap(d: number) {
+		if (maps.length < 2) return;
+		const i = Math.max(0, maps.findIndex((m) => m.id === mapId));
+		mapId = maps[(i + d + maps.length) % maps.length].id;
+	}
+	$: mapIndex = Math.max(0, maps.findIndex((m) => m.id === mapId));
 	let session: MatchSession | null = null;
 	let players: Readable<Player[]> = writable([]);
 	let state: Readable<MatchState> = writable(initialMatchState());
@@ -479,8 +507,8 @@
 		const st = session ? get(session.status) : 'reconnecting';
 		closeSession();
 		joinError = st === 'connected'
-			? `No open game with code “${room}”.`
-			: `Couldn't reach the server — check your connection and try again.`;
+			? `No open game “${room}”.`
+			: `Can't reach the server — try again.`;
 		clearActive();
 		mode = 'join';
 	}
@@ -679,7 +707,7 @@
 		<!-- landing · role · admin · menu · join: the crest and one column of steps beside the island -->
 		<main class="screen s-col" class:landing={mode === 'landing'} class:compact={mode === 'join' || mode === 'admin'} transition:reveal>
 			<div class="leftcol">
-				<button id="crest-home" class="home" on:click={onLogo} aria-label={mode === 'landing' ? 'Enter' : 'Main menu'}>
+				<button id="crest-home" class="home" bind:this={homeEl} on:click={onLogo} aria-label={mode === 'landing' ? 'Enter' : 'Main menu'}>
 					<img class="logo" src={logoImage} alt="Guards of Atlantis II" />
 				</button>
 				<div class="stage" style:height={stageH ? stageH + 'px' : ''}>
@@ -687,12 +715,11 @@
 						<div class="step enterstep" transition:reveal bind:clientHeight={h['landing']}>
 							<!-- the crest above is the way in (no separate Enter button) -->
 							<label class="crest-hint" for="crest-home"><span class="deskonly">Click</span><span class="phoneonly">Tap</span> the crest to enter</label>
-							{#if joining}<p class="t-small rejoin">Rejoining room {room}…</p>{/if}
+							<p class="t-small rejoin slot">{joining ? `Rejoining room ${room}…` : ''}</p>
 						</div>
 					{:else if mode === 'choose'}
 						<div class="step" transition:reveal bind:clientHeight={h['choose']}>
 							<header class="head"><span class="t-label">Guards of Atlantis II</span><h1 class="t-h1">Choose your role</h1></header>
-							{#if notice}<p class="alert notice">{notice}</p>{/if}
 							<div class="choices">
 								<button class="choice card p" on:click={goPlayer}>
 									<span class="choice-ic"><Icon name="user" /></span>
@@ -711,7 +738,7 @@
 							<header class="head"><span class="t-label">Admin</span><h1 class="t-h1">Enter the password</h1></header>
 							<section class="panel formpanel">
 								<label class="fld"><span class="t-label">Password</span><input class="field" class:is-error={pwError} type="password" placeholder="Password" bind:value={pw} on:keydown={onKey} autocomplete="off" /></label>
-								{#if pwError}<p class="msg-error err">Incorrect password.</p>{/if}
+								<p class="msg-error err slot">{pwError ? 'Incorrect password.' : ''}</p>
 								<div class="row">
 									<button class="btn btn-ghost" on:click={() => (mode = 'choose')}><Icon name="back" /> Back</button>
 									<button class="btn btn-duo" on:click={submitAdmin} disabled={busy || !pw}>{busy ? 'Checking…' : 'Unlock'}</button>
@@ -743,7 +770,7 @@
 									{/each}
 								</div>
 								<p class="t-small c-muted">{siteVer ? `${siteVer} is live for everyone.` : 'Live version unknown (no setting yet).'} Switching sends every player to that version the next time they open or refresh the site.</p>
-								{#if verErr}<p class="msg-error">{verErr}</p>{/if}
+								<p class="msg-error slot" title={verErr}>{verErr}</p>
 								{#if THIS_VERSION === 'release'}<p class="t-small c-muted">You're on the release build (/goa2/v1) — 1.0 plus 2.0's features as they come in. Not live yet.</p>{/if}
 								<a class="btn btn-ghost" href={base + '/preview'}>2.0 preview — pick features</a>
 							</section>
@@ -752,7 +779,6 @@
 					{:else if mode === 'menu'}
 						<div class="step" transition:reveal bind:clientHeight={h['menu']}>
 							<header class="head"><span class="t-label">{$role === 'admin' ? 'Admin' : 'Player'}</span><h1 class="t-h1">Play a game</h1></header>
-							{#if notice}<p class="alert notice">{notice}</p>{/if}
 							<div class="choices">
 								<button class="choice card p" on:click={() => (mode = 'create')}>
 									<span class="choice-ic"><Icon name="plus" /></span>
@@ -773,33 +799,32 @@
 							<section class="panel formpanel">
 								<label class="fld"><span class="t-label">Name</span><input class="field" bind:value={name} placeholder="Your name" /></label>
 								<label class="fld"><span class="t-label">Room code</span><input class="field field--code up" class:is-error={!!joinError} bind:value={room} on:input={() => (joinError = '')} maxlength="8" placeholder="Code" /></label>
-								{#if joinError}<p class="msg-error err">{joinError}</p>{/if}
+								<p class="msg-error err slot">{joinError}</p>
 								<div class="row">
 									<button class="btn btn-ghost" on:click={() => (mode = 'menu')}><Icon name="back" /> Back</button>
 									<button class="btn btn-duo" on:click={joinGame} disabled={!room.trim() || !name.trim() || joining}>{joining ? 'Joining…' : 'Join game'}</button>
 								</div>
 							</section>
-							{#if openRooms.length}
-								<section class="panel openpanel">
-									<span class="t-label">Open games</span>
-									<div class="glist">
-										{#each openRooms as r (r.room)}
-											{@const spectate = r.started || r.count >= r.seats}
-											<button class="listrow gcard" on:click={() => joinFromList(r)}>
-												<span class="state" class:is-live={r.started}></span>
-												<span class="who">
-													<span class="t-h3">{r.host} <span class="t-small t-mono">{r.room}</span></span>
-													<span class="sub">
-														<span class="seatdots">{#each Array(r.seats) as _, i (i)}<i class:on={i < r.count}></i>{/each}</span>
-														<span class="t-small">{r.started ? 'in progress' : `${r.count} / ${r.seats} seated`}</span>
-													</span>
+							<section class="panel openpanel">
+								<span class="t-label">Open games</span>
+								<div class="glist">
+									{#if !openRooms.length}<p class="t-small c-muted gempty">No open games right now.</p>{/if}
+									{#each openRooms as r (r.room)}
+										{@const spectate = r.started || r.count >= r.seats}
+										<button class="listrow gcard" on:click={() => joinFromList(r)}>
+											<span class="state" class:is-live={r.started}></span>
+											<span class="who">
+												<span class="t-h3">{r.host} <span class="t-small t-mono">{r.room}</span></span>
+												<span class="sub">
+													<span class="seatdots">{#each Array(r.seats) as _, i (i)}<i class:on={i < r.count}></i>{/each}</span>
+													<span class="t-small">{r.started ? 'in progress' : `${r.count} / ${r.seats} seated`}</span>
 												</span>
-												<span class="go">{spectate ? 'Spectate' : 'Join'} <Icon name="go" /></span>
-											</button>
-										{/each}
-									</div>
-								</section>
-							{/if}
+											</span>
+											<span class="go">{spectate ? 'Spectate' : 'Join'} <Icon name="go" /></span>
+										</button>
+									{/each}
+								</div>
+							</section>
 						</div>
 					{/if}
 				</div>
@@ -853,15 +878,19 @@
 									<div class="mapbox">
 										<div class="boardframe mapframe">
 											{#if chosenMap}<BoardCanvas bind:this={createBoard} map={chosenMap.data} look="island" interactive={false} pieces={[]} effects={false} />{/if}
-											<div class="cap mapcap"><span><b>{chosenMap?.label ?? 'No map'}</b></span></div>
+											<button class="mapnav prev" on:click={() => cycleMap(-1)} disabled={maps.length < 2} aria-label="Previous map"><Icon name="back" /></button>
+											<button class="mapnav next" on:click={() => cycleMap(1)} disabled={maps.length < 2} aria-label="Next map"><Icon name="go" /></button>
+											<div class="cap mapcap"><span><b>{chosenMap?.label ?? 'No map'}</b>{#if maps.length > 1} · {mapIndex + 1} / {maps.length}{/if}</span></div>
 										</div>
 										<div class="mapmeta">
+											<div class="maprow">
 											<div class="t-h3 mapname">{chosenMap?.label ?? 'No map'}</div>
-											{#if maps.length > 1}
-												<div class="mapchips">{#each maps as m (m.id)}<button class="chip" class:is-on={mapId === m.id} on:click={() => (mapId = m.id)}>{m.label}</button>{/each}</div>
-											{:else}
-												<span class="tag"><Icon name="check" /> Selected</span>
-											{/if}
+											<span class="mapstep">
+												<button class="pbtn" on:click={() => cycleMap(-1)} disabled={maps.length < 2} aria-label="Previous map"><Icon name="back" /></button>
+												{#if maps.length > 1}<span class="t-small">{mapIndex + 1} / {maps.length}</span>{/if}
+												<button class="pbtn" on:click={() => cycleMap(1)} disabled={maps.length < 2} aria-label="Next map"><Icon name="go" /></button>
+											</span>
+											</div>
 											<div class="msum">{@render counts()}</div>
 										</div>
 									</div>
@@ -891,14 +920,11 @@
 									<p class="t-small cxhint">Light up every complexity you want in the hero pool. 4-star heroes are coming soon.</p>
 								</div>
 							</div>
-							{#if poolShort}
-								<p class="alert warn">Only {eligibleCount} heroes — need {poolNeed} for {DRAFT_LABELS[draftSystem]} with {playerCount} players.</p>
-							{/if}
 						</div>
 					</div>
 					<footer class="cfoot">
 						<button class="btn btn-ghost" on:click={() => (mode = 'menu')}><Icon name="back" /> Back</button>
-						<div class="csum">{@render counts()}<span class="pill">{playerCount} seats</span><span class="pill" class:pill--bad={poolShort} title="Heroes in the pool">{eligibleCount} heroes</span></div>
+						<div class="csum">{@render counts()}<span class="pill">{playerCount} seats</span><span class="pill" class:pill--bad={poolShort} title={poolShort ? `Only ${eligibleCount} heroes — ${DRAFT_LABELS[draftSystem]} with ${playerCount} players needs ${poolNeed}` : 'Heroes in the pool'}>{eligibleCount}{poolShort ? ` / ${poolNeed}` : ''} heroes</span></div>
 						<button class="btn btn-duo createbtn" on:click={createGame} disabled={poolShort || !name.trim()}>Create game</button>
 					</footer>
 				</section>
@@ -934,9 +960,6 @@
 							{/if}
 						</div>
 					</header>
-					{#if $connStatus === 'reconnecting' || $connStatus === 'closed'}
-						<p class="alert alert--warn connbanner">Connection lost — trying to reconnect. Your seat is held.</p>
-					{/if}
 
 					<div class="ltable">
 						{@render teamPanel('orange', orangeSeats, orangeCount)}
@@ -960,9 +983,7 @@
 									<button title={c.label} aria-label={c.label} class="swatch sw" class:is-on={(mySeat < 0 ? pick : color) === c.id} class:sel={(mySeat < 0 ? pick : color) === c.id} class:is-locked={!takenColors.has(c.id)} disabled={takenColors.has(c.id) || (mySeat >= 0 && ready)} style="--sc:{c.hex}" on:click={() => pickColor(c.id)}></button>
 								{/each}
 							</div>
-							{#if spectators.length}
-								<p class="t-small specs"><span class="speclbl">Spectating:</span>{#each spectators as sp (sp.id)}<span class="spec"><span class="c-ink">{sp.name}{sp.id === session?.clientId ? ' (you)' : ''}</span>{#if iAmHost && sp.id !== session?.clientId}<button class="seat-kick kickx" title="Kick" aria-label="Kick {sp.name}" on:click={() => kick(sp.id)}><Icon name="x" /></button>{/if}</span>{/each}</p>
-							{/if}
+							<p class="t-small specs slot">{#if spectators.length}<span class="speclbl">Spectating:</span>{#each spectators as sp (sp.id)}<span class="spec"><span class="c-ink">{sp.name}{sp.id === session?.clientId ? ' (you)' : ''}</span>{#if iAmHost && sp.id !== session?.clientId}<button class="seat-kick kickx" title="Kick" aria-label="Kick {sp.name}" on:click={() => kick(sp.id)}><Icon name="x" /></button>{/if}</span>{/each}{/if}</p>
 						</div>
 					</section>
 				</div>
@@ -974,18 +995,20 @@
 					{:else}
 						<button class="btn btn-ghost on-art leave" on:click={leaveRoom}>Leave</button>
 					{/if}
-					{#if iAmHost && !allReady}<p class="t-small lhint">Everyone seated must ready up<span class="deskonly">{' '}before you can begin</span>.</p>{:else if !iAmHost && mySeat >= 0 && ready}<p class="t-small lhint">Waiting for the host to begin.</p>{/if}
+					<p class="t-small lhint">{#if iAmHost && !allReady}Everyone seated must ready up<span class="deskonly">{' '}before you can begin</span>.{:else if !iAmHost && mySeat >= 0 && ready}Waiting for the host to begin.{/if}</p>
 					{#if mySeat >= 0}
 						<button class="btn btn-ready btn-lg" class:is-on={ready} class:isready={ready} on:click={toggleReady}>{#if ready}<Icon name="check" /> Ready{:else}Ready up{/if}</button>
 					{/if}
 					{#if iAmHost}
-						<button class="btn btn-primary btn-lg" disabled={!allReady} on:click={beginGame}>Begin</button>
+						<button class="btn btn-duo btn-lg beginbtn" disabled={!allReady} on:click={beginGame}>Begin</button>
 					{/if}
 				</footer>
 			</div>
 		</main>
 	{/if}
-	{#if seatNotice}<div class="toast toast--plain pretoast">{seatNotice}</div>{/if}
+	{#if seatNotice}<div class="toast toast--plain pretoast">{seatNotice}</div>
+	{:else if notice}<div class="toast toast--plain pretoast">{notice}</div>
+	{:else if mode === 'lobby' && ($connStatus === 'reconnecting' || $connStatus === 'closed')}<div class="toast toast--plain pretoast warntoast">Connection lost — reconnecting. Your seat is held.</div>{/if}
 </div>
 {/if}
 
@@ -1018,13 +1041,24 @@
 	.logo { display: block; width: 100%; height: auto; filter: drop-shadow(0 14px 30px rgba(0, 0, 0, 0.6)); }
 	.row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 	.vrule { align-self: stretch; width: 1px; background: var(--hair); }
-	.pretoast { position: absolute; top: 18px; left: 50%; transform: translateX(-50%); z-index: 30; }
+	.pretoast { position: absolute; top: 18px; left: 50%; transform: translateX(-50%); z-index: 30; max-width: calc(100% - 32px); text-align: center; }
+	.warntoast { border-color: rgba(240, 160, 60, 0.7); color: #ffd9a8; }
+	/* fixed slots: a message that comes and goes never changes a window's size */
+	.slot { min-height: 1.35em; margin: 0; line-height: 1.35; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+	.gempty { margin: auto; text-align: center; }
+	/* the map window: step through the maps */
+	.mapnav { position: absolute; top: 50%; transform: translateY(-50%); z-index: 3; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; cursor: pointer;
+		color: var(--brass-hi); background: rgba(4, 14, 26, 0.82); border: 1px solid var(--brass-line); }
+	.mapnav.prev { left: 10px; } .mapnav.next { right: 10px; }
+	.mapnav:hover:not(:disabled) { border-color: var(--brass); }
+	.mapnav:disabled { opacity: 0.35; cursor: default; }
+	.mapstep { display: none; align-items: center; gap: 8px; }
 
 	/* ------------------------------------------------ landing · role · admin · menu · join */
 	.s-col { padding: 32px max(40px, 7%); }
 	.leftcol { width: 420px; max-width: 100%; margin: auto 0; display: flex; flex-direction: column; align-items: flex-start; }
 	.s-col.landing .leftcol { width: 540px; }
-	.s-col .home { width: 168px; margin: 0 0 20px -10px; transition: width 0.6s cubic-bezier(0.2, 0.85, 0.2, 1), margin 0.6s cubic-bezier(0.2, 0.85, 0.2, 1); }
+	.s-col .home { width: 168px; margin: 0 0 20px -10px; transform-origin: 0 0; will-change: transform; }
 	.s-col.compact .home { width: 124px; margin-bottom: 14px; }
 	.s-col.landing .home { width: 520px; margin: 0 0 22px -18px; }
 	.s-col.landing .logo { filter: drop-shadow(0 20px 46px rgba(0, 0, 0, 0.65)) drop-shadow(0 0 34px rgba(216, 179, 106, 0.26)); }
@@ -1066,7 +1100,8 @@
 	.step .verpanel { display: flex; flex-direction: column; gap: 10px; padding: 16px 22px 18px; margin-top: 14px; }
 	.verpanel .vers { display: flex; gap: 10px; }
 	.verpanel .vers .btn { flex: 1; }
-	.glist { display: flex; flex-direction: column; gap: 8px; max-height: 216px; overflow-y: auto; }
+	/* a fixed-size list (it never grows the window): as tall as the screen allows, up to three rows */
+	.glist { display: flex; flex-direction: column; gap: 8px; height: clamp(96px, calc(var(--vh, 1vh) * 17), 216px); overflow-y: auto; }
 
 	/* ------------------------------------------------------------------- create game */
 	/* a little more water over the island behind a full screen of panels */
@@ -1088,13 +1123,11 @@
 	.mapframe { flex: 1; min-height: 240px; }
 	.mapframe .mapcap { justify-content: flex-start; }
 	.mapframe .mapcap > span { font-size: var(--fs-h3); padding: 8px 18px; }
-	.mapmeta .mapname, .mapmeta .tag, .mapmeta .msum { display: none; } /* (phones show these beside a small picture) */
-	.mapchips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+	.mapmeta .mapname, .mapmeta .msum { display: none; } /* (phones show these beside a small picture) */
 	.cxchips { display: flex; gap: 8px; }
 	.cxchips .chip { flex: 1 1 0; min-width: 0; min-height: 56px; padding: 0 4px; }
 	.cxchips :global(.ico) { width: 20px; height: 20px; }
 	.cxhint { color: var(--ink-2); max-width: 44ch; }
-	.cform .warn { margin-top: 14px; }
 	.cfoot { display: flex; align-items: center; gap: 16px; margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--hair); }
 	.csum { display: flex; flex-wrap: nowrap; justify-content: center; align-items: center; gap: 8px; margin: 0 auto; white-space: nowrap; }
 	/* waves / Life with their own ± — the counts are edited where they are shown */
@@ -1142,13 +1175,13 @@
 	.scol .swatches { flex-wrap: nowrap; align-items: center; gap: 8px; min-height: 44px; }
 	.swatch.is-locked:disabled { opacity: 0.5; background: var(--sc); box-shadow: inset 0 2px 3px rgba(255, 255, 255, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.3); }
 	.swatch.is-locked.is-on:disabled { opacity: 1; box-shadow: inset 0 2px 3px rgba(255, 255, 255, 0.25), 0 0 0 2px var(--deep), 0 0 0 4px var(--brass-hi); }
-	.specs { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 16px; min-height: 30px; }
+	.specs { display: flex; flex-wrap: nowrap; align-items: center; gap: 2px 16px; height: 30px; overflow: hidden; }
 	.speclbl { margin-right: -8px; }
 	.spec { display: inline-flex; align-items: center; gap: 2px; }
 	.spec .kickx { width: 30px; height: 30px; }
 	/* a guest reads the host's choice: still brass (blue only ever means the Titans), just quieter */
 	.lbox .lactions { display: flex; align-items: center; gap: 14px; padding: 12px 14px; }
-	.lactions .lhint { flex: 1; text-align: right; color: var(--ink); text-shadow: 0 1px 6px rgba(0, 0, 0, 0.8); }
+	.lactions .lhint { flex: 1; min-height: 1.35em; margin: 0; text-align: right; color: var(--ink); text-shadow: 0 1px 6px rgba(0, 0, 0, 0.8); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 	.lactions .btn-lg { min-width: 190px; }
 	.lactions .leave { min-width: 120px; margin-right: auto; }
 
@@ -1194,7 +1227,7 @@
 		.deskonly { display: none; }
 		.phoneonly { display: inline; }
 		.pre, .coinoverlay { --fs-label: 15px; } /* labels are sentences here: nothing under 15px on a phone */
-		.s-col { padding: 20px 16px 24px; }
+		.s-col { padding: clamp(10px, 2.4dvh, 20px) 16px clamp(12px, 2.8dvh, 24px); }
 		.leftcol { width: 100%; margin: auto; align-items: center; }
 		.s-col .home { width: 132px; margin: 0 0 14px; }
 		.s-col.compact .home { width: 96px; margin-bottom: 10px; }
@@ -1222,7 +1255,6 @@
 		.cgrid, .ccol { display: contents; }
 		.cform .vrule, .crule { display: none; }
 		.g-map { order: 9; }
-		.cform .warn { order: 10; margin-top: 0; }
 		.cform :global(.seg-opt.has-sub) { min-height: 46px; }
 		.cform :global(.seg-opt .sub) { display: none; }
 					.cxchips { gap: 6px; }
@@ -1233,12 +1265,11 @@
 		.mapbox .mapframe { flex: none; width: 118px; height: 72px; min-height: 0; border-radius: var(--r-md); }
 		.mapframe .mapcap { display: none; }
 		.mapmeta { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; }
-		.mapmeta .mapname, .mapmeta .tag { display: inline-flex; }
+		.mapmeta .mapname { display: inline-flex; }
 		.mapmeta .msum { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
 		.msum .pstep { padding-top: 2px; padding-bottom: 2px; }
 		.msum .pbtn { width: 22px; height: 22px; }
-		.mapchips { margin-top: 0; }
-		.cfoot { flex: none; gap: 8px; margin: 0; padding: 10px 12px 12px; background: rgba(4, 15, 28, 0.95); border-top: 1px solid var(--brass-line); box-shadow: 0 -12px 30px rgba(0, 6, 14, 0.5); }
+			.cfoot { flex: none; gap: 8px; margin: 0; padding: 10px 12px 12px; background: rgba(4, 15, 28, 0.95); border-top: 1px solid var(--brass-line); box-shadow: 0 -12px 30px rgba(0, 6, 14, 0.5); }
 		.csum { display: none; }
 		.createbtn { flex: 1; min-width: 0; }
 
@@ -1293,5 +1324,64 @@
 		.lactions .leave { flex: 0 0 92px; min-width: 0; margin: 0; padding: 0 8px; min-height: var(--h-btn-lg); }
 
 		.coinring { width: 190px; height: 190px; }
+
+		/* ONE screen on every phone: Create and the lobby size themselves to the screen's height
+		   (dvh = the visible height, browser bars excluded), so nothing ever scrolls */
+		.mapnav { display: none; }
+		.mapstep { display: inline-flex; }
+		.mapstep .pbtn { width: 26px; height: 26px; }
+		.s-create, .s-lobby { --h-btn: clamp(38px, 6.2dvh, 50px); --h-btn-lg: clamp(42px, 7dvh, 56px); }
+		.chead { padding: clamp(6px, 1.2dvh, 12px) 12px clamp(4px, 0.9dvh, 8px); }
+		.chead .home { width: clamp(34px, 6dvh, 46px); }
+		.cbody { overflow: hidden; padding: 2px 12px clamp(6px, 1.2dvh, 14px); }
+		.cform { gap: clamp(5px, 1.1dvh, 12px); padding: clamp(9px, 1.6dvh, 14px); }
+		.cform :global(.fld) { gap: clamp(3px, 0.7dvh, 8px); }
+		.cform :global(.seg-opt.has-sub), .cform :global(.seg-opt) { min-height: clamp(32px, 5.3dvh, 46px); }
+		.cxchips .chip { min-height: clamp(32px, 5.3dvh, 46px); }
+		.mapbox .mapframe { width: clamp(84px, 14dvh, 118px); height: clamp(52px, 8.6dvh, 72px); }
+		.mapmeta { gap: clamp(3px, 0.6dvh, 6px); }
+		.cfoot { padding: clamp(6px, 1.1dvh, 10px) 12px clamp(8px, 1.4dvh, 12px); }
+
+		.lbody { overflow: hidden; gap: clamp(5px, 1dvh, 10px); padding: clamp(6px, 1.1dvh, 10px) 12px clamp(6px, 1.2dvh, 14px); }
+		.ltop .home { width: clamp(34px, 6dvh, 46px); }
+		.roomblock .roomcode { font-size: clamp(22px, 3.8dvh, 30px); }
+		.ltop .copybtn { min-height: clamp(34px, 5.6dvh, 44px); }
+		.lboard { height: clamp(48px, 11dvh, 124px); }
+		.lyou { min-height: clamp(34px, 5.6dvh, 44px); }
+		.lyou .flipbtn { min-height: clamp(34px, 5.6dvh, 44px); }
+		.lbody :global(.band) { min-height: clamp(32px, 5.2dvh, 44px); }
+		.tseats, .tseats.many { gap: clamp(3px, 0.7dvh, 6px); padding: clamp(4px, 0.9dvh, 8px); }
+		.tseats .seat, .tseats.many .seat { min-height: clamp(40px, 7dvh, 62px); padding-top: 3px; padding-bottom: 3px; }
+		.tseats .token { width: clamp(28px, 5dvh, 40px); height: clamp(28px, 5dvh, 40px); font-size: clamp(13px, 2.1dvh, 17px); }
+		.lbody .setup { gap: clamp(5px, 1dvh, 14px); padding: clamp(7px, 1.2dvh, 12px); }
+		.scol .swatches { gap: clamp(4px, 0.8dvh, 8px); min-height: 0; }
+		.swatches .swatch { max-width: clamp(28px, 5dvh, 44px); }
+		.specs { height: clamp(20px, 3.2dvh, 30px); }
+		.lbox .lactions { gap: clamp(5px, 0.9dvh, 8px); padding: clamp(6px, 1.1dvh, 10px) 12px clamp(8px, 1.4dvh, 12px); }
+		.lactions .lhint { white-space: nowrap; }
+		/* "soon" options: a dimmed style is enough on a phone (no extra line of text) */
+		.cform :global(.seg-opt .soon), .cxchips :global(.soon) { display: none; }
+		.maprow { display: flex; align-items: center; gap: 8px; min-width: 0; }
+		.maprow .mapname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; }
+		.mapstep { flex: none; gap: 4px; white-space: nowrap; }
+		.lboard :global(.cap > span) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; font-size: 13px; padding: 3px 10px; }
+		.mapmeta .msum { flex-direction: row; flex-wrap: nowrap; gap: 4px; }
+		.msum .pstep { font-size: 13px; gap: 3px; padding-left: 2px; padding-right: 2px; }
+		/* join: the crest and the open-games list follow the screen's height */
+		.s-col.compact .home { width: clamp(48px, 9dvh, 96px); margin-bottom: clamp(4px, 1dvh, 10px); }
+		.glist { height: clamp(48px, 14dvh, 216px); }
+		.step .openpanel { padding: 10px 14px 12px; gap: 6px; }
+		.step .formpanel { gap: clamp(8px, 1.6dvh, 14px); padding: clamp(10px, 1.8dvh, 16px); }
+		/* the lobby on a short screen: the seat's second line goes, the swatches shrink */
+		.tseats :global(.state) { font-size: 13px; }
+		.swatches .swatch { max-width: clamp(26px, 4.6dvh, 44px); }
+	}
+	@media (max-width: 380px) {
+		.lbody :global(.band) { font-size: 14px; }
+	}
+	@media (max-width: 760px) and (max-height: 800px) {
+		.tseats .seat.seat--open :global(.state) { display: none; }
+		.tseats .seat, .tseats.many .seat { min-height: clamp(36px, 6dvh, 50px); }
+		.lblrow .hint { display: none; }
 	}
 </style>
