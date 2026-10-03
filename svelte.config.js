@@ -10,7 +10,8 @@ const config = {
 	kit: {
 		adapter: adapter(),
 		paths: {
-			base: dev ? '' : '/goa2',
+			// BASE_PATH lets the deploy build version 1.0 under /goa2/v1 (see siteVersion.ts)
+			base: dev ? '' : (process.env.BASE_PATH ?? '/goa2'),
 		},
 		// Poll for new deploys so the app self-updates without a manual hard refresh.
 		version: {

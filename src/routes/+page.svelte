@@ -10,6 +10,7 @@
 	import coinBlue from '$lib/images/tiebreaker_blue.png';
 	import { reveal } from '$lib/transitions';
 	import { role, tryAdmin, enterAsPlayer, signOut } from '$lib/role';
+	import { THIS_VERSION, SITE_VERSIONS, fetchSiteVersion, setSiteVersion, goToVersion, type SiteVersion } from '$lib/siteVersion';
 	import { availableMaps, type MapChoice } from '$lib/maps';
 	import { announceRoom, browseRooms, type RoomInfo } from '$lib/lobby';
 	import { claimIdentity, tabClientId, writeTicket, clearTicket, type ResumeTicket } from '$lib/identity';
@@ -297,6 +298,22 @@
 		busy = false;
 		if (ok) mode = 'adminhub';
 		else { pwError = true; pw = ''; }
+	}
+
+	// --- GM: which version of the site is live (1.0 / 2.0) for everyone ---
+	let siteVer: SiteVersion | null = null;
+	let verBusy = false, verErr = '';
+	$: if (mode === 'adminhub') loadSiteVersion();
+	async function loadSiteVersion() { siteVer = (await fetchSiteVersion()) ?? null; }
+	async function switchVersion(v: SiteVersion) {
+		if (v === siteVer && v === THIS_VERSION) return;
+		if (!confirm(`Switch the whole site to version ${v}? Everyone is sent there the next time they open or refresh it.`)) return;
+		verBusy = true; verErr = '';
+		const err = await setSiteVersion(v);
+		verBusy = false;
+		if (err) { verErr = err; return; }
+		siteVer = v;
+		goToVersion(v);
 	}
 	function onKey(e: KeyboardEvent) { if (e.key === 'Enter') submitAdmin(); }
 
@@ -604,6 +621,18 @@
 						<span class="ic"><svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="#fdba74" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z" /><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" /><path d="M2 2l7.586 7.586" /><circle cx="11" cy="11" r="2" /></svg></span>
 						<span class="t">Map editor</span><span class="s">Paint maps & battle zones</span>
 					</a>
+				</div>
+				<div class="verpanel">
+					<span class="vlbl">Site version</span>
+					<div class="vers">
+						{#each SITE_VERSIONS as v (v)}
+							<button class:primary={siteVer === v} class:ghost={siteVer !== v} disabled={verBusy} on:click={() => switchVersion(v)}>
+								{v}{v === THIS_VERSION ? ' · this one' : ''}
+							</button>
+						{/each}
+					</div>
+					<p class="hint">{siteVer ? `${siteVer} is live for everyone.` : 'Live version unknown (no setting yet).'} Switching sends every player to that version the next time they open or refresh the site.</p>
+					{#if verErr}<p class="err">{verErr}</p>{/if}
 				</div>
 				<div class="row center"><button class="ghost" on:click={goHome}>Sign out</button></div>
 			</div>
@@ -954,6 +983,11 @@
 	.gstatus { font-size: 0.68rem; color: #94a3b8; white-space: nowrap; }
 	.garrow { font-size: 0.75rem; font-weight: 600; color: #fdba74; opacity: 0.75; white-space: nowrap; transition: opacity 0.14s, transform 0.14s; }
 	.err { color: #fca5a5; font-size: 0.82rem; margin: 0; }
+	.verpanel { display: flex; flex-direction: column; gap: 8px; margin: 14px 0 4px; padding: 14px 16px; border-radius: 14px;
+		background: rgba(12, 18, 32, 0.46); border: 1px solid rgba(255, 255, 255, 0.12); backdrop-filter: blur(8px); }
+	.verpanel .vlbl { font-size: 0.68rem; letter-spacing: 0.12em; text-transform: uppercase; color: #b8a06a; }
+	.verpanel .vers { display: flex; gap: 10px; }
+	.verpanel .vers button { flex: 1; }
 	.row { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
 	.boardopts { display: grid; grid-template-columns: auto auto; align-items: center; justify-content: center; gap: 6px 12px; margin: 2px 0 4px; }
 	.boardopts .bolbl { text-align: right; }
