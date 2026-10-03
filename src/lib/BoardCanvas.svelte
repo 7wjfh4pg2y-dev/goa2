@@ -55,6 +55,9 @@
 	export let seaStill = false;
 	// the board's moving effects — the sea, the minions' turning rims, the battle zone's pulse (a host option)
 	export let effects = true;
+	/** Screen space the HUD covers (css px from each edge). The island's resting view — the one `reset()` returns
+	 *  to — is fitted into what is left, while the sea still fills the whole box. null = fit the whole box. */
+	export let inset: { t: number; b: number; l?: number; r?: number } | null = null;
 
 	const SQRT3 = Math.sqrt(3);
 	const tileSprites = import.meta.glob('./images/tiles/*.png', { eager: true, import: 'default' }) as Record<string, string>;
@@ -239,6 +242,7 @@
 		const q = new DOMPoint(before.x, before.y).matrixTransform(baseM());
 		panX = target.x - q.x; panY = target.y - q.y; // keep `before` under the cursor
 		clampPan();
+		atHome = false;
 	}
 	export function zoomBtn(f: number) {
 		const r = wrapEl?.getBoundingClientRect();
@@ -246,7 +250,17 @@
 		zoomAt(scale * f, r.left + r.width / 2, r.top + r.height / 2);
 	}
 	export function rotateBy(deg: number) { spin += deg; }
-	export function reset() { scale = 1; panX = 0; panY = 0; spin = 0; }
+	export function reset() { spin = 0; atHome = true; scale = home?.scale ?? 1; panX = home?.panX ?? 0; panY = home?.panY ?? 0; }
+	// The resting view when the HUD takes a slice of the box (`inset`): the island a little smaller and moved to the
+	// middle of the free area. It follows the window until the player pans, zooms or loads a saved view (`atHome`).
+	$: home = (() => {
+		if (!inset || !fit) return null;
+		const l = inset.l ?? 0, r = inset.r ?? 0, trim = size * 1.3; // the viewBox carries a wide margin; the free area needs little
+		const fw = Math.max(120, wrapW - l - r), fh = Math.max(120, wrapH - inset.t - inset.b);
+		return { scale: Math.min(fw / (bounds.w - 2 * trim), fh / (bounds.h - 2 * trim)) / fit.s, panX: (l - r) / 2 / fit.s, panY: (inset.t - inset.b) / 2 / fit.s };
+	})();
+	let atHome = true;
+	$: if (home && atHome && !staged) { scale = home.scale; panX = home.panX; panY = home.panY; }
 	// saved views: rotation (relative to your team's orientation), zoom and pan
 	type BoardView = { spin: number; scale: number; panX: number; panY: number };
 	/** Put down whatever is picked up (tap-to-move hold / carry). */
@@ -261,7 +275,16 @@
 		return { x: pt.x, y: pt.y, r: size * 0.8 * Math.hypot(m.a, m.b) };
 	}
 	export function getView(): BoardView { return { spin: ((spin % 360) + 360) % 360, scale, panX, panY }; }
-	export function setView(v: BoardView) { spin = v.spin; scale = clamp(v.scale, 0.4, 8); panX = v.panX; panY = v.panY; clampPan(); }
+	export function setView(v: BoardView) { atHome = false; spin = v.spin; scale = clamp(v.scale, 0.4, 8); panX = v.panX; panY = v.panY; clampPan(); }
+	/** Stage the board as a picture (the pre-game backdrop): its centre at (fx, fy) of the box — 0.5, 0.5 is the
+	 *  middle — at zoom `s` (1 = the whole board fits). Not clamped: it may sit partly off screen. */
+	export function place(fx: number, fy: number, s: number) { staged = { fx, fy, s }; }
+	// (kept and re-applied whenever the box is measured or resized)
+	let staged: { fx: number; fy: number; s: number } | null = null;
+	$: if (staged && fit) {
+		spin = 0; scale = staged.s;
+		panX = ((staged.fx - 0.5) * wrapW) / fit.s; panY = ((staged.fy - 0.5) * wrapH) / fit.s;
+	}
 
 	function onWheel(e: WheelEvent) {
 		if (!interactive) return;
@@ -276,6 +299,7 @@
 			panX -= e.deltaX / m.a;
 			panY -= e.deltaY / m.d;
 			clampPan();
+			atHome = false;
 		}
 	}
 	// ---- pan / move-piece interaction -----------------------------------------
@@ -387,6 +411,7 @@
 			const p = toUser(e.clientX, e.clientY);
 			panX = pan0.x + (p.x - p0.x); panY = pan0.y + (p.y - p0.y);
 			clampPan();
+			atHome = false;
 		}
 	}
 	function up(e: PointerEvent) {
@@ -689,7 +714,7 @@
 	.ping .pdot { fill: var(--pc); stroke: #fff; stroke-width: 1.5; animation: pdot 3.5s ease forwards; }
 	@keyframes pring { 0% { transform: scale(.25); opacity: 1; } 100% { transform: scale(1.6); opacity: 0; } }
 	@keyframes pdot { 0% { opacity: 0; } 8% { opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; } }
-	.selring { animation: spin 8s linear infinite; transform-box: fill-box; transform-origin: center; }
+	.selring { transform-box: fill-box; transform-origin: center; }
 	/* minion rims (see `rimPieces`): drawn three times too big and scaled down, so they stay sharp when the board is zoomed in */
 	.rims { position: absolute; inset: 0; transform-origin: 0 0; pointer-events: none; }
 	.rim { position: absolute; }

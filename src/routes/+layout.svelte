@@ -1,5 +1,6 @@
 <script lang="ts">
 	import '../app.postcss';
+	import '$lib/ui/tide.css';
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
 	import { updated } from '$app/stores';
@@ -23,7 +24,7 @@
 	});
 </script>
 
-<!-- Global battlefield background, fixed behind every page -->
+<!-- Global backdrop, fixed behind every page -->
 <div class="app-bg" aria-hidden="true"></div>
 
 <slot />
@@ -33,19 +34,9 @@
 		position: fixed;
 		inset: 0;
 		z-index: -1;
-		/* Orange (top-left) & blue (bottom-right) armies dominate and blend through a
-		   purple centre; the map's green wilds lightly tint the other two corners. */
-		background:
-			radial-gradient(70% 70% at 100% 0%, rgba(46, 132, 78, 0.3) 0%, transparent 55%),
-			radial-gradient(70% 70% at 0% 100%, rgba(46, 132, 78, 0.3) 0%, transparent 55%),
-			linear-gradient(
-				135deg,
-				rgba(216, 100, 26, 0.98) 0%,
-				rgba(200, 88, 34, 0.92) 24%,
-				rgba(122, 66, 146, 0.88) 50%,
-				rgba(40, 112, 168, 0.92) 76%,
-				rgba(34, 104, 162, 0.98) 100%
-			);
-		background-color: #17243a;
+		/* Deep water (the Tide theme): the pre-game screens put the live island and sea on top of this;
+		   the editor and the lab pages just get the calm navy. */
+		background: radial-gradient(120% 90% at 50% 40%, #0e4f80 0%, #08304f 45%, #06182a 100%);
+		background-color: #06182a;
 	}
 </style>
