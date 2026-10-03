@@ -1,3 +1,7 @@
+<script lang="ts" module>
+	let islands = 0;
+</script>
+
 <svelte:options namespace="svg" />
 <script lang="ts">
 	// The island, drawn from the map data alone (so any map made in the editor gets the same
@@ -28,6 +32,9 @@
 	export let coast = '';
 	/** terrain hex → a kind of scatter terrain (scatter.ts); none = a boulder */
 	export let scatter: Record<string, string> = {};
+	// every island on the page gets its OWN ids for its drawings: two islands sharing ids (the backdrop
+	// plus the Create preview) made the browser re-resolve every <use> on the page on each mount / unmount
+	const P = `isl${++islands}-`;
 
 	// minion spawn points: the emblem's radius on the hex (in hex sizes), and the two teams' inks
 	const EMBLEM = 0.6;
@@ -227,32 +234,32 @@
 <defs>
 	{#each ZS as z}
 		{#each VARIANTS as dv, v}
-			<radialGradient id="isl-{z}-{v}" cx="0.5" cy="0.46" r="0.72">
+			<radialGradient id="{P}{z}-{v}" cx="0.5" cy="0.46" r="0.72">
 				<stop offset="0" stop-color={hsl(PAL[z].t, dv + 5)} />
 				<stop offset="0.72" stop-color={hsl(PAL[z].t, dv)} />
 				<stop offset="1" stop-color={hsl(PAL[z].t, dv - 8)} />
 			</radialGradient>
 		{/each}
 	{/each}
-	<radialGradient id="isl-brass" cx="0.4" cy="0.35" r="0.8"><stop offset="0" stop-color="#ffd08a" /><stop offset=".55" stop-color="#dd8a33" /><stop offset="1" stop-color="#96531a" /></radialGradient>
-	<radialGradient id="isl-steel" cx="0.4" cy="0.35" r="0.8"><stop offset="0" stop-color="#a9dcfa" /><stop offset=".55" stop-color="#3f86c4" /><stop offset="1" stop-color="#1c4573" /></radialGradient>
-	<radialGradient id="isl-slate" cx="0.45" cy="0.4" r="0.75"><stop offset="0" stop-color="#727a86" /><stop offset="1" stop-color="#3b414b" /></radialGradient>
-	<radialGradient id="isl-stone" cx="0.45" cy="0.4" r="0.75"><stop offset="0" stop-color="#96604a" /><stop offset="1" stop-color="#5a3325" /></radialGradient>
+	<radialGradient id="{P}brass" cx="0.4" cy="0.35" r="0.8"><stop offset="0" stop-color="#ffd08a" /><stop offset=".55" stop-color="#dd8a33" /><stop offset="1" stop-color="#96531a" /></radialGradient>
+	<radialGradient id="{P}steel" cx="0.4" cy="0.35" r="0.8"><stop offset="0" stop-color="#a9dcfa" /><stop offset=".55" stop-color="#3f86c4" /><stop offset="1" stop-color="#1c4573" /></radialGradient>
+	<radialGradient id="{P}slate" cx="0.45" cy="0.4" r="0.75"><stop offset="0" stop-color="#727a86" /><stop offset="1" stop-color="#3b414b" /></radialGradient>
+	<radialGradient id="{P}stone" cx="0.45" cy="0.4" r="0.75"><stop offset="0" stop-color="#96604a" /><stop offset="1" stop-color="#5a3325" /></radialGradient>
 
 	<!-- ── jungle ── everything is seen from straight above, lit evenly, so it can be turned any way -->
 	<!-- a palm: fronds round a trunk (46 units long) -->
-	<g id="isl-palm">
+	<g id="{P}palm">
 		{#each [0, 52, 103, 155, 206, 258, 309] as a, i}
 			<path transform="rotate({a})" d="M0 0C9 -13 29 -17 46 -5C30 -3 14 1 0 0Z" fill={i % 2 ? '#3c8a34' : '#2f7630'} />
 			<path transform="rotate({a})" d="M4 -1C16 -8 30 -9 42 -5" fill="none" stroke="#7cc45a" stroke-opacity=".5" stroke-width="1.6" stroke-linecap="round" />
 		{/each}
 		<circle r="5.5" fill="#4b3219" /><circle r="2.6" cx="-1" cy="-1" fill="#8a6a3a" />
 	</g>
-	<g id="isl-palm-shade">
+	<g id="{P}palm-shade">
 		{#each [0, 52, 103, 155, 206, 258, 309] as a}<path transform="rotate({a})" d="M0 0C9 -13 29 -17 46 -5C30 -3 14 1 0 0Z" />{/each}
 	</g>
 	<!-- a broadleaf tree's crown: lobes of leaves, darker underneath -->
-	<g id="isl-tree">
+	<g id="{P}tree">
 		{#each [0, 51, 103, 154, 206, 257, 309] as a}<circle transform="rotate({a})" cx="14" cy="0" r="10.5" fill="#1e5225" />{/each}
 		<circle r="15" fill="#1e5225" />
 		{#each [20, 80, 140, 200, 260, 320] as a}<circle transform="rotate({a})" cx="11.5" cy="0" r="8" fill="#2d7230" />{/each}
@@ -263,14 +270,14 @@
 		<circle cx="-2" cy="-2" r="1.6" fill="#9ad873" fill-opacity=".7" />
 	</g>
 	<!-- a low bush -->
-	<g id="isl-bush">
+	<g id="{P}bush">
 		<circle cx="-6" cy="3.5" r="9" fill="#27622a" /><circle cx="6" cy="4" r="9.4" fill="#27622a" /><circle cx="0" cy="-6" r="9.6" fill="#27622a" />
 		<circle cx="-5" cy="2" r="6.6" fill="#398233" /><circle cx="5" cy="2.6" r="7" fill="#398233" /><circle cx="0" cy="-5.6" r="7" fill="#398233" />
 		<circle cx="0" cy="-1" r="5.2" fill="#55a542" />
 		<circle cx="-5" cy="0" r="1.5" fill="#8fd06a" fill-opacity=".7" /><circle cx="4" cy="-5" r="1.4" fill="#8fd06a" fill-opacity=".7" /><circle cx="3.5" cy="4.5" r="1.3" fill="#8fd06a" fill-opacity=".7" />
 	</g>
 	<!-- a fern: a rosette of light fronds -->
-	<g id="isl-fern">
+	<g id="{P}fern">
 		{#each [0, 45, 90, 135, 180, 225, 270, 315] as a, i}
 			<path transform="rotate({a})" d="M0 0Q8 -3.4 {i % 2 ? 15 : 18} 0Q8 3.4 0 0Z" fill={i % 2 ? '#4c9a3e' : '#63b24b'} />
 			<path transform="rotate({a})" d="M2 0H{i % 2 ? 12 : 15}" stroke="#2f6b2a" stroke-opacity=".55" stroke-width=".9" />
@@ -278,69 +285,69 @@
 		<circle r="2.2" fill="#2f6b2a" />
 	</g>
 	<!-- three mushrooms, caps from above -->
-	<g id="isl-shroom">
+	<g id="{P}shroom">
 		<circle r="5.2" fill="#c93c29" stroke="#7d2217" stroke-width=".8" /><circle cx="-1.7" cy="-1.5" r="1.25" fill="#fff4e0" /><circle cx="1.9" cy=".5" r="1.05" fill="#fff4e0" /><circle cx="-.3" cy="2.7" r=".85" fill="#fff4e0" />
 		<circle cx="8.4" cy="5" r="3.5" fill="#d8532f" stroke="#7d2217" stroke-width=".7" /><circle cx="7.7" cy="4.2" r=".9" fill="#fff4e0" /><circle cx="9.5" cy="5.9" r=".7" fill="#fff4e0" />
 		<circle cx="-6.4" cy="6.8" r="2.7" fill="#e3b577" stroke="#8a6230" stroke-width=".6" />
 	</g>
 	<!-- a fallen log, moss along one side -->
-	<g id="isl-log">
+	<g id="{P}log">
 		<rect x="-16" y="-4.6" width="32" height="9.2" rx="4.6" fill="#6b4726" stroke="#3f2913" stroke-width="1" />
 		<path d="M-11 -1.6H5M-6 1.8H10M-13 1.4H-9" stroke="#4a3018" stroke-width="1.1" stroke-linecap="round" fill="none" />
 		<ellipse cx="14.6" cy="0" rx="3" ry="4.1" fill="#caa470" stroke="#7a5630" stroke-width=".9" /><ellipse cx="14.6" cy="0" rx="1.2" ry="1.8" fill="none" stroke="#9a7645" stroke-width=".7" />
 		<ellipse cx="-5" cy="-3.4" rx="6.5" ry="2.2" fill="#5f9c40" fill-opacity=".85" />
 	</g>
 	<!-- a scatter of small flowers -->
-	<g id="isl-flowers">
+	<g id="{P}flowers">
 		<circle cx="-5" cy="-2" r="2.5" fill="#f7c9e3" /><circle cx="-5" cy="-2" r=".95" fill="#f2c230" />
 		<circle cx="4" cy="-4.5" r="2.2" fill="#fff8ec" /><circle cx="4" cy="-4.5" r=".85" fill="#f2c230" />
 		<circle cx="2" cy="4.5" r="2.4" fill="#ffe27a" /><circle cx="2" cy="4.5" r=".9" fill="#e88a2a" />
 		<circle cx="-3.5" cy="5.5" r="1.7" fill="#f7c9e3" /><circle cx="-3.5" cy="5.5" r=".65" fill="#f2c230" />
 	</g>
 	<!-- a clump of grass from above: blades fanning out (green by the jungle, dry elsewhere) -->
-	<g id="isl-tuft">
+	<g id="{P}tuft">
 		{#each [8, 58, 112, 168, 222, 276, 328] as a, i}<path transform="rotate({a})" d="M0 0Q4 -1.6 {i % 2 ? 7.5 : 10.5} .4" fill="none" stroke={i % 3 ? '#5d9a3a' : '#86bf52'} stroke-width="1.7" stroke-linecap="round" />{/each}
 	</g>
-	<g id="isl-tuft-dry">
+	<g id="{P}tuft-dry">
 		{#each [8, 58, 112, 168, 222, 276, 328] as a, i}<path transform="rotate({a})" d="M0 0Q4 -1.6 {i % 2 ? 7 : 10} .4" fill="none" stroke={i % 3 ? '#9c9450' : '#bfb26a'} stroke-width="1.6" stroke-linecap="round" />{/each}
 	</g>
 	<!-- a dry shrub -->
-	<g id="isl-shrub">
+	<g id="{P}shrub">
 		<circle cx="-4" cy="2" r="6" fill="#6f7036" /><circle cx="4" cy="2.5" r="6.2" fill="#6f7036" /><circle cx="0" cy="-4" r="6.4" fill="#6f7036" />
 		<circle cx="-3" cy="1" r="4" fill="#8f8d45" /><circle cx="3" cy="1.6" r="4.2" fill="#8f8d45" /><circle cx="0" cy="-3.6" r="4.2" fill="#8f8d45" />
 		<circle cx="0" cy="-.6" r="2.6" fill="#aba757" />
 	</g>
 
 	<!-- ── beach ── -->
-	<g id="isl-ripple">
+	<g id="{P}ripple">
 		<path d="M-13 0Q-6 -5 0 0T13 0" fill="none" stroke="#fff6d8" stroke-opacity=".5" stroke-width="2.2" stroke-linecap="round" />
 		<path d="M-9 7Q-3 3 3 7T12 7" fill="none" stroke="#b78f4c" stroke-opacity=".38" stroke-width="2" stroke-linecap="round" />
 	</g>
-	<g id="isl-shell">
+	<g id="{P}shell">
 		<path d="M0 6.5C-8.5 4.5 -9.5 -4 -5.4 -7.2C-2.2 -9.4 2.2 -9.4 5.4 -7.2C9.5 -4 8.5 4.5 0 6.5Z" fill="#f7e0cc" stroke="#c39a7c" stroke-width="1" stroke-linejoin="round" />
 		<path d="M0 5.4L-5 -5.2M0 5.4L-2 -7.6M0 5.4L2 -7.6M0 5.4L5 -5.2" fill="none" stroke="#d6ad92" stroke-width=".9" stroke-linecap="round" />
 	</g>
-	<g id="isl-starfish">
+	<g id="{P}starfish">
 		<path d="M0 -8L1.9 -2.6L7.6 -2.5L3 1L4.7 6.5L0 3.2L-4.7 6.5L-3 1L-7.6 -2.5L-1.9 -2.6Z" fill="#e8764b" stroke="#e8764b" stroke-width="2.2" stroke-linejoin="round" />
 		<path d="M0 -8L1.9 -2.6L7.6 -2.5L3 1L4.7 6.5L0 3.2L-4.7 6.5L-3 1L-7.6 -2.5L-1.9 -2.6Z" fill="none" stroke="#a8472a" stroke-opacity=".35" stroke-width=".8" stroke-linejoin="round" />
 		<circle r="1.5" fill="#ffc9a8" fill-opacity=".85" /><circle cy="-4.6" r=".8" fill="#ffc9a8" fill-opacity=".8" /><circle cx="4.3" cy="-1.5" r=".8" fill="#ffc9a8" fill-opacity=".8" /><circle cx="-4.3" cy="-1.5" r=".8" fill="#ffc9a8" fill-opacity=".8" />
 	</g>
-	<g id="isl-driftwood">
+	<g id="{P}driftwood">
 		<path d="M-15 2Q-4 -3 8 -1Q13 0 16 -3M2 -1.6Q6 -6 9 -8" fill="none" stroke="#a88d68" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" />
 		<path d="M-12 1.2Q-4 -2.6 7 -1.4" fill="none" stroke="#d9c5a2" stroke-opacity=".8" stroke-width="1" stroke-linecap="round" />
 	</g>
-	<g id="isl-pebbles">
+	<g id="{P}pebbles">
 		<ellipse cx="-4" cy="1" rx="4.4" ry="3.3" fill="#8d867a" stroke="#5f5a52" stroke-width=".7" /><ellipse cx="-5" cy="0" rx="1.8" ry="1.1" fill="#b9b2a4" fill-opacity=".8" />
 		<ellipse cx="4" cy="-2.6" rx="3" ry="2.3" fill="#a79d8c" stroke="#6d665c" stroke-width=".6" />
 		<ellipse cx="3.4" cy="4.4" rx="2.1" ry="1.6" fill="#77716a" />
 	</g>
 
 	<!-- ── centre ── -->
-	<g id="isl-crack">
+	<g id="{P}crack">
 		<path d="M-10 -2L-3 2L1 -3L9 1M-3 2L-5 8" fill="none" stroke="#6b4a26" stroke-opacity=".34" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
 	</g>
 	<!-- old paving: two worn slabs -->
-	<g id="isl-slab">
+	<g id="{P}slab">
 		<rect x="-12" y="-7.5" width="15" height="13" rx="2.4" fill="#c7b288" stroke="#84704a" stroke-width="1.1" />
 		<path d="M-7 -7.5L-5 -1L-8.5 5.5" fill="none" stroke="#84704a" stroke-opacity=".8" stroke-width=".9" />
 		<rect x="-10" y="-5.4" width="4" height="2.6" rx="1" fill="#e3d4ae" fill-opacity=".7" />
@@ -349,50 +356,50 @@
 
 	<!-- ── the Atlanteans' base: machinery ── -->
 	<!-- a riveted deck plate: seams and rivets across the whole hex -->
-	<g id="isl-plate">
+	<g id="{P}plate">
 		<path d="M-44 -9H44M-9 -9V43M17 -9V-46" fill="none" stroke="#4a2209" stroke-opacity=".5" stroke-width="2.2" />
 		<path d="M-44 -6.6H44M-6.6 -6V43" fill="none" stroke="#ffd9a0" stroke-opacity=".22" stroke-width="1" />
 		{#each [[-36, -17], [-12, -17], [8, -17], [36, -17], [-36, -1], [-17, -1], [-1, -1], [36, -1], [-17, 30], [-1, 30], [9, -38], [25, -38]] as [x, y]}
 			<circle cx={x} cy={y} r="2.1" fill="#ffcf8c" fill-opacity=".8" stroke="#4a2209" stroke-opacity=".6" stroke-width=".8" />
 		{/each}
 	</g>
-	<g id="isl-vent">
+	<g id="{P}vent">
 		<rect x="-11" y="-8" width="22" height="16" rx="3" fill="#2e1b0e" stroke="#e3a455" stroke-width="1.7" />
 		<path d="M-7.5 -4.5H7.5M-7.5 -1.5H7.5M-7.5 1.5H7.5M-7.5 4.5H7.5" fill="none" stroke="#8a5a2a" stroke-width="1.5" stroke-linecap="round" />
 	</g>
-	<g id="isl-porthole">
-		<circle r="9.5" fill="url(#isl-brass)" stroke="#4a2608" stroke-width="1.3" />
+	<g id="{P}porthole">
+		<circle r="9.5" fill="url(#{P}brass)" stroke="#4a2608" stroke-width="1.3" />
 		<circle r="6.3" fill="#0f4652" stroke="#4a2608" stroke-width="1" /><circle r="6.3" fill="#3fd0d8" fill-opacity=".28" />
 		<path d="M-3.8 -2.6A4.6 4.6 0 0 1 .6 -4.6" fill="none" stroke="#dffcff" stroke-opacity=".85" stroke-width="1.4" stroke-linecap="round" />
 		{#each [45, 135, 225, 315] as a}<circle transform="rotate({a})" cx="7.9" cy="0" r=".95" fill="#5a2f0b" />{/each}
 	</g>
-	<g id="isl-gauge">
-		<circle r="8.6" fill="url(#isl-brass)" stroke="#4a2608" stroke-width="1.3" /><circle r="6.2" fill="#f6e9c8" stroke="#6b4a26" stroke-width=".7" />
+	<g id="{P}gauge">
+		<circle r="8.6" fill="url(#{P}brass)" stroke="#4a2608" stroke-width="1.3" /><circle r="6.2" fill="#f6e9c8" stroke="#6b4a26" stroke-width=".7" />
 		{#each [-120, -80, -40, 0, 40, 80, 120] as a}<path transform="rotate({a})" d="M0 -5.6V-4.2" stroke="#4a3018" stroke-width=".8" />{/each}
 		<path d="M0 .4L3.6 -3.4" stroke="#c0392b" stroke-width="1.4" stroke-linecap="round" /><circle r="1.2" fill="#4a2608" />
 	</g>
-	<g id="isl-valve">
+	<g id="{P}valve">
 		<circle r="7.4" fill="none" stroke="#b03226" stroke-width="2.8" /><circle r="7.4" fill="none" stroke="#e86a55" stroke-opacity=".6" stroke-width=".9" />
 		{#each [0, 60, 120] as a}<rect transform="rotate({a})" x="-1.2" y="-7" width="2.4" height="14" fill="#b03226" />{/each}
-		<circle r="2.6" fill="url(#isl-brass)" stroke="#4a2608" stroke-width=".8" />
+		<circle r="2.6" fill="url(#{P}brass)" stroke="#4a2608" stroke-width=".8" />
 	</g>
-	<g id="isl-pipe">
+	<g id="{P}pipe">
 		<rect x="-21" y="-5" width="42" height="10" rx="2" fill="#b9682a" stroke="#4a2608" stroke-width="1.2" />
 		<path d="M-19 -2.2H19" stroke="#ffd4a0" stroke-opacity=".6" stroke-width="1.5" stroke-linecap="round" /><path d="M-19 2.6H19" stroke="#5a2a0c" stroke-opacity=".45" stroke-width="1.4" />
 		{#each [-11, 8] as x}<rect {x} y="-6.8" width="4.4" height="13.6" rx="1.2" fill="#8a4a1a" stroke="#4a2608" stroke-width="1" /><path d="M{x + 2.2} -5V5" stroke="#f0b575" stroke-opacity=".5" stroke-width="1" />{/each}
 	</g>
-	<g id="isl-pipe-shade"><rect x="-21" y="-6.4" width="42" height="12.8" rx="2.4" /></g>
+	<g id="{P}pipe-shade"><rect x="-21" y="-6.4" width="42" height="12.8" rx="2.4" /></g>
 
 	<!-- ── the Titans' base: ice ── -->
-	<g id="isl-icecrack">
+	<g id="{P}icecrack">
 		<path d="M-15 3L-6 -1L0 4L8 -3L15 -1M-6 -1L-8 -9M8 -3L10 -10M0 4L2 11" fill="none" stroke="#f4fcff" stroke-opacity=".8" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" />
 		<path d="M-14 4.4L-6 .6L0 5.4" fill="none" stroke="#2c6fa6" stroke-opacity=".3" stroke-width="1" stroke-linecap="round" />
 	</g>
-	<g id="isl-snow">
+	<g id="{P}snow">
 		<ellipse rx="11.5" ry="8.2" fill="#e6f4ff" /><ellipse cx="-2.6" cy="-2" rx="6.8" ry="4.4" fill="#ffffff" /><ellipse cx="4.4" cy="4.4" rx="5.4" ry="2.3" fill="#a9d3ee" fill-opacity=".75" />
 	</g>
 	<!-- ice crystals: a clump of faceted spikes all leaning one way out of a frosted root -->
-	<g id="isl-shard">
+	<g id="{P}shard">
 		<ellipse cx="0" cy="1" rx="8" ry="5" fill="#d9f1ff" fill-opacity=".85" />
 		<path d="M6 1L10.5 -1L11.5 3.6L8 5Z" fill="#bfe6fb" stroke="#2a6a9c" stroke-opacity=".6" stroke-width=".7" stroke-linejoin="round" />
 		{#each [[-36, 0.72], [42, 0.6], [3, 1]] as [a, s]}
@@ -403,16 +410,16 @@
 			</g>
 		{/each}
 	</g>
-	<g id="isl-shard-shade">
+	<g id="{P}shard-shade">
 		{#each [[-36, 0.72], [42, 0.6], [3, 1]] as [a, s]}<path transform="rotate({a}) scale({s})" d="M0 2L-5 -8L0 -25L5 -8Z" />{/each}
 	</g>
 
 	<!-- ── terrain features ── -->
-	<radialGradient id="isl-cap" cx="0.42" cy="0.38" r="0.75"><stop offset="0" stop-color="#f79ab2" /><stop offset=".6" stop-color="#d1456f" /><stop offset="1" stop-color="#8c2247" /></radialGradient>
-	<radialGradient id="isl-orbglow" cx="0.4" cy="0.36" r="0.8"><stop offset="0" stop-color="#f1fff6" /><stop offset=".45" stop-color="#5ff09a" /><stop offset="1" stop-color="#1a8a48" /></radialGradient>
+	<radialGradient id="{P}cap" cx="0.42" cy="0.38" r="0.75"><stop offset="0" stop-color="#f79ab2" /><stop offset=".6" stop-color="#d1456f" /><stop offset="1" stop-color="#8c2247" /></radialGradient>
+	<radialGradient id="{P}orbglow" cx="0.4" cy="0.36" r="0.8"><stop offset="0" stop-color="#f1fff6" /><stop offset=".45" stop-color="#5ff09a" /><stop offset="1" stop-color="#1a8a48" /></radialGradient>
 	<!-- a crystal cluster standing on a mossy mound (drawn upright, like the pillars); its colours come from
 	     --c1 (lit side), --c2 (shaded side), --c3 (edges), --cg (the glow on the ground) -->
-	<g id="isl-crystal">
+	<g id="{P}crystal">
 		<ellipse cy="7" rx="26" ry="14" style="fill:var(--cg)" fill-opacity=".22" />
 		<ellipse cy="6" rx="20" ry="10.5" fill="#35542a" /><ellipse cx="-2" cy="4.5" rx="15" ry="7" fill="#4f7a39" />
 		{#each [[-36, 0.62, -10], [26, 0.8, 9], [-13, 1, -3], [10, 0.92, 4], [44, 0.5, 14]] as [a, k, x]}
@@ -425,15 +432,15 @@
 		{/each}
 	</g>
 	<!-- a giant mushroom and two small ones -->
-	<g id="isl-bigshroom">
-		<circle cx="15" cy="14" r="8.6" fill="url(#isl-cap)" stroke="#6a1c36" stroke-width="1.2" /><circle cx="13" cy="12" r="1.7" fill="#fff0e2" /><circle cx="18" cy="16" r="1.3" fill="#fff0e2" />
-		<circle cx="-16" cy="12" r="6.6" fill="url(#isl-cap)" stroke="#6a1c36" stroke-width="1.1" /><circle cx="-17" cy="10.5" r="1.4" fill="#fff0e2" />
-		<circle r="19.5" fill="url(#isl-cap)" stroke="#6a1c36" stroke-width="1.6" />
+	<g id="{P}bigshroom">
+		<circle cx="15" cy="14" r="8.6" fill="url(#{P}cap)" stroke="#6a1c36" stroke-width="1.2" /><circle cx="13" cy="12" r="1.7" fill="#fff0e2" /><circle cx="18" cy="16" r="1.3" fill="#fff0e2" />
+		<circle cx="-16" cy="12" r="6.6" fill="url(#{P}cap)" stroke="#6a1c36" stroke-width="1.1" /><circle cx="-17" cy="10.5" r="1.4" fill="#fff0e2" />
+		<circle r="19.5" fill="url(#{P}cap)" stroke="#6a1c36" stroke-width="1.6" />
 		<circle r="15.5" fill="none" stroke="#ffd9e4" stroke-opacity=".3" stroke-width="1.3" />
 		{#each [[-7, -8, 3.2], [6, -10, 2.4], [10, 1, 3], [1, 2, 2.2], [-10, 4, 2.6], [-2, 11, 2.9], [8, 11, 1.8], [-13, -3, 1.7]] as [x, y, r]}<circle cx={x} cy={y} {r} fill="#fff0e2" fill-opacity=".92" />{/each}
 	</g>
 	<!-- a dead tree from above: bare forked branches round a stump -->
-	<g id="isl-deadtree" fill="none" stroke-linecap="round" stroke-linejoin="round">
+	<g id="{P}deadtree" fill="none" stroke-linecap="round" stroke-linejoin="round">
 		{#each [0, 68, 141, 207, 289] as a}
 			<g transform="rotate({a})">
 				<path d="M0 0C4 -8 2 -16 6 -24" stroke="#43301f" stroke-width="4.6" />
@@ -443,18 +450,18 @@
 		{/each}
 		<circle r="6.4" fill="#43301f" stroke="none" /><circle cx="-1" cy="-1" r="3.2" fill="#74573a" stroke="none" />
 	</g>
-	<g id="isl-deadtree-shade" fill="none" stroke="currentColor" stroke-linecap="round">
+	<g id="{P}deadtree-shade" fill="none" stroke="currentColor" stroke-linecap="round">
 		{#each [0, 68, 141, 207, 289] as a}<path transform="rotate({a})" d="M0 0C4 -8 2 -16 6 -24M3.6 -13C9 -16 13 -15 17 -19M6 -24C10 -27 12 -31 15 -32" stroke-width="4.6" />{/each}
 	</g>
 	<!-- the purple fan plant: a burst of spines with bright tips -->
-	<g id="isl-anemone">
+	<g id="{P}anemone">
 		<circle r="13" fill="#35134a" />
 		{#each Array(20) as _, n}<path transform="rotate({n * 18})" d="M0 -5L1.7 -24L0 -28.5L-1.7 -24Z" fill={n % 2 ? '#c552e6' : '#8f3fc6'} />{/each}
 		{#each Array(20) as _, n}<circle transform="rotate({n * 18 + 9})" cx="0" cy="-19.5" r="1.35" fill="#ffb8f2" />{/each}
 		<circle r="6.8" fill="#f08bd8" /><circle r="3.1" fill="#fff0fb" />
 	</g>
 	<!-- the toothed plant: leaves, a purple bulb, a ring of teeth round a dark mouth -->
-	<g id="isl-maw">
+	<g id="{P}maw">
 		{#each [28, 118, 208, 298] as a}<path transform="rotate({a})" d="M0 0Q11 -9 26 -3Q13 5 0 0Z" fill="#3b8638" stroke="#1f5425" stroke-width="1" />{/each}
 		<circle r="15.5" fill="#7c3192" stroke="#3a1147" stroke-width="1.5" />
 		{#each [20, 92, 164, 236, 308] as a}<circle transform="rotate({a})" cx="0" cy="-12.7" r="1.5" fill="#e59af0" fill-opacity=".8" />{/each}
@@ -463,7 +470,7 @@
 		<circle r="3.4" fill="#e23b5a" />
 	</g>
 	<!-- cooling lava: a dark crust split by glowing cracks -->
-	<g id="isl-lava">
+	<g id="{P}lava">
 		<circle r="36" fill="#ff5a1f" fill-opacity=".16" />
 		<path d="M-29 -9L-20 -25L-2 -31L18 -26L30 -11L31 9L20 25L2 31L-18 27L-30 12Z" fill="#1d1614" stroke="#0c0908" stroke-width="2" stroke-linejoin="round" />
 		<path d="M-22 -8L-9 -4L-3 -17L9 -11L21 -15M-9 -4L-12 10L-23 14M-12 10L2 15L5 27M2 15L15 6L26 10M15 6L9 -11" fill="none" stroke="#ff5a1f" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" />
@@ -471,57 +478,57 @@
 		<path d="M-24 -13L-17 -23L-4 -27" fill="none" stroke="#5a4a44" stroke-opacity=".7" stroke-width="1.4" stroke-linecap="round" />
 	</g>
 	<!-- an ice floe: snow on pale ice -->
-	<g id="isl-floe">
+	<g id="{P}floe">
 		<path d="M-30 -8L-21 -26L-1 -32L19 -27L31 -10L30 10L19 26L0 32L-19 27L-31 11Z" fill="#cfeaff" stroke="#6fb1e0" stroke-width="2" stroke-linejoin="round" />
 		<path d="M-22 -6L-15 -19L0 -24L15 -19L23 -6L21 9L12 20L-2 23L-15 19L-23 8Z" fill="#f4fbff" />
 		<path d="M-12 -3L-2 2L4 -8M-2 2L-5 13M8 5L17 2" fill="none" stroke="#8cc6ee" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
 		<ellipse cx="7" cy="13" rx="7" ry="3" fill="#b9dcf2" fill-opacity=".7" />
 	</g>
 	<!-- the TOPS of things that stand up (the column under each is drawn by the layer, so it leans away from the light) -->
-	<g id="isl-pillar-top">
+	<g id="{P}pillar-top">
 		<circle r="11" fill="#aab0bb" stroke="#3c4049" stroke-width="1.3" /><circle r="7" fill="none" stroke="#7d838e" stroke-width="1.2" />
 		<path d="M-11 -2L-4 1L-1 -5L5 -2" fill="none" stroke="#3c4049" stroke-opacity=".7" stroke-width="1.1" stroke-linecap="round" />
 		<path d="M4 4L11 7L8 11L2 9Z" fill="#6f7580" />
 	</g>
-	<g id="isl-runestone-top">
+	<g id="{P}runestone-top">
 		<path d="M-8.5 -4L-3 -10L5 -9L9.5 -2L7 7L-2 10L-9 5Z" fill="#9aa6b6" stroke="#333b47" stroke-width="1.3" stroke-linejoin="round" />
 		<path d="M-2 -6V5M-2 -6L3 -2L-2 1M2 5L-2 1" fill="none" stroke="#7df3ff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
 		<path d="M-2 -6V5M-2 -6L3 -2L-2 1M2 5L-2 1" fill="none" stroke="#e4fdff" stroke-width=".5" stroke-linecap="round" stroke-linejoin="round" />
 	</g>
-	<g id="isl-cube-top">
+	<g id="{P}cube-top">
 		<rect x="-11" y="-11" width="22" height="22" rx="2.2" fill="#3fb8b0" stroke="#0f4a4d" stroke-width="1.4" />
 		<rect x="-7" y="-7" width="14" height="14" rx="1.4" fill="none" stroke="#a6fff5" stroke-opacity=".8" stroke-width="1.3" />
 		<path d="M-3 -3H3V3H-3ZM0 -7V-3M0 3V7M-7 0H-3M3 0H7" fill="none" stroke="#a6fff5" stroke-opacity=".8" stroke-width="1.1" />
 	</g>
-	<g id="isl-orb-top">
+	<g id="{P}orb-top">
 		<circle r="19" fill="#7dffb0" fill-opacity=".24" /><circle r="13" fill="#7dffb0" fill-opacity=".26" />
-		<circle r="9.2" fill="url(#isl-orbglow)" stroke="#0f5c2e" stroke-width="1.1" />
+		<circle r="9.2" fill="url(#{P}orbglow)" stroke="#0f5c2e" stroke-width="1.1" />
 		<path d="M-4.6 -3.4A5.8 5.8 0 0 1 .4 -6.2" fill="none" stroke="#fff" stroke-opacity=".9" stroke-width="1.5" stroke-linecap="round" />
 	</g>
 	<!-- …and what stands at their feet -->
-	<g id="isl-orb-foot">
+	<g id="{P}orb-foot">
 		{#each [20, 140, 260] as a}<path transform="rotate({a})" d="M0 0Q8 -7 19 -2Q9 4 0 0Z" fill="#3b8638" stroke="#1f5425" stroke-width=".9" />{/each}
 		<circle r="7" fill="#2f6f30" />
 	</g>
-	<g id="isl-pillar-foot"><circle r="13.5" fill="#4a4f59" /><path d="M13 9L21 12L18 18L11 15Z" fill="#6f7580" stroke="#3c4049" stroke-width="1" stroke-linejoin="round" /></g>
-	<g id="isl-runestone-foot"><ellipse rx="13" ry="11" fill="#3f5a34" /></g>
-	<g id="isl-cube-foot"><rect x="-13" y="-13" width="26" height="26" rx="3" fill="#35542a" /></g>
+	<g id="{P}pillar-foot"><circle r="13.5" fill="#4a4f59" /><path d="M13 9L21 12L18 18L11 15Z" fill="#6f7580" stroke="#3c4049" stroke-width="1" stroke-linejoin="round" /></g>
+	<g id="{P}runestone-foot"><ellipse rx="13" ry="11" fill="#3f5a34" /></g>
+	<g id="{P}cube-foot"><rect x="-13" y="-13" width="26" height="26" rx="3" fill="#35542a" /></g>
 
 	<!-- hero spawn points, after the two faces of the tie-breaker coin: the Atlanteans' copper
 	     gear on slate, the Titans' five-point star in a ring on red stone -->
-	<g id="isl-emblem-orange">
-		<circle r="40" fill="url(#isl-brass)" stroke="#4a2608" stroke-width="3" />
-		<circle r="32.5" fill="url(#isl-slate)" stroke="#4a2608" stroke-width="1.6" />
+	<g id="{P}emblem-orange">
+		<circle r="40" fill="url(#{P}brass)" stroke="#4a2608" stroke-width="3" />
+		<circle r="32.5" fill="url(#{P}slate)" stroke="#4a2608" stroke-width="1.6" />
 		{#each [0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330] as a}<rect transform="rotate({a})" x="-4.2" y="-30.5" width="8.4" height="9" rx="1.4" fill="#e08c35" stroke="#5a2f0b" stroke-width="1.2" />{/each}
 		<circle r="23.5" fill="#e08c35" stroke="#5a2f0b" stroke-width="1.4" />
-		<circle r="15.5" fill="url(#isl-slate)" stroke="#5a2f0b" stroke-width="1.2" />
+		<circle r="15.5" fill="url(#{P}slate)" stroke="#5a2f0b" stroke-width="1.2" />
 		{#each [0, 60, 120] as a}<rect transform="rotate({a})" x="-2.1" y="-16" width="4.2" height="32" fill="#e08c35" stroke="#5a2f0b" stroke-width=".9" />{/each}
 		<circle r="4.6" fill="#f0a54a" stroke="#5a2f0b" stroke-width="1" />
 		<circle r="36.3" fill="none" stroke="#ffe3ad" stroke-opacity=".45" stroke-width="1.3" />
 	</g>
-	<g id="isl-emblem-blue">
-		<circle r="40" fill="url(#isl-steel)" stroke="#0c2038" stroke-width="3" />
-		<circle r="32.5" fill="url(#isl-stone)" stroke="#0c2038" stroke-width="1.6" />
+	<g id="{P}emblem-blue">
+		<circle r="40" fill="url(#{P}steel)" stroke="#0c2038" stroke-width="3" />
+		<circle r="32.5" fill="url(#{P}stone)" stroke="#0c2038" stroke-width="1.6" />
 		{#each [-54, 18, 90, 162, 234] as a}<circle transform="rotate({a})" cx="20.5" cy="0" r="3.1" fill="#16416f" stroke="#6cc4f5" stroke-width="1.7" />{/each}
 		<path d={PENTA} fill="none" stroke="#12305a" stroke-width="7.4" stroke-linejoin="round" />
 		<path d={PENTA} fill="none" stroke="#4ea3e2" stroke-width="4.4" stroke-linejoin="round" />
@@ -540,7 +547,7 @@
 	<!-- one tile per hex: a darker seam, then the rounded tile itself, lit from its middle -->
 	{#each tiles as t (t.id)}
 		<polygon points={t.full} fill={hsl(PAL[t.z].g)} />
-		<polygon points={t.inner} fill="url(#isl-{t.z}-{t.v})" stroke="url(#isl-{t.z}-{t.v})" stroke-width={size * 0.19} stroke-linejoin="round" />
+		<polygon points={t.inner} fill="url(#{P}{t.z}-{t.v})" stroke="url(#{P}{t.z}-{t.v})" stroke-width={size * 0.19} stroke-linejoin="round" />
 	{/each}
 
 	<!-- the shore is damp: a darker band just inside the waterline -->
@@ -552,14 +559,14 @@
 	{/each}
 
 	<!-- small things lying on the ground -->
-	{#each scenery.low as d (d.key)}<use href="#isl-{d.ref}" transform={tf(d)} style={d.style} />{/each}
+	{#each scenery.low as d (d.key)}<use href="#{P}{d.ref}" transform={tf(d)} style={d.style} />{/each}
 
 	<!-- spawn points and thrones keep their plates -->
 	{#each tiles as t (t.id)}
 		{#if t.emblem}
 			<circle cx={t.c.x} cy={t.c.y} r={size * 0.98} fill={t.emblem === 'orange' ? '#ffb057' : '#bfeaff'} fill-opacity=".28" />
 			<circle cx={t.c.x + down.x * size * 0.07} cy={t.c.y + down.y * size * 0.07} r={size * 0.68} fill="#000" fill-opacity=".32" />
-			<use href="#isl-emblem-{t.emblem}" transform="translate({t.c.x.toFixed(1)} {t.c.y.toFixed(1)}) scale({(size / 60).toFixed(3)})" />
+			<use href="#{P}emblem-{t.emblem}" transform="translate({t.c.x.toFixed(1)} {t.c.y.toFixed(1)}) scale({(size / 60).toFixed(3)})" />
 		{:else if t.spawn}
 			{@const a = MINION_ART[t.spawn.team][t.spawn.role]}
 			{@const k = (size * EMBLEM) / a.r}
@@ -596,18 +603,18 @@
 			<!-- a standing thing: its foot, its shadow, the column (a thick line from foot to top), then the top, upright -->
 			{@const tx = d.x - down.x * up.lift * d.k}
 			{@const ty = d.y - down.y * up.lift * d.k}
-			<use href="#isl-{d.ref}-foot" transform="translate({d.x.toFixed(1)} {d.y.toFixed(1)}) rotate({-rot}) scale({d.k.toFixed(3)})" />
+			<use href="#{P}{d.ref}-foot" transform="translate({d.x.toFixed(1)} {d.y.toFixed(1)}) rotate({-rot}) scale({d.k.toFixed(3)})" />
 			<line x1={(d.x + down.x * size * 0.12).toFixed(1)} y1={(d.y + down.y * size * 0.12).toFixed(1)} x2={(d.x + down.x * size * 0.3).toFixed(1)} y2={(d.y + down.y * size * 0.3).toFixed(1)}
 				stroke="#08141c" stroke-opacity=".34" stroke-width={(up.r * 2 * d.k).toFixed(1)} stroke-linecap={up.square ? 'square' : 'round'} />
 			<line x1={d.x.toFixed(1)} y1={d.y.toFixed(1)} x2={tx.toFixed(1)} y2={ty.toFixed(1)} stroke={up.side} stroke-width={(up.r * 2 * d.k).toFixed(1)} stroke-linecap={up.square ? 'square' : 'round'} />
-			<use href="#isl-{d.ref}-top" transform="translate({tx.toFixed(1)} {ty.toFixed(1)}) rotate({-rot}) scale({d.k.toFixed(3)})" />
+			<use href="#{P}{d.ref}-top" transform="translate({tx.toFixed(1)} {ty.toFixed(1)}) rotate({-rot}) scale({d.k.toFixed(3)})" />
 		{:else}
 		{#if d.shade}
-			<use href="#isl-{d.ref}-shade" transform="translate({(d.x + down.x * size * 0.1).toFixed(1)} {(d.y + down.y * size * 0.1).toFixed(1)}) rotate({d.r}) scale({d.k.toFixed(3)})" fill="#08141c" fill-opacity=".34" color="#08141c" stroke-opacity=".34" />
+			<use href="#{P}{d.ref}-shade" transform="translate({(d.x + down.x * size * 0.1).toFixed(1)} {(d.y + down.y * size * 0.1).toFixed(1)}) rotate({d.r}) scale({d.k.toFixed(3)})" fill="#08141c" fill-opacity=".34" color="#08141c" stroke-opacity=".34" />
 		{:else if d.sr}
 			<circle cx={(d.x + down.x * size * 0.09).toFixed(1)} cy={(d.y + down.y * size * 0.09).toFixed(1)} r={(d.sr * d.k).toFixed(1)} fill="#0c2410" fill-opacity=".34" />
 		{/if}
-		<use href="#isl-{d.ref}" transform={tf(d, rot, down)} style={d.style} />
+		<use href="#{P}{d.ref}" transform={tf(d, rot, down)} style={d.style} />
 		{/if}
 	{/each}
 

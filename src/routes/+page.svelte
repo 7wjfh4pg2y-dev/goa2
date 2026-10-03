@@ -211,6 +211,7 @@
 		session?.leave();
 		roomHandle?.leave();
 		browseHandle?.leave();
+		boardTimers.forEach(clearTimeout);
 	});
 
 	$: chosenMap = maps.find((m) => m.id === mapId) ?? maps[0];
@@ -279,7 +280,16 @@
 	$: family = mode === 'landing' || mode === 'choose' || mode === 'admin' || mode === 'adminhub' || mode === 'menu' || mode === 'join';
 	// the island behind: large beside the column, pushed away and dimmed behind a form
 	$: bgScene = (mode === 'landing' ? 'landing' : mode === 'lobby' ? 'lobby' : mode === 'create' || ((mobile || portrait) && (mode === 'join' || mode === 'admin')) ? 'form' : 'menu') as 'landing' | 'menu' | 'form' | 'lobby';
-	$: bgMap = (mode === 'lobby' ? $state.map : null) ?? chosenMap?.data ?? null;
+	// the island behind only redraws when the map's CONTENT changes: the room's copy of the chosen map is a new
+	// object, and redrawing ~5k island shapes for the same board was most of the Create game hitch
+	let bgMap: GameMap | null = null;
+	let bgKey = '';
+	$: setBgMap((mode === 'lobby' ? $state.map : null) ?? chosenMap?.data ?? null);
+	function setBgMap(m: GameMap | null) {
+		if (m === bgMap) return;
+		const k = m ? JSON.stringify(m) : '';
+		if (k !== bgKey || !bgMap) { bgKey = k; bgMap = m; }
+	}
 	// the lobby's caption under the live board: the real numbers of this room
 	$: lobbyMapName = $state.map?.name?.trim() || maps.find((m) => m.id === $state.mapId)?.label || 'The board';
 	$: lobbyWaves = $state.wavesMax;
@@ -289,6 +299,22 @@
 	// the live boards are pictures here: staged so the island sits clear of the caption
 	let lobbyBoard: BoardCanvas | null = null;
 	let createBoard: BoardCanvas | null = null;
+	// The Create form's island preview and the lobby's board mount a beat AFTER their screen, so opening
+	// either isn't one long freeze (the screen fades in first, then the board — up to ~2k svg nodes — is
+	// built in its own task); in the lobby the sea behind then stops moving (a still screen), in a frame of its own too.
+	let boardOn = false;
+	let lobbyCalm = false;
+	let boardTimers: ReturnType<typeof setTimeout>[] = [];
+	$: armBoards(mode);
+	function armBoards(m: string) {
+		boardTimers.forEach(clearTimeout);
+		boardTimers = [];
+		boardOn = false;
+		lobbyCalm = false;
+		if (m !== 'create' && m !== 'lobby') return;
+		boardTimers.push(setTimeout(() => (boardOn = true), 320));
+		if (m === 'lobby') boardTimers.push(setTimeout(() => (lobbyCalm = true), 900));
+	}
 	$: if (lobbyBoard) lobbyBoard.place(0.5, mobile ? 0.5 : 0.46, mobile ? 2.3 : 0.94);
 	$: if (createBoard) createBoard.place(0.5, mobile ? 0.5 : 0.44, mobile ? 1.5 : 1.04);
 	const initial = (n: string) => (n.trim()[0] ?? '?').toUpperCase();
@@ -701,7 +727,7 @@
 	<GameView {session} ms={state} {players} clientId={session.clientId} {room} onLeave={leaveRoom} />
 	{#if seatNotice}<div class="seattoast">{seatNotice}</div>{/if}
 {:else}
-<SeaBackdrop scene={bgScene} map={bgMap} mobile={mobile || (portrait && family)} effects={mode !== 'lobby'} />
+<SeaBackdrop scene={bgScene} map={bgMap} mobile={mobile || (portrait && family)} effects={mode !== 'lobby' || !lobbyCalm} />
 <div class="uiscale tide pre" style="--ui:{ui}">
 	{#if family}
 		<!-- landing · role · admin · menu · join: the crest and one column of steps beside the island -->
@@ -719,7 +745,6 @@
 						</div>
 					{:else if mode === 'choose'}
 						<div class="step" transition:reveal bind:clientHeight={h['choose']}>
-							<header class="head deskhead"><span class="t-label">Guards of Atlantis II</span><h1 class="t-h1">Choose your role</h1></header>
 							<div class="choices">
 								<button class="choice card p" on:click={goPlayer}>
 									<span class="choice-ic"><Icon name="user" /></span>
@@ -778,7 +803,6 @@
 						</div>
 					{:else if mode === 'menu'}
 						<div class="step" transition:reveal bind:clientHeight={h['menu']}>
-							<header class="head deskhead"><span class="t-label">{$role === 'admin' ? 'Admin' : 'Player'}</span><h1 class="t-h1">Play a game</h1></header>
 							<div class="choices">
 								<button class="choice card p" on:click={() => (mode = 'create')}>
 									<span class="choice-ic"><Icon name="plus" /></span>
@@ -794,7 +818,6 @@
 						</div>
 					{:else if mode === 'join'}
 						<div class="step" transition:reveal bind:clientHeight={h['join']}>
-							<header class="head"><span class="t-label">{$role === 'admin' ? 'Admin' : 'Player'}</span><h1 class="t-h1">Join a game</h1></header>
 							<section class="panel formpanel">
 								<label class="fld"><span class="t-label">Name</span><input class="field" bind:value={name} placeholder="Your name" /></label>
 								<label class="fld"><span class="t-label">Room code</span><input class="field field--code up" class:is-error={!!joinError} bind:value={room} on:input={() => (joinError = '')} maxlength="8" placeholder="Code" /></label>
@@ -842,7 +865,7 @@
 				<button class="pbtn" on:click={() => stepLife(1)} disabled={previewLife >= 10} aria-label="More Life"><Icon name="plus" /></button>
 			</span>
 		{/snippet}
-		<main class="screen s-create" transition:reveal>
+		<main class="screen s-create" in:reveal>
 			<div class="cwrap">
 				<section class="panel cbox">
 					<header class="chead">
@@ -876,7 +899,7 @@
 									<span class="t-label">Map</span>
 									<div class="mapbox">
 										<div class="boardframe mapframe">
-											{#if chosenMap}<BoardCanvas bind:this={createBoard} map={chosenMap.data} look="island" interactive={false} pieces={[]} effects={false} />{/if}
+											{#if chosenMap && boardOn}<BoardCanvas bind:this={createBoard} map={chosenMap.data} look="island" interactive={false} pieces={[]} effects={false} />{/if}
 											<button class="mapnav prev" on:click={() => cycleMap(-1)} disabled={maps.length < 2} aria-label="Previous map"><Icon name="back" /></button>
 											<button class="mapnav next" on:click={() => cycleMap(1)} disabled={maps.length < 2} aria-label="Next map"><Icon name="go" /></button>
 											<div class="cap mapcap"><span><b>{chosenMap?.label ?? 'No map'}</b>{#if maps.length > 1} · {mapIndex + 1} / {maps.length}{/if}</span></div>
@@ -963,7 +986,7 @@
 					<div class="ltable">
 						{@render teamPanel('orange', orangeSeats, orangeCount)}
 						<div class="boardframe lboard" class:classic={lobbyLook === 'classic'}>
-							{#if $state.map}
+							{#if $state.map && boardOn}
 								<BoardCanvas bind:this={lobbyBoard} map={$state.map} look={lobbyLook} glowZone={lobbyGlow && lobbyLook === 'island' ? 'Center' : null} effects={lobbyFx} interactive={false} pieces={[]} />
 							{/if}
 							<div class="cap"><span><b>{lobbyMapName}</b> · {lobbyLength.replace(' game', '')} <span class="deskonly">game</span> · {lobbyWaves} waves · {lobbyLife} Life <span class="deskonly">per team</span></span></div>
@@ -1099,7 +1122,9 @@
 	.verpanel .vers { display: flex; gap: 10px; }
 	.verpanel .vers .btn { flex: 1; }
 	/* a fixed-size list (it never grows the window): as tall as the screen allows, up to three rows */
-	.glist { display: flex; flex-direction: column; gap: 8px; height: clamp(96px, calc(var(--vh, 1vh) * 17), 216px); overflow-y: auto; }
+	/* exactly three rows tall; a fourth game scrolls */
+	.glist { --gr: 64px; --gg: 8px; display: flex; flex-direction: column; gap: var(--gg); height: calc(var(--gr) * 3 + var(--gg) * 2); overflow-y: auto; flex: none; }
+	.glist .gcard { flex: none; min-height: 0; height: var(--gr); }
 
 	/* ------------------------------------------------------------------- create game */
 	/* a little more water over the island behind a full screen of panels */
@@ -1179,6 +1204,8 @@
 	.spec .kickx { width: 30px; height: 30px; }
 	/* a guest reads the host's choice: still brass (blue only ever means the Titans), just quieter */
 	.lbox .lactions { display: flex; align-items: center; gap: 14px; padding: 12px 14px; }
+	.lboard :global(.board-wrap), .mapframe :global(.board-wrap) { animation: boardin 0.35s ease both; }
+	@keyframes boardin { from { opacity: 0; } }
 	.lactions .lhint { flex: 1; min-height: 1.35em; margin: 0; text-align: right; color: var(--ink); text-shadow: 0 1px 6px rgba(0, 0, 0, 0.8); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 	.lactions .btn-lg { min-width: 190px; }
 	.lactions .leave { min-width: 120px; margin-right: auto; }
@@ -1233,7 +1260,6 @@
 		.enterstep { right: 0; width: auto; }
 		.crest-hint { font-size: 0.95rem; padding: 8px 18px; }
 		.head { align-items: center; text-align: center; align-self: center; padding: 8px 16px 10px; }
-		.head.deskhead { display: none; } /* the role and play menus speak for themselves on a phone */
 		.step .formpanel { padding: 16px; gap: 14px; }
 		.step .openpanel { padding: 14px 16px 16px; }
 		.choices { gap: 12px; }
@@ -1366,7 +1392,9 @@
 		.msum .pstep { font-size: 13px; gap: 3px; padding-left: 2px; padding-right: 2px; }
 		/* join: the crest and the open-games list follow the screen's height */
 		.s-col.compact .home { width: clamp(48px, 9dvh, 96px); margin-bottom: clamp(4px, 1dvh, 10px); }
-		.glist { height: clamp(48px, 14dvh, 216px); }
+		.glist { --gr: clamp(44px, 6.6dvh, 60px); --gg: 6px; }
+		.glist .gcard { padding-top: 0; padding-bottom: 0; gap: 10px; }
+		.glist .gcard .who { gap: 2px; }
 		.step .openpanel { padding: 10px 14px 12px; gap: 6px; }
 		.step .formpanel { gap: clamp(8px, 1.6dvh, 14px); padding: clamp(10px, 1.8dvh, 16px); }
 		/* the lobby on a short screen: the seat's second line goes, the swatches shrink */
