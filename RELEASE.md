@@ -16,7 +16,8 @@ or friends) → tick it off. Fixes the live game needs go into 1.0 AND here.
 4. [ ] New hero symbols on card backs; the crest on the turn cards
 5. [ ] The island board — with the battle zone outline and moving effects (and their host switches)
 6. [ ] Speed pass — the parts that apply to what's here by then
-7. [ ] The Tide look, before the game — landing, menus, Create, lobby, hero select, matchup slices
+7. [x] The Tide look, before the game — landing (the island in its moving sea), choose / admin / GM tools, menu, Create, Join, lobby (its live board is the classic one until step 5; no board switches)
+7b. [ ] The Tide look — hero select and the matchup slices
 8. [ ] The in-game screen — top bar, console and roster, player boards, the Ascension deck
 9. [ ] The phone in-game layout
 10. [ ] Final playtest with the group → switch `/goa2` to the release

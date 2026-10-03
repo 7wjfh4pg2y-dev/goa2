@@ -1,0 +1,351 @@
+/* THE TIDE — the pieces only the pre-game screens use (menu, join, create, lobby, coin flip).
+   Same rules as tide.css: everything is scoped under .tide and built from its tokens. */
+
+/* ------------------------------------------------------------ alert strip */
+.tide .alert {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 10px 16px;
+	border-radius: var(--r-md);
+	border: 1px solid rgba(229, 72, 77, 0.5);
+	background: rgba(60, 14, 18, 0.72);
+	color: var(--danger-hi);
+	font-size: var(--fs-small);
+}
+.tide .alert--warn {
+	border-color: rgba(234, 179, 8, 0.5);
+	background: rgba(58, 42, 6, 0.72);
+	color: #ffd27a;
+}
+
+/* --------------------------------------------- a tappable row (open games) */
+.tide .listrow {
+	display: flex;
+	align-items: center;
+	gap: var(--s4);
+	width: 100%;
+	min-height: 64px;
+	padding: var(--s2) var(--s4);
+	border-radius: var(--r-md);
+	border: 1px solid var(--hair);
+	background: var(--well);
+	text-align: left;
+	color: var(--ink);
+	transition:
+		border-color var(--t-fast),
+		background var(--t-fast);
+}
+.tide .listrow:hover {
+	border-color: var(--brass);
+	background: var(--raise);
+}
+.tide .listrow .state {
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	background: #2ecc71;
+	box-shadow: 0 0 8px #2ecc71;
+	flex: none;
+}
+.tide .listrow .state.is-live {
+	background: #eab308;
+	box-shadow: 0 0 8px #eab308;
+}
+.tide .listrow .who {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	min-width: 0;
+	flex: 1;
+}
+.tide .listrow .who .t-h3 {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.tide .listrow .sub {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+.tide .listrow .go {
+	margin-left: auto;
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	color: var(--brass-hi);
+	white-space: nowrap;
+}
+.tide .seatdots {
+	display: inline-flex;
+	gap: 4px;
+}
+.tide .seatdots i {
+	width: 9px;
+	height: 9px;
+	border-radius: 50%;
+	border: 1px solid var(--ink-3);
+}
+.tide .seatdots i.on {
+	background: var(--brass);
+	border-color: var(--brass);
+}
+
+/* --------------------------------- segmented option with a second, small line */
+.tide .seg-opt.has-sub {
+	flex-direction: column;
+	gap: 3px;
+	min-height: 56px;
+	padding: 6px 8px;
+	line-height: 1;
+}
+.tide .seg-opt .sub {
+	font-size: 14px;
+	letter-spacing: 0.03em;
+	color: var(--ink-3);
+	white-space: nowrap;
+}
+.tide .seg-opt.is-on .sub {
+	color: rgba(27, 18, 4, 0.78);
+}
+.tide .seg--grid {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+}
+.tide .chip .stars {
+	gap: 3px;
+	color: inherit;
+}
+.tide .chip.is-on .stars {
+	color: var(--ink-dark);
+}
+.tide .chip:not(.is-on) .stars {
+	color: var(--brass);
+}
+.tide .chip.is-soon .stars {
+	color: var(--ink-3);
+}
+
+/* ------------------------------------------------- stepper (custom waves / life) */
+.tide .stepper {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 3px;
+	border-radius: var(--r-md);
+	background: var(--well);
+	border: 1px solid var(--hair);
+	box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.35);
+}
+.tide .stepper button {
+	display: grid;
+	place-items: center;
+	width: 40px;
+	height: 40px;
+	padding: 0;
+	border-radius: 9px;
+	border: 1px solid var(--brass-line);
+	background: linear-gradient(180deg, rgba(26, 68, 104, 0.9), rgba(13, 40, 66, 0.9));
+	color: var(--brass-hi);
+}
+.tide .stepper button:hover {
+	filter: brightness(1.2);
+}
+.tide .stepper button:disabled {
+	opacity: 0.4;
+	cursor: not-allowed;
+	filter: none;
+}
+.tide .stepper b {
+	min-width: 44px;
+	text-align: center;
+	font-weight: 400;
+	font-size: var(--fs-h2);
+	line-height: 1;
+	color: var(--ink);
+	font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------ team panels
+   A team's panel in the lobby: a plate of the team's own material as the header
+   (riveted copper for the Atlanteans, cut ice for the Titans) over a glass body
+   tinted the same way, with the team's coin faint in the lower corner. */
+.tide .teamcard {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	overflow: hidden;
+	border-radius: var(--r-lg);
+	border: 1px solid var(--tc-line);
+	box-shadow:
+		var(--sh-2),
+		inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+.tide .teamcard.is-orange {
+	background: linear-gradient(180deg, rgba(88, 44, 16, 0.86) 0%, rgba(38, 30, 34, 0.88) 55%, rgba(8, 24, 42, 0.92) 100%);
+}
+.tide .teamcard.is-blue {
+	background: linear-gradient(180deg, rgba(20, 62, 112, 0.86) 0%, rgba(12, 40, 74, 0.88) 55%, rgba(6, 21, 38, 0.92) 100%);
+}
+.tide .band {
+	position: relative;
+	z-index: 1;
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: var(--s3);
+	min-height: 56px;
+	padding: 0 20px;
+	font-size: var(--fs-h3);
+	letter-spacing: 0.06em;
+}
+.tide .band img {
+	width: 36px;
+	height: 36px;
+	filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
+}
+.tide .band-count {
+	margin-left: auto;
+	letter-spacing: 0.04em;
+	white-space: nowrap;
+}
+.tide .band--copper {
+	color: #2a1003;
+	text-shadow: 0 1px 0 rgba(255, 220, 185, 0.45);
+	background:
+		radial-gradient(circle at 8px 8px, #ffe3c6 0 1.2px, #6d300b 1.9px 3.2px, transparent 3.9px),
+		radial-gradient(circle at calc(100% - 8px) 8px, #ffe3c6 0 1.2px, #6d300b 1.9px 3.2px, transparent 3.9px),
+		radial-gradient(circle at 8px calc(100% - 8px), #ffe3c6 0 1.2px, #6d300b 1.9px 3.2px, transparent 3.9px),
+		radial-gradient(circle at calc(100% - 8px) calc(100% - 8px), #ffe3c6 0 1.2px, #6d300b 1.9px 3.2px, transparent 3.9px),
+		linear-gradient(180deg, #e9995a 0%, #c96f2c 44%, #9d4d18 100%);
+	box-shadow:
+		inset 0 1px 0 rgba(255, 226, 196, 0.6),
+		inset 0 -2px 0 rgba(70, 26, 4, 0.55),
+		0 3px 8px rgba(0, 0, 0, 0.35);
+}
+.tide .band--ice {
+	color: #0a2244;
+	text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6);
+	background:
+		linear-gradient(112deg, rgba(255, 255, 255, 0.5) 0 9%, transparent 9.2% 27%, rgba(255, 255, 255, 0.2) 27.2% 36%, transparent 36.2% 66%, rgba(255, 255, 255, 0.28) 66.2% 72%, transparent 72.2% 90%, rgba(255, 255, 255, 0.16) 90.2%),
+		linear-gradient(180deg, #eef8ff 0%, #b3dafa 46%, #6fade9 100%);
+	box-shadow:
+		inset 0 1px 0 rgba(255, 255, 255, 0.9),
+		inset 0 -2px 0 rgba(20, 70, 140, 0.5),
+		0 3px 8px rgba(0, 0, 0, 0.35);
+}
+.tide .teammark {
+	position: absolute;
+	right: -34px;
+	bottom: -40px;
+	width: 230px;
+	height: 230px;
+	opacity: 0.14;
+	pointer-events: none;
+}
+/* seats inside a team panel */
+.tide .teamcard .seat {
+	position: relative;
+	background: rgba(2, 11, 22, 0.55);
+}
+.tide .teamcard .seat--open {
+	background: rgba(2, 11, 22, 0.22);
+	border-color: rgba(255, 255, 255, 0.28);
+	color: var(--ink-2);
+}
+.tide .teamcard .seat--open:hover:not(:disabled) {
+	border-color: var(--tc-hi);
+	background: rgba(255, 255, 255, 0.07);
+	color: var(--ink);
+}
+.tide .teamcard .seat--me {
+	background: linear-gradient(90deg, rgba(216, 179, 106, 0.2), rgba(2, 11, 22, 0.55) 70%);
+}
+.tide .seat .state {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	font-size: var(--fs-small);
+	color: var(--ink-3);
+	white-space: nowrap;
+}
+.tide .seat .state.is-ready {
+	color: var(--ready-hi);
+}
+.tide .seat-kick {
+	flex: none;
+	display: grid;
+	place-items: center;
+	width: 40px;
+	height: 40px;
+	padding: 0;
+	border-radius: 10px;
+	border: 1px solid transparent;
+	background: transparent;
+	color: var(--ink-3);
+}
+.tide .seat-kick:hover {
+	color: var(--danger-hi);
+	border-color: rgba(229, 72, 77, 0.6);
+	background: rgba(229, 72, 77, 0.14);
+}
+
+/* ------------------------------------------------- the framed live board */
+.tide .boardframe {
+	position: relative;
+	overflow: hidden;
+	border-radius: var(--r-lg);
+	border: 1px solid var(--brass);
+	background: radial-gradient(120% 100% at 50% 45%, #0e4f80 0%, #08304f 55%, #06182a 100%);
+	box-shadow:
+		0 0 0 3px rgba(216, 179, 106, 0.14),
+		var(--sh-2);
+}
+.tide .boardframe .cap {
+	position: absolute;
+	left: 12px;
+	right: 12px;
+	bottom: 12px;
+	z-index: 2;
+	display: flex;
+	justify-content: center;
+	pointer-events: none;
+}
+.tide .boardframe .cap > span {
+	max-width: 100%;
+	padding: 7px 16px;
+	border-radius: var(--r-pill);
+	background: rgba(4, 15, 28, 0.84);
+	border: 1px solid var(--brass-line);
+	font-size: var(--fs-small);
+	color: var(--ink);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.tide .boardframe .cap b {
+	font-weight: 400;
+	color: var(--brass-hi);
+}
+
+/* --------------------------------------------------------------- overlay
+   A moment over the current screen (the coin flips): the screen stays, dimmed. */
+.tide.overlay {
+	position: fixed;
+	inset: 0;
+	z-index: 50;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	text-align: center;
+	padding: var(--s5);
+	background: rgba(3, 11, 21, 0.8);
+	animation: tide-fadein 0.25s ease;
+}
+@keyframes tide-fadein {
+	from {
+		opacity: 0;
+	}
+}
