@@ -1,6 +1,6 @@
 // Site version switch (GM tools). Both versions of the app are deployed side by side:
-//   2.0 at /goa2/      (branch claude/stats-of-atlantis-replica-hg5nv2)
-//   1.0 at /goa2/v1/   (branch 1.0)
+//   1.0 at /goa2/      (branch 1.0) — the default
+//   2.0 at /goa2/v2/   (branch claude/stats-of-atlantis-replica-hg5nv2)
 // The GM picks which one is live in the Supabase table `goa2_settings` (key 'site_version').
 // Every page load checks it and, if this build isn't the chosen one, moves the visitor over.
 // Fail-safe: no table / offline / any error → stay where you are.
@@ -12,7 +12,7 @@ import { supabase } from './supabase'
 export type SiteVersion = '1.0' | '2.0'
 export const THIS_VERSION: SiteVersion = '2.0'
 export const SITE_VERSIONS: SiteVersion[] = ['1.0', '2.0']
-const BASES: Record<SiteVersion, string> = { '1.0': '/goa2/v1', '2.0': '/goa2' }
+const BASES: Record<SiteVersion, string> = { '1.0': '/goa2', '2.0': '/goa2/v2' }
 const TABLE = 'goa2_settings'
 const KEY = 'site_version'
 
