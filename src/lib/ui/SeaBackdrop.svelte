@@ -24,6 +24,10 @@
 	$: if (ready && board && map) board.place(stage.x, stage.y, stage.s);
 	onMount(() => { ready = true; });
 	$: far = scene === 'landing' || scene === 'menu';
+	/** a still picture of the island for a preview frame (see BoardCanvas.paintPicture) */
+	export function paintPicture(...a: Parameters<BoardCanvas['paintPicture']>): Promise<boolean> {
+		return board ? board.paintPicture(...a) : Promise.resolve(false);
+	}
 </script>
 
 <div class="sea" class:far class:near={!far} class:mobile aria-hidden="true">

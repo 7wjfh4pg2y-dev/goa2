@@ -50,62 +50,19 @@
 		const swells = texture(SWELL_N, [5, 52, 96], (i) => smooth(0.47, 0.72, s[i]));
 		return (shared = { streaks, swells });
 	}
-</script>
-
-<script lang="ts">
-	// The sea the island sits in: one canvas behind the board. Everything is drawn in BOARD
-	// coordinates through the same view matrix as the board's svg, so the water pans, zooms
-	// and turns with the island. It never touches the svg above it, so the board itself is
-	// not repainted while the sea animates.
-	//
-	// The open water is two soft textures made once from noise — broad darker swells, and a
-	// broken net of pale streaks (light on the surface) — the streaks laid down twice at
-	// different sizes and angles, sliding past each other, which is what makes water look
-	// like water instead of a pattern. Round the island: the shelf (pale bands hugging the
-	// coast) and the foam washing in and out.
-	//
-	// COST (this runs on every screen, on every PC): the canvas is kept SMALL — about 0.65
-	// megapixels whatever the window or pixel density, stretched by CSS (water is soft, it
-	// does not show) — the shelf's six wide strokes are drawn once per view into a spare
-	// canvas and copied, and the sea moves 20 times a second. A full-size canvas redrawn 30
-	// times a second with those strokes was the single biggest load on weak machines.
-	import { onMount } from 'svelte';
-
-	/** the board svg's viewBox */
-	export let bounds = { a: 0, b: 0, w: 100, h: 100 };
-	/** the board's view transform (pan / zoom / rotate), in viewBox units */
-	export let view = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
-	/** the island's coastline (svg path, board units) */
-	export let coast = '';
-	export let size = 60;
-	/** draw once per change instead of animating (also forced by "reduce motion") */
-	export let still = false;
-
-	let canvas: HTMLCanvasElement;
-	let W = 0, H = 0, dpr = 1;
-	let t = 0;
-	let reduce = false;
-	let coastPath: Path2D | null = null;
-	$: coastPath = typeof Path2D !== 'undefined' && coast ? new Path2D(coast) : null;
-	let streaks: CanvasPattern | null = null, swells: CanvasPattern | null = null;
-	/** the shelf bands, drawn once per view (they do not move) */
-	let shelf: HTMLCanvasElement | null = null, shelfKey = '';
-	const BUDGET = 650_000; // canvas pixels
-
-	function makeTextures(ctx: CanvasRenderingContext2D) {
+	/** the two water textures as patterns for `ctx` */
+	export function seaPatterns(ctx: CanvasRenderingContext2D) {
 		const t = sharedTextures();
-		streaks = ctx.createPattern(t.streaks, 'repeat');
-		swells = ctx.createPattern(t.swells, 'repeat');
+		return { streaks: ctx.createPattern(t.streaks, 'repeat'), swells: ctx.createPattern(t.swells, 'repeat') };
 	}
-
-	function draw() {
-		const ctx = canvas?.getContext('2d');
-		if (!ctx || !W || !H) return;
-		if (!streaks) makeTextures(ctx);
-		// viewBox → css px ("xMidYMid meet"), then the board's own view transform
-		const s = Math.min(W / bounds.w, H / bounds.h);
-		const ox = (W - s * bounds.w) / 2 - s * bounds.a, oy = (H - s * bounds.h) / 2 - s * bounds.b;
-		const A = s * view.a, B = s * view.b, C = s * view.c, D = s * view.d, E = s * view.e + ox, F = s * view.f + oy;
+	export type SeaCache = { shelf: HTMLCanvasElement | null; key: string };
+	/** paint the sea into `ctx`: `m` maps board units → css px, `dpr` = canvas px per css px. Shared by the live
+	 *  sea and still pictures of the board (BoardCanvas.paintPicture). */
+	export function paintSea(ctx: CanvasRenderingContext2D, o: { W: number; H: number; dpr: number; bounds: { a: number; b: number; w: number; h: number };
+		m: { A: number; B: number; C: number; D: number; E: number; F: number }; coastPath: Path2D | null; size: number; t: number;
+		streaks: CanvasPattern | null; swells: CanvasPattern | null; cache: SeaCache }) {
+		const { W, H, dpr, bounds, coastPath, size, t, streaks, swells, cache } = o;
+		const { A, B, C, D, E, F } = o.m;
 		const k = Math.hypot(A, B) || 1; // css px per board unit
 		const det = A * D - B * C || 1;
 
@@ -145,11 +102,12 @@
 		//    (kept in a spare canvas: redrawn only when the view changes)
 		ctx.globalAlpha = 1;
 		if (coastPath) {
-			const key = [A, B, C, D, E, F, canvas.width, canvas.height, size, coast.length].join();
-			if (!shelf) shelf = document.createElement('canvas');
-			if (key !== shelfKey) {
-				shelfKey = key;
-				shelf.width = canvas.width; shelf.height = canvas.height;
+			const key = [A, B, C, D, E, F, ctx.canvas.width, ctx.canvas.height, size].join();
+			if (!cache.shelf) cache.shelf = document.createElement('canvas');
+			const shelf = cache.shelf;
+			if (key !== cache.key) {
+				cache.key = key;
+				shelf.width = ctx.canvas.width; shelf.height = ctx.canvas.height;
 				const sc = shelf.getContext('2d')!;
 				sc.setTransform(dpr * A, dpr * B, dpr * C, dpr * D, dpr * E, dpr * F);
 				sc.lineCap = 'round'; sc.lineJoin = 'round';
@@ -188,6 +146,63 @@
 		vg.addColorStop(1, 'rgba(3,28,60,.42)');
 		ctx.fillStyle = vg;
 		ctx.fillRect(0, 0, W, H);
+	}
+</script>
+
+<script lang="ts">
+	// The sea the island sits in: one canvas behind the board. Everything is drawn in BOARD
+	// coordinates through the same view matrix as the board's svg, so the water pans, zooms
+	// and turns with the island. It never touches the svg above it, so the board itself is
+	// not repainted while the sea animates.
+	//
+	// The open water is two soft textures made once from noise — broad darker swells, and a
+	// broken net of pale streaks (light on the surface) — the streaks laid down twice at
+	// different sizes and angles, sliding past each other, which is what makes water look
+	// like water instead of a pattern. Round the island: the shelf (pale bands hugging the
+	// coast) and the foam washing in and out.
+	//
+	// COST (this runs on every screen, on every PC): the canvas is kept SMALL — about 0.65
+	// megapixels whatever the window or pixel density, stretched by CSS (water is soft, it
+	// does not show) — the shelf's six wide strokes are drawn once per view into a spare
+	// canvas and copied, and the sea moves 20 times a second. A full-size canvas redrawn 30
+	// times a second with those strokes was the single biggest load on weak machines.
+	import { onMount } from 'svelte';
+
+	/** the board svg's viewBox */
+	export let bounds = { a: 0, b: 0, w: 100, h: 100 };
+	/** the board's view transform (pan / zoom / rotate), in viewBox units */
+	export let view = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
+	/** the island's coastline (svg path, board units) */
+	export let coast = '';
+	export let size = 60;
+	/** draw once per change instead of animating (also forced by "reduce motion") */
+	export let still = false;
+
+	let canvas: HTMLCanvasElement;
+	let W = 0, H = 0, dpr = 1;
+	let t = 0;
+	let reduce = false;
+	let coastPath: Path2D | null = null;
+	$: coastPath = typeof Path2D !== 'undefined' && coast ? new Path2D(coast) : null;
+	let streaks: CanvasPattern | null = null, swells: CanvasPattern | null = null;
+	/** the shelf bands, drawn once per view (they do not move) */
+	const cache: SeaCache = { shelf: null, key: '' };
+	$: { void coastPath; cache.key = ''; } // a new coastline redraws the shelf
+	const BUDGET = 650_000; // canvas pixels
+
+	function makeTextures(ctx: CanvasRenderingContext2D) {
+		({ streaks, swells } = seaPatterns(ctx));
+	}
+
+	function draw() {
+		const ctx = canvas?.getContext('2d');
+		if (!ctx || !W || !H) return;
+		if (!streaks) makeTextures(ctx);
+		// viewBox → css px ("xMidYMid meet"), then the board's own view transform
+		const s = Math.min(W / bounds.w, H / bounds.h);
+		const ox = (W - s * bounds.w) / 2 - s * bounds.a, oy = (H - s * bounds.h) / 2 - s * bounds.b;
+		const m = { A: s * view.a, B: s * view.b, C: s * view.c, D: s * view.d, E: s * view.e + ox, F: s * view.f + oy };
+		paintSea(ctx, { W, H, dpr, bounds, m, coastPath, size, t, streaks, swells, cache });
 	}
 
 	// redraw as soon as something the picture depends on changes (pan / zoom must not lag behind
