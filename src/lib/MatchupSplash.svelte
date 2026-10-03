@@ -225,21 +225,23 @@
 	.body { position: absolute; left: 50px; right: 50px; bottom: 0; padding: 0 0 20px; display: flex; flex-direction: column; align-items: center; transform: translateX(-34px); }
 	.sigil { width: calc(40px + 88px / var(--n)); height: calc(40px + 88px / var(--n)); object-fit: contain; filter: drop-shadow(0 3px 7px rgba(0,0,0,0.8)); }
 	.txt { text-align: center; }
-	.hname { font-size: min(calc(88px / var(--n) + 2px), calc(var(--sw) / (var(--nl, 8) * 0.6))); line-height: 1; white-space: nowrap; text-shadow: 0 2px 8px rgba(0,0,0,0.8); }
+	.hname { font-size: min(calc(88px / var(--n) + 2px), calc(var(--sw) / (var(--nl, 8) * 0.68))); line-height: 1; white-space: nowrap; text-shadow: 0 2px 8px rgba(0,0,0,0.8); }
 	.htitle { margin-top: 4px; font-size: 17px; line-height: 1.15; white-space: nowrap; color: var(--brass-hi, #f4dfa8); text-shadow: 0 1px 6px rgba(0,0,0,0.8); }
-	.roles { display: flex; gap: 7px; align-items: center; margin-top: 10px; }
-	.roles img, .roles em { width: 26px; height: 26px; object-fit: contain; filter: drop-shadow(0 1px 3px rgba(0,0,0,0.8)); }
-	.roles em { display: grid; place-items: center; font-style: normal; font-size: 19px; color: var(--brass-hi, #f4dfa8); }
+	.roles { display: flex; gap: 9px; align-items: center; margin-top: 12px; }
+	.roles img, .roles em { width: 34px; height: 34px; object-fit: contain; filter: brightness(1.5) saturate(1.15) drop-shadow(0 0 1px rgba(255,238,200,0.95)) drop-shadow(0 0 7px rgba(255,214,140,0.45)) drop-shadow(0 2px 3px rgba(0,0,0,0.9)); }
+	.roles em { display: grid; place-items: center; font-style: normal; font-size: 24px; color: var(--brass-hi, #f4dfa8); }
 	.packed .htitle { font-size: 13px; }
+	.dense .roles { gap: 6px; }
+	.dense .roles img, .dense .roles em { width: 28px; height: 28px; font-size: 20px; }
 	.packed .roles { gap: 3px; }
-	.packed .roles img, .packed .roles em { width: 19px; height: 19px; font-size: 14px; }
+	.packed .roles img, .packed .roles em { width: 22px; height: 22px; font-size: 16px; }
 	.packed .who { font-size: 13px; padding: 3px 9px 3px 6px; letter-spacing: 0.05em; }
 	.packed .who b { display: none; }
 	.packed .top { padding-left: 62px; }
 
 	/* the blade between the teams, the VS on it */
 	.seam { position: absolute; z-index: 3; left: 50%; top: 30px; bottom: 14px; width: 0; }
-	.seam > i { position: absolute; left: -3px; top: 0; bottom: 0; width: 6px; transform: skewX(-8deg); transform-origin: 50% 0; border-radius: 3px;
+	.seam > i { display: none; position: absolute; left: -3px; top: 0; bottom: 0; width: 6px; transform: skewX(-8deg); transform-origin: 50% 0; border-radius: 3px;
 		background: linear-gradient(180deg, transparent, #ffe9b8 18%, #fff 50%, #ffe9b8 82%, transparent); box-shadow: 0 0 24px 6px rgba(244,223,168,0.5); animation: blade 0.22s var(--seam) cubic-bezier(0.3, 0, 0.2, 1) both; }
 	@keyframes blade { from { opacity: 0; transform: skewX(-8deg) scaleY(0); } to { opacity: 1; transform: skewX(-8deg) scaleY(1); } }
 	.disc { position: absolute; left: -44px; top: calc(50% - 44px); width: 88px; height: 88px; border-radius: 50%; display: grid; place-items: center;
@@ -305,7 +307,7 @@
 		.hname { font-size: min(26px, calc(190px / (var(--nl, 8) * 0.6))); }
 		.htitle { font-size: 13px; margin-top: 1px; }
 		.roles { margin: 0; flex-basis: 100%; gap: 4px; }
-		.roles img, .roles em { width: 17px; height: 17px; font-size: 13px; }
+		.roles img, .roles em { width: 21px; height: 21px; font-size: 15px; }
 		.dense .sigil { width: 32px; height: 32px; }
 		.dense .hname { font-size: min(22px, calc(190px / (var(--nl, 8) * 0.6))); }
 		.dense .roles { display: none; }
@@ -313,7 +315,7 @@
 		.packed .htitle { display: none; }
 		.packed .top { top: 20px; padding: 0; }
 		.seam { position: relative; left: 0; top: 0; bottom: auto; width: 100%; height: 0; flex: none; }
-		.seam > i { left: 0; right: 0; width: auto; top: -2px; bottom: auto; height: 4px; transform: skewY(-4deg); transform-origin: 0 50%;
+		.seam > i { display: block; left: 0; right: 0; width: auto; top: -2px; bottom: auto; height: 4px; transform: skewY(-4deg); transform-origin: 0 50%;
 			background: linear-gradient(90deg, transparent, #ffe9b8 18%, #fff 50%, #ffe9b8 82%, transparent); animation-name: bladeX; }
 		.disc { left: calc(50% - 23px); top: -23px; width: 46px; height: 46px; box-shadow: 0 0 0 4px rgba(216,179,106,0.16), 0 0 24px rgba(216,179,106,0.32), inset 0 0 12px rgba(0,0,0,0.6); }
 		.disc span { font-size: 18px; }
