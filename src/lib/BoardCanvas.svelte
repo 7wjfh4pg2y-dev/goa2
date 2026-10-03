@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import Ocean from '$lib/board/Ocean.svelte';
+	import Ocean, { paintSea, seaPatterns } from '$lib/board/Ocean.svelte';
 	import IslandLayer from '$lib/board/IslandLayer.svelte';
 	import PieceDefs from '$lib/board/PieceDefs.svelte';
 	import HeroToken from '$lib/board/HeroToken.svelte';
@@ -208,6 +208,7 @@
 	$: if (viewM && look === 'island') viewMoved();
 
 	let svgEl: SVGSVGElement;
+	let landEl: SVGSVGElement | null = null;
 	let viewG: SVGGElement;
 	let wrapEl: HTMLDivElement;
 	const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
@@ -279,6 +280,56 @@
 	/** Stage the board as a picture (the pre-game backdrop): its centre at (fx, fy) of the box — 0.5, 0.5 is the
 	 *  middle — at zoom `s` (1 = the whole board fits). Not clamped: it may sit partly off screen. */
 	export function place(fx: number, fy: number, s: number) { staged = { fx, fy, s }; }
+
+	/** A still PICTURE of this board's island (sea + land, no pieces) painted into `target` at w × h css px, the whole
+	 *  island fitted inside the box minus `inset` (px). The pre-game previews (Create, lobby) use the backdrop's board
+	 *  for this instead of building a second live board: one canvas instead of ~2k svg nodes. False if not ready. */
+	let picImg: { xml: string; img: HTMLImageElement } | null = null;
+	export async function paintPicture(target: HTMLCanvasElement, w: number, h: number, inset = { t: 0, r: 0, b: 0, l: 0 }): Promise<boolean> {
+		if (look !== 'island' || !landEl || !hexes.length || w < 2 || h < 2) return false;
+		const dpr = Math.min(window.devicePixelRatio || 1, 2);
+		// the island's extent (board units), a little sea round it
+		const xs = hexes.map((q) => q.x), ys = hexes.map((q) => q.y);
+		const m0 = size * 1.35;
+		const ix0 = Math.min(...xs) - size * 0.87 - m0, ix1 = Math.max(...xs) + size * 0.87 + m0;
+		const iy0 = Math.min(...ys) - size - m0, iy1 = Math.max(...ys) + size + m0;
+		const aw = Math.max(1, w - inset.l - inset.r), ah = Math.max(1, h - inset.t - inset.b);
+		const k = Math.min(aw / (ix1 - ix0), ah / (iy1 - iy0)); // css px per board unit
+		const E = inset.l + aw / 2 - k * (ix0 + ix1) / 2, F = inset.t + ah / 2 - k * (iy0 + iy1) / 2;
+		// the land: this board's own island svg as an image (decoded once per island: decoding styles every shape in it)
+		const clone = landEl.cloneNode(true) as SVGSVGElement;
+		clone.removeAttribute('style');
+		clone.removeAttribute('class');
+		clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+		clone.setAttribute('width', String(Math.ceil(bounds.w)));
+		clone.setAttribute('height', String(Math.ceil(bounds.h)));
+		const xml = new XMLSerializer().serializeToString(clone);
+		let url = '';
+		try {
+			if (picImg?.xml !== xml) {
+				url = URL.createObjectURL(new Blob([xml], { type: 'image/svg+xml' }));
+				const im = new Image();
+				im.src = url;
+				await im.decode();
+				picImg = { xml, img: im };
+			}
+			const img = picImg.img;
+			target.width = Math.round(w * dpr);
+			target.height = Math.round(h * dpr);
+			const ctx = target.getContext('2d');
+			if (!ctx) return false;
+			paintSea(ctx, { W: w, H: h, dpr, bounds, m: { A: k, B: 0, C: 0, D: k, E, F }, coastPath: coast ? new Path2D(coast) : null, size, t: 0,
+				...seaPatterns(ctx), cache: { shelf: null, key: '' } });
+			ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+			ctx.globalAlpha = 1;
+			ctx.drawImage(img, E + k * bounds.a, F + k * bounds.b, k * bounds.w, k * bounds.h);
+			return true;
+		} catch {
+			return false;
+		} finally {
+			if (url) URL.revokeObjectURL(url);
+		}
+	}
 	// (kept and re-applied whenever the box is measured or resized)
 	let staged: { fx: number; fy: number; s: number } | null = null;
 	$: if (staged && fit) {
@@ -564,7 +615,7 @@
 >
 	{#if look === 'island' && viewM}
 		<Ocean {bounds} view={viewM} {coast} {size} still={seaStill || !effects} />
-		<svg class="land" class:moving viewBox={vb} preserveAspectRatio="xMidYMid meet" style:transform={landTf} aria-hidden="true">
+		<svg class="land" class:moving viewBox={vb} preserveAspectRatio="xMidYMid meet" style:transform={landTf} aria-hidden="true" bind:this={landEl}>
 			<IslandLayer {cells} {meta} {size} rot={rotEff} zones={zoneNames} thrones={throneAt} {coast} scatter={map.scatter ?? {}} />
 		</svg>
 		<!-- the battle zone's outline is its own svg so that its pulse is an opacity animation on a whole element

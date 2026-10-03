@@ -45,7 +45,6 @@
 	import '$lib/ui/pregame.css';
 	import SeaBackdrop from '$lib/ui/SeaBackdrop.svelte';
 	import Icon from '$lib/ui/Icon.svelte';
-	import BoardCanvas from '$lib/BoardCanvas.svelte';
 
 	type Mode = 'landing' | 'choose' | 'admin' | 'adminhub' | 'menu' | 'create' | 'join' | 'lobby' | 'draft' | 'game';
 	let mode: Mode = 'landing';
@@ -211,7 +210,8 @@
 		session?.leave();
 		roomHandle?.leave();
 		browseHandle?.leave();
-		boardTimers.forEach(clearTimeout);
+		if (calmT) clearTimeout(calmT);
+		if (picT) clearTimeout(picT);
 	});
 
 	$: chosenMap = maps.find((m) => m.id === mapId) ?? maps[0];
@@ -235,9 +235,6 @@
 	// the host's board options, as the lobby shows them
 	// the release plays on the classic board, still, for now (the island in the game and its
 	// host switches come with the board step) — so the lobby shows exactly that board
-	const lobbyLook = 'island' as 'island' | 'classic';
-	const lobbyGlow = false;
-	const lobbyFx = false;
 	$: seatCount = $state.seats;
 	$: half = Math.floor(seatCount / 2);
 	// a player is "playing" once they hold a real seat (seat >= 0)
@@ -296,28 +293,40 @@
 	$: lobbyLife = $state.lifeMax;
 	$: lobbyLength = lobbyLife === lifeFor('quick', seatCount) && lobbyWaves === mapWaves($state.map, 'quick') ? 'Quick game'
 		: lobbyLife === lifeFor('long', seatCount) && lobbyWaves === mapWaves($state.map, 'long') ? 'Long game' : 'Custom game';
-	// the live boards are pictures here: staged so the island sits clear of the caption
-	let lobbyBoard: BoardCanvas | null = null;
-	let createBoard: BoardCanvas | null = null;
-	// The Create form's island preview and the lobby's board mount a beat AFTER their screen, so opening
-	// either isn't one long freeze (the screen fades in first, then the board — up to ~2k svg nodes — is
-	// built in its own task). The sea moves only on the landing screens and in the game: on Create and in the lobby
-	// it is still (it stops a beat after the Create form opens, in a frame of its own, and stays still into the lobby).
-	let boardOn = false;
-	let seaCalm = false;
-	let boardTimers: ReturnType<typeof setTimeout>[] = [];
-	$: armBoards(mode);
-	function armBoards(m: string) {
-		boardTimers.forEach(clearTimeout);
-		boardTimers = [];
-		boardOn = false;
-		const still = m === 'create' || m === 'lobby';
-		if (!still) { seaCalm = false; return; }
-		boardTimers.push(setTimeout(() => (boardOn = true), 320));
-		if (!seaCalm) boardTimers.push(setTimeout(() => (seaCalm = true), 900));
+	// The Create form's map and the lobby's board are PICTURES of the backdrop's island (BoardCanvas.paintPicture:
+	// one canvas, the whole island fitted inside the frame clear of its caption) — not second live boards (~2k svg
+	// nodes each, the Create game hitch). Painted a beat after the screen opens, so the click stays light; again
+	// when the map or the frame's size changes.
+	let sea: SeaBackdrop | null = null;
+	let createPic: HTMLCanvasElement | null = null, lobbyPic: HTMLCanvasElement | null = null;
+	let cw = 0, ch = 0, lw = 0, lh = 0;
+	$: pic = mode === 'create' ? { el: createPic, w: cw, h: ch, inset: mobile ? { t: 2, r: 2, b: 2, l: 2 } : { t: 8, r: 8, b: 58, l: 8 } }
+		: mode === 'lobby' ? { el: lobbyPic, w: lw, h: lh, inset: mobile ? { t: 3, r: 3, b: 36, l: 3 } : { t: 8, r: 8, b: 50, l: 8 } }
+		: null;
+	$: schedulePic(pic, bgKey);
+	let picEl: HTMLCanvasElement | null = null, picKey = '';
+	let picT: ReturnType<typeof setTimeout> | null = null;
+	function schedulePic(p: typeof pic, mapKey: string) {
+		if (!p?.el || !p.w || !p.h || !mapKey) return;
+		const el = p.el, k = `${mapKey}|${p.w}x${p.h}`;
+		if (el === picEl && k === picKey) return;
+		if (picT) clearTimeout(picT);
+		picT = setTimeout(async () => {
+			picT = null;
+			if (await sea?.paintPicture(el, p.w, p.h, p.inset)) { picEl = el; picKey = k; el.classList.add('on'); }
+		}, el === picEl ? 60 : 320);
 	}
-	$: if (lobbyBoard) lobbyBoard.place(0.5, mobile ? 0.5 : 0.46, mobile ? 2.3 : 0.94);
-	$: if (createBoard) createBoard.place(0.5, mobile ? 0.5 : 0.44, mobile ? 1.5 : 1.04);
+	// The sea moves only on the landing screens and in the game: on Create and in the lobby it is still (it stops a
+	// beat after the Create form opens, in a frame of its own, and stays still into the lobby).
+	let seaCalm = false;
+	let calmT: ReturnType<typeof setTimeout> | null = null;
+	$: armCalm(mode === 'create' || mode === 'lobby');
+	function armCalm(still: boolean) {
+		if (calmT) clearTimeout(calmT);
+		calmT = null;
+		if (!still) seaCalm = false;
+		else if (!seaCalm) calmT = setTimeout(() => (seaCalm = true), 900);
+	}
 	const initial = (n: string) => (n.trim()[0] ?? '?').toUpperCase();
 	$: myColorLabel = PLAYER_COLORS.find((c) => c.id === (mySeat < 0 ? pick : color))?.label ?? '';
 
@@ -728,7 +737,7 @@
 	<GameView {session} ms={state} {players} clientId={session.clientId} {room} onLeave={leaveRoom} />
 	{#if seatNotice}<div class="seattoast">{seatNotice}</div>{/if}
 {:else}
-<SeaBackdrop scene={bgScene} map={bgMap} mobile={mobile || (portrait && family)} effects={!seaCalm} />
+<SeaBackdrop bind:this={sea} scene={bgScene} map={bgMap} mobile={mobile || (portrait && family)} effects={!seaCalm} />
 <div class="uiscale tide pre" style="--ui:{ui}">
 	{#if family}
 		<!-- landing · role · admin · menu · join: the crest and one column of steps beside the island -->
@@ -899,8 +908,8 @@
 								<div class="fld g-map">
 									<span class="t-label">Map</span>
 									<div class="mapbox">
-										<div class="boardframe mapframe">
-											{#if chosenMap && boardOn}<BoardCanvas bind:this={createBoard} map={chosenMap.data} look="island" interactive={false} pieces={[]} effects={false} />{/if}
+										<div class="boardframe mapframe" bind:clientWidth={cw} bind:clientHeight={ch}>
+											<canvas class="pic" bind:this={createPic} aria-hidden="true"></canvas>
 											<button class="mapnav prev" on:click={() => cycleMap(-1)} disabled={maps.length < 2} aria-label="Previous map"><Icon name="back" /></button>
 											<button class="mapnav next" on:click={() => cycleMap(1)} disabled={maps.length < 2} aria-label="Next map"><Icon name="go" /></button>
 											<div class="cap mapcap"><span><b>{chosenMap?.label ?? 'No map'}</b>{#if maps.length > 1} · {mapIndex + 1} / {maps.length}{/if}</span></div>
@@ -986,10 +995,8 @@
 
 					<div class="ltable">
 						{@render teamPanel('orange', orangeSeats, orangeCount)}
-						<div class="boardframe lboard" class:classic={lobbyLook === 'classic'}>
-							{#if $state.map && boardOn}
-								<BoardCanvas bind:this={lobbyBoard} map={$state.map} look={lobbyLook} glowZone={lobbyGlow && lobbyLook === 'island' ? 'Center' : null} effects={lobbyFx} interactive={false} pieces={[]} />
-							{/if}
+						<div class="boardframe lboard" bind:clientWidth={lw} bind:clientHeight={lh}>
+							<canvas class="pic" bind:this={lobbyPic} aria-hidden="true"></canvas>
 							<div class="cap"><span><b>{lobbyMapName}</b> · {lobbyLength.replace(' game', '')} <span class="deskonly">game</span> · {lobbyWaves} waves · {lobbyLife} Life <span class="deskonly">per team</span></span></div>
 						</div>
 						{@render teamPanel('blue', blueSeats, blueCount)}
@@ -1205,8 +1212,8 @@
 	.spec .kickx { width: 30px; height: 30px; }
 	/* a guest reads the host's choice: still brass (blue only ever means the Titans), just quieter */
 	.lbox .lactions { display: flex; align-items: center; gap: 14px; padding: 12px 14px; }
-	.lboard :global(.board-wrap), .mapframe :global(.board-wrap) { animation: boardin 0.35s ease both; }
-	@keyframes boardin { from { opacity: 0; } }
+	.boardframe .pic { position: absolute; inset: 0; width: 100%; height: 100%; display: block; opacity: 0; transition: opacity 0.35s ease; }
+	.boardframe .pic:global(.on) { opacity: 1; }
 	.lactions .lhint { flex: 1; min-height: 1.35em; margin: 0; text-align: right; color: var(--ink); text-shadow: 0 1px 6px rgba(0, 0, 0, 0.8); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 	.lactions .btn-lg { min-width: 190px; }
 	.lactions .leave { min-width: 120px; margin-right: auto; }
