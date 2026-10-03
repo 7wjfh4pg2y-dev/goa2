@@ -63,6 +63,10 @@
 	let playerCount = 4;
 	let customWaves = 3;
 	let customLife = 6;
+	// Custom starts from whatever was showing; the ± on the waves / Life counts edit it in place
+	function goCustom() { if (ruleset !== 'custom') { customWaves = previewWaves; customLife = previewLife; ruleset = 'custom'; } }
+	function stepWaves(d: number) { goCustom(); customWaves = Math.min(7, Math.max(1, customWaves + d)); }
+	function stepLife(d: number) { goCustom(); customLife = Math.min(10, Math.max(3, customLife + d)); }
 	let draftSystem: DraftSystem = 'all-pick';
 	let draftStars = [1, 2, 3]; // 4★ heroes disabled for now (extra dev work pending)
 	let maps: MapChoice[] = [];
@@ -681,8 +685,8 @@
 				<div class="stage" style:height={stageH ? stageH + 'px' : ''}>
 					{#if mode === 'landing'}
 						<div class="step enterstep" transition:reveal bind:clientHeight={h['landing']}>
-							<!-- the crest above is the button; this is its big visible label -->
-							<label class="btn btn-duo btn-lg enter" for="crest-home">Enter</label>
+							<!-- the crest above is the way in (no separate Enter button) -->
+							<label class="crest-hint" for="crest-home"><span class="deskonly">Click</span><span class="phoneonly">Tap</span> the crest to enter</label>
 							{#if joining}<p class="t-small rejoin">Rejoining room {room}…</p>{/if}
 						</div>
 					{:else if mode === 'choose'}
@@ -710,7 +714,7 @@
 								{#if pwError}<p class="msg-error err">Incorrect password.</p>{/if}
 								<div class="row">
 									<button class="btn btn-ghost" on:click={() => (mode = 'choose')}><Icon name="back" /> Back</button>
-									<button class="btn btn-primary" on:click={submitAdmin} disabled={busy || !pw}>{busy ? 'Checking…' : 'Unlock'}</button>
+									<button class="btn btn-duo" on:click={submitAdmin} disabled={busy || !pw}>{busy ? 'Checking…' : 'Unlock'}</button>
 								</div>
 							</section>
 						</div>
@@ -772,7 +776,7 @@
 								{#if joinError}<p class="msg-error err">{joinError}</p>{/if}
 								<div class="row">
 									<button class="btn btn-ghost" on:click={() => (mode = 'menu')}><Icon name="back" /> Back</button>
-									<button class="btn btn-primary" on:click={joinGame} disabled={!room.trim() || !name.trim() || joining}>{joining ? 'Joining…' : 'Join game'}</button>
+									<button class="btn btn-duo" on:click={joinGame} disabled={!room.trim() || !name.trim() || joining}>{joining ? 'Joining…' : 'Join game'}</button>
 								</div>
 							</section>
 							{#if openRooms.length}
@@ -802,6 +806,18 @@
 			</div>
 		</main>
 	{:else if mode === 'create'}
+		{#snippet counts()}
+			<span class="pill pstep" class:is-custom={ruleset === 'custom'}>
+				<button class="pbtn" on:click={() => stepWaves(-1)} disabled={previewWaves <= 1} aria-label="Fewer waves"><Icon name="minus" /></button>
+				<span class="pv"><b>{previewWaves}</b> waves</span>
+				<button class="pbtn" on:click={() => stepWaves(1)} disabled={previewWaves >= 7} aria-label="More waves"><Icon name="plus" /></button>
+			</span>
+			<span class="pill pstep" class:is-custom={ruleset === 'custom'}>
+				<button class="pbtn" on:click={() => stepLife(-1)} disabled={previewLife <= 3} aria-label="Less Life"><Icon name="minus" /></button>
+				<span class="pv"><b>{previewLife}</b> Life <span class="deskonly">per team</span></span>
+				<button class="pbtn" on:click={() => stepLife(1)} disabled={previewLife >= 10} aria-label="More Life"><Icon name="plus" /></button>
+			</span>
+		{/snippet}
 		<main class="screen s-create" transition:reveal>
 			<div class="cwrap">
 				<section class="panel cbox">
@@ -819,18 +835,8 @@
 										<div class="seg seg--fill">
 											<button class="seg-opt has-sub" class:is-on={ruleset === 'quick'} on:click={() => (ruleset = 'quick')}>Quick<span class="sub">{mapWaves(chosenMap?.data, 'quick')} waves · {lifeFor('quick', playerCount)} Life</span></button>
 											<button class="seg-opt has-sub" class:is-on={ruleset === 'long'} on:click={() => (ruleset = 'long')}>Long<span class="sub">{mapWaves(chosenMap?.data, 'long')} waves · {lifeFor('long', playerCount)} Life</span></button>
-											<button class="seg-opt has-sub" class:is-on={ruleset === 'custom'} on:click={() => (ruleset = 'custom')}>Custom<span class="sub">Set your own</span></button>
+											<button class="seg-opt has-sub" class:is-on={ruleset === 'custom'} on:click={() => goCustom()}>Custom<span class="sub">Set with ±</span></button>
 										</div>
-										{#if ruleset === 'custom'}
-											<div class="custom">
-												<span class="cust"><span class="t-small">Waves</span>
-													<span class="stepper"><button on:click={() => (customWaves = Math.max(1, customWaves - 1))} disabled={customWaves <= 1} aria-label="Fewer waves"><Icon name="minus" /></button><b>{customWaves}</b><button on:click={() => (customWaves = Math.min(7, customWaves + 1))} disabled={customWaves >= 7} aria-label="More waves"><Icon name="plus" /></button></span>
-												</span>
-												<span class="cust"><span class="t-small">Life <span class="deskonly">per team</span></span>
-													<span class="stepper"><button on:click={() => (customLife = Math.max(3, customLife - 1))} disabled={customLife <= 3} aria-label="Less life"><Icon name="minus" /></button><b>{customLife}</b><button on:click={() => (customLife = Math.min(10, customLife + 1))} disabled={customLife >= 10} aria-label="More life"><Icon name="plus" /></button></span>
-												</span>
-											</div>
-										{/if}
 									</div>
 									<div class="fld g-seats">
 										<span class="t-label">Players (seats)</span>
@@ -856,7 +862,7 @@
 											{:else}
 												<span class="tag"><Icon name="check" /> Selected</span>
 											{/if}
-											<p class="t-small msum">{previewWaves} waves · {previewLife} Life per team · {playerCount} seats</p>
+											<div class="msum">{@render counts()}</div>
 										</div>
 									</div>
 								</div>
@@ -892,8 +898,8 @@
 					</div>
 					<footer class="cfoot">
 						<button class="btn btn-ghost" on:click={() => (mode = 'menu')}><Icon name="back" /> Back</button>
-						<div class="csum"><span class="pill">{previewWaves} waves</span><span class="pill">{previewLife} Life per team</span><span class="pill">{playerCount} seats</span><span class="pill" class:pill--bad={poolShort}>{eligibleCount} heroes in the pool</span></div>
-						<button class="btn btn-primary createbtn" on:click={createGame} disabled={poolShort || !name.trim()}>Create game</button>
+						<div class="csum">{@render counts()}<span class="pill">{playerCount} seats</span><span class="pill" class:pill--bad={poolShort} title="Heroes in the pool">{eligibleCount} heroes</span></div>
+						<button class="btn btn-duo createbtn" on:click={createGame} disabled={poolShort || !name.trim()}>Create game</button>
 					</footer>
 				</section>
 			</div>
@@ -1016,20 +1022,40 @@
 
 	/* ------------------------------------------------ landing · role · admin · menu · join */
 	.s-col { padding: 32px max(40px, 7%); }
-	.leftcol { width: 500px; max-width: 100%; margin: auto 0; display: flex; flex-direction: column; align-items: flex-start; }
+	.leftcol { width: 420px; max-width: 100%; margin: auto 0; display: flex; flex-direction: column; align-items: flex-start; }
+	.s-col.landing .leftcol { width: 540px; }
 	.s-col .home { width: 168px; margin: 0 0 20px -10px; transition: width 0.6s cubic-bezier(0.2, 0.85, 0.2, 1), margin 0.6s cubic-bezier(0.2, 0.85, 0.2, 1); }
 	.s-col.compact .home { width: 124px; margin-bottom: 14px; }
-	.s-col.landing .home { width: 420px; margin: 0 0 30px -16px; }
+	.s-col.landing .home { width: 520px; margin: 0 0 22px -18px; }
 	.s-col.landing .logo { filter: drop-shadow(0 20px 46px rgba(0, 0, 0, 0.65)) drop-shadow(0 0 34px rgba(216, 179, 106, 0.26)); }
 	.stage { position: relative; width: 100%; transition: height 0.32s cubic-bezier(0.2, 0.8, 0.2, 1); }
 	.s-col.landing .stage { min-height: var(--h-btn-lg); } /* (room for Enter before the step is measured: no jump on load) */
 	.step { position: absolute; top: 0; left: 0; right: 0; display: flex; flex-direction: column; gap: 16px; }
 	.phoneonly { display: none; }
-	.enterstep { right: auto; width: 388px; align-items: center; gap: 14px; }
-	.enter { min-width: 260px; cursor: pointer; letter-spacing: 0.08em; }
+	.enterstep { right: auto; width: 484px; align-items: center; gap: 14px; }
+	/* a dark pool behind the crest so its banner reads over the island */
+	.home { position: relative; isolation: isolate; }
+	.home::before { content: ''; position: absolute; inset: -12% -10%; z-index: -1; border-radius: 50%; pointer-events: none;
+		background: radial-gradient(closest-side, rgba(3, 12, 24, 0.72), rgba(3, 12, 24, 0.38) 62%, transparent); }
+	.crest-hint { cursor: pointer; padding: 9px 22px; border-radius: var(--r-pill); font-size: 1.05rem; letter-spacing: 0.14em; text-transform: uppercase;
+		color: var(--brass-hi); background: rgba(4, 14, 26, 0.82); border: 1px solid var(--brass-line); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8); animation: hintglow 2.4s ease-in-out infinite; }
+	@keyframes hintglow { 0%, 100% { opacity: 1; } 50% { opacity: 0.62; } }
+	@media (prefers-reduced-motion: reduce) { .crest-hint { animation: none; } }
 	.step .rejoin { color: var(--ink); }
-	.head { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
-	.head .t-h1 { text-shadow: 0 2px 14px rgba(0, 0, 0, 0.55); }
+	/* each screen's title sits on a dark plate so it reads over the island */
+	.head { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; align-self: flex-start; padding: 10px 18px 12px; border-radius: 14px;
+		background: linear-gradient(180deg, rgba(4, 14, 26, 0.84), rgba(4, 14, 26, 0.7)); border: 1px solid var(--brass-line); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); }
+	.head .t-label { color: var(--brass-hi); }
+	.head .t-h1 { text-shadow: 0 2px 10px rgba(0, 0, 0, 0.6); }
+	/* the menu cards: the two teams' orange → blue */
+	.choices :global(.choice) { min-height: 96px; color: #fff; border-color: rgba(255, 255, 255, 0.3);
+		background: linear-gradient(105deg, rgba(214, 104, 26, 0.95) 0%, rgba(150, 82, 120, 0.93) 55%, rgba(40, 104, 200, 0.95) 100%); }
+	.choices :global(.choice:hover) { border-color: rgba(255, 255, 255, 0.7); box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.25); }
+	.choices :global(.choice-ic) { width: 58px; height: 58px; color: #fff; background: rgba(4, 14, 26, 0.38); border-color: rgba(255, 255, 255, 0.55); box-shadow: none; }
+	.choices :global(.choice .c-muted) { color: rgba(255, 255, 255, 0.86); }
+	.choices :global(.choice-go) { color: #fff; }
+	.choices :global(.choice .t-h2) { text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45); }
 	.choices { display: flex; flex-direction: column; gap: 16px; width: 100%; }
 	.step .note { margin-top: 6px; color: var(--ink-2); text-shadow: 0 1px 6px rgba(0, 0, 0, 0.7); }
 	.step .formpanel { display: flex; flex-direction: column; gap: 16px; padding: 24px 26px; }
@@ -1057,11 +1083,6 @@
 	.cgrid { display: grid; grid-template-columns: minmax(0, 1fr) 1px minmax(0, 1fr); gap: 0 40px; }
 	.ccol { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 	.cform .crule { margin: 18px 0; }
-	.custom { display: flex; justify-content: space-between; gap: 12px; margin-top: 2px; }
-	.cust :global(.stepper button) { width: 36px; height: 36px; }
-	.cust :global(.stepper b) { min-width: 36px; }
-	.cust { display: inline-flex; align-items: center; gap: 10px; }
-	.cust .t-small { color: var(--ink); }
 	.g-map { min-height: 0; }
 	.mapbox { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 	.mapframe { flex: 1; min-height: 240px; }
@@ -1075,7 +1096,15 @@
 	.cxhint { color: var(--ink-2); max-width: 44ch; }
 	.cform .warn { margin-top: 14px; }
 	.cfoot { display: flex; align-items: center; gap: 16px; margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--hair); }
-	.csum { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 0 auto; }
+	.csum { display: flex; flex-wrap: nowrap; justify-content: center; align-items: center; gap: 8px; margin: 0 auto; white-space: nowrap; }
+	/* waves / Life with their own ± — the counts are edited where they are shown */
+	.pstep { gap: 6px; padding-left: 4px; padding-right: 4px; }
+	.pstep.is-custom { border-color: var(--brass); }
+	.pstep .pv b { font-weight: 400; color: var(--brass-hi); }
+	.pbtn { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border-radius: 50%; cursor: pointer;
+		color: var(--brass-hi); background: rgba(13, 40, 66, 0.9); border: 1px solid var(--brass-line); font-size: 12px; }
+	.pbtn:hover:not(:disabled) { border-color: var(--brass); }
+	.pbtn:disabled { opacity: 0.35; cursor: default; }
 	.createbtn { min-width: 220px; }
 
 	/* ------------------------------------------------------------------------- lobby */
@@ -1158,8 +1187,7 @@
 		.seat-top { flex-wrap: wrap; row-gap: 2px; }
 		.lhead { gap: 12px; }
 		.lyou { gap: 10px; }
-		.cust .t-small { white-space: nowrap; }
-	}
+		}
 
 	/* ------------------------------------------------------------------------ phones */
 	@media (max-width: 760px) {
@@ -1170,10 +1198,11 @@
 		.leftcol { width: 100%; margin: auto; align-items: center; }
 		.s-col .home { width: 132px; margin: 0 0 14px; }
 		.s-col.compact .home { width: 96px; margin-bottom: 10px; }
-		.s-col.landing .home { width: min(300px, 74vw); margin: 0 0 26px; }
+		.s-col.landing .leftcol { width: 100%; }
+		.s-col.landing .home { width: min(350px, 88vw); margin: 0 0 18px; }
 		.enterstep { right: 0; width: auto; }
-		.enter { min-width: 220px; }
-		.head { align-items: center; text-align: center; }
+		.crest-hint { font-size: 0.95rem; padding: 8px 18px; }
+		.head { align-items: center; text-align: center; align-self: center; padding: 8px 16px 10px; }
 		.step .note { align-self: center; text-align: center; padding: 6px 14px; border-radius: var(--r-pill); background: rgba(4, 15, 28, 0.62); }
 		.step .formpanel { padding: 16px; gap: 14px; }
 		.step .openpanel { padding: 14px 16px 16px; }
@@ -1189,18 +1218,14 @@
 		.chead { flex: none; flex-direction: row; gap: 12px; margin: 0; padding: 12px 12px 8px; }
 		.chead .home { width: 46px; }
 		.cbody { flex: 1; min-height: 0; overflow-y: auto; padding: 2px 12px 14px; }
-		.cform { gap: 13px; padding: 14px; border-radius: var(--r-lg); border: 1px solid var(--brass-line); background: var(--glass); box-shadow: var(--sh-2), inset 0 1px 0 rgba(255, 255, 255, 0.07); }
+		.cform { gap: 12px; padding: 14px; border-radius: var(--r-lg); border: 1px solid var(--brass-line); background: var(--glass); box-shadow: var(--sh-2), inset 0 1px 0 rgba(255, 255, 255, 0.07); }
 		.cgrid, .ccol { display: contents; }
 		.cform .vrule, .crule { display: none; }
 		.g-map { order: 9; }
 		.cform .warn { order: 10; margin-top: 0; }
 		.cform :global(.seg-opt.has-sub) { min-height: 46px; }
 		.cform :global(.seg-opt .sub) { display: none; }
-		.custom { flex-direction: column; gap: 8px; }
-		.cust { justify-content: space-between; }
-		.cust :global(.stepper button) { width: 42px; height: 42px; }
-		.cust :global(.stepper b) { min-width: 48px; }
-		.cxchips { gap: 6px; }
+					.cxchips { gap: 6px; }
 		.cxchips .chip { min-height: 46px; }
 		.cxchips :global(.ico) { width: 15px; height: 15px; }
 		.cxhint { display: none; }
@@ -1209,7 +1234,9 @@
 		.mapframe .mapcap { display: none; }
 		.mapmeta { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; }
 		.mapmeta .mapname, .mapmeta .tag { display: inline-flex; }
-		.mapmeta .msum { display: block; }
+		.mapmeta .msum { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+		.msum .pstep { padding-top: 2px; padding-bottom: 2px; }
+		.msum .pbtn { width: 22px; height: 22px; }
 		.mapchips { margin-top: 0; }
 		.cfoot { flex: none; gap: 8px; margin: 0; padding: 10px 12px 12px; background: rgba(4, 15, 28, 0.95); border-top: 1px solid var(--brass-line); box-shadow: 0 -12px 30px rgba(0, 6, 14, 0.5); }
 		.csum { display: none; }
