@@ -1212,7 +1212,7 @@ export function joinMatch(
 		if (patch.lastDefeat && patch.lastDefeat.id !== local.lastDefeat?.id) {
 			const d = patch.lastDefeat
 			const assist = d.assists.length ? ` · ${d.assists.map(nameOf).join(', ')} +${d.assist} assist` : ''
-			note(d.by, `defeated ${nameOf(d.victim)} — +${d.coins} coins${assist} · ${teamName(d.team)} −${d.lives} life`)
+			note(d.by, `defeated ${nameOf(d.victim)} — +${d.coins} ${d.coins === 1 ? 'coin' : 'coins'}${assist} · ${teamName(d.team)} −${d.lives} life`)
 		}
 		if (req.kind === 'battleRemove' && patch.pieces) {
 			const m = local.pieces?.[req.piece]
