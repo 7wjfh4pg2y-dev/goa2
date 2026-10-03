@@ -41,6 +41,8 @@ jobs:
       # sends everyone to whichever one is live:
       #   1.0 (branch `1.0`)          → /goa2/
       #   2.0 (this branch)           → /goa2/v2/
+      #   the release (branch `release`: 1.0 + 2.0's features brought in one by one,
+      #   not live until finished)    → /goa2/v1/
       - name: Build version 2.0
         env:
           BASE_PATH: /goa2/v2
@@ -60,11 +62,27 @@ jobs:
           npm ci
           npm run build
 
+      - name: Checkout the release
+        uses: actions/checkout@v4
+        with:
+          ref: release
+          path: relsrc
+
+      - name: Build the release
+        working-directory: relsrc
+        env:
+          BASE_PATH: /goa2/v1
+        run: |
+          npm ci
+          npx vitest run
+          npm run build
+
       - name: Assemble the site
         run: |
-          mkdir -p site/v2
+          mkdir -p site/v2 site/v1
           cp -r v1src/build/. site/
           cp -r build/. site/v2/
+          cp -r relsrc/build/. site/v1/
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

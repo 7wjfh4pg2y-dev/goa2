@@ -1,16 +1,19 @@
-// Site version switch (GM tools). Both versions of the app are deployed side by side:
+// Site version switch (GM tools). The versions of the app are deployed side by side:
 //   1.0 at /goa2/      (branch 1.0) — the default
 //   2.0 at /goa2/v2/   (branch claude/stats-of-atlantis-replica-hg5nv2)
+//   the RELEASE at /goa2/v1/ (branch release) — 1.0 with 2.0's features brought in one by one;
+//     never redirects anyone and isn't offered by the switch until it is finished
 // The GM picks which one is live in the Supabase table `goa2_settings` (key 'site_version').
 // Every page load checks it and, if this build isn't the chosen one, moves the visitor over.
 // Fail-safe: no table / offline / any error → stay where you are.
 //
-// This file is identical on both branches except THIS_VERSION.
+// This file is identical on every branch except THIS_VERSION.
 import { base } from '$app/paths'
 import { supabase } from './supabase'
 
 export type SiteVersion = '1.0' | '2.0'
-export const THIS_VERSION: SiteVersion = '2.0'
+export type Build = SiteVersion | 'release'
+export const THIS_VERSION = '2.0' as Build
 export const SITE_VERSIONS: SiteVersion[] = ['1.0', '2.0']
 const BASES: Record<SiteVersion, string> = { '1.0': '/goa2', '2.0': '/goa2/v2' }
 const TABLE = 'goa2_settings'
@@ -59,6 +62,7 @@ export function setPreview(on: boolean) {
 /** On app start: if the GM picked the other version, move there. (Skipped in dev and in preview mode.) */
 export async function followSiteVersion() {
 	if (!base) return // `npm run dev` serves one version only
+	if (THIS_VERSION === 'release') return // the work-in-progress release: testers stay put
 	if (/^\/(preview|sandbox)\b/.test(location.pathname.slice(base.length))) setPreview(true)
 	if (isPreview()) return
 	const v = await fetchSiteVersion()
