@@ -629,6 +629,7 @@
 					</div>
 					<p class="hint">{siteVer ? `${siteVer} is live for everyone.` : 'Live version unknown (no setting yet).'} Switching sends every player to that version the next time they open or refresh the site.</p>
 					{#if verErr}<p class="err">{verErr}</p>{/if}
+					{#if THIS_VERSION === 'release'}<p class="hint">You're on the release build (/goa2/v1) — 1.0 plus 2.0's features as they come in. Not live yet.</p>{/if}
 					<a class="ghost pvlink" href="/goa2/v2/preview">Preview 2.0 — pick features</a>
 				</div>
 				<div class="row center"><button class="ghost" on:click={goHome}>Sign out</button></div>
