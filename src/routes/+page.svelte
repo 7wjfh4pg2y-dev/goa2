@@ -791,7 +791,6 @@
 									<span class="choice-go"><Icon name="go" /></span>
 								</button>
 							</div>
-							<p class="t-small note">The crest takes you back to the start.</p>
 						</div>
 					{:else if mode === 'join'}
 						<div class="step" transition:reveal bind:clientHeight={h['join']}>
@@ -1091,7 +1090,6 @@
 	.choices :global(.choice-go) { color: #fff; }
 	.choices :global(.choice .t-h2) { text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45); }
 	.choices { display: flex; flex-direction: column; gap: 16px; width: 100%; }
-	.step .note { margin-top: 6px; color: var(--ink-2); text-shadow: 0 1px 6px rgba(0, 0, 0, 0.7); }
 	.step .formpanel { display: flex; flex-direction: column; gap: 16px; padding: 24px 26px; }
 	.step .formpanel .row { margin-top: 4px; }
 	.field.up { text-transform: uppercase; }
@@ -1211,7 +1209,6 @@
 		.s-col.landing .home { margin-left: 0; }
 		.enterstep { right: 0; width: auto; }
 		.head { align-items: center; text-align: center; }
-		.step .note { align-self: center; }
 	}
 	/* a narrow window (the canvas is under 1440 wide): the lobby's settings stack */
 	@media (min-width: 761px) and (max-width: 1007px) {
@@ -1237,7 +1234,6 @@
 		.crest-hint { font-size: 0.95rem; padding: 8px 18px; }
 		.head { align-items: center; text-align: center; align-self: center; padding: 8px 16px 10px; }
 		.head.deskhead { display: none; } /* the role and play menus speak for themselves on a phone */
-		.step .note { align-self: center; text-align: center; padding: 6px 14px; border-radius: var(--r-pill); background: rgba(4, 15, 28, 0.62); }
 		.step .formpanel { padding: 16px; gap: 14px; }
 		.step .openpanel { padding: 14px 16px 16px; }
 		.choices { gap: 12px; }
