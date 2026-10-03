@@ -331,16 +331,19 @@
 					{#if !complete}<span class="sep modesep"></span><span class="mode">{DRAFT_LABELS[d.system]}</span>{/if}
 					{#if countdown}<span class="left" style="--p:{timeFrac.toFixed(3)}"></span>{/if}
 				</div>
-				{#if toastAction && toastHero}
-					<div class="toast dtoast t-{toastAction.team}" class:ban={toastAction.type === 'ban'}>
-						<div class="tav"><img src={heroAvatar(toastAction.hero)} alt="" />{#if toastAction.type === 'ban'}<span class="tban">✕</span>{/if}</div>
-						<div class="ttext">
-							<span class="twho"><span class="tteam">{teamName(toastAction.team)}</span> · {nameOf(toastAction.actor)}{toastAction.auto ? ' · auto' : ''}</span>
-							<span class="tact"><span class="tverb">{toastAction.type === 'ban' ? 'Banned' : 'Picked'}</span> {toastHero.name} <span class="ttitle">{toastHero.title}</span></span>
-						</div>
-					</div>
-				{/if}
 			</div>
+		</div>
+		<!-- pick / ban announcements: under the turn pill, centred on the screen too -->
+		<div class="toastbox">
+			{#if toastAction && toastHero}
+				<div class="toast dtoast t-{toastAction.team}" class:ban={toastAction.type === 'ban'}>
+					<div class="tav"><img src={heroAvatar(toastAction.hero)} alt="" />{#if toastAction.type === 'ban'}<span class="tban">✕</span>{/if}</div>
+					<div class="ttext">
+						<span class="twho"><span class="tteam">{teamName(toastAction.team)}</span> · {nameOf(toastAction.actor)}{toastAction.auto ? ' · auto' : ''}</span>
+						<span class="tact"><span class="tverb">{toastAction.type === 'ban' ? 'Banned' : 'Picked'}</span> {toastHero.name} <span class="ttitle">{toastHero.title}</span></span>
+					</div>
+				</div>
+			{/if}
 		</div>
 
 		<div class="rightcol">
@@ -493,23 +496,26 @@
 		linear-gradient(180deg, rgba(3,11,21,0.62) 0%, transparent 20%); }
 
 	/* top: Leave on the left, the turn pill centred over the art, the toast under it */
-	.dtop { position: absolute; top: 18px; left: 24px; right: 496px; display: flex; justify-content: center; pointer-events: none; }
+	/* the turn pill sits at the middle of the SCREEN; it may be as wide as the gap left of the hero panel allows */
+	.dtop { position: absolute; top: 18px; left: 24px; right: 24px; display: flex; justify-content: center; pointer-events: none; }
 	.draft .leave { position: absolute; left: 0; top: 4px; z-index: 30; pointer-events: auto; gap: 8px; }
-	.topmid { display: flex; flex-direction: column; align-items: center; gap: 12px; min-width: 0; max-width: calc(100% - 276px); }
+	.topmid { display: flex; flex-direction: column; align-items: center; gap: 12px; min-width: 0; max-width: calc(100% - 920px); }
+	.toastbox { position: absolute; top: 84px; left: 24px; right: 24px; display: flex; justify-content: center; pointer-events: none; }
+	.toastbox > :global(*) { max-width: calc(100% - 920px); }
 	.turn { --tc: var(--orange); position: relative; display: flex; align-items: center; gap: 14px; max-width: 100%; min-height: 52px; padding: 0 26px; overflow: hidden;
 		border-radius: var(--r-pill); background: rgba(3,11,21,0.88);
 		border: 1px solid var(--brass-line); box-shadow: var(--sh-1), inset 0 1px 0 rgba(255,255,255,0.06);
 		font-size: 24px; line-height: 1; letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; pointer-events: auto; }
 	.turn.t-blue { --tc: var(--blue); }
-	/* a long turn message ("Atlanteans · Mia is banning…") takes the room of the mode label */
-	.turn.wordy .mode, .turn.wordy .modesep { display: none; }
+	/* a long turn message ("Atlanteans · Mia is banning…") goes a size down */
+	.turn.wordy .btxt { font-size: 18px; letter-spacing: 0.03em; }
 	.dot { flex: none; width: 12px; height: 12px; border-radius: 50%; background: var(--tc); box-shadow: 0 0 10px var(--tc); }
 	.btxt { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 	.btxt.long { font-size: 20px; letter-spacing: 0.04em; }
 	.btxt.short { display: none; }
 	.sep { flex: none; width: 1px; height: 24px; background: var(--brass-line); }
 	.clock { flex: none; font-size: 27px; color: var(--brass-hi); font-variant-numeric: tabular-nums; min-width: 2.3em; text-align: center; }
-	.mode { flex: none; color: var(--ink-2); font-size: var(--fs-small); letter-spacing: 0.14em; }
+	.mode, .modesep { display: none; } /* the pill is centred now; the draft system shows on the Create form and in the lobby */
 	/* time left, as a line along the bottom of the pill */
 	.left { position: absolute; left: 0; bottom: 0; height: 3px; width: 100%; transform-origin: 0 50%; transform: scaleX(var(--p, 1)); background: var(--brass); transition: transform 1s linear; }
 	/* last 10 s: the words and the clock redden */
@@ -540,7 +546,9 @@
 	.tact { font-size: 26px; line-height: 1.05; color: var(--ink); }
 	.tverb { color: var(--ready-hi); }
 	.dtoast.ban .tverb { color: var(--danger-hi); }
-	.ttitle { color: var(--ink-2); font-size: var(--fs-body); }
+	.ttitle { display: none; } /* "Picked Tigerclaw" — the title would push it under the hero panel */
+	.tact { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.ttext { min-width: 0; }
 	@keyframes toastIn { 0% { opacity: 0; transform: translateY(-14px) scale(0.92); } 60% { opacity: 1; transform: translateY(2px) scale(1.02); } 100% { opacity: 1; transform: none; } }
 
 	/* bottom-left: who this hero is */
@@ -619,7 +627,7 @@
 	.hero.filtered { filter: brightness(0.3) saturate(0.4); pointer-events: none; }
 	.hero.viewlock { filter: brightness(0.45) saturate(0.5); pointer-events: none; }
 
-	.actslot { position: relative; flex: none; height: 64px; display: flex; }
+	.actslot { position: relative; flex: none; height: 52px; display: flex; }
 	.draft .lockin { height: 100%; min-height: 0; }
 	.draft .lockin.ban { background: linear-gradient(180deg, #f2777b 0%, var(--danger) 50%, #b3262b 100%); border-color: #ffb3b5 #e5484d #8f1c21; text-shadow: 0 1px 2px rgba(70,0,0,0.55);
 		box-shadow: 0 8px 24px rgba(0,0,0,0.45), 0 0 0 1px rgba(0,0,0,0.35), 0 0 26px rgba(229,72,77,0.35), inset 0 1px 0 rgba(255,255,255,0.4); }
@@ -627,16 +635,16 @@
 	.draft .lockin:disabled { opacity: 1; filter: none; background: rgba(3,11,21,0.62); border: 1px dashed rgba(255,255,255,0.26); color: var(--ink-3); text-shadow: none; box-shadow: none; }
 	/* locked in: done, so it stops shouting — an outline in your team's colour */
 	.draft .lockin.done:disabled { border-style: solid; background: linear-gradient(180deg, var(--tc-glass), rgba(3,11,21,0.5)), var(--deep); border-color: var(--tc-line); color: var(--tc-hi); text-shadow: none; box-shadow: none; }
-	.oath { position: absolute; left: 0; right: 0; bottom: 0; box-sizing: border-box; display: flex; flex-direction: column; gap: 6px; padding: 8px 8px 7px; border-radius: 14px;
+	.oath { position: absolute; inset: 0; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 5px 5px 5px 14px; border-radius: 12px;
 		background: linear-gradient(180deg, rgba(14,40,66,0.98), rgba(6,21,38,0.99)); border: 1px solid var(--brass);
 		box-shadow: var(--sh-2), 0 0 22px rgba(216,179,106,0.22); animation: oathIn 0.22s ease; }
 	.oath.ban { border-color: var(--danger); box-shadow: var(--sh-2), 0 0 22px rgba(229,72,77,0.25); }
-	.oath-txt { min-width: 0; display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 0 8px; line-height: 1.1; }
-	.oath-t { min-width: 0; font-size: 23px; color: var(--brass-hi); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-	.oath-s { flex: none; font-size: var(--fs-small); color: var(--ink-2); white-space: nowrap; }
-	.oath-b { flex: none; height: 46px; display: flex; gap: 8px; }
-	.draft .oath-no { flex: 1 1 0; height: 100%; min-height: 0; padding: 0 12px; font-size: var(--fs-body); }
-	.draft .oath .lockin { flex: 1.25 1 0; padding: 0 16px; font-size: var(--fs-h3); box-shadow: 0 0 0 1px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.4); }
+	.oath-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; line-height: 1; }
+	.oath-t { min-width: 0; font-size: 15px; color: var(--brass-hi); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.oath-s { font-size: 11px; letter-spacing: 0.04em; color: var(--ink-2); white-space: nowrap; }
+	.oath-b { flex: none; height: 100%; display: flex; gap: 6px; }
+	.draft .oath-no { flex: none; height: 100%; min-height: 0; padding: 0 9px; font-size: 13px; }
+	.draft .oath .lockin { flex: none; padding: 0 11px; font-size: 15px; box-shadow: 0 0 0 1px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.4); }
 	@keyframes oathIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
 	/* ───────────── the dash: two teams, the coins between ───────────── */
@@ -720,10 +728,12 @@
 		.pav { width: 64px; height: 52px; }
 		.pn { font-size: 19px; }
 		/* the turn pill sits beside Leave instead of centred */
-		.dtop { justify-content: flex-start; padding-left: 134px; }
+		.dtop { right: 496px; justify-content: flex-start; padding-left: 134px; }
+		.toastbox { right: 496px; justify-content: flex-start; }
+		.toastbox > :global(*) { max-width: 100%; }
 		.topmid { align-items: flex-start; max-width: 100%; }
 		.turn { font-size: 20px; padding: 0 20px; gap: 12px; }
-		.mode, .modesep { display: none; }
+		.turn .btxt, .turn.wordy .btxt, .btxt.long { font-size: 17px; letter-spacing: 0.03em; }
 		/* 3+ a side: the portrait over the names */
 		.rails.dense .pcard { display: flex; flex-direction: column; justify-content: center; gap: 3px; padding: 6px 4px; }
 		.rails.dense .pstats { display: none; }
@@ -754,8 +764,9 @@
 		.btxt.short { display: block; }
 		.clock { font-size: 22px; }
 		.sep { height: 22px; }
-		.mode, .modesep { display: none; }
-		.draft .dtoast { position: absolute; top: 52px; left: 0; right: 0; gap: 10px; padding: 6px 12px 6px 6px; white-space: normal; }
+		.toastbox { top: 62px; left: 12px; right: 12px; }
+		.toastbox > :global(*) { max-width: 100%; }
+		.draft .dtoast { width: 100%; gap: 10px; padding: 6px 12px 6px 6px; white-space: normal; }
 		.tav { width: 72px; height: 44px; }
 		.twho { font-size: var(--fs-small); letter-spacing: 0.02em; }
 		.tact { font-size: 19px; }
@@ -814,10 +825,10 @@
 		.soon { padding: 1px 0 2px; letter-spacing: 0.04em; }
 		.tk { box-shadow: inset 0 0 0 2px var(--pc), inset 0 0 8px var(--pc); }
 		.bx { font-size: 22px; }
-		.actslot { height: 56px; }
-		.oath-txt { gap: 10px; padding: 0 6px; }
-		.oath-t { font-size: 19px; }
-		.oath-b { height: 48px; }
+		.actslot { height: 50px; }
+		.oath { padding-left: 10px; gap: 6px; }
+		.oath-t { font-size: 14px; }
+		.oath-s { font-size: 10px; }
 
 		.rails, .rails.dense { height: auto; display: flex; flex-direction: column; align-items: stretch; gap: 5px; padding: 8px 12px calc(10px + env(safe-area-inset-bottom)); background: var(--abyss); box-shadow: none; }
 		.rails::before { display: none; }
