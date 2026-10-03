@@ -52,7 +52,7 @@
 					<span class="rule r"></span>
 				</div>
 				<span class="sub">
-					{#if shown.kind === 'up'}{shown.coins} {shown.coins === 1 ? 'coin' : 'coins'} to spend · {shown.ult ? 'your ultimate is in reach' : 'choose your upgrades'}{:else}+1 coin when the round ends{/if}
+					{#if shown.kind === 'up'}{shown.coins} {shown.coins === 1 ? 'coin' : 'coins'}{:else}+1 coin at round end{/if}
 				</span>
 			</div>
 		</div>

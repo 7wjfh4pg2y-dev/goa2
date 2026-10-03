@@ -101,3 +101,43 @@
 .tide.top-dlg .mleave { color: var(--danger-hi); background: rgba(229, 72, 77, 0.16); border: 1px solid rgba(229, 72, 77, 0.7); }
 .tide.top-dlg .mleave:hover { background: rgba(229, 72, 77, 0.3); }
 .tide.top-dlg .mleave.win { color: var(--ink-dark); background: var(--brass-fill); border-color: #8a6a2c; }
+
+/* ═══════ PHONE (≤ 760 px): the same layer at zoom 1 — one 48px bar (☰ + the one-row scoreline), the prompts
+   and the toolbar under the roster row (CardLayer's), the menu as a full-screen sheet, the waves / Life sheet ═══════ */
+.tide.top.ph { zoom: 1; font-size: 15px; }
+.ph .p-top { position: absolute; left: 0; right: 0; top: 0; z-index: 6; height: 48px; box-sizing: border-box; display: flex; align-items: center; gap: 2px; padding: 0 6px 0 4px;
+	background: var(--hull); border-bottom: 1px solid var(--brass-line); box-shadow: var(--sh-hud); }
+.ph .p-top .hbtn { position: static; flex: none; width: 40px; height: 40px; font-size: 18px; box-shadow: none; }
+.ph .prompts { left: 8px; right: 8px; top: 100px; transform: none; }
+.ph .prompt { max-width: 100%; box-sizing: border-box; height: 40px; padding: 0 5px 0 12px; font-size: 15px; gap: 6px; }
+.ph .prompt > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ph .prompt.plain { padding-right: 12px; }
+.ph .pbtn { height: 30px; padding: 0 10px; font-size: 14px; }
+.ph .pbtn.lg { height: 40px; padding: 0 12px; font-size: 15px; }
+.ph .ptool { width: max-content; max-width: calc(100vw - 16px); box-sizing: border-box; flex-wrap: wrap; justify-content: center; row-gap: 5px; }
+.ph .ptool.free { top: 100px; }
+.ph .ptool .lbl { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+/* a confirm: the name on its own line (never cut), the rewards and the one button under it */
+.ph .ptool.confirm .lbl { flex: 1 1 100%; text-align: center; padding: 2px 6px 0; }
+.ph .ptool.confirm .lbl + .gain { margin-left: auto; }
+.ph .ptool.confirm .gain + .pbtn { margin-left: auto; }
+.ph .ptool.confirm .pbtn.x { margin-right: auto; }
+/* the waves / Life sheet: tap a token to flip it; drag down to close */
+.ph .p-sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 19; display: flex; flex-direction: column; gap: 14px; padding: 22px 14px calc(16px + env(safe-area-inset-bottom)); border-radius: 18px 18px 0 0;
+	background: var(--hull); border-top: 1px solid var(--brass); box-shadow: 0 -14px 30px rgba(0, 6, 14, 0.55); touch-action: none; transition: transform 0.22s ease; }
+.ph .p-sheet.drag { transition: none; }
+.ph .p-sheet .grab { position: absolute; top: 7px; left: 50%; transform: translateX(-50%); width: 42px; height: 4px; border-radius: 3px; background: rgba(255, 255, 255, 0.4); }
+.ph .srow { display: flex; align-items: center; gap: 10px; min-height: 40px; }
+.ph .srow .t-label { flex: none; width: 92px; color: var(--tc-hi, var(--brass)); }
+.ph .srow .n { flex: none; width: 34px; font-size: 26px; line-height: 1; text-align: center; color: var(--tc-hi, var(--brass-hi)); font-variant-numeric: tabular-nums; }
+.ph .srow .toks { flex: 1; display: flex; flex-wrap: wrap; gap: 6px; }
+.ph .srow .lt { width: 32px; height: 32px; padding: 0; border: 0; background: transparent no-repeat center / contain; }
+.ph .srow .lt.lost { opacity: 0.55; }
+.ph .srow .wv { width: 20px; height: 20px; padding: 0; border: 0; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff3cf, var(--brass) 55%, #8a6a2c); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5); }
+.ph .srow .wv.spent { background: rgba(2, 11, 22, 0.6); box-shadow: inset 0 0 0 1px rgba(216, 179, 106, 0.4); }
+.ph .srow .lt.flip, .ph .srow .wv.flip { animation: top-flip 0.45s ease-in-out; }
+@keyframes top-flip { from { transform: rotateY(0); } to { transform: rotateY(360deg); } }
+.ph .srow .zone { font-size: 17px; color: var(--ink); }
+.ph .menuscrim { z-index: 20; }
+.tide.top-dlg .modal { max-width: calc(100vw - 24px); }
+@media (max-width: 760px) { .tide.top-dlg .modal-scrim { z-index: 22; } }
