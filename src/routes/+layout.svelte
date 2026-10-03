@@ -4,6 +4,7 @@
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
 	import { updated } from '$app/stores';
+	import { followSiteVersion } from '$lib/siteVersion';
 
 	// When SvelteKit detects a new deploy (via version polling), reload so players
 	// always run the latest build — no manual hard refresh / cache clearing.
@@ -11,6 +12,8 @@
 
 	// Also check the moment the tab regains focus, so returning picks up a deploy fast.
 	onMount(() => {
+		// the GM's site version switch (1.0 / 2.0): if the other one is live, go there
+		followSiteVersion();
 		const check = () => { if (document.visibilityState === 'visible') updated.check(); };
 		document.addEventListener('visibilitychange', check);
 		window.addEventListener('focus', check);

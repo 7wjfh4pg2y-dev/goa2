@@ -1,0 +1,54 @@
+// Site version switch (GM tools). Both versions of the app are deployed side by side:
+//   2.0 at /goa2/      (branch claude/stats-of-atlantis-replica-hg5nv2)
+//   1.0 at /goa2/v1/   (branch 1.0)
+// The GM picks which one is live in the Supabase table `goa2_settings` (key 'site_version').
+// Every page load checks it and, if this build isn't the chosen one, moves the visitor over.
+// Fail-safe: no table / offline / any error → stay where you are.
+//
+// This file is identical on both branches except THIS_VERSION.
+import { base } from '$app/paths'
+import { supabase } from './supabase'
+
+export type SiteVersion = '1.0' | '2.0'
+export const THIS_VERSION: SiteVersion = '2.0'
+export const SITE_VERSIONS: SiteVersion[] = ['1.0', '2.0']
+const BASES: Record<SiteVersion, string> = { '1.0': '/goa2/v1', '2.0': '/goa2' }
+const TABLE = 'goa2_settings'
+const KEY = 'site_version'
+
+const isVersion = (v: unknown): v is SiteVersion => v === '1.0' || v === '2.0'
+
+/** The version the GM chose, or null if it can't be read. */
+export async function fetchSiteVersion(): Promise<SiteVersion | null> {
+	try {
+		const { data, error } = await supabase.from(TABLE).select('value').eq('key', KEY).maybeSingle()
+		return !error && isVersion(data?.value) ? data.value : null
+	} catch {
+		return null
+	}
+}
+
+/** GM: make `v` the live version for everyone. Returns an error message, or null on success. */
+export async function setSiteVersion(v: SiteVersion): Promise<string | null> {
+	try {
+		const { data, error } = await supabase.from(TABLE).update({ value: v, updated_at: new Date().toISOString() }).eq('key', KEY).select('value')
+		if (error) return error.message
+		if (!data?.length) return 'The goa2_settings table is missing its site_version row — run the setup SQL in Supabase.'
+		return null
+	} catch (e) {
+		return e instanceof Error ? e.message : 'Could not reach the server.'
+	}
+}
+
+/** Go to the start page of version `v` (keeps ?query so room links survive). */
+export function goToVersion(v: SiteVersion) {
+	if (v === THIS_VERSION || typeof location === 'undefined') return
+	location.replace(`${BASES[v]}/${location.search}${location.hash}`)
+}
+
+/** On app start: if the GM picked the other version, move there. (Skipped in dev.) */
+export async function followSiteVersion() {
+	if (!base) return // `npm run dev` serves one version only
+	const v = await fetchSiteVersion()
+	if (v && v !== THIS_VERSION) goToVersion(v)
+}
