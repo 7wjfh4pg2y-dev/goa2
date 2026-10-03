@@ -14,8 +14,9 @@
 	//    drops out of it; the seat stands empty for a beat; the winners' crest crosses into it.
 	//  · FINAL PUSH (the last wave breaks through): the crests face each other on a line; the
 	//    winners' draws back, drives through and shoves the losers' off its side.
-	// Gold when the viewer's team won, pewter when it lost. The crest then stays where it is:
-	// the victory card (VictorySplash) takes it over — see winstage.ts.
+	// Gold when the viewer's team won (a spectator sees gold for whoever won), pewter when it
+	// lost. The crest then stays where it is: the victory card (VictorySplash) takes it over —
+	// see winstage.ts.
 	import { teamName, placeName } from '$lib/teams';
 	import { onDestroy } from 'svelte';
 	import type { PushNews } from '$lib/battle';
@@ -25,7 +26,8 @@
 
 	export let news: PushNews | null = null;
 	export let mobile = false;
-	export let myTeam: Team = 'blue'; // the viewer's team sits on the right (spectators: blue)
+	export let myTeam: Team | null = 'blue'; // the viewer's team sits on the right; null = a spectator (watches as blue)
+	$: view = (myTeam ?? 'blue') as Team;
 
 	let seen = news?.id ?? null; // joining mid-game: don't replay an old push
 	let shown: PushNews | null = null;
@@ -37,9 +39,12 @@
 	function play(n: PushNews) {
 		shown = null;
 		if (timer) clearTimeout(timer);
+		// the hand-over is posted NOW, not a frame later: the victory card may be mounting in this
+		// very tick (GameView holds it 5 s from the push; after a minion battle the ceremony starts
+		// late, and the card must find these times and wait for it)
+		if (n.won) { winStage.ready = Date.now() + WIN_MS; winStage.gone = Date.now() + WIN_HOLD_MS; }
 		requestAnimationFrame(() => {
 			shown = n;
-			if (n.won) { winStage.ready = Date.now() + WIN_MS; winStage.gone = Date.now() + WIN_HOLD_MS; }
 			timer = setTimeout(() => (shown = null), n.won ? WIN_HOLD_MS : 3300);
 		});
 	}
@@ -50,12 +55,13 @@
 	$: title = throne ? 'The Throne Falls' : 'Final Push';
 	$: letters = title.split('');
 	$: loser = (shown?.winner === 'orange' ? 'blue' : 'orange') as Team;
+	$: gold = !!shown && (myTeam == null || shown.winner === myTeam);
 	const stageVars = `--top:${STAGE_TOP * 100}%; --cd:${CREST_D}px; --cy:${CREST_Y}px; --T:${WIN_MS}ms; --hold:${WIN_HOLD_MS}ms`;
 
 	// the arrow is ONE svg (body + head) clipped to its own shape, so the chevrons and the
 	// glint run all the way into the tip; sized from the measured box
 	let aw = 0, ah = 0;
-	$: fromR = !!shown && shown.winner === myTeam;
+	$: fromR = !!shown && shown.winner === view;
 	$: hw = ah * 0.55; // head length
 	$: shape = !aw || !ah ? '' : fromR
 		? `M${aw} 0 H${hw} L0 ${ah / 2} L${hw} ${ah} H${aw} Z`
@@ -71,8 +77,8 @@
 	{#key shown.id}
 		{#if shown.won}
 			<!-- the win. --d: the winners' side (1 = the viewer's right: their own team; -1 = the left) -->
-			<div class="pw {throne ? 'throne' : 'final'} {shown.winner}" class:mine={shown.winner === myTeam} class:mob={mobile}
-				style="{stageVars}; --d:{shown.winner === myTeam ? 1 : -1}" role="status" aria-label="{title}. {teamName(shown.winner)} win the game.">
+			<div class="pw {throne ? 'throne' : 'final'} {shown.winner}" class:mine={gold} class:mob={mobile}
+				style="{stageVars}; --d:{shown.winner === view ? 1 : -1}; --n:{letters.length}" role="status" aria-label="{title}. {teamName(shown.winner)} win the game.">
 				<div class="scrim"></div>
 				<div class="stage" aria-hidden="true">
 					<span class="orbit"></span>
@@ -90,7 +96,7 @@
 				</div>
 			</div>
 		{:else}
-			<div class="ps {shown.winner}" class:fromR={shown.winner === myTeam} class:mob={mobile} aria-live="polite">
+			<div class="ps {shown.winner}" class:fromR={fromR} class:mob={mobile} aria-live="polite">
 				<!-- one plain arrow pointing the way the wave moves; chevrons stream right into the tip -->
 				<div class="arrow" bind:clientWidth={aw} bind:clientHeight={ah}>
 					{#if shape}
@@ -150,7 +156,7 @@
 	.big { font-size: 4.2rem; line-height: 1; text-transform: uppercase; letter-spacing: .03em; animation: slam .45s cubic-bezier(.2, 1.4, .3, 1) .2s both, out var(--T) ease both; }
 	.sub { font-size: 1.1rem; letter-spacing: .1em; color: #fff4e0; animation: fade .3s ease .45s both, out var(--T) ease both; }
 	.sub b { font-weight: normal; color: #fff; }
-	@keyframes slam { from { opacity: 0; transform: scale(1.9); filter: blur(5px); } to { opacity: 1; transform: scale(1); filter: blur(0); } }
+	@keyframes slam { from { opacity: 0; transform: scale(1.9); } to { opacity: 1; transform: scale(1); } } /* transform + opacity only (a blur here ran on the main thread on every push) */
 	@keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 	@keyframes out { 0%, 86% { opacity: 1; } 100% { opacity: 0; } }
 
@@ -174,8 +180,9 @@
 	.pw:not(.mine) { --brass: linear-gradient(90deg, transparent, #6b7280 20%, #c9ced6 50%, #6b7280 80%, transparent);
 		--ink: linear-gradient(180deg, #f1f2f4 8%, #a3a9b3 50%, #4b5059 92%); --ring: #aab1bb; }
 	.pw.mob { --z: .62; --sx: 228px; }
-	.scrim { position: absolute; inset: 0; background: radial-gradient(75% 65% at 50% 42%, rgba(11, 36, 60, .95), rgba(3, 11, 21, .99)); animation: pwIn .45s ease both; }
-	.pw:not(.mine) .scrim { background: radial-gradient(75% 65% at 50% 42%, rgba(9, 19, 31, .96), rgba(2, 5, 10, .995)); }
+	/* deep sea: opaque (a translucent one let the HUD and the hexes ghost through the ceremony) */
+	.scrim { position: absolute; inset: 0; background: radial-gradient(75% 65% at 50% 42%, #0b243c, #030b15); animation: pwIn .45s ease both; }
+	.pw:not(.mine) .scrim { background: radial-gradient(75% 65% at 50% 42%, #09131f, #02050a); }
 	.stage { position: absolute; left: 50%; top: var(--top); width: 0; height: 0; zoom: var(--z); }
 	.stage > * { position: absolute; }
 	@keyframes pwIn { from { opacity: 0; } }
@@ -204,8 +211,9 @@
 	.seat { left: calc(var(--cd) / -2 - 15px); top: calc(var(--cy) - var(--cd) / 2 - 15px); width: calc(var(--cd) + 30px); height: calc(var(--cd) + 30px);
 		border-radius: 50%; border: 3px solid var(--ring); opacity: 0; }
 
-	/* THE THRONE FALLS — the losers' crest in the seat: it greys, tips and drops out; the
-	   winners' crest waits at its own side, crosses into the empty seat, then swells */
+	/* THE THRONE FALLS — the losers' crest in the seat: it greys, tips and drops out; only then
+	   does the winners' crest come in from its own side, at the seat's height, crosses into the
+	   empty seat and swells (for the first 1.5 s the seat stands alone, centred) */
 	.throne .seat { background: radial-gradient(closest-side, rgba(1, 6, 12, .7) 84%, rgba(1, 6, 12, 0)); animation: seatT var(--T) both; }
 	@keyframes seatT {
 		0% { opacity: 0; transform: scale(.56); }
@@ -223,9 +231,9 @@
 	}
 	.throne .cr.win { animation: winT var(--T) both; }
 	@keyframes winT {
-		0% { opacity: 0; transform: translate(calc(var(--d) * var(--sx)), 66px) scale(.4); }
-		8%, 33% { opacity: 1; transform: translate(calc(var(--d) * var(--sx)), 54px) scale(.4); animation-timing-function: cubic-bezier(.6, 0, .2, 1); }
-		43%, 46% { opacity: 1; transform: scale(.62); animation-timing-function: cubic-bezier(.3, 0, .3, 1); }
+		0%, 27% { opacity: 0; transform: translate(calc(var(--d) * (var(--sx) + 70px)), 0) scale(.4); animation-timing-function: cubic-bezier(.2, .6, .3, 1); }
+		33%, 36% { opacity: 1; transform: translate(calc(var(--d) * var(--sx)), 0) scale(.4); animation-timing-function: cubic-bezier(.6, 0, .2, 1); }
+		44%, 46% { opacity: 1; transform: scale(.62); animation-timing-function: cubic-bezier(.3, 0, .3, 1); }
 		57% { opacity: 1; transform: scale(1.035); animation-timing-function: ease-in-out; }
 		62%, 100% { opacity: 1; transform: none; }
 	}
@@ -288,9 +296,12 @@
 	.tx span { background: var(--ink); -webkit-background-clip: text; background-clip: text; color: transparent; animation: trackIn .95s cubic-bezier(.2, .7, .2, 1) 2.4s both; }
 	/* the letters' shadow: the same letters in black underneath, in once they have settled */
 	.sh { position: absolute; inset: 0; transform: translate(1px, 4px); color: rgba(0, 0, 0, .62); animation: pwIn .5s ease 3s both; }
-	@keyframes trackIn { from { opacity: 0; transform: translateX(calc(var(--o) * .42em)); } }
-	.pw.mob .ttl { font-size: 48px; }
-	.pw.mob .rule { left: -300px; width: 600px; }
+	@keyframes trackIn { from { opacity: 0; transform: translateX(calc(var(--o) * var(--tr, .42em))); } }
+	/* phones: the title (--n letters, measured ≈ .74em each with its spacing) plus the track-in
+	   travel at both ends (--tr × the outer letters' offset) fits between 18 px gutters at any
+	   width — 390 px wide: ≈ 42 px type, 26 css px */
+	.pw.mob .ttl { --tr: .12em; font-size: min(48px, calc((100vw - 36px) / var(--z) / (var(--n) * .74 + 1.8))); }
+	.pw.mob .rule { left: -280px; width: 560px; }
 
 	@media (prefers-reduced-motion: reduce) {
 		.pw, .pw * { animation: none !important; }

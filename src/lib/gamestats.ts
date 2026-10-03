@@ -16,7 +16,8 @@
 //                      every change arrived on its own; best effort if two were merged
 //  · tide              the battle zone in each turn's snapshot; a throne push ends it on
 //                      the throne                                                         — exact
-//  · falls             the hero events again: the turn, the fallen hero's team, who       — exact
+//  · falls             the hero events again: the turn, the fallen hero's team, who
+//                      (and the report row's id, so the chart draws the right face)       — exact
 import type { GameStatsData, PlayerStat } from './GameStats.svelte'
 import type { GameEvent, Journal } from './recorder'
 import { colorHex, type Team } from './match'
@@ -105,7 +106,9 @@ function build(j: Journal): GameStatsData | null {
 		const v = bySeat.get(at(e.v))
 		const team = e.team ?? v?.team
 		if (!team) continue
-		falls.push({ turn: Math.max(0, Math.min(n - 1, turnIndex(e.r, e.t))), team, who: v ? `${v.name} (${heroName(v.hero)})` : 'A hero' })
+		// `id` = the report row the fallen hero belongs to (the seat's player at the end), so the chart
+		// draws the right face without parsing `who`
+		falls.push({ turn: Math.max(0, Math.min(n - 1, turnIndex(e.r, e.t))), team, who: v ? `${v.name} (${heroName(v.hero)})` : 'A hero', ...(v ? { id: v.id } : {}) })
 	}
 	falls.sort((a, b) => a.turn - b.turn)
 
