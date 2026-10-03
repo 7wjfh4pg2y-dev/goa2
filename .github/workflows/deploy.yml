@@ -37,11 +37,15 @@ jobs:
       - name: Unit tests
         run: npx vitest run
 
-      - name: Build
+      # Two versions side by side; the GM's site version switch (src/lib/siteVersion.ts)
+      # sends everyone to whichever one is live:
+      #   1.0 (branch `1.0`)          → /goa2/
+      #   2.0 (this branch)           → /goa2/v2/
+      - name: Build version 2.0
+        env:
+          BASE_PATH: /goa2/v2
         run: npm run build
 
-      # Version 1.0 (branch `1.0`) is served side by side at /goa2/v1 — the GM's site
-      # version switch (src/lib/siteVersion.ts) sends everyone to whichever one is live.
       - name: Checkout version 1.0
         uses: actions/checkout@v4
         with:
@@ -51,17 +55,21 @@ jobs:
       - name: Build version 1.0
         working-directory: v1src
         env:
-          BASE_PATH: /goa2/v1
+          BASE_PATH: /goa2
         run: |
           npm ci
           npm run build
-          mkdir -p ../build/v1
-          cp -r build/. ../build/v1/
+
+      - name: Assemble the site
+        run: |
+          mkdir -p site/v2
+          cp -r v1src/build/. site/
+          cp -r build/. site/v2/
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: build
+          path: site
 
   deploy:
     needs: build
