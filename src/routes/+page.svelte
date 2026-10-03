@@ -235,7 +235,7 @@
 	// the host's board options, as the lobby shows them
 	// the release plays on the classic board, still, for now (the island in the game and its
 	// host switches come with the board step) — so the lobby shows exactly that board
-	const lobbyLook = 'classic' as 'island' | 'classic';
+	const lobbyLook = 'island' as 'island' | 'classic';
 	const lobbyGlow = false;
 	const lobbyFx = false;
 	$: seatCount = $state.seats;
@@ -301,19 +301,20 @@
 	let createBoard: BoardCanvas | null = null;
 	// The Create form's island preview and the lobby's board mount a beat AFTER their screen, so opening
 	// either isn't one long freeze (the screen fades in first, then the board — up to ~2k svg nodes — is
-	// built in its own task); in the lobby the sea behind then stops moving (a still screen), in a frame of its own too.
+	// built in its own task). The sea moves only on the landing screens and in the game: on Create and in the lobby
+	// it is still (it stops a beat after the Create form opens, in a frame of its own, and stays still into the lobby).
 	let boardOn = false;
-	let lobbyCalm = false;
+	let seaCalm = false;
 	let boardTimers: ReturnType<typeof setTimeout>[] = [];
 	$: armBoards(mode);
 	function armBoards(m: string) {
 		boardTimers.forEach(clearTimeout);
 		boardTimers = [];
 		boardOn = false;
-		lobbyCalm = false;
-		if (m !== 'create' && m !== 'lobby') return;
+		const still = m === 'create' || m === 'lobby';
+		if (!still) { seaCalm = false; return; }
 		boardTimers.push(setTimeout(() => (boardOn = true), 320));
-		if (m === 'lobby') boardTimers.push(setTimeout(() => (lobbyCalm = true), 900));
+		if (!seaCalm) boardTimers.push(setTimeout(() => (seaCalm = true), 900));
 	}
 	$: if (lobbyBoard) lobbyBoard.place(0.5, mobile ? 0.5 : 0.46, mobile ? 2.3 : 0.94);
 	$: if (createBoard) createBoard.place(0.5, mobile ? 0.5 : 0.44, mobile ? 1.5 : 1.04);
@@ -727,7 +728,7 @@
 	<GameView {session} ms={state} {players} clientId={session.clientId} {room} onLeave={leaveRoom} />
 	{#if seatNotice}<div class="seattoast">{seatNotice}</div>{/if}
 {:else}
-<SeaBackdrop scene={bgScene} map={bgMap} mobile={mobile || (portrait && family)} effects={mode !== 'lobby' || !lobbyCalm} />
+<SeaBackdrop scene={bgScene} map={bgMap} mobile={mobile || (portrait && family)} effects={!seaCalm} />
 <div class="uiscale tide pre" style="--ui:{ui}">
 	{#if family}
 		<!-- landing · role · admin · menu · join: the crest and one column of steps beside the island -->
