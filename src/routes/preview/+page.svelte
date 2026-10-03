@@ -72,7 +72,10 @@
 			<h1>2.0 preview</h1>
 			<p>Everything 2.0 has that 1.0 doesn't. Tick what you want brought over. This tab stays on 2.0 until you close it or leave.</p>
 		</div>
-		<button class="leave" on:click={leave}>Back to the live site</button>
+		<div class="hbtns">
+			<a class="leave" href="/goa2/v1/">The release build (v1)</a>
+			<button class="leave" on:click={leave}>Back to the live site</button>
+		</div>
 	</header>
 
 	{#each GROUPS as g (g.name)}
@@ -111,7 +114,8 @@
 	header { display: flex; gap: 16px; align-items: flex-start; justify-content: space-between; margin-bottom: 18px; }
 	h1 { margin: 0; font-size: 2.2rem; font-weight: normal; letter-spacing: .04em; color: #f3d48a; }
 	header p { margin: 6px 0 0; color: #a9b6c8; font-size: .95rem; line-height: 1.4; }
-	.leave { flex: none; font: inherit; font-size: .85rem; padding: 8px 14px; border-radius: 10px; cursor: pointer; color: #e9eef6;
+	.hbtns { flex: none; display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
+	.leave { flex: none; text-align: center; text-decoration: none; font: inherit; font-size: .85rem; padding: 8px 14px; border-radius: 10px; cursor: pointer; color: #e9eef6;
 		background: rgba(255, 255, 255, .06); border: 1px solid rgba(255, 255, 255, .2); }
 	section { margin-top: 22px; }
 	h2 { margin: 0 0 8px; font-size: .78rem; font-weight: normal; letter-spacing: .16em; text-transform: uppercase; color: #c9a75e; }
