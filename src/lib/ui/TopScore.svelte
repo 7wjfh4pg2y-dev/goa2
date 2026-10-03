@@ -22,6 +22,9 @@
 	export let onLife: (t: Team, i: number) => void;
 	export let onWave: (i: number) => void;
 	export let onTie: () => void;
+	/** phone: ONE row (enemy Life · coin · round + turns · lane · waves · your Life); Life and waves open the sheet */
+	export let compact = false;
+	export let onSheet: () => void = () => {};
 
 	const ROMAN = ['I', 'II', 'III', 'IV'];
 	const ZONE_TEAM = ['is-orange', '', 'is-blue']; // LANE order: Orange Beach, Center, Blue Beach
@@ -46,6 +49,19 @@
 	</div>
 {/snippet}
 
+{#if compact}
+	<div class="score ph is-{view}">
+		<button class="pteam is-{enemy}" on:click={onSheet} aria-label="{teamAdj(enemy)} Life {life[enemy]}"><img src={lifeArt(enemy, 'front')} alt="" /><b>{life[enemy]}</b></button>
+		<button class="tie" on:click={onTie} aria-label="Tie-breaker: {teamName(tie)}"><img src={tieArt(tie)} class:flip={tieFlip} alt="" /></button>
+		<span class="rd">R{round}</span>
+		<span class="tpips">{#each ROMAN as r, i}<i class:is-done={i + 1 < turn} class:is-now={i + 1 === turn}>{r}</i>{/each}</span>
+		<span class="track" aria-label="Battle zone: {placeName(LANE[lane])}">
+			{#each zones as z, k}{#if k}<i class="seg"></i>{/if}<i class="zone {ZONE_TEAM[z]}" class:is-now={z === lane}></i>{/each}
+		</span>
+		<button class="waves" on:click={onSheet} aria-label="Waves left: {waves}"><i class="wv"></i><b>{waves}</b></button>
+		<button class="pteam is-{view} is-right" on:click={onSheet} aria-label="{teamAdj(view)} Life {life[view]}"><b>{life[view]}</b><img src={lifeArt(view, 'front')} alt="" /></button>
+	</div>
+{:else}
 <div class="score is-{view}">
 	{@render wing(enemy, false)}
 	<div class="mid">
@@ -67,8 +83,29 @@
 		<img src={tieArt(tie)} class:flip={tieFlip} alt="" />
 	</button>
 </div>
+{/if}
 
 <style>
+	/* ── phone: one row inside the top bar (GameView's .p-top), no box of its own ── */
+	.score.ph { position: static; flex: 1; min-width: 0; width: auto; height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 2px;
+		background: none; border: 0; border-radius: 0; box-shadow: none; }
+	.score.ph::after { display: none; }
+	.ph .pteam { flex: none; display: inline-flex; align-items: center; gap: 3px; height: 40px; padding: 0 2px; border: 0; background: none; color: var(--tc-hi); }
+	.ph .pteam img { width: 22px; height: 22px; object-fit: contain; }
+	.ph .pteam b { font-weight: 400; font-size: 26px; line-height: 1; min-width: 15px; text-align: center; font-variant-numeric: tabular-nums; }
+	.ph .tie { position: static; flex: none; width: 26px; height: 26px; box-shadow: 0 0 0 1.5px var(--brass), 0 2px 5px rgba(0, 0, 0, 0.6); }
+	.ph .rd { flex: none; font-size: 13px; line-height: 1; letter-spacing: 0.06em; color: var(--brass); }
+	.ph .tpips { flex: none; gap: 2px; }
+	.ph .tpips i { width: 17px; height: 19px; font-size: 11px; border-radius: 4px; }
+	.ph .track { flex: none; }
+	.ph .seg { width: 4px; }
+	.ph .zone { width: 12px; height: 14px; }
+	.ph .zone.is-now { width: 16px; height: 19px; }
+	.ph .waves { flex: none; display: inline-flex; align-items: center; gap: 3px; height: 40px; padding: 0 2px 0 5px; border: 0; border-left: 1px solid var(--brass-faint); background: none; color: var(--brass-hi); }
+	.ph .waves .wv { width: 12px; height: 12px; }
+	.ph .waves b { font-weight: 400; font-size: 17px; line-height: 1; min-width: 10px; font-variant-numeric: tabular-nums; }
+	@media (max-width: 370px) { .ph .tpips i { width: 15px; } .ph .pteam b { font-size: 23px; } }
+
 	.score { position: absolute; left: calc(50% - 280px); top: 0; z-index: 6; width: 560px; height: 64px;
 		display: grid; grid-template-columns: 184px 192px 184px;
 		background: var(--hull); border: 1px solid var(--brass-line); border-top: 0; border-radius: 0 0 22px 22px; box-shadow: var(--sh-hud); }

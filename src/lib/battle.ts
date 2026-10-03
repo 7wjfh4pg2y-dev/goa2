@@ -212,7 +212,7 @@ export function laneNotes(before: MatchState, patch: Partial<MatchState>): strin
 		out.push(after.wonBy ? `${w} pushed the lane · waves ${before.waves} → ${after.waves}`
 			: `${w} pushed the lane · waves ${before.waves} → ${after.waves} · battle zone → ${placeName(battleZone(after))}, new minions`)
 	}
-	if (after.wonBy && !before.wonBy) out.push(`🏆 ${teamName(after.wonBy.team)} win — ${after.wonBy.reason}`)
+	if (after.wonBy && !before.wonBy) out.push(`${teamName(after.wonBy.team)} win — ${after.wonBy.reason}`)
 	return out
 }
 export const battleText = (b: Battle) =>
