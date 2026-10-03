@@ -19,7 +19,7 @@
 	import { uiLayout, layoutVars } from '$lib/layout';
 	import { placeToken, moveToken, effectiveHex, MINES, tokenName, tokensLeft, removalOptions, applyRemoval, removalLog, canRemove, type ArmToken, type RemovalOption } from '$lib/tokens';
 	import {
-		colorHex, movePiece, teamForSeat, throneHex, minionCoins, heroDefeatSummary, canRespawn, freeSpawns, teamOf, clearable, boardLookOf, zoneGlowOf, boardFxOf, type BoardLook,
+		colorHex, movePiece, teamForSeat, throneHex, minionCoins, heroDefeatSummary, canRespawn, freeSpawns, teamOf, clearable, type BoardLook,
 		type MatchState, type Player, type MatchSession, type Team, type ConnStatus
 	} from '$lib/match';
 
@@ -150,14 +150,11 @@
 
 	let board: BoardCanvas;
 	let cardLayer: CardLayer;
-	// the host's board options: map visuals, and the outline round the battle zone (it follows the lane)
-	$: boardLook = boardLookOf($ms);
-	$: zoneGlow = zoneGlowOf($ms);
-	$: glowZone = boardLook === 'island' && zoneGlow && !$ms.wonBy ? battleZone($ms) : null;
-	function setBoardLook(v: BoardLook) { if (iAmHost) session.update({ boardLook: v }); }
-	function setZoneGlow(v: boolean) { if (iAmHost) session.update({ zoneGlow: v }); }
-	$: boardFx = boardFxOf($ms);
-	function setBoardFx(v: boolean) { if (iAmHost) session.update({ boardFx: v }); }
+	// 1.0 plays on the CLASSIC board only, still: the island look, the battle-zone outline and the
+	// moving effects (and the host's switches for them) wait for the 2.0 launch
+	const boardLook: BoardLook = 'classic';
+	const glowZone = null;
+	const boardFx = false;
 	// every lingering card effect in play (switched on from a played card)
 	$: activeFx = $ms.effects ?? [];
 	// area radii (set from each player's dash): centred on that player's hero, in their colour
@@ -569,7 +566,7 @@
 
 <svelte:window on:keydown={(e) => { if (e.key !== 'Escape') return; if (confirmLeave) confirmLeave = false; else { pendingSpawn = null; pendingToken = null; pingArmed = false; if (clearing) cancelClear(); } }} on:pointerdown={(e) => { viewsOutside(e); }} bind:innerWidth={gvw} bind:innerHeight={gvh} />
 
-<div class="gamewrap" class:sea={boardLook === 'island'} class:mob={mobile} class:dashfull={!mobile && lay.underHud} style={mobile ? '' : layoutVars(lay)}>
+<div class="gamewrap" class:mob={mobile} class:dashfull={!mobile && lay.underHud} style={mobile ? '' : layoutVars(lay)}>
 	{#if $ms.wonBy}
 		<button class="placehint won" on:click={() => (victoryClosed = false)} title="Show the victory screen again">🏆 {teamName($ms.wonBy.team)} win — {$ms.wonBy.reason}</button>
 	{:else if clearing}
@@ -814,31 +811,6 @@
 							{/each}
 						</div>
 					{:else}<span class="empty-note">None</span>{/if}
-				</div>
-
-				<div class="mpsec">
-					<div class="mplbl">Board{#if !iAmHost}<span class="ct">host's choice</span>{/if}</div>
-					<div class="mprow">
-						<span class="mpname">Map visuals</span>
-						<span class="mpacts">
-							<button class="act sm" class:primary={boardLook === 'island'} disabled={!iAmHost} on:click={() => setBoardLook('island')}>Island</button>
-							<button class="act sm" class:primary={boardLook === 'classic'} disabled={!iAmHost} on:click={() => setBoardLook('classic')}>Classic</button>
-						</span>
-					</div>
-					<div class="mprow">
-						<span class="mpname">Battle zone outline</span>
-						<span class="mpacts">
-							<button class="act sm" class:primary={zoneGlow} disabled={!iAmHost || boardLook !== 'island'} on:click={() => setZoneGlow(true)}>On</button>
-							<button class="act sm" class:primary={!zoneGlow} disabled={!iAmHost || boardLook !== 'island'} on:click={() => setZoneGlow(false)}>Off</button>
-						</span>
-					</div>
-					<div class="mprow">
-						<span class="mpname">Moving effects<span class="mphero">the sea · turning minion rims · the outline's pulse</span></span>
-						<span class="mpacts">
-							<button class="act sm" class:primary={boardFx} disabled={!iAmHost} on:click={() => setBoardFx(true)}>On</button>
-							<button class="act sm" class:primary={!boardFx} disabled={!iAmHost} on:click={() => setBoardFx(false)}>Off</button>
-						</span>
-					</div>
 				</div>
 
 				{#if mySeat < 0}<p class="mphint">You're spectating. Request an open/away seat above — the host approves takeovers.</p>{/if}
