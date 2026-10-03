@@ -212,6 +212,7 @@
 		browseHandle?.leave();
 		if (calmT) clearTimeout(calmT);
 		if (picT) clearTimeout(picT);
+		crestTs.forEach(clearTimeout);
 	});
 
 	$: chosenMap = maps.find((m) => m.id === mapId) ?? maps[0];
@@ -298,6 +299,20 @@
 	// nodes each, the Create game hitch). Painted a beat after the screen opens, so the click stays light; again
 	// when the map or the frame's size changes.
 	let sea: SeaBackdrop | null = null;
+	// Landing (desktop, landscape): the crest sits centred between the screen's left edge and the island's, sized to
+	// that gap. `crestL` = the island's left edge in design px (0 = unknown → the CSS default).
+	let crestL = 0;
+	let crestTs: ReturnType<typeof setTimeout>[] = [];
+	function measureCrest() {
+		crestTs.forEach(clearTimeout);
+		// the backdrop stages the island once it has measured itself, so look again a moment later
+		crestTs = [0, 120, 500].map((d) => setTimeout(() => {
+			const r = !mobile && !portrait ? sea?.islandRect() : null;
+			crestL = r ? r.left / ui : 0;
+		}, d));
+	}
+	$: if (bgMap && sea) measureCrest();
+	$: crestW = crestL ? Math.round(Math.max(240, Math.min(400, crestL * 0.62))) : 0;
 	let createPic: HTMLCanvasElement | null = null, lobbyPic: HTMLCanvasElement | null = null;
 	let cw = 0, ch = 0, lw = 0, lh = 0;
 	$: pic = mode === 'create' ? { el: createPic, w: cw, h: ch, inset: mobile ? { t: 2, r: 2, b: 2, l: 2 } : { t: 8, r: 8, b: 58, l: 8 } }
@@ -688,7 +703,7 @@
 
 <svelte:head><title>Guards of Atlantis II</title></svelte:head>
 
-<svelte:window on:resize={fitUi} />
+<svelte:window on:resize={() => { fitUi(); measureCrest(); }} />
 
 <!-- one team's panel in the lobby: the material header, its seats, the faint coin in the corner -->
 {#snippet teamPanel(team: Team, seats: number[], count: number)}
@@ -741,7 +756,7 @@
 <div class="uiscale tide pre" style="--ui:{ui}">
 	{#if family}
 		<!-- landing · role · admin · menu · join: the crest and one column of steps beside the island -->
-		<main class="screen s-col" class:landing={mode === 'landing'} class:compact={mode === 'join' || mode === 'admin'} transition:reveal>
+		<main class="screen s-col" class:landing={mode === 'landing'} class:compact={mode === 'join' || mode === 'admin'} class:placed={!!crestW} style:--crest-w={crestW ? crestW + 'px' : null} style:--crest-x={crestW ? Math.round(crestL / 2 - crestW / 2) + 'px' : null} transition:reveal>
 			<div class="leftcol">
 				<button id="crest-home" class="home" bind:this={homeEl} on:click={onLogo} aria-label={mode === 'landing' ? 'Enter' : 'Main menu'}>
 					<img class="logo" src={logoImage} alt="Guards of Atlantis II" />
@@ -1087,10 +1102,17 @@
 	/* ------------------------------------------------ landing · role · admin · menu · join */
 	.s-col { padding: 32px max(40px, 7%); }
 	.leftcol { width: 420px; max-width: 100%; margin: auto 0; display: flex; flex-direction: column; align-items: flex-start; }
-	.s-col.landing .leftcol { width: 540px; }
+	.s-col.landing .leftcol { width: 420px; }
 	.s-col .home { width: 168px; margin: 0 0 20px -10px; transform-origin: 0 0; will-change: transform; }
 	.s-col.compact .home { width: 124px; margin-bottom: 14px; }
-	.s-col.landing .home { width: 520px; margin: 0 0 22px -18px; }
+	.s-col.landing .home { width: 400px; margin: 0 0 22px -14px; }
+	/* landscape desktop: the crest centred in the gap left of the island, sized to it */
+	@media (min-width: 761px) and (min-aspect-ratio: 1001/1000) {
+		.s-col.landing.placed { padding-left: 0; padding-right: 0; }
+		.s-col.landing.placed .leftcol { width: var(--crest-w); margin-left: var(--crest-x); align-items: center; }
+		.s-col.landing.placed .home { width: 100%; margin: 0 0 22px; }
+		.s-col.landing.placed .enterstep { left: 0; right: 0; width: auto; }
+	}
 	.s-col.landing .logo { filter: drop-shadow(0 20px 46px rgba(0, 0, 0, 0.65)) drop-shadow(0 0 34px rgba(216, 179, 106, 0.26)); }
 	.stage { position: relative; width: 100%; transition: height 0.32s cubic-bezier(0.2, 0.8, 0.2, 1); }
 	.s-col.landing .stage { min-height: var(--h-btn-lg); } /* (room for Enter before the step is measured: no jump on load) */
@@ -1101,7 +1123,7 @@
 	.home { position: relative; isolation: isolate; }
 	.home::before { content: ''; position: absolute; inset: -12% -10%; z-index: -1; border-radius: 50%; pointer-events: none;
 		background: radial-gradient(closest-side, rgba(3, 12, 24, 0.72), rgba(3, 12, 24, 0.38) 62%, transparent); }
-	.crest-hint { cursor: pointer; padding: 9px 22px; border-radius: var(--r-pill); font-size: 1.05rem; letter-spacing: 0.14em; text-transform: uppercase;
+	.crest-hint { cursor: pointer; white-space: nowrap; padding: 9px 22px; border-radius: var(--r-pill); font-size: 1.05rem; letter-spacing: 0.14em; text-transform: uppercase;
 		color: var(--brass-hi); background: rgba(4, 14, 26, 0.82); border: 1px solid var(--brass-line); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
 		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8); animation: hintglow 2.4s ease-in-out infinite; }
 	@keyframes hintglow { 0%, 100% { opacity: 1; } 50% { opacity: 0.62; } }
