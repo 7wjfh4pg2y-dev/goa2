@@ -73,7 +73,7 @@
 			<p>Everything 2.0 has that 1.0 doesn't. Tick what you want brought over. This tab stays on 2.0 until you close it or leave.</p>
 		</div>
 		<div class="hbtns">
-			<a class="leave" href="/goa2/v1/">The release build (v1)</a>
+			<a class="leave" href="/goa2/v1/" rel="external">The release build (v1)</a>
 			<button class="leave" on:click={leave}>Back to the live site</button>
 		</div>
 	</header>
