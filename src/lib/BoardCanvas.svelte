@@ -52,6 +52,8 @@
 	export let look: 'classic' | 'island' = 'classic';
 	// island look: the zone (zones.ts name, e.g. 'Center') to light up as the battle zone
 	export let glowZone: string | null = null;
+	/** the current battle zone: its minion spawn points get their corner brackets (null = none) */
+	export let activeZone: string | null = null;
 	// island look: a still sea (no animation)
 	export let seaStill = false;
 	// the board's moving effects — the sea, the minions' turning rims, the battle zone's pulse (a host option)
@@ -176,7 +178,7 @@
 	$: viewTf = viewM ? `matrix(${viewM.a},${viewM.b},${viewM.c},${viewM.d},${viewM.e},${viewM.f})` : '';
 	// island look: the coastline (shared by the sea and the land) and every hex's zone name
 	$: coast = look === 'island' ? loopsPath(outlineLoops(Object.keys(cells), size), 0.9) : '';
-	$: zoneNames = look === 'island' ? zoneTable(map as Parameters<typeof zoneTable>[0]) : {};
+	$: zoneNames = look === 'island' || activeZone ? zoneTable(map as Parameters<typeof zoneTable>[0]) : {};
 	// the battle zone's outline hugs the ground you can stand on (rocks belong to the zone but aren't lit)
 	$: zoneGlow = look === 'island' && glowZone ? loopsPath(outlineLoops(Object.keys(cells).filter((id) => zoneNames[id] === glowZone && cells[id] !== 'terrain'), size), 0.45) : '';
 	// The island is thousands of shapes, so it lives in its OWN svg and the view is applied to
@@ -622,7 +624,7 @@
 	{#if look === 'island' && viewM}
 		<Ocean {bounds} view={viewM} {coast} {size} still={seaStill || !effects} />
 		<svg class="land" class:moving viewBox={vb} preserveAspectRatio="xMidYMid meet" style:transform={landTf} aria-hidden="true" bind:this={landEl}>
-			<IslandLayer {cells} {meta} {size} rot={rotEff} zones={zoneNames} thrones={throneAt} {coast} scatter={map.scatter ?? {}} />
+			<IslandLayer {cells} {meta} {size} rot={rotEff} zones={zoneNames} {activeZone} thrones={throneAt} {coast} scatter={map.scatter ?? {}} />
 		</svg>
 		<!-- the battle zone's outline is its own svg so that its pulse is an opacity animation on a whole element
 		     (GPU work); pulsing a path inside the land svg re-styled and repainted that layer every frame -->
@@ -661,7 +663,7 @@
 					<!-- an empty minion spawn point: its zone's ground with a mark on it (never a minion picture — new players took those for minions) -->
 					<image href={zoneTile(zoneOf(h.id))} x={h.x - SQRT3 * size * 0.53} y={h.y - size * 1.06}
 						width={SQRT3 * size * 1.06} height={size * 2 * 1.06} preserveAspectRatio="none" />
-					<SpawnMark c={{ x: h.x, y: h.y }} {size} team={h.t === 'spawnOrange' ? 'orange' : 'blue'} role={meta[h.id]?.m === 'ranged' || meta[h.id]?.m === 'heavy' ? meta[h.id].m as 'ranged' | 'heavy' : 'melee'} dir={meta[h.id]?.dir ?? 0} />
+					<SpawnMark c={{ x: h.x, y: h.y }} {size} team={h.t === 'spawnOrange' ? 'orange' : 'blue'} role={meta[h.id]?.m === 'ranged' || meta[h.id]?.m === 'heavy' ? meta[h.id].m as 'ranged' | 'heavy' : 'melee'} dir={meta[h.id]?.dir ?? 0} active={!!activeZone && zoneNames[h.id] === activeZone} />
 				{:else if isThrone(h.t)}
 					<image href={zoneTile(isSpawn(h.t) ? zoneOf(h.id) : baseTileFor(h.t))} x={h.x - SQRT3 * size * 0.53} y={h.y - size * 1.06}
 						width={SQRT3 * size * 1.06} height={size * 2 * 1.06} preserveAspectRatio="none" />

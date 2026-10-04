@@ -27,6 +27,8 @@
 	export let rot = 0;
 	/** hex → zone name (zones.ts) for the cracks */
 	export let zones: Record<string, string> = {};
+	/** the current battle zone: its spawn points get their corner brackets */
+	export let activeZone: string | null = null;
 	/** hex → team for the two throne hexes */
 	export let thrones: Record<string, string> = {};
 	/** the coastline (svg path), shared with the sea */
@@ -568,7 +570,7 @@
 		{:else if t.spawn}
 			<!-- a minion spawn point: a wash of the team's colour, the minion's emblem as an outline facing the way it will
 			     march, and corner brackets (SpawnMark) — a mark on the ground, never something that looks like a piece -->
-			<SpawnMark c={t.c} {size} team={t.spawn.team} role={t.spawn.role} dir={t.spawn.dir} />
+			<SpawnMark c={t.c} {size} team={t.spawn.team} role={t.spawn.role} dir={t.spawn.dir} active={!!activeZone && zones[t.id] === activeZone} />
 		{/if}
 	{/each}
 
