@@ -782,6 +782,7 @@
 									<span class="choice-go"><Icon name="go" /></span>
 								</button>
 							</div>
+							<a class="btn btn-ghost on-art hall" href={base + '/stats'}><Icon name="crown" /> Hall of Records</a>
 						</div>
 					{:else if mode === 'admin'}
 						<div class="step" transition:reveal bind:clientHeight={h['admin']}>
@@ -823,6 +824,7 @@
 								<p class="msg-error slot" title={verErr}>{verErr}</p>
 								{#if THIS_VERSION === 'release'}<p class="t-small c-muted">You're on the release build (/goa2/v1) — 1.0 plus 2.0's features as they come in. Not live yet.</p>{/if}
 								<a class="btn btn-ghost" href={base + '/preview'}>2.0 preview — pick features</a>
+								<a class="btn btn-ghost" href={base + '/stats'}>Hall of Records</a>
 							</section>
 							<div class="row"><button class="btn btn-ghost on-art" on:click={goHome}>Sign out</button></div>
 						</div>
@@ -1143,6 +1145,7 @@
 	.choices :global(.choice-go) { color: #fff; }
 	.choices :global(.choice .t-h2) { text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45); }
 	.choices { display: flex; flex-direction: column; gap: 16px; width: 100%; }
+	.hall { align-self: center; margin-top: 14px; }
 	.step .formpanel { display: flex; flex-direction: column; gap: 16px; padding: 24px 26px; }
 	.step .formpanel .row { margin-top: 4px; }
 	.field.up { text-transform: uppercase; }

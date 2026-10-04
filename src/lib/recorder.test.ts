@@ -13,6 +13,19 @@ const base = (over: Partial<MatchState> = {}): MatchState => ({
 } as unknown as MatchState)
 
 describe('game recorder', () => {
+	it('logs each player\'s build: one step per change, in order — kept upgrades, items, the ultimate', () => {
+		const c = base().cards!
+		// arien: 7 = Expert Duelist (BLUE II, twin 10), 13 = Master Duelist (BLUE III, twin 16); 4 = the BLUE I card
+		const at = (over: object, turn = 1, round = 1) => base({ round, turn, cards: { ...c, a: { ...c.a, hand: [0, 4, 5, 6], upgrade: [], ...over } } } as Partial<MatchState>)
+		let j = journalUpdate(newJournal('ROOM', base()), at({}))
+		expect(j.builds?.a).toEqual([{ r: 1, t: 1, lv: 1, keep: [], up: [], ult: false }])
+		j = journalUpdate(j, at({ level: 2, hand: [0, 7, 5, 6], upgrade: [10] }, 4))
+		j = journalUpdate(j, at({ level: 2, hand: [0, 7, 5, 6], upgrade: [10] }, 4)) // nothing new
+		// round 2: the Tier III blue, played this turn (still counts as kept), the Tier II twin goes to the items
+		j = journalUpdate(j, at({ level: 3, hand: [0, 5, 6], turns: [13, null, null, null], upgrade: [10, 7, 16] }, 1, 2))
+		expect(j.builds?.a.map((b) => [b.lv, b.keep, b.up])).toEqual([[1, [], []], [2, [7], [10]], [3, [13], [7, 10, 16]]])
+		expect(gameRow({ ...j, done: true }).data.builds?.a).toHaveLength(3)
+	})
 	it('uses the same id on every client', () => {
 		expect(gameId('ROOM', base())).toBe('ROOM-123')
 		expect(gameId('ROOM', base({ gameId: 'g1', startFlip: null } as Partial<MatchState>))).toBe('ROOM-g1')

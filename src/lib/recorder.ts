@@ -13,6 +13,7 @@
 // dashboard). The id is the same on every client, so duplicates are refused.
 import type { LogEntry, MatchState, Team } from './match'
 import { supabase } from './supabase'
+import { heroCards } from './cards/deck'
 
 export const REC_TABLE = 'goa2_games'
 const PREFIX = 'goa2-rec:'
@@ -36,6 +37,11 @@ export type GameEvent =
 	| { k: 'hero'; id: string; r: number; t: number; by: string; v: string; a: string[]; c: number; ac: number; l: number; team: Team | null }
 	| { k: 'minion'; id: string; r: number; t: number; by: string; role: string; team: Team }
 
+/** A player's BUILD at a moment: the upgrade cards they keep (indices into heroCards(hero), Tier II / III),
+ *  the twins they turned into items (`up`), whether the ultimate is on, and their level. The journal keeps
+ *  one step per change (a swap or an undo is a change too), so the order of a level-up path is there. */
+export type BuildStep = { r: number; t: number; lv: number; keep: number[]; up: number[]; ult: boolean }
+
 export interface Journal {
 	v: 1
 	id: string
@@ -55,6 +61,8 @@ export interface Journal {
 	log: LogEntry[]
 	/** structured events (absent in journals begun before they were recorded) */
 	ev?: GameEvent[]
+	/** each player's build, one step per change (absent in journals begun before builds were recorded) */
+	builds?: Record<string, BuildStep[]>
 	/** what the event tracker saw last: the latest hero-defeat id and the minions on the board (id → "team|role") */
 	mark?: { d: string | null; m: Record<string, string> } | null
 	done: boolean // won — ready to upload
@@ -79,7 +87,7 @@ export function newJournal(room: string, s: MatchState): Journal {
 		v: 1, id: gameId(room, s), room, startedAt: Date.now(), lastAt: Date.now(),
 		fromStart: s.round === 1 && s.turn === 1 && !s.wonBy,
 		seats: s.seats, mapId: s.mapId, draftSystem: s.draftSystem, lifeMax: s.lifeMax, wavesMax: s.wavesMax,
-		players: {}, draft: null, turns: [], cur: null, log: [], ev: [], mark: null, done: false, uploaded: false
+		players: {}, draft: null, turns: [], cur: null, log: [], ev: [], builds: {}, mark: null, done: false, uploaded: false
 	}
 }
 
@@ -152,6 +160,30 @@ function track(out: Journal, j: Journal, s: MatchState): boolean {
 	return true
 }
 
+/** A player's build now (see BuildStep): the Tier II / III cards still in their collection, not turned into items. */
+export function buildOf(c: NonNullable<MatchState['cards']>[string], r: number, t: number): BuildStep {
+	const deck = heroCards(c.hero)
+	const gone = new Set([...(c.upgrade ?? []), ...(c.removed ?? [])])
+	const held = new Set<number>([...(c.hand ?? []), ...(c.discard ?? []), ...((c.turns ?? []).filter((x): x is number => x != null)), ...(c.pending != null ? [c.pending] : [])])
+	const keep = [...held].filter((i) => !gone.has(i) && (deck[i]?.level === 2 || deck[i]?.level === 3)).sort((a, b) => a - b)
+	return { r, t, lv: c.level ?? 1, keep, up: [...(c.upgrade ?? [])].sort((a, b) => a - b), ult: !!c.ultimate }
+}
+const sameBuild = (a: BuildStep, b: BuildStep) => a.lv === b.lv && a.ult === b.ult && a.keep.join() === b.keep.join() && a.up.join() === b.up.join()
+function trackBuilds(out: Journal, j: Journal, s: MatchState): boolean {
+	if (!j.builds) return false // a journal from before builds were recorded
+	let changed = false
+	for (const [pid, c] of Object.entries(s.cards ?? {})) {
+		if (!c?.hero) continue
+		const now = buildOf(c, s.round, s.turn)
+		const steps = out.builds![pid] ?? []
+		const last = steps[steps.length - 1]
+		if (last && sameBuild(last, now)) continue
+		out.builds = { ...out.builds, [pid]: [...steps, now] }
+		changed = true
+	}
+	return changed
+}
+
 /** Fold the latest state into the journal (pure; returns the same object when nothing changed). */
 export function journalUpdate(j: Journal, s: MatchState): Journal {
 	if (j.done && s.wonBy) return j
@@ -172,6 +204,8 @@ export function journalUpdate(j: Journal, s: MatchState): Journal {
 			changed = true
 		}
 	}
+	// builds: a new step whenever a player's kept upgrades, items, ultimate or level change
+	try { if (trackBuilds(out, j, s)) changed = true } catch { /* ignore */ }
 	// hero and minion defeats, from the state itself (never allowed to break the rest of the journal)
 	try { if (track(out, j, s)) changed = true } catch { /* ignore */ }
 	if (!out.draft && s.draft) {
@@ -226,7 +260,7 @@ export function gameRow(j: Journal) {
 		players: Object.keys(j.players).length,
 		data: {
 			v: j.v, seats: j.seats, mapId: j.mapId, draftSystem: j.draftSystem, lifeMax: j.lifeMax, wavesMax: j.wavesMax,
-			players: j.players, draft: j.draft, turns, log: j.log, final: f ?? null, ev: j.ev ?? null
+			players: j.players, draft: j.draft, turns, log: j.log, final: f ?? null, ev: j.ev ?? null, builds: j.builds ?? null
 		}
 	}
 }
