@@ -56,8 +56,11 @@
 	export let activeZone: string | null = null;
 	// island look: a still sea (no animation)
 	export let seaStill = false;
-	// the board's moving effects — the sea, the minions' turning rims, the battle zone's pulse (a host option)
+	// the board's moving effects — the sea, the minions' turning rims, the battle zone's pulse — all at once…
 	export let effects = true;
+	// …or one by one (each player's own choice in the game: boardPrefs)
+	export let sea = true;
+	export let rims = true;
 	/** Screen space the HUD covers (css px from each edge). The island's resting view — the one `reset()` returns
 	 *  to — is fitted into what is left, while the sea still fills the whole box. null = fit the whole box. */
 	export let inset: { t: number; b: number; l?: number; r?: number } | null = null;
@@ -616,13 +619,14 @@
 	bind:clientWidth={wrapW}
 	bind:clientHeight={wrapH}
 	class:calm={!effects}
+	class:rimstill={!rims}
 	class:holding={!!ghostPiece}
 	class:pinging={pingArmed}
 	role="img"
 	aria-label={map.name ? `Game board: ${map.name}` : 'Game board'}
 >
 	{#if look === 'island' && viewM}
-		<Ocean {bounds} view={viewM} {coast} {size} still={seaStill || !effects} />
+		<Ocean {bounds} view={viewM} {coast} {size} still={seaStill || !effects || !sea} />
 		<svg class="land" class:moving viewBox={vb} preserveAspectRatio="xMidYMid meet" style:transform={landTf} aria-hidden="true" bind:this={landEl}>
 			<IslandLayer {cells} {meta} {size} rot={rotEff} zones={zoneNames} {activeZone} thrones={throneAt} {coast} scatter={map.scatter ?? {}} />
 		</svg>
@@ -794,6 +798,6 @@
 	.rim .turn svg { position: absolute; inset: -100%; width: 300%; height: 300%; scale: 0.33333; }
 	@keyframes rimturn { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 	@media (prefers-reduced-motion: reduce) { .rim .turn { animation: none; } }
-	.board-wrap.calm .rim .turn, .board-wrap.calm svg.zone { animation: none; } /* the host switched effects off */
+	.board-wrap.calm .rim .turn, .board-wrap.calm svg.zone, .board-wrap.rimstill .rim .turn { animation: none; } /* effects off */
 	@keyframes spin { to { transform: rotate(360deg); } }
 </style>

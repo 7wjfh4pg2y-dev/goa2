@@ -8,6 +8,7 @@
 	import PushSplash from '$lib/PushSplash.svelte';
 	import VictorySplash from '$lib/VictorySplash.svelte';
 	import ControlWheel, { type WheelItem } from '$lib/ControlWheel.svelte';
+	import { boardPrefs } from '$lib/boardPrefs';
 	import { heroById, heroLogo } from '$lib/heroes';
 	import { teamName, teamAdj, aMinion, placeName } from '$lib/teams';
 	import { createRecorder } from '$lib/recorder';
@@ -21,7 +22,7 @@
 	import { uiLayout, layoutVars } from '$lib/layout';
 	import { placeToken, moveToken, effectiveHex, MINES, tokenName, tokensLeft, removalOptions, applyRemoval, removalLog, canRemove, type ArmToken, type RemovalOption } from '$lib/tokens';
 	import {
-		colorHex, movePiece, teamForSeat, throneHex, minionCoins, heroDefeatSummary, canRespawn, freeSpawns, teamOf, clearable, boardLookOf, zoneGlowOf, boardFxOf,
+		colorHex, movePiece, teamForSeat, throneHex, minionCoins, heroDefeatSummary, canRespawn, freeSpawns, teamOf, clearable, 
 		type MatchState, type Player, type MatchSession, type Team, type ConnStatus
 	} from '$lib/match';
 
@@ -155,11 +156,10 @@
 	let cardLayer: CardLayer;
 	// the board: the host's three switches (shared state; unset = island, outline on, effects on), set from the
 	// control centre. The outline follows the lane and goes once the game is won.
-	$: boardLook = boardLookOf($ms);
-	$: zoneGlow = zoneGlowOf($ms);
-	$: glowZone = boardLook === 'island' && zoneGlow && !$ms.wonBy ? battleZone($ms) : null;
-	$: boardFx = boardFxOf($ms);
-	function setBoard(text: string, patch: Partial<MatchState>) { if (iAmHost) session.act(text, patch); }
+	// the board's look and its effects are each player's OWN choice (boardPrefs: this browser only, all effects
+	// off by default) — switching one changes nobody else's screen
+	$: boardLook = $boardPrefs.look;
+	$: glowZone = boardLook === 'island' && $boardPrefs.zone && !$ms.wonBy ? battleZone($ms) : null;
 
 	// ── the control centre: one button → a wheel over the board (view controls inside, the board's switches outside)
 	let wheelOpen = false;
@@ -173,26 +173,27 @@
 		island: '<path d="M12 2.5l8.2 4.75v9.5L12 21.5l-8.2-4.75v-9.5z" /><path d="M7 14c1.5-2 3-2.6 5-1.2s3.4.8 5-1.3" />',
 		classic: '<path d="M12 2.5l8.2 4.75v9.5L12 21.5l-8.2-4.75v-9.5z" /><path d="M12 2.5v19M3.8 7.25l16.4 9.5M20.2 7.25l-16.4 9.5" />',
 		zone: '<path d="M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9z" stroke-dasharray="3 2.4" /><circle cx="12" cy="12" r="2.4" />',
+		rims: '<circle cx="12" cy="12" r="8" /><path d="M12 4v2M20 12h-2M12 20v-2M4 12h2M17.7 6.3l-1.4 1.4M17.7 17.7l-1.4-1.4M6.3 17.7l1.4-1.4M6.3 6.3l1.4 1.4" />',
+		waves: '<path d="M2 9c2.5-2.5 4.5-2.5 7 0s4.5 2.5 7 0 4.5-2.5 6 0" /><path d="M2 15c2.5-2.5 4.5-2.5 7 0s4.5 2.5 7 0 4.5-2.5 6 0" />',
 		fx: '<path d="M2 15c2.5-2.5 4.5-2.5 7 0s4.5 2.5 7 0 4.5-2.5 6 0" /><path d="M12 3v3M6.5 5.5l1.6 2M17.5 5.5l-1.6 2" />'
 	};
-	$: wheelView = [
-		{ id: 'recenter', label: 'Recenter', icon: ICON.recenter, act: () => board?.reset() },
+	const wheelHub: WheelItem = { id: 'recenter', label: 'Recenter', icon: ICON.recenter, act: () => board?.reset() };
+	$: onIsland = boardLook === 'island';
+	$: wheelRing = [
+		{ id: 'fx', label: 'Effects', icon: ICON.fx, title: 'Effects — only on your screen', act: () => {}, sub: [
+			{ id: 'rims', label: 'Rims', icon: ICON.rims, on: $boardPrefs.rims, title: `The minions' turning rims: ${$boardPrefs.rims ? 'on' : 'off'}`, act: () => boardPrefs.set({ rims: !$boardPrefs.rims }) },
+			{ id: 'zone', label: 'Zone', icon: ICON.zone, on: onIsland && $boardPrefs.zone, disabled: !onIsland,
+				title: onIsland ? `Battle zone outline: ${$boardPrefs.zone ? 'on' : 'off'}` : 'The battle zone outline is drawn on the island only', act: () => boardPrefs.set({ zone: !$boardPrefs.zone }) },
+			{ id: 'sea', label: 'Waves', icon: ICON.waves, on: onIsland && $boardPrefs.sea, disabled: !onIsland,
+				title: onIsland ? `Moving sea: ${$boardPrefs.sea ? 'on' : 'off'}` : 'The sea is drawn on the island only', act: () => boardPrefs.set({ sea: !$boardPrefs.sea }) },
+			{ id: 'look', label: onIsland ? 'Island' : 'Classic', icon: onIsland ? ICON.island : ICON.classic, on: onIsland,
+				title: `Map: ${onIsland ? 'the island' : 'classic tiles'} (only on your screen)`, act: () => boardPrefs.set({ look: onIsland ? 'classic' : 'island' }) }
+		] },
 		{ id: 'rotr', label: 'Turn', icon: ICON.rotr, title: 'Turn clockwise (45°)', act: () => board?.rotateBy(45) },
 		{ id: 'zin', label: 'Zoom in', icon: ICON.zin, act: () => board?.zoomBtn(1.2) },
 		{ id: 'views', label: 'Views', icon: ICON.views, title: 'Saved views', act: () => {} },
 		{ id: 'zout', label: 'Zoom out', icon: ICON.zout, act: () => board?.zoomBtn(1 / 1.2) },
 		{ id: 'rotl', label: 'Turn', icon: ICON.rotl, title: 'Turn anticlockwise (45°)', act: () => board?.rotateBy(-45) }
-	] as WheelItem[];
-	$: wheelBoard = [
-		{ id: 'look', label: boardLook === 'island' ? 'Island' : 'Classic', icon: boardLook === 'island' ? ICON.island : ICON.classic, on: boardLook === 'island',
-			title: `Map: ${boardLook === 'island' ? 'the island' : 'classic tiles'}`,
-			act: () => setBoard(`switched the board to ${boardLook === 'island' ? 'Classic' : 'the Island'}`, { boardLook: boardLook === 'island' ? 'classic' : 'island' }) },
-		{ id: 'zone', label: 'Outline', icon: ICON.zone, on: zoneGlow && boardLook === 'island', disabled: boardLook !== 'island',
-			title: boardLook !== 'island' ? 'The battle zone outline is drawn on the island only' : `Battle zone outline: ${zoneGlow ? 'on' : 'off'}`,
-			act: () => setBoard(`turned the battle zone outline ${zoneGlow ? 'off' : 'on'}`, { zoneGlow: !zoneGlow }) },
-		{ id: 'fx', label: 'Effects', icon: ICON.fx, on: boardFx,
-			title: `Moving effects (the sea, the minions' rims, the outline's pulse): ${boardFx ? 'on' : 'off'}`,
-			act: () => setBoard(`turned the moving effects ${boardFx ? 'off' : 'on'}`, { boardFx: !boardFx }) }
 	] as WheelItem[];
 	// every lingering card effect in play (switched on from a played card)
 	$: activeFx = $ms.effects ?? [];
@@ -700,7 +701,7 @@
 	{#if $ms.wonBy && !victoryClosed && !victoryHold}
 		<VictorySplash team={$ms.wonBy.team} reason={$ms.wonBy.reason} myTeam={mySeat >= 0 && mySeat < $ms.seats ? myTeam : null} {mobile} onClose={() => (victoryClosed = true)} round={$ms.round} stats={gameStats} />
 	{/if}
-	<ControlWheel open={wheelOpen} view={wheelView} board={iAmHost ? wheelBoard : []} boardNote="Board" {mobile} {views} {viewLabel} onGo={goView} onSave={saveView} onClose={() => (wheelOpen = false)} />
+	<ControlWheel open={wheelOpen} ring={wheelRing} hub={wheelHub} {mobile} {views} {viewLabel} onGo={goView} onSave={saveView} onClose={() => (wheelOpen = false)} />
 	{#if askLifeEnd && lifeOut}
 		<div class="modal-scrim" role="presentation">
 			<div class="modal" role="dialog" aria-modal="true" tabindex="-1">
@@ -722,7 +723,7 @@
 	<div class="ocean"></div>
 	<!-- on a phone the board sits between the top bar + player strip and the dash -->
 	<div class="boardarea" class:mob={mobile}>
-	<BoardCanvas bind:this={board} map={$ms.map ?? {}} look={boardLook} {glowZone} activeZone={$ms.wonBy ? null : battleZone($ms)} effects={boardFx} rotation={orientation} interactive={true} {placing} {placeGhost} holdColor={myHoldColor} onCancelPlace={cancelPlace} {areas} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} pings={boardPings} onPing={doPing} {pingArmed} />
+	<BoardCanvas bind:this={board} map={$ms.map ?? {}} look={boardLook} {glowZone} activeZone={$ms.wonBy ? null : battleZone($ms)} effects={true} sea={$boardPrefs.sea} rims={$boardPrefs.rims} rotation={orientation} interactive={true} {placing} {placeGhost} holdColor={myHoldColor} onCancelPlace={cancelPlace} {areas} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} pings={boardPings} onPing={doPing} {pingArmed} />
 	</div>
 
 	<CardLayer bind:this={cardLayer} {mobile} {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} onRespawn={placeMyHero} onEnter={placeMyHero} onArmToken={armToken} holdingToken={!!pendingToken} {pingArmed} onPing={pingButton} bind:previewId />
@@ -931,7 +932,7 @@
 				<div class="msec mviews">
 					<button class="ctlbtn mctl" on:click={() => { menuOpen = false; wheelOpen = true; }}>
 						<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5" /><circle cx="12" cy="12" r="3" /><path d="M12 1.5v4M12 18.5v4M1.5 12h4M18.5 12h4" /></svg>
-						Controls · view &amp; board
+						Controls · view &amp; effects
 					</button>
 				</div>
 				<div class="msec">
@@ -1094,7 +1095,7 @@
 
 		<!-- the control centre: view and board, behind one button -->
 		<div class="viewctl">
-			<button class="ctlbtn" on:click={() => (wheelOpen = true)} title="Control centre — recenter, turn, zoom, saved views and the board">
+			<button class="ctlbtn" on:click={() => (wheelOpen = true)} title="Control centre — recenter, turn, zoom, saved views and your effects">
 				<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5" /><circle cx="12" cy="12" r="3" /><path d="M12 1.5v4M12 18.5v4M1.5 12h4M18.5 12h4" /></svg>
 				Controls
 			</button>
