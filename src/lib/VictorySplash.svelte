@@ -1,24 +1,21 @@
 <script lang="ts">
 	// GAME OVER — a quiet title card, viewer-relative: VICTORY (you won) · DEFEAT (you lost) ·
 	// "<Team> wins" (spectators). Above the title, how it was won:
-	//  · a push (throne / final push) — the winners' crest. Straight after the push ceremony
-	//    (PushSplash; see winstage.ts) this card waits for it to finish and TAKES ITS CREST OVER:
-	//    it is already there, large — it shrinks up into its seat and the card draws under it.
-	//    Opened cold (the trophy button, a late joiner) the two-sided coin drops in flipping
-	//    and lands on the winners' face
+	//  · a push (throne / final push) — the two-sided team coin (orange gear / blue star, the
+	//    tie-breaker art) drops in flipping and lands on the winners' face
 	//  · Life ran out — both teams' Life hearts (enemy left, yours right, like the other splashes):
 	//    the winners' beats and glows, the losers' shakes and cracks to its broken back
 	// Then two gold rules draw out, the title tracks in between them, and ONE line below
 	// says how: "Titans ran out of Life Tokens" / "Atlanteans pushed into the Titan Throne" /
 	// "Titans won the Final Push". (Names / numbers belong on the battle report.)
 	// With `stats`, the battle report (GameStats — a full page of its own, with its own headline and
-	// "View the board") covers the card after a few seconds, or straight away from "Battle report".
+	// "View the board") takes over from the card after a few seconds, or straight away from "Battle report".
 	import type { Team } from '$lib/match';
 	import { teamName } from '$lib/teams';
+	import tieOrange from '$lib/images/tiebreaker_orange.png';
+	import tieBlue from '$lib/images/tiebreaker_blue.png';
 	import { onDestroy, onMount } from 'svelte';
 	import GameStats, { type GameStatsData } from '$lib/GameStats.svelte';
-	import TeamCrest from '$lib/ui/TeamCrest.svelte';
-	import { winStage, CREST_D, CREST_Y } from '$lib/winstage';
 
 	export let team: Team; // the winning team
 	export let reason = '';
@@ -31,19 +28,10 @@
 	const REPORT_AFTER = 5500;
 	let report = false;
 	let timer: ReturnType<typeof setTimeout> | null = null;
-	// the hand-over from the push ceremony: wait for it to finish, then take its crest over
-	let shown = false, arrive = false;
-	let holdT: ReturnType<typeof setTimeout> | null = null;
-	const SEAT = 160; // the crest's size in its seat (design px); its centre is 85 below the card's top
-	const arriveVars = `--ay:${85 - CREST_Y}px; --as:${CREST_D / SEAT}`;
-	onMount(() => {
-		const now = Date.now();
-		arrive = !/life/i.test(reason) && now < winStage.gone - 400;
-		const start = () => { shown = true; if (stats) timer = setTimeout(() => (report = true), REPORT_AFTER); };
-		if (arrive && winStage.ready > now) holdT = setTimeout(start, winStage.ready - now); else start();
-	});
-	onDestroy(() => { if (timer) clearTimeout(timer); if (holdT) clearTimeout(holdT); });
+	onMount(() => { if (stats) timer = setTimeout(() => (report = true), REPORT_AFTER); });
+	onDestroy(() => { if (timer) clearTimeout(timer); });
 
+	const EMBLEM: Record<Team, string> = { orange: tieOrange, blue: tieBlue };
 	const lifeImgs = import.meta.glob('./cards/images/life_counter_*.png', { eager: true, import: 'default' }) as Record<string, string>;
 	const heart = (t: Team, side: 'front' | 'back') => lifeImgs[`./cards/images/life_counter_${t}_${side}.png`] ?? '';
 	const C: Record<Team, string> = { orange: '#ef7d22', blue: '#2f7fe6' };
@@ -57,15 +45,9 @@
 	$: enemy = (mine === 'orange' ? 'blue' : 'orange') as Team;
 </script>
 
-{#if shown}
-<div class="vs" class:lost class:mob={mobile} class:hearts={byLife} class:report class:arrive style="--wc:{C[team]}; --wl:{L[team]}; --n:{title.length}; {arriveVars}" role="dialog" aria-label="Game over">
+<div class="vs" class:lost class:mob={mobile} class:hearts={byLife} class:report style="--wc:{C[team]}; --wl:{L[team]}" role="dialog" aria-label="Game over">
 	<div class="bg"></div>
 	<div class="col">
-		{#if arrive}
-			<!-- the crest from the push ceremony: it starts where that one ended (the card's middle
-			     line is the ceremony's stage point) and shrinks up into the seat -->
-			<div class="lift"><div class="grow"><span class="halo"></span><div class="face"><TeamCrest {team} /></div></div></div>
-		{/if}
 		<div class="sign">
 			{#if byLife}
 				<div class="pair">
@@ -76,12 +58,12 @@
 						</div>
 					{/each}
 				</div>
-			{:else if !arrive}
+			{:else}
 				<div class="coin">
 					<span class="halo"></span><span class="ring"></span>
 					<div class="spin">
-						<div class="face l"><TeamCrest team={loser} /></div>
-						<div class="face w"><TeamCrest {team} /></div>
+						<img class="face l" src={EMBLEM[loser]} alt="" />
+						<img class="face w" src={EMBLEM[team]} alt="" />
 					</div>
 				</div>
 			{/if}
@@ -99,16 +81,14 @@
 	<!-- the battle report: its own page over the card -->
 	{#if report && stats}<GameStats data={stats} {myTeam} winner={team} {reason} {mobile} {onClose} />{/if}
 </div>
-{/if}
 
 <style>
 	.vs { position: fixed; inset: 0; z-index: 70; overflow: hidden; color: #f6ead2; --z: var(--uis, 1); --td: 1.15s; }
 	.vs.mob { --z: .62; }
-	/* opaque: the HUD and the board must not ghost through the card */
-	.bg { position: absolute; inset: 0; animation: fade .5s ease both; background: radial-gradient(70% 60% at 50% 45%, #0e0e14, #020204); }
+	.bg { position: absolute; inset: 0; animation: fade .5s ease both; background: radial-gradient(70% 60% at 50% 45%, rgba(14, 14, 20, .95), rgba(2, 2, 4, .99)); }
 	/* one centred column; zoom scales it (percent insets are untouched by zoom) */
 	.col { position: absolute; left: 50%; top: 46%; translate: -50% -50%; zoom: var(--z); display: flex; flex-direction: column; align-items: center; gap: 12px; width: max-content; max-width: calc(96vw / var(--z)); }
-	.sign { height: 170px; display: grid; place-items: center; margin-bottom: 4px; }
+	.sign { height: 170px; display: grid; place-items: center; margin-bottom: 4px; transition: height .8s cubic-bezier(.6, 0, .2, 1), opacity .5s ease, margin .8s ease; }
 	/* the battle report covers the card: the card and its buttons leave the page (no tab stops under the report) */
 	.report :is(.col, .foot) { opacity: 0; visibility: hidden; transition: opacity .2s ease, visibility 0s .2s; }
 	.kick { font-size: .9rem; letter-spacing: .5em; text-transform: uppercase; color: var(--wl); animation: fade .6s ease var(--td) both; }
@@ -128,27 +108,12 @@
 	@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 	@keyframes up { from { opacity: 0; translate: 0 12px; } to { opacity: 1; translate: 0 0; } }
 	@keyframes draw { from { scale: 0 1; opacity: 0; } to { scale: 1 1; opacity: 1; } }
-	@keyframes track { from { opacity: 0; transform: scaleX(1.28); } } /* transform only: never letter-spacing or blur */
-
-	/* ═════ arriving from the push ceremony: the same sea, the same crest ═════ */
-	.vs.arrive { --td: .6s; }
-	.arrive .bg { background: radial-gradient(75% 65% at 50% 42%, #0b243c, #030b15); animation-duration: .4s; }
-	.arrive.lost .bg { background: radial-gradient(75% 65% at 50% 42%, #09131f, #02050a); }
-	/* .lift is as tall as the card, so 50% of it is the card's middle line = the ceremony's stage point */
-	.lift { position: absolute; inset: 0; pointer-events: none; animation: lift .95s cubic-bezier(.6, 0, .2, 1) .2s both; transition: opacity .4s ease; }
-	.grow { position: absolute; left: 50%; top: 5px; width: 160px; height: 160px; margin-left: -80px; animation: grow .95s cubic-bezier(.6, 0, .2, 1) .2s both; }
-	@keyframes lift { from { transform: translateY(calc(50% - var(--ay))); } }
-	@keyframes grow { from { transform: scale(var(--as)); } }
-	.arrive .halo { inset: -56%; opacity: 1; animation: haloIn .4s ease both; background: radial-gradient(closest-side, color-mix(in srgb, var(--wl) 46%, transparent), transparent); }
-	.arrive.lost .halo { opacity: .5; }
-	@keyframes haloIn { from { opacity: 0; } }
-	.report .lift { opacity: 0; }
-	@media (prefers-reduced-motion: reduce) { .lift, .grow, .arrive .bg, .arrive .halo { animation: none; } }
+	@keyframes track { from { opacity: 0; letter-spacing: .5em; filter: blur(8px); } to { opacity: 1; letter-spacing: .08em; } }
 
 	/* ═════ the coin: two-sided (loser's face up first), three flat flips, lands on the winners' ═════ */
 	.coin { position: relative; width: 160px; height: 160px; }
 	.spin { position: absolute; inset: 0; animation: drop .9s cubic-bezier(.3, .1, .4, 1) .15s both, flip .9s cubic-bezier(.2, .5, .4, 1) .15s both; }
-	.face { position: absolute; inset: 0; }
+	.face { position: absolute; inset: 0; width: 100%; height: 100%; filter: drop-shadow(0 10px 18px rgba(0, 0, 0, .7)); }
 	.face.w { animation: faceW .9s cubic-bezier(.2, .5, .4, 1) .15s both; }
 	.face.l { animation: faceL .9s cubic-bezier(.2, .5, .4, 1) .15s both; }
 	@keyframes drop { 0% { opacity: 0; translate: 0 -380px; } 15% { opacity: 1; } 78% { translate: 0 6px; } 100% { opacity: 1; translate: 0 0; } }
@@ -158,7 +123,7 @@
 	@keyframes faceL { 0%, 11.9% { opacity: 1; } 12%, 41.9% { opacity: 0; } 42%, 75.9% { opacity: 1; } 76%, 100% { opacity: 0; } }
 	.halo { position: absolute; inset: -45%; border-radius: 50%; background: radial-gradient(closest-side, color-mix(in srgb, var(--wl) 50%, transparent), transparent); opacity: 0; animation: fade .8s ease 1s forwards; }
 	.ring { position: absolute; inset: 0; border-radius: 50%; border: 4px solid #ffe3a0; opacity: 0; animation: ring .8s ease-out 1.05s forwards; }
-	@keyframes ring { 0% { opacity: .9; scale: .9; } 100% { opacity: 0; scale: 2.1; } }
+	@keyframes ring { 0% { opacity: .9; scale: .9; } 100% { opacity: 0; scale: 2.1; border-width: 1px; } }
 
 	/* ═════ the hearts: the winners' beats, the losers' shakes and cracks ═════ */
 	.vs.hearts { --td: 1.35s; }
@@ -173,9 +138,8 @@
 	@keyframes gone { to { opacity: 0; } }
 	@keyframes crackIn { 0% { opacity: 1; scale: 1.15; filter: brightness(2); } 100% { opacity: 1; scale: 1; filter: brightness(.6) saturate(.6) drop-shadow(0 6px 10px rgba(0, 0, 0, .7)); } }
 
-	/* phones: the column is zoomed down (--z); the title (--n letters ≈ .78em each, and it tracks in
-	   from 1.28× wide) stays on one line between 20 px gutters — "Atlanteans win" included */
-	.mob .ttl { font-size: min(6rem, calc((100vw - 40px) / var(--z) / (var(--n) * .86))); }
+	/* phones: the column is zoomed down (--z); keep the title on one line */
+	.mob .ttl { font-size: min(6rem, calc(15vw / var(--z))); }
 	.mob .pair { gap: 40px; }
 	.mob .why { font-size: 1.3rem; }
 	.mob .close { zoom: 1; font-size: .92rem; padding: .6rem 1.1rem; white-space: nowrap; }
