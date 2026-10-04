@@ -49,7 +49,7 @@ vi.mock('./supabase', () => ({
 	supabase: { channel: (topic: string, config: any) => makeChannel(topic, config) }
 }));
 
-const { joinMatch, initialMatchState, nextHost } = await import('./match');
+const { joinMatch, initialMatchState, nextHost, LOG_CAP } = await import('./match');
 
 describe('lobby: second player picks a colour', () => {
 	it('does not kick or close the joiner', () => {
@@ -213,5 +213,20 @@ describe('host hand-over', () => {
 		expect(get(b.state).host).toBe(host.clientId);
 		expect(get(host.state).log.at(-1)?.text).toContain('is the host again');
 		vi.useRealTimers();
+	});
+
+	it('Undo keeps working once the log is full (it is capped at LOG_CAP lines)', () => {
+		const host = joinMatch('ROOMU', { name: 'Host', color: 'spectator' }, { seed: initialMatchState({ players: 4 }) });
+		host.update({ started: true, round: 3, turn: 2 });
+		for (let i = 0; i < LOG_CAP + 5; i++) host.act(`line ${i}`, { waves: 5 });
+		expect(get(host.state).log).toHaveLength(LOG_CAP);
+		host.act('pushed the lane', { waves: 4 });
+		expect(get(host.canUndo)).toBe(true);
+		host.undo();
+		expect(get(host.state).waves).toBe(5);
+		expect(get(host.state).log.at(-1)?.text).toBe(`line ${LOG_CAP + 4}`);
+		// a new turn starts a fresh history
+		host.act('next turn', { turn: 3 });
+		expect(get(host.canUndo)).toBe(false);
 	});
 });
