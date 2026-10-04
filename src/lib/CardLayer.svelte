@@ -11,6 +11,7 @@
 	import { teamForSeat, colorHex, battlePatch, levelPatch, canRespawn } from '$lib/match';
 	import { battleResult, battleText, laneNotes } from '$lib/battle';
 	import Card from '$lib/cards/Card.svelte';
+	import CardBack from '$lib/cards/CardBack.svelte';
 	import DeckView from '$lib/DeckView.svelte';
 	import { uiLayout, layoutVars } from '$lib/layout';
 	import CardBanner from '$lib/CardBanner.svelte';
@@ -1129,9 +1130,7 @@
 			<div class="pvcard" style="--glow:{cardGlow(mine.hero, selected)}" on:pointerdown={swipeStart} on:pointerup={swipeEnd} on:pointercancel={() => (swipeX = null)} role="presentation">
 				<div class="pvflip" class:up={committing}>
 					<div class="pvface front"><Card heroId={mine.hero} card={heroCards(mine.hero)[selected]} /></div>
-					<div class="pvface back">
-						<span class="band top"></span><span class="emblem sym"><img src={heroLogo(mine.hero)} alt="" /></span><span class="band bot"></span>
-					</div>
+					<div class="pvface back"><CardBack hero={mine.hero} /></div>
 				</div>
 			</div>
 			{#if pvList.length > 1}<button class="pvnav next" on:click={() => stepPreview(1)} aria-label="Next card">›</button>{/if}
@@ -1210,7 +1209,7 @@
 						{/if}
 					{:else}<span class="mtrash">{@html TRASH}</span>{/if}
 				</span>
-				<button class="msl mdeck" class:lvup={iMustLevel} on:click={() => (deckOpen = true)} title="Your deck — {deckCards(mine).length} cards"><img src={heroLogo(mine.hero)} alt="" /><b>{deckCards(mine).length}</b></button>
+				<button class="msl mdeck" class:lvup={iMustLevel} on:click={() => (deckOpen = true)} title="Your deck — {deckCards(mine).length} cards"><span class="mdeck-card"><CardBack hero={mine.hero} /></span><b>{deckCards(mine).length}</b></button>
 			</div>
 			<div class="mact">{@render actionBody()}</div>
 			</div>
@@ -1300,9 +1299,9 @@
 
 				<!-- your deck (face-down stack) and, once unlocked, your ultimate -->
 				<button class="deckstack" class:lvup={iMustLevel} on:click={() => (deckOpen = true)} title="View & manage your deck">
-					<span class="ds-card ds3"></span>
-					<span class="ds-card ds2"></span>
-					<span class="ds-card ds1"><img src={heroLogo(mine.hero)} alt="" /></span>
+					<span class="ds-card ds3"><CardBack blank /></span>
+					<span class="ds-card ds2"><CardBack blank /></span>
+					<span class="ds-card ds1"><CardBack hero={mine.hero} /></span>
 					<span class="ds-count">{deckCards(mine).length}</span>
 				</button>
 				<!-- the ultimate's slot is always reserved, so unlocking it shifts nothing -->
@@ -1439,7 +1438,7 @@
 						<div class="cc" style="--tint:{teamTint(p)}">
 							{#if idx != null && idx !== PASS}
 								<div class="cc-flip" class:up={curtainFlip}>
-									<div class="cc-face cc-back"><span class="band top"></span><span class="emblem"><img src={heroLogo(cs.hero)} alt="" /></span><span class="band bot"></span></div>
+									<div class="cc-face cc-back"><CardBack hero={cs.hero} /></div>
 									<div class="cc-face cc-front"><Card heroId={cs.hero} card={heroCards(cs.hero)[idx]} /></div>
 								</div>
 							{:else}
@@ -1774,13 +1773,7 @@
 	.cc-face { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; border-radius: 5%; overflow: hidden; }
 	.cc-face.cc-front { transform: rotateY(180deg); box-shadow: 0 0 0 2px var(--tint); }
 	.cc-face.cc-front :global(.cardface) { display: block; width: 100%; border-radius: 5%; }
-	.cc-back { display: flex; flex-direction: column; box-shadow: 0 0 0 2px var(--tint);
-		background: repeating-linear-gradient(135deg, rgba(90,70,40,.04) 0 1px, transparent 1px 5px), radial-gradient(115% 78% at 50% 40%, #fdfcf8, #efe9db 62%, #ddd4c1 100%); }
-	.cc-back .band { position: relative; height: 13%; background: linear-gradient(180deg, #2c333f, #1a1f28); }
-	.cc-back .band::after { content: ''; position: absolute; left: 8%; right: 8%; height: 2px; background: linear-gradient(90deg, transparent, #caa25e 25%, #f2d89e 50%, #caa25e 75%, transparent); }
-	.cc-back .band.top::after { bottom: 0; } .cc-back .band.bot::after { top: 0; }
-	.cc-back .emblem { flex: 1; display: grid; place-items: center; padding: 12%; }
-	.cc-back .emblem img { width: 76%; max-height: 100%; object-fit: contain; filter: drop-shadow(0 2px 5px rgba(0,0,0,.4)); }
+	.cc-back { box-shadow: 0 0 0 2px var(--tint); } /* the drawing is CardBack */
 	.cc-name { display: flex; align-items: center; justify-content: center; gap: .4em; max-width: 100%; font-family: 'Modesto Poster', serif; font-size: clamp(.62rem, calc(var(--cw) / 14), 1.15rem); color: #eef2f8; }
 	.cc-name span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 	.cc-name img { width: 1.9rem; height: 1.9rem; border-radius: 50%; object-fit: cover; border: 2px solid var(--tint); }
@@ -1840,13 +1833,7 @@
 	.pvface { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; border-radius: 3%; overflow: hidden; }
 	.pvface.front :global(.cardface) { display: block; width: 100%; border-radius: 3%; }
 	.pvcard { box-shadow: 0 0 0 3px var(--glow), 0 0 44px var(--glow), 0 24px 60px rgba(0,0,0,.7); }
-	.pvface.back { transform: rotateY(180deg); display: flex; flex-direction: column; background: radial-gradient(115% 78% at 50% 40%, #fdfcf8, #efe9db 62%, #ddd4c1 100%); box-shadow: inset 0 0 0 1px rgba(120,95,55,.4); }
-	.pvface.back .band { position: relative; height: 13%; background: linear-gradient(180deg, #2c333f, #1a1f28); }
-	.pvface.back .band::after { content: ''; position: absolute; left: 8%; right: 8%; height: 2px; background: linear-gradient(90deg, transparent, #caa25e 25%, #f2d89e 50%, #caa25e 75%, transparent); }
-	.pvface.back .band.top::after { bottom: 0; } .pvface.back .band.bot::after { top: 0; }
-	.pvface.back .emblem { flex: 1; display: grid; place-items: center; padding: 12%; }
-	.pvface.back .emblem img { width: 60%; border-radius: 50%; opacity: .85; }
-	.pvface.back .emblem.sym img { width: 74%; border-radius: 0; opacity: 1; filter: drop-shadow(0 2px 4px rgba(0,0,0,.4)); }
+	.pvface.back { transform: rotateY(180deg); } /* the drawing is CardBack */
 	.pvbar { position: fixed; left: 224px; right: 260px; bottom: calc((var(--db, 12px) + var(--dh, 70px)) / var(--uis, 1) - 8px); zoom: var(--uis, 1); z-index: 32; pointer-events: none; display: flex; gap: 8px; justify-content: center; }
 	.pvbar .act { pointer-events: auto; }
 	.pvcard { touch-action: pan-y; }
@@ -1956,13 +1943,10 @@
 	/* face-down deck stack on the dash (opens the deck view) */
 	.deckstack { position: relative; width: 40px; height: 54px; background: none; border: none; padding: 0; cursor: pointer; flex: none; }
 	.deckstack:hover .ds1 { transform: translateY(-3px); }
-	.ds-card { position: absolute; inset: 0; border-radius: 5px; box-shadow: 0 3px 8px rgba(0,0,0,.55);
-		background: repeating-linear-gradient(135deg, rgba(90,70,40,.05) 0 1px, transparent 1px 5px), radial-gradient(115% 78% at 50% 40%, #fdfcf8, #efe9db 62%, #ddd4c1 100%);
-		border: 1px solid rgba(120,95,55,.5); }
+	.ds-card { position: absolute; inset: 0; border-radius: 5px; overflow: hidden; box-shadow: 0 3px 8px rgba(0,0,0,.55); outline: 1px solid rgba(120,95,55,.5); outline-offset: -1px; }
 	.ds3 { transform: translate(5px, 5px); opacity: .7; }
 	.ds2 { transform: translate(2.5px, 2.5px); opacity: .85; }
-	.ds1 { display: grid; place-items: center; transition: transform .14s; }
-	.ds1 img { width: 68%; max-height: 74%; object-fit: contain; filter: drop-shadow(0 1px 2px rgba(0,0,0,.4)); }
+	.ds1 { transition: transform .14s; }
 	.ds-count { position: absolute; bottom: -5px; right: -6px; z-index: 2; min-width: 1.05rem; height: 1.05rem; padding: 0 4px; border-radius: 999px;
 		display: grid; place-items: center; background: linear-gradient(#2b3444, #171d27); border: 1px solid rgba(199,154,78,.6); color: #f0dcae;
 		font-size: .6rem; font-weight: 900; font-variant-numeric: tabular-nums; box-shadow: 0 2px 5px rgba(0,0,0,.5); }
@@ -2095,10 +2079,10 @@
 	.mdstack :global(.cardface) { display: block; width: 100%; border-radius: 4px; }
 	.mtrash { width: 14px; color: rgba(255,255,255,.25); display: grid; }
 	.mtrash :global(svg) { width: 100%; }
-	.mdeck { height: 36px; padding: 0; border-radius: 4px; cursor: pointer; display: grid; place-items: center; border: 1px solid rgba(120,95,55,.6);
-		background: radial-gradient(115% 78% at 50% 40%, #fdfcf8, #efe9db 62%, #ddd4c1); box-shadow: 2px 2px 0 #cbbf9f, 3px 3px 0 #b9ad8c; }
+	.mdeck { height: 36px; padding: 0; border-radius: 4px; cursor: pointer; display: grid; border: 1px solid rgba(120,95,55,.6);
+		background: #efe9db; box-shadow: 2px 2px 0 #cbbf9f, 3px 3px 0 #b9ad8c; }
 	.mdeck { position: relative; overflow: visible; }
-	.mdeck img { width: 78%; max-height: 78%; object-fit: contain; filter: drop-shadow(0 1px 2px rgba(0,0,0,.35)); }
+	.mdeck-card { display: block; width: 100%; height: 100%; border-radius: 3px; overflow: hidden; }
 	.mdeck b { position: absolute; right: -5px; bottom: -5px; min-width: 15px; height: 15px; padding: 0 3px; box-sizing: border-box; border-radius: 8px; display: grid; place-items: center;
 		font-weight: normal; font-size: 9px; line-height: 1; color: #fff; background: #1c140a; border: 1px solid #c79a4e; font-variant-numeric: tabular-nums; box-shadow: 0 1px 3px rgba(0,0,0,.6); }
 	.mbtns { flex: none; display: grid; grid-template-columns: repeat(2, 36px); grid-template-rows: repeat(3, 18px); gap: 3px; }

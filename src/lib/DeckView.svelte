@@ -11,9 +11,10 @@
 	// scaled to fit, so every screen uses all of its space.
 	// (The earlier all-cards banner list lives on in archive/DeckBannerList.svelte.)
 	import Card from '$lib/cards/Card.svelte';
+	import CardBack from '$lib/cards/CardBack.svelte';
 	import LevelConfirm from '$lib/LevelConfirm.svelte';
 	import { heroCards } from '$lib/cards/deck';
-	import { heroSplash, heroLogo, HERO_BY_ID } from '$lib/heroes';
+	import { heroSplash, HERO_BY_ID } from '$lib/heroes';
 	import {
 		levelOf, levelCost, statDeltas, ultimateIndex, pickTier, tierIn, canPick, canAfford, mustLevel, swapSource, twinOf, allowedMoves, pickedThisRound,
 		MAX_LEVEL, type PlayerCardState, type CardZone, type StatKey
@@ -296,7 +297,7 @@
 				{#if focus != null}
 					<button class="icw" style="--c:{COL[cards[focus]?.color] ?? '#888'}" on:click={() => focus != null && onPreview(focus)} title="Open full size"><Card heroId={H} card={cards[focus]} /></button>
 				{:else}
-					<div class="icw back"><span class="band top"></span><span class="emblem"><img src={heroLogo(H)} alt="" /></span><span class="band bot"></span></div>
+					<div class="icw back"><CardBack hero={H} /></div>
 				{/if}
 			</div>
 
@@ -433,12 +434,8 @@
 	.icard { flex: 1; min-height: 0; display: flex; justify-content: center; }
 	.icw { height: 100%; max-width: 100%; aspect-ratio: 1192 / 1664; padding: 0; border: none; background: none; cursor: zoom-in; }
 	.icw :global(.cardface) { display: block; width: 100%; border-radius: 8px; box-shadow: 0 0 0 2px var(--c), 0 0 22px color-mix(in srgb, var(--c) 45%, transparent), 0 10px 26px rgba(0,0,0,.6); }
-	.icw.back { display: flex; flex-direction: column; cursor: default; overflow: hidden; border-radius: 8px; background: radial-gradient(115% 78% at 50% 40%, #fdfcf8, #efe9db 62%, #ddd4c1 100%); box-shadow: inset 0 0 0 1px rgba(120,95,55,.4), 0 10px 26px rgba(0,0,0,.6); }
-	.back .band { position: relative; height: 13%; background: linear-gradient(180deg, #2c333f, #1a1f28); }
-	.back .band::after { content: ''; position: absolute; left: 8%; right: 8%; height: 2px; background: linear-gradient(90deg, transparent, #caa25e 25%, #f2d89e 50%, #caa25e 75%, transparent); }
-	.back .band.top::after { bottom: 0; } .back .band.bot::after { top: 0; }
-	.back .emblem { flex: 1; display: grid; place-items: center; }
-	.back .emblem img { width: 72%; filter: drop-shadow(0 2px 4px rgba(0,0,0,.4)); }
+	.icw.back { position: relative; cursor: default; overflow: hidden; border-radius: 8px; box-shadow: 0 10px 26px rgba(0,0,0,.6); }
+	.icw.back::after { content: ''; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 1px rgba(120,95,55,.4); pointer-events: none; }
 	.iinfo { flex: none; height: 112px; box-sizing: border-box; overflow: hidden; display: flex; flex-direction: column; gap: 5px; padding: 8px 10px; border-radius: 10px; background: rgba(255,255,255,.035); border: 1px solid rgba(255,255,255,.08); box-shadow: inset 3px 0 0 var(--c); }
 	.in1 { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
 	.in1 b { font-weight: normal; font-size: 1rem; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

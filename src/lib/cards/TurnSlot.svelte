@@ -4,7 +4,7 @@
 	// render a static face-up card. Used for opponents' mini strips and your own.
 	import Card from '$lib/cards/Card.svelte';
 	import { heroCards } from '$lib/cards/deck';
-	import { heroLogo } from '$lib/heroes';
+	import CardBack from '$lib/cards/CardBack.svelte';
 	import { PASS } from '$lib/cards/cardstate';
 
 	export let heroId: string;
@@ -30,11 +30,7 @@
 {:else if showFlip}
 	<button class="slot" class:btn={examinable && (revealed || peekable)} class:thru={!(examinable && (revealed || peekable))} tabindex={examinable && (revealed || peekable) ? 0 : -1} title={peekable && !revealed ? 'Your card — click to read it' : undefined} on:click on:keydown>
 		<div class="flip" class:up={revealed}>
-			<div class="face back">
-				<span class="band top"></span>
-				<span class="emblem"><img src={heroLogo(heroId)} alt="" /></span>
-				<span class="band bot"></span>
-			</div>
+			<div class="face back"><CardBack hero={heroId} /></div>
 			<div class="face front"><Card {heroId} card={heroCards(heroId)[faceIdx ?? 0]} /></div>
 		</div>
 	</button>
@@ -60,15 +56,8 @@
 	.face { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; border-radius: 6%; overflow: hidden; }
 	.face.front { transform: rotateY(180deg); }
 	.face.front :global(.cardface) { display: block; width: 100%; border-radius: 6%; }
-	/* white card back with grey bands + hero emblem (matches the big overlay back) */
-	.back { display: flex; flex-direction: column;
-		background: repeating-linear-gradient(135deg, rgba(90, 70, 40, 0.04) 0 1px, transparent 1px 5px), radial-gradient(115% 78% at 50% 40%, #fdfcf8, #efe9db 62%, #ddd4c1 100%);
-		box-shadow: inset 0 0 0 1px rgba(120, 95, 55, 0.4), 0 3px 8px rgba(0, 0, 0, 0.45); animation: popin 0.2s ease; }
-	.back .band { position: relative; height: 13%; background: linear-gradient(180deg, #2c333f, #1a1f28); }
-	.back .band::after { content: ''; position: absolute; left: 8%; right: 8%; height: 1.5px; background: linear-gradient(90deg, transparent, #caa25e 25%, #f2d89e 50%, #caa25e 75%, transparent); }
-	.back .band.top::after { bottom: 0; }
-	.back .band.bot::after { top: 0; }
-	.back .emblem { flex: 1; display: grid; place-items: center; padding: 8%; }
-	.back .emblem img { width: 82%; max-height: 100%; object-fit: contain; filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4)); }
+	/* the card back (CardBack): this face only adds the edge, the shadow and the pop-in */
+	.back { box-shadow: 0 3px 8px rgba(0, 0, 0, 0.45); animation: popin 0.2s ease; }
+	.back::after { content: ''; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 1px rgba(120, 95, 55, 0.4); pointer-events: none; }
 	@keyframes popin { from { transform: scale(0.82); opacity: 0.4; } to { transform: scale(1); opacity: 1; } }
 </style>

@@ -91,8 +91,8 @@ const splashUrls = import.meta.glob('./images/avatars_full/*.webp', { eager: tru
 export const heroSplash = (id: string): string => splashUrls[`./images/avatars_full/${id}.webp`] ?? '';
 
 /** Per-hero emblem/logo (the crest shown beside the name). */
-const logoUrls = import.meta.glob('./images/logos/*.png', { eager: true, import: 'default' }) as Record<string, string>;
-export const heroLogo = (id: string): string => logoUrls[`./images/logos/${id}.png`] ?? '';
+const logoUrls = import.meta.glob('./images/logos/*.webp', { eager: true, import: 'default' }) as Record<string, string>;
+export const heroLogo = (id: string): string => logoUrls[`./images/logos/${id}.webp`] ?? '';
 
 // Stat/trait/star icons.
 const iconUrls = import.meta.glob('./images/hero_icons/*.png', { eager: true, import: 'default' }) as Record<string, string>;
