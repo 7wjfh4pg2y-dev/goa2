@@ -13,7 +13,7 @@ or friends) → tick it off. Fixes the live game needs go into 1.0 AND here.
 1. [x] Reliability — a lone host's reload rejoins; no shared colours; joins always end
 2. [ ] Battle report from real games — the recorder's game events, the stats screen after a win
 3. [ ] End of the game — the game-winning push sequence; the end-game polish (review it first)
-4. [ ] New hero symbols on card backs; the crest on the turn cards (in: the new symbols everywhere, and ONE card back — `cards/CardBack.svelte`, the old colours with a faint honeycomb — used by every face-down card. Open: the crest on the turn cards)
+4. [x] New hero symbols on card backs; the crest on the turn cards (the new symbols everywhere; ONE card back — `cards/CardBack.svelte`, the old colours with a faint honeycomb; the turn / round cards carry the gear-and-ice crest with the GEAR centred, sized so the ice stays inside)
 5. [ ] The island board — with the battle zone outline and moving effects (and their host switches)
 6. [ ] Speed pass — the parts that apply to what's here by then
 7. [x] The Tide look, before the game — landing (the island in its moving sea), choose / admin / GM tools, menu, Create, Join, lobby (its live board is the classic one until step 5; no board switches)
