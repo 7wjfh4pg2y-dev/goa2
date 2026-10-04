@@ -855,7 +855,10 @@ export function joinMatch(
 			if (undoStack.length) { undoStack = []; canUndo.set(false) }
 			return
 		}
-		if ((after.log?.length ?? 0) > (before.log?.length ?? 0)) {
+		// a new log entry = a new last entry (the log is capped at LOG_CAP, so its LENGTH stops growing
+		// once a game is a few rounds in — comparing lengths switched Undo off for the rest of the game)
+		const lastId = (s: MatchState) => s.log?.[s.log.length - 1]?.id
+		if (after.log?.length && lastId(after) !== lastId(before) && !before.log?.some((e) => e.id === lastId(after))) {
 			undoStack.push(before)
 			if (undoStack.length > UNDO_CAP) undoStack.shift()
 			canUndo.set(true)
