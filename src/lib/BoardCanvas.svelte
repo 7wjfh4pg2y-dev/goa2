@@ -2,6 +2,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import Ocean, { paintSea, seaPatterns } from '$lib/board/Ocean.svelte';
 	import IslandLayer from '$lib/board/IslandLayer.svelte';
+	import SpawnMark from '$lib/board/SpawnMark.svelte';
 	import PieceDefs from '$lib/board/PieceDefs.svelte';
 	import HeroToken from '$lib/board/HeroToken.svelte';
 	import KitToken from '$lib/board/KitToken.svelte';
@@ -656,7 +657,12 @@
 		<g bind:this={viewG} transform={viewTf}>
 			{#if look !== 'island'}
 			{#each hexes as h (h.id)}
-				{#if isSpawn(h.t) || isThrone(h.t)}
+				{#if isSpawn(h.t)}
+					<!-- an empty minion spawn point: its zone's ground with a mark on it (never a minion picture — new players took those for minions) -->
+					<image href={zoneTile(zoneOf(h.id))} x={h.x - SQRT3 * size * 0.53} y={h.y - size * 1.06}
+						width={SQRT3 * size * 1.06} height={size * 2 * 1.06} preserveAspectRatio="none" />
+					<SpawnMark c={{ x: h.x, y: h.y }} {size} team={h.t === 'spawnOrange' ? 'orange' : 'blue'} role={meta[h.id]?.m === 'ranged' || meta[h.id]?.m === 'heavy' ? meta[h.id].m as 'ranged' | 'heavy' : 'melee'} dir={meta[h.id]?.dir ?? 0} />
+				{:else if isThrone(h.t)}
 					<image href={zoneTile(isSpawn(h.t) ? zoneOf(h.id) : baseTileFor(h.t))} x={h.x - SQRT3 * size * 0.53} y={h.y - size * 1.06}
 						width={SQRT3 * size * 1.06} height={size * 2 * 1.06} preserveAspectRatio="none" />
 					<image href={spriteFor(h.id, h.t)} x={h.x - SQRT3 * size * 1.06 * 0.36} y={h.y - SQRT3 * size * 1.06 * 0.36}

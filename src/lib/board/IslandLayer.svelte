@@ -16,8 +16,9 @@
 	// RIM of its hex, never in the middle where a piece stands; no svg filters.
 	import { hexCenter, hexPoints, hexHash, hexNeighbour, borderPath, type Pt } from './hexgeo';
 	import { zoneType } from '../zones';
-	import { MINION_ART, type MinionRole, type MinionTeam } from './minionArt';
+	import type { MinionRole, MinionTeam } from './minionArt';
 	import { SCATTER_BY_KEY } from './scatter';
+	import SpawnMark from './SpawnMark.svelte';
 
 	export let cells: Record<string, string> = {};
 	export let meta: Record<string, { m: string; dir: number }> = {};
@@ -36,9 +37,6 @@
 	// plus the Create preview) made the browser re-resolve every <use> on the page on each mount / unmount
 	const P = `isl${++islands}-`;
 
-	// minion spawn points: the emblem's radius on the hex (in hex sizes), and the two teams' inks
-	const EMBLEM = 0.6;
-	const INK = { orange: { ink: '#4a2208', halo: '#ffd9a8' }, blue: { ink: '#123c70', halo: '#f2fbff' } };
 	const roleOf = (m?: string): MinionRole => (m === 'ranged' || m === 'heavy' ? m : 'melee');
 
 	// ── palette: [hue, saturation, lightness] of the tile and of the darker seam under it
@@ -81,8 +79,8 @@
 	$: tiles = ids.map((id) => {
 		const c = hexCenter(id, size), t = cells[id];
 		const team: MinionTeam | null = t === 'spawnOrange' ? 'orange' : t === 'spawnBlue' ? 'blue' : null;
-		// a spawn point is a full hex of its team's ground (copper deck / ice), whatever zone it lies in
-		const z: Z = team === 'orange' ? 'baseOrange' : team === 'blue' ? 'baseBlue' : zoneOf(id);
+		// a spawn point keeps its zone's ground and gets a mark (SpawnMark) on top
+		const z: Z = zoneOf(id);
 		const v = Math.floor(hexHash(id, 1) * VARIANTS.length);
 		return {
 			id, c, z, v,
@@ -568,16 +566,9 @@
 			<circle cx={t.c.x + down.x * size * 0.07} cy={t.c.y + down.y * size * 0.07} r={size * 0.68} fill="#000" fill-opacity=".32" />
 			<use href="#{P}emblem-{t.emblem}" transform="translate({t.c.x.toFixed(1)} {t.c.y.toFixed(1)}) scale({(size / 60).toFixed(3)})" />
 		{:else if t.spawn}
-			{@const a = MINION_ART[t.spawn.team][t.spawn.role]}
-			{@const k = (size * EMBLEM) / a.r}
-			{@const ink = INK[t.spawn.team]}
-			<!-- a minion spawn point: a plate of the team's ground with that minion engraved on it, facing the way it
-			     will march (the minion pieces themselves carry turning pips, so the two can't be confused). The emblem's own
-			     path, not a <use> of the piece drawings: the island must draw on its own (pre-game boards have no pieces,
-			     and the lobby's picture is this svg alone) -->
-			<polygon points={hexPoints(t.c, size * 0.86)} fill="none" stroke={ink.halo} stroke-opacity=".34" stroke-width={size * 0.035} stroke-linejoin="round" />
-			<path d={a.d} transform="translate({t.c.x.toFixed(1)} {t.c.y.toFixed(1)}) rotate({t.spawn.dir * 60 - 30}) scale({k.toFixed(4)}) translate({-a.cx} {-a.cy})"
-				fill={ink.ink} fill-rule="evenodd" stroke={ink.halo} stroke-opacity=".6" stroke-width={(size * 0.035 / k).toFixed(2)} stroke-linejoin="round" paint-order="stroke" />
+			<!-- a minion spawn point: a wash of the team's colour, the minion's emblem as an outline facing the way it will
+			     march, and corner brackets (SpawnMark) — a mark on the ground, never something that looks like a piece -->
+			<SpawnMark c={t.c} {size} team={t.spawn.team} role={t.spawn.role} dir={t.spawn.dir} />
 		{/if}
 	{/each}
 
