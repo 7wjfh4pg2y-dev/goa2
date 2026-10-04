@@ -14,8 +14,9 @@
 
 <script lang="ts">
 	// The control centre: ONE button opens this wheel over the board. The inner ring moves the view
-	// (recentre, turn, zoom, saved views); the outer arc holds the board's switches (the island or the
-	// classic tiles, the battle-zone outline, the moving effects) — the host's, everyone sees the result.
+	// (recentre, turn, zoom, saved views); the outer circle holds, at the top, the board's switches (the island
+	// or the classic tiles, the battle-zone outline, the moving effects — the HOST's; nobody else gets them)
+	// and, at the bottom when Views is pressed, the three saved views.
 	// Nothing in it closes the wheel except the hub, a tap outside, or Esc, so you can turn / zoom
 	// / flip switches and watch the board change behind it.
 	export let open = false;
@@ -35,8 +36,8 @@
 	$: if (!open) viewsOpen = false;
 	// the inner ring: evenly round the hub, the first item on top
 	const at = (i: number, n: number) => -90 + (360 / n) * i;
-	// the outer arc: centred on the top, spread by `step` degrees
-	const arc = (i: number, n: number, step: number) => -90 + (i - (n - 1) / 2) * step;
+	// the outer circle: an arc centred on `mid` degrees (−90 = top, 90 = bottom), spread by `step`
+	const arc = (i: number, n: number, step: number, mid = -90) => mid + (i - (n - 1) / 2) * step;
 </script>
 
 <svelte:window on:keydown={(e) => { if (open && e.key === 'Escape') { e.stopPropagation(); onClose(); } }} />
@@ -45,7 +46,7 @@
 	<div class="cw" class:mob={mobile} role="presentation" on:pointerdown|self={onClose}>
 		<div class="wheel" role="dialog" aria-label="Control centre">
 			<span class="ring r0" aria-hidden="true"></span>
-			<span class="ring r1" aria-hidden="true"></span>
+			{#if board.length || viewsOpen}<span class="ring r1" aria-hidden="true"></span>{/if}
 			{#if board.length}<span class="note" style="--a:-90deg">{boardNote || 'Board'}</span>{/if}
 
 			{#each board as it, i (it.id)}
@@ -67,15 +68,18 @@
 				<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
 			</button>
 
+			<!-- the saved views, out on the circle round the Views button: a saved one jumps there, an empty one saves the
+			     current view, ↻ saves over a saved one -->
 			{#if viewsOpen}
-				<div class="vpanel">
-					{#each views as v, i}
-						<div class="vrow">
-							<button class="vgo" disabled={!v} on:click={() => onGo(i)} title={v ? 'Jump to this view' : 'Empty — save a view here first'}><b>{i + 1}</b><span>{v ? viewLabel(v as never) : 'Empty'}</span></button>
-							<button class="vsave" on:click={() => onSave(i)}>{v ? 'Overwrite' : 'Save'}</button>
-						</div>
-					{/each}
-				</div>
+				{#each views as v, i (i)}
+					<div class="pos" style="--a:{arc(i, views.length, mobile ? -40 : -34, 90)}deg; --d:{i * 0.04}s">
+						<button class="wb vb" class:empty={!v} on:click={() => (v ? onGo(i) : onSave(i))} title={v ? `Go to view ${i + 1}` : `Save the current view as view ${i + 1}`}>
+							<b class="vn">{i + 1}</b>
+							<span class="lb">{v ? viewLabel(v as never) : 'Save'}</span>
+						</button>
+						{#if v}<button class="vsv" on:click={() => onSave(i)} title="Save the current view over view {i + 1}" aria-label="Save the current view over view {i + 1}">↻</button>{/if}
+					</div>
+				{/each}
 			{/if}
 		</div>
 	</div>
@@ -116,16 +120,15 @@
 	.hub svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
 	.hub:hover { border-color: #fff1c8; }
 
-	/* saved views: a small panel under the wheel */
-	.vpanel { position: absolute; left: 0; top: calc(var(--r0) + var(--b0) / 2 + 18px); transform: translateX(-50%); width: 250px; display: flex; flex-direction: column; gap: 6px; padding: 10px;
-		border-radius: 12px; background: rgba(6, 21, 38, 0.96); border: 1px solid rgba(216, 179, 106, 0.45); box-shadow: 0 10px 26px rgba(0, 0, 0, 0.6); animation: fade 0.15s ease both; }
-	.vrow { display: flex; gap: 6px; }
-	.vgo { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 8px; cursor: pointer; color: #f1f5f9; text-align: left;
-		background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.14); }
-	.vgo b { color: #f4dfa8; font-weight: normal; }
-	.vgo span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
-	.vgo:disabled { opacity: 0.5; cursor: default; }
-	.vsave { flex: none; padding: 0 10px; border-radius: 8px; cursor: pointer; font-size: 12px; color: #1c1408; background: linear-gradient(180deg, #f3dca0, #c99a4c); border: 1px solid #fff1c8; }
-	.mob .vpanel { width: 230px; }
+	/* a saved-view slot on the outer circle: placed like an outer button, the button and its ↻ inside */
+	.pos { position: absolute; left: 0; top: 0; width: 0; height: 0; transform: rotate(var(--a)) translate(var(--r1)) rotate(calc(-1 * var(--a)));
+		animation: outPos 0.24s var(--d, 0s) cubic-bezier(0.2, 0.9, 0.3, 1.2) both; }
+	@keyframes outPos { from { opacity: 0; transform: rotate(var(--a)) translate(var(--r0)) rotate(calc(-1 * var(--a))); } }
+	.pos .wb.vb { width: var(--b1); height: var(--b1); margin: calc(var(--b1) / -2) 0 0 calc(var(--b1) / -2); transform: none; animation: none; }
+	.vn { font-size: 24px; line-height: 1; color: #f4dfa8; margin-top: -10px; }
+	.wb.vb.empty { border-style: dashed; background: rgba(6, 21, 38, 0.86); }
+	.wb.vb.empty .vn { color: rgba(244, 223, 168, 0.5); }
+	.vsv { position: absolute; left: calc(var(--b1) / 2 - 16px); top: calc(var(--b1) / -2 - 4px); width: 24px; height: 24px; padding: 0; border-radius: 50%; display: grid; place-items: center;
+		cursor: pointer; font-size: 14px; line-height: 1; color: #1c1408; background: linear-gradient(180deg, #f3dca0, #c99a4c); border: 1px solid #fff1c8; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5); }
 	@media (prefers-reduced-motion: reduce) { .wb, .cw { animation: none; } }
 </style>

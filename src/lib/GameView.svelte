@@ -181,16 +181,15 @@
 		{ id: 'zout', label: 'Zoom out', icon: ICON.zout, act: () => board?.zoomBtn(1 / 1.2) },
 		{ id: 'rotl', label: 'Turn', icon: ICON.rotl, title: 'Turn anticlockwise (45°)', act: () => board?.rotateBy(-45) }
 	] as WheelItem[];
-	$: hostOnly = iAmHost ? '' : ' — the host sets this';
 	$: wheelBoard = [
-		{ id: 'look', label: boardLook === 'island' ? 'Island' : 'Classic', icon: boardLook === 'island' ? ICON.island : ICON.classic, on: boardLook === 'island', disabled: !iAmHost,
-			title: `Map: ${boardLook === 'island' ? 'the island' : 'classic tiles'}${hostOnly}`,
+		{ id: 'look', label: boardLook === 'island' ? 'Island' : 'Classic', icon: boardLook === 'island' ? ICON.island : ICON.classic, on: boardLook === 'island',
+			title: `Map: ${boardLook === 'island' ? 'the island' : 'classic tiles'}`,
 			act: () => setBoard(`switched the board to ${boardLook === 'island' ? 'Classic' : 'the Island'}`, { boardLook: boardLook === 'island' ? 'classic' : 'island' }) },
-		{ id: 'zone', label: 'Outline', icon: ICON.zone, on: zoneGlow && boardLook === 'island', disabled: !iAmHost || boardLook !== 'island',
-			title: boardLook !== 'island' ? 'The battle zone outline is drawn on the island only' : `Battle zone outline: ${zoneGlow ? 'on' : 'off'}${hostOnly}`,
+		{ id: 'zone', label: 'Outline', icon: ICON.zone, on: zoneGlow && boardLook === 'island', disabled: boardLook !== 'island',
+			title: boardLook !== 'island' ? 'The battle zone outline is drawn on the island only' : `Battle zone outline: ${zoneGlow ? 'on' : 'off'}`,
 			act: () => setBoard(`turned the battle zone outline ${zoneGlow ? 'off' : 'on'}`, { zoneGlow: !zoneGlow }) },
-		{ id: 'fx', label: 'Effects', icon: ICON.fx, on: boardFx, disabled: !iAmHost,
-			title: `Moving effects (the sea, the minions' rims, the outline's pulse): ${boardFx ? 'on' : 'off'}${hostOnly}`,
+		{ id: 'fx', label: 'Effects', icon: ICON.fx, on: boardFx,
+			title: `Moving effects (the sea, the minions' rims, the outline's pulse): ${boardFx ? 'on' : 'off'}`,
 			act: () => setBoard(`turned the moving effects ${boardFx ? 'off' : 'on'}`, { boardFx: !boardFx }) }
 	] as WheelItem[];
 	// every lingering card effect in play (switched on from a played card)
@@ -665,7 +664,7 @@
 	{#if $ms.wonBy && !victoryClosed && !victoryHold}
 		<VictorySplash team={$ms.wonBy.team} reason={$ms.wonBy.reason} myTeam={mySeat >= 0 && mySeat < $ms.seats ? myTeam : null} {mobile} onClose={() => (victoryClosed = true)} round={$ms.round} />
 	{/if}
-	<ControlWheel open={wheelOpen} view={wheelView} board={wheelBoard} boardNote={iAmHost ? 'Board' : 'Board · host'} {mobile} {views} {viewLabel} onGo={goView} onSave={saveView} onClose={() => (wheelOpen = false)} />
+	<ControlWheel open={wheelOpen} view={wheelView} board={iAmHost ? wheelBoard : []} boardNote="Board" {mobile} {views} {viewLabel} onGo={goView} onSave={saveView} onClose={() => (wheelOpen = false)} />
 	{#if askLifeEnd && lifeOut}
 		<div class="modal-scrim" role="presentation">
 			<div class="modal" role="dialog" aria-modal="true" tabindex="-1">
