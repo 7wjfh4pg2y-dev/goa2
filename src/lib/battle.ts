@@ -133,6 +133,68 @@ export function spawnWave(map: GameMap | null, zone: string, pieces: Record<stri
 	return { minions, cleared }
 }
 
+// ── minions outside the battle zone (rulebook p.18) ─────────────────────────────
+// A minion that ends an action outside the battle zone goes back in at once: along the shortest path of
+// empty spaces to an empty space of the battle zone (several such spaces → its own team picks); with no
+// path, to the nearest empty space of the battle zone. Moving a minion never triggers a push.
+let nbrMap: { map: object; n: Map<string, string[]> } | null = null
+function neighbours(map: GameMap | null, hex: string): string[] {
+	const cells = map?.cells ?? {}
+	if (!map || nbrMap?.map !== map) {
+		const ids = Object.keys(cells)
+		const cubes = new Map(ids.map((h) => [h, hexCube(h)]))
+		const n = new Map<string, string[]>()
+		for (const a of ids) n.set(a, ids.filter((b) => cubeDist(cubes.get(a)!, cubes.get(b)!) === 1))
+		nbrMap = { map: map ?? {}, n }
+	}
+	return nbrMap.n.get(hex) ?? []
+}
+/** Where a minion standing outside the battle zone has to go: the battle-zone spaces it can reach
+ *  first (one = it just goes there; several = its team chooses). [] when it's inside the zone. */
+export function returnHexes(s: Pick<MatchState, 'map' | 'lane' | 'pieces'>, pieceId: string): string[] {
+	const p = s.pieces?.[pieceId]
+	if (!p || p.kind !== 'minion' || !s.map || inZone(s, p.hex)) return []
+	const cells = s.map.cells ?? {}
+	const zones = zoneTable(s.map)
+	const zone = battleZone(s)
+	const taken = new Set(Object.values(s.pieces ?? {}).filter((q) => q.id !== pieceId && !q.attachedTo).map((q) => q.hex))
+	const empty = (h: string) => !!cells[h] && !BLOCKED.has(cells[h]) && !taken.has(h)
+	// breadth-first over empty spaces: the first ring that reaches an empty space of the battle zone
+	let ring = [p.hex]
+	const seen = new Set(ring)
+	while (ring.length) {
+		const next: string[] = []
+		for (const h of ring) for (const n of neighbours(s.map, h)) if (!seen.has(n) && empty(n)) { seen.add(n); next.push(n) }
+		const hit = next.filter((h) => zones[h] === zone)
+		if (hit.length) return hit.sort()
+		ring = next
+	}
+	// walled in: the nearest empty spaces of the battle zone
+	const c = hexCube(p.hex)
+	const opts = Object.keys(cells).filter((h) => zones[h] === zone && empty(h))
+	if (!opts.length) return []
+	const d = Math.min(...opts.map((h) => cubeDist(hexCube(h), c)))
+	return opts.filter((h) => cubeDist(hexCube(h), c) === d).sort()
+}
+/** After a minion was moved: one way back → it goes straight there; several → it waits in `strays`
+ *  for its team to pick (a move that leaves it inside the zone clears any old choice). */
+export function returnPatch(s: MatchState, pieceId: string): Partial<MatchState> {
+	const opts = returnHexes(s, pieceId)
+	const strays = { ...(s.strays ?? {}) }
+	delete strays[pieceId]
+	if (opts.length === 1) return { pieces: { ...s.pieces, [pieceId]: { ...s.pieces[pieceId], hex: opts[0] } }, strays }
+	if (opts.length > 1) strays[pieceId] = opts
+	return { strays }
+}
+/** Put every waiting minion back on its first option (before a battle or a push counts the zone). */
+export function settleStrays(s: MatchState): Partial<MatchState> {
+	const ids = Object.keys(s.strays ?? {})
+	if (!ids.length) return {}
+	const pieces = { ...s.pieces }
+	for (const id of ids) { const h = s.strays![id]?.[0]; if (pieces[id] && h && !Object.values(pieces).some((q) => q.hex === h && q.id !== id)) pieces[id] = { ...pieces[id], hex: h } }
+	return { pieces, strays: {} }
+}
+
 // ── pushing ────────────────────────────────────────────────────────────────
 /** `winner` pushes the lane (see the rules at the top). */
 export function pushLane(s: MatchState, winner: Team): Partial<MatchState> {
@@ -142,13 +204,14 @@ export function pushLane(s: MatchState, winner: Team): Partial<MatchState> {
 	if (i >= 0) waveTok[i] = false
 	const waves = waveTok.length ? waveTok.filter(Boolean).length : Math.max(0, s.waves - 1)
 	const pieces: Record<string, Piece> = {}
-	for (const id in s.pieces ?? {}) { const p = s.pieces[id]; if (!(p.kind === 'minion' && inZone(s, p.hex))) pieces[id] = p }
+	// every minion belongs to the battle zone, so the push clears them all — one left outside the zone too
+	for (const id in s.pieces ?? {}) { const p = s.pieces[id]; if (p.kind !== 'minion') pieces[id] = p }
 	const lane = laneOf(s) + (winner === 'orange' ? 1 : -1)
 	const news = (to: string | null, won: string | null): PushNews => ({
 		id: `p_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
 		winner, from: battleZone(s), to, wavesBefore: s.waves, wavesAfter: waves, won, at: Date.now()
 	})
-	const patch: Partial<MatchState> = { waves, waveTok, lastPush: winner, pieces, battle: null }
+	const patch: Partial<MatchState> = { waves, waveTok, lastPush: winner, pieces, battle: null, strays: {} }
 	if (lane < 0 || lane >= LANE.length) {
 		const reason = `pushed into the ${teamAdj(loser)} Throne`
 		return { ...patch, wonBy: { team: winner, reason }, pushNews: news(null, reason) }
@@ -172,10 +235,11 @@ export function pushCheck(s: MatchState): Partial<MatchState> {
 /** Start the minion battle (end of round): the end-of-turn push check first, then
  *  count the zone. Nobody to remove → done (battle: null). */
 export function startBattle(s: MatchState): Partial<MatchState> {
-	const pushed = pushCheck(s)
-	const after = { ...s, ...pushed }
+	const settled = settleStrays(s)
+	const pushed = pushCheck({ ...s, ...settled })
+	const after = { ...s, ...settled, ...pushed }
 	const b = battleResult(after)
-	return { ...pushed, battle: b.remove > 0 ? b : null }
+	return { ...settled, ...pushed, battle: b.remove > 0 ? b : null }
 }
 
 /** The loser takes a minion off for the battle; the last one done → push check. */

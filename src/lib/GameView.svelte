@@ -14,7 +14,7 @@
 	import { statsFromJournal } from '$lib/gamestats'; // battle report
 	import { zoneName } from '$lib/zones';
 	import { effectLabel } from '$lib/effects';
-	import { battleZone, canBattleRemove, pushLane, laneNotes, heavyImmune } from '$lib/battle';
+	import { battleZone, canBattleRemove, pushLane, laneNotes, heavyImmune, returnPatch, minionCount } from '$lib/battle';
 	import lifeSplit from '$lib/images/life_split.png';
 	import { heroCards } from '$lib/cards/deck';
 	import { ultimateIndex, allowedMoves } from '$lib/cards/cardstate';
@@ -200,7 +200,7 @@
 	$: areas = [...Object.entries($ms.radii ?? {}).flatMap(([pid, r]) => {
 		const hero = $ms.pieces?.[pid];
 		return hero && r > 0 ? [{ hex: hero.hex, r, color: colorHex(hero.color ?? '') }] : [];
-	}), ...battleMarks, ...spawnMarks, ...clearMarks];
+	}), ...battleMarks, ...spawnMarks, ...clearMarks, ...strayMarks];
 
 	// ── minion battle / lane (battle.ts) ──
 	// the minions the battle's loser may take off glow red on the board
@@ -213,6 +213,15 @@
 	$: battle = battleSplashing ? null : $ms.battle ?? null;
 	$: battleMarks = battle ? Object.values($ms.pieces ?? {}).filter((p) => canBattleRemove($ms, p.id)).map((p) => ({ hex: p.hex, r: 0, color: battle?.loser === 'blue' ? '#8cc0ff' : '#ffb27a' })) : []; // the losing team's own colour
 	$: iChooseBattle = !!battle && (iAmHost || (iPlay && myTeam === battle.loser));
+	// a minion left outside the battle zone with several ways back: its team (or the host) picks the space
+	// the minions the battle would count right now (only those inside the battle zone)
+	$: zoneCount = minionCount($ms);
+	$: strays = Object.entries($ms.strays ?? {}).filter(([id, opts]) => $ms.pieces?.[id] && opts?.length);
+	// its team picks; the host only when nobody of that team is here
+	$: teamHere = (t: string) => $players.some((p) => p.seat >= 0 && p.seat < $ms.seats && teamForSeat(p.seat, $ms.seats) === t);
+	$: myStray = strays.find(([id]) => (iPlay && $ms.pieces[id].team === myTeam) || (iAmHost && !teamHere($ms.pieces[id].team))) ?? null;
+	$: strayWait = !myStray ? strays[0] ?? null : null;
+	$: strayMarks = myStray ? myStray[1].map((hex) => ({ hex, r: 0, color: '#fff3a8' })) : [];
 	$: selImmune = !!selPiece && selPiece.role === 'heavy' && heavyImmune($ms, selPiece.id);
 	$: canBattleSel = !!selPiece && iChooseBattle && canBattleRemove($ms, selPiece.id);
 	function battleTakeSel() {
@@ -273,7 +282,17 @@
 			session.act(`moved ${p.token ? tokenName(p.token) : 'a token'} → ${placeName(zoneName($ms.map, hex))}`, { pieces: moveToken($ms.pieces, id, hex) });
 			return;
 		}
-		session.act(`moved ${label} → ${placeName(zoneName($ms.map, hex))}`, movePiece($ms, id, hex));
+		const moved = movePiece($ms, id, hex);
+		// a minion that ends outside the battle zone goes straight back in (rulebook p.18): one way back → there;
+		// several → its team picks (strays)
+		if (p?.kind === 'minion') {
+			const back = returnPatch({ ...$ms, ...moved } as MatchState, id);
+			const to = back.pieces?.[id]?.hex;
+			const note = to ? ' · back into the battle zone' : back.strays?.[id] ? ` · outside the battle zone: the ${teamName(p.team)} choose where it goes back in` : '';
+			session.act(`moved ${aMinion(p.team, p.role)} → ${placeName(zoneName($ms.map, to ?? hex))}${note}`, { ...moved, ...back });
+			return;
+		}
+		session.act(`moved ${label} → ${placeName(zoneName($ms.map, hex))}`, moved);
 	}
 
 	// ── minion spawn (temporary manual controls) + piece delete ────────────────
@@ -298,7 +317,7 @@
 	$: myEntry = $ms.toSpawn?.[clientId] ?? null;
 	$: heroToPlace = myDefeat?.piece ?? myEntry;
 	$: if (!heroToPlace) pendingRespawn = false;
-	$: placing = !!pendingSpawn || !!pendingToken || pendingRespawn;
+	$: placing = !!pendingSpawn || !!pendingToken || pendingRespawn || !!myStray;
 	function placeMyHero() { cancelPlace(); selPieceId = null; actId = null; pendingRespawn = true; }
 	// the free spawn points of your base light up while you place your hero
 	$: spawnMarks = pendingRespawn && heroToPlace ? freeSpawns($ms, heroToPlace.team as Team).map((hex) => ({ hex, r: 0, color: '#fff3a8' })) : [];
@@ -318,6 +337,15 @@
 	function cancelPlace() { pendingSpawn = null; pendingToken = null; pendingRespawn = false; }
 	// board hex tapped while holding something: drop it right there
 	function onBoardHex(hex: string) {
+		if (myStray && !pendingSpawn && !pendingToken && !pendingRespawn) {
+			const [id, opts] = myStray;
+			if (!opts.includes(hex)) return;
+			const m = $ms.pieces[id];
+			const rest = { ...($ms.strays ?? {}) };
+			delete rest[id];
+			session.act(`put ${aMinion(m.team, m.role)} back into the battle zone`, { ...movePiece($ms, id, hex), strays: rest });
+			return;
+		}
 		if (pendingRespawn) {
 			// only your base's free spawn points take a hero (a map without them: anywhere)
 			const team = heroToPlace?.team as Team | undefined;
@@ -589,6 +617,7 @@
 {#snippet laneCtl()}
 	<div class="lane">
 		<span class="bz" title="Battle zone — the minion battle is fought here; a push moves it one zone towards the loser's throne">⚔ {placeName(battleZone($ms))}</span>
+		<span class="zc" title="Minions in the battle zone — Atlanteans {zoneCount.orange}, Titans {zoneCount.blue}"><b class="o">{zoneCount.orange}</b>:<b class="b">{zoneCount.blue}</b></span>
 		{#if iAmHost && !$ms.wonBy}
 			<span class="pushes">
 				{#each ['orange', 'blue'] as t}
@@ -650,6 +679,11 @@
 				<button class="ab no" on:click={() => answer(clientId, 'defeated')}>No</button>
 			</span>
 		</div>
+	{/if}
+	{#if myStray && !pendingToken && !pendingRespawn && !pendingSpawn}
+		<div class="placehint stray"><span>Tap a glowing space: put the {teamAdj($ms.pieces[myStray[0]].team)} {$ms.pieces[myStray[0]].role ?? ''} minion back into the battle zone</span></div>
+	{:else if strayWait && !pendingToken && !pendingRespawn}
+		<div class="placehint stray"><span>Waiting for the {teamName($ms.pieces[strayWait[0]].team)} to put their minion back into the battle zone</span></div>
 	{/if}
 	{#if pendingToken || pendingRespawn || (mobile && pendingSpawn)}
 		<div class="placehint">
@@ -1103,6 +1137,9 @@
 	.piedefeat:disabled { opacity: .55; cursor: default; }
 	.piedefeat { display: inline-flex; align-items: center; gap: 4px; border: 1px solid rgba(240, 200, 120, 0.6); background: linear-gradient(180deg, #e2a64a, #b8781f); color: #1a1206; border-radius: 999px; padding: 4px 12px; font-weight: 700; cursor: pointer; font-size: 0.76rem; }
 	.piedefeat:hover { filter: brightness(1.1); }
+	.zc { margin-left: 6px; font-size: 0.8rem; letter-spacing: 0.04em; color: #94a3b8; white-space: nowrap; }
+	.zc b { font-weight: 700; padding: 0 2px; } .zc .o { color: #ffb27a; } .zc .b { color: #8cc0ff; }
+	.placehint.stray { border-color: rgba(255, 243, 168, 0.75); color: #fff6c8; }
 	.placehint.defeat { border-color: rgba(239, 68, 68, 0.6); color: #ffc9c2; }
 	.lane { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 6px; margin-top: 6px; font-size: 0.72rem; color: #d7c79c; }
 	.lane .bz { white-space: nowrap; }

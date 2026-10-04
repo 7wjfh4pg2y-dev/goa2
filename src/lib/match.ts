@@ -277,6 +277,7 @@ export interface MatchState {
 	levelBase?: Record<string, PlayerCardState> | null // every board as the level-up step opened: what OTHER players see until the round locks the picks
 	lane?: number // battle zone: index into LANE (battle.ts) — 0 Orange Beach, 1 Center, 2 Blue Beach
 	battle?: Battle | null // minion battle in progress: the loser still has minions to take off
+	strays?: Record<string, string[]> | null // minions outside the battle zone waiting for their team to pick the way back in (battle.ts returnPatch)
 	wonBy?: { team: Team; reason: string } | null // a push won the game (throne / last wave)
 	/** heroes under attack, keyed by the defender: who attacks, and whether they chose to defend */
 	attacks?: Record<string, { by: string; defending: boolean; at: number }>

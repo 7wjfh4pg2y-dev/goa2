@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { applyCardReq, battlePatch, placeMinions, spendTokens, extraSpawns, heroSpawns, type MatchState, type Piece } from './match'
-import { LANE, battleResult, canBattleRemove, heavyImmune, inZone, pushLane, spawnWave, zoneMinions } from './battle'
-import { zoneTable } from './zones'
+import { LANE, battleResult, canBattleRemove, heavyImmune, inZone, pushLane, spawnWave, zoneMinions, returnHexes, returnPatch, settleStrays } from './battle'
+import { zoneTable, hexCube, cubeDist } from './zones'
 import map from './maps/forgotten_island.json'
 import type { GameMap } from './maps'
 
@@ -201,5 +201,64 @@ describe('the minion lane', () => {
 
 	it('life tokens flip with a hero defeat', () => {
 		expect(spendTokens([true, true, true, false], 2)).toEqual([true, false, false, false])
+	})
+})
+
+describe('minions outside the battle zone (rulebook p.18)', () => {
+	const cells = M.cells as Record<string, string>
+	const near = (a: string, b: string) => cubeDist(hexCube(a), hexCube(b)) === 1
+	const occupied = (s: MatchState) => new Set(Object.values(s.pieces).map((p) => p.hex))
+	const outsideNextTo = (s: MatchState) => Object.keys(cells).find((h) => zoneTable(M)[h] !== 'Center' && cells[h] !== 'terrain' && !occupied(s).has(h)
+		&& Object.keys(cells).some((n) => near(h, n) && zoneTable(M)[n] === 'Center' && cells[n] !== 'terrain' && !occupied(s).has(n)))!
+	const someMinion = (s: MatchState) => zoneMinions(s, 'blue').find((m) => m.role === 'melee')!.id
+
+	it('a minion inside the zone stays where it is', () => {
+		const s = game()
+		expect(returnHexes(s, someMinion(s))).toEqual([])
+		expect(returnPatch(s, someMinion(s))).toEqual({ strays: {} })
+	})
+
+	it('one step outside: it goes back to an empty zone space next to it (several → its team picks)', () => {
+		let s = game()
+		const id = someMinion(s), out = outsideNextTo(s)
+		s = { ...s, pieces: { ...s.pieces, [id]: { ...s.pieces[id], hex: out } } }
+		const opts = returnHexes(s, id)
+		expect(opts.length).toBeGreaterThan(0)
+		for (const h of opts) { expect(zoneTable(M)[h]).toBe('Center'); expect(near(h, out)).toBe(true); expect(occupied(s).has(h)).toBe(false) }
+		const p = returnPatch(s, id)
+		if (opts.length === 1) expect(p.pieces![id].hex).toBe(opts[0])
+		else { expect(p.strays![id]).toEqual(opts); expect(p.pieces).toBeUndefined() }
+	})
+
+	it('far away (in a base): the nearest way back, always onto an empty space of the zone', () => {
+		let s = game()
+		const id = someMinion(s)
+		const base = Object.keys(cells).find((h) => cells[h] === 'baseOrange')!
+		s = { ...s, pieces: { ...s.pieces, [id]: { ...s.pieces[id], hex: base } } }
+		const opts = returnHexes(s, id)
+		expect(opts.length).toBeGreaterThan(0)
+		for (const h of opts) { expect(zoneTable(M)[h]).toBe('Center'); expect(occupied(s).has(h)).toBe(false) }
+	})
+
+	it('the battle settles a minion still waiting, and a push clears every minion — one left outside the zone too', () => {
+		let s = game({ turn: 4 } as Partial<MatchState>)
+		const id = someMinion(s), out = outsideNextTo(s)
+		s = { ...s, pieces: { ...s.pieces, [id]: { ...s.pieces[id], hex: out } }, strays: { [id]: ['nowhere'] } }
+		const settled = { ...s, ...settleStrays({ ...s, strays: { [id]: returnHexes(s, id) } }) }
+		expect(inZone(settled, settled.pieces[id].hex)).toBe(true)
+		expect(settled.strays).toEqual({})
+		// a minion left outside the zone goes with the push, so the new wave never lands next to leftovers
+		const pushed = pushLane(drop(s, 6, 'orange'), 'blue')
+		expect(Object.values(pushed.pieces!).filter((p) => p.kind === 'minion' && p.hex === out)).toHaveLength(0)
+		expect(pushed.strays).toEqual({})
+		// 4 v 2 where one of the 4 stood outside: the battle puts it back first, so it still counts
+		let b = drop(game({ turn: 4 } as Partial<MatchState>), 4, 'orange')
+		b = drop(b, 2, 'blue')
+		const bid = zoneMinions(b, 'blue').find((m) => m.role !== 'heavy')!.id
+		const bout = outsideNextTo(b)
+		b = { ...b, pieces: { ...b.pieces, [bid]: { ...b.pieces[bid], hex: bout } } }
+		b = { ...b, strays: { [bid]: returnHexes(b, bid) } }
+		const fight = battlePatch(b)
+		expect(fight.battle).toMatchObject({ orange: 2, blue: 4, loser: 'orange', remove: 2 })
 	})
 })
