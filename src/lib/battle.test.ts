@@ -37,6 +37,33 @@ describe('the minion lane', () => {
 		expect(roles).toEqual(['heavy', 'melee', 'melee', 'melee', 'melee', 'ranged'])
 	})
 
+	it('every wave stands exactly on its zone\'s spawn points — each minion on its own team\'s point, the map\'s role — through both beaches and back', () => {
+		const cells = M.cells as Record<string, string>
+		const check = (st: MatchState, zone: string) => {
+			const ms = Object.values(st.pieces).filter((p) => p.kind === 'minion')
+			const spawns = Object.keys(cells).filter((h) => zoneTable(M)[h] === zone && (cells[h] === 'spawnOrange' || cells[h] === 'spawnBlue'))
+			expect(ms).toHaveLength(spawns.length) // one minion per spawn point, nothing else of theirs on the board
+			expect(new Set(ms.map((m) => m.hex)).size).toBe(ms.length) // never two on one hex
+			for (const m of ms) {
+				expect(zoneTable(M)[m.hex]).toBe(zone)
+				expect(cells[m.hex]).toBe(m.team === 'orange' ? 'spawnOrange' : 'spawnBlue')
+				const role = (M.meta as Record<string, { m?: string }> | undefined)?.[m.hex]?.m
+				expect(m.role).toBe(role === 'ranged' || role === 'heavy' ? role : 'melee')
+			}
+		}
+		let s = game()
+		check(s, 'Center')
+		const step = (winner: 'orange' | 'blue', zone: string, lane: number) => {
+			s = { ...s, ...pushLane(drop(s, 6, winner === 'orange' ? 'blue' : 'orange'), winner) }
+			expect(s.lane).toBe(lane)
+			check(s, zone)
+		}
+		step('blue', 'Orange Beach', 0) // the Titans push onto the Atlanteans' beach
+		step('orange', 'Center', 1) // and back
+		step('orange', 'Blue Beach', 2) // the Atlanteans push onto the Titans' beach
+		step('blue', 'Center', 1)
+	})
+
 	it('the battle: fewer minions removes the difference, heavies last', () => {
 		let s = drop(game(), 2, 'orange', 'melee') // orange 4 : 6 blue
 		const b = battlePatch(s)

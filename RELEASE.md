@@ -14,9 +14,9 @@ or friends) → tick it off. Fixes the live game needs go into 1.0 AND here.
 2. [ ] Battle report from real games — the recorder's game events, the stats screen after a win
 3. [ ] End of the game — the game-winning push sequence; the end-game polish (review it first)
 4. [x] New hero symbols on card backs; the crest on the turn cards (the new symbols everywhere; ONE card back — `cards/CardBack.svelte`, the old colours with a faint honeycomb; the turn / round cards carry the gear-and-ice crest with the GEAR centred, sized so the ice stays inside)
-5. [ ] The island board — with the battle zone outline and moving effects (and their host switches)
+5. [x] The island board — with the battle zone outline and moving effects. The host's three switches (Island / Classic, Outline, Effects) and the view controls (recenter, turn, zoom, saved views) live in ONE control centre: a Controls button (desktop: the bottom of the panel; phones: the ☰ menu) opens a wheel over the board. Waves tested on every zone (`battle.test.ts`: through both beaches and back, each minion on its own team's spawn point, the map's role); effects off = ~1 ms/s idle (on ≈ 21)
 6. [ ] Speed pass — the parts that apply to what's here by then
-7. [x] The Tide look, before the game — landing (the island in its moving sea), choose / admin / GM tools, menu, Create, Join, lobby (its live board is the classic one until step 5; no board switches)
+7. [x] The Tide look, before the game — landing (the island in its moving sea), choose / admin / GM tools, menu, Create, Join, lobby (the island as a still picture)
 7b. [ ] The Tide look — hero select and the matchup slices (in: 2.0's screen with the user's changes — team-coloured pips / All / Lock in, no stat numbers, picked heroes ringed in the picker's colour, a lower bottom bar: full cards up to 3 a side, compact at 4–5; the slices loom the tie-breaker coins. Slices stay full width (the user's pick, A); no blade line on desktop; long names a touch smaller; bigger, outlined role icons)
 8. [ ] The in-game screen — top bar, console and roster, player boards, the Ascension deck
 9. [ ] The phone in-game layout

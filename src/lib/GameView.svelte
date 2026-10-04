@@ -7,6 +7,7 @@
 	import BattleSplash from '$lib/BattleSplash.svelte';
 	import PushSplash from '$lib/PushSplash.svelte';
 	import VictorySplash from '$lib/VictorySplash.svelte';
+	import ControlWheel, { type WheelItem } from '$lib/ControlWheel.svelte';
 	import { heroById, heroLogo } from '$lib/heroes';
 	import { teamName, teamAdj, aMinion, placeName } from '$lib/teams';
 	import { createRecorder } from '$lib/recorder';
@@ -19,7 +20,7 @@
 	import { uiLayout, layoutVars } from '$lib/layout';
 	import { placeToken, moveToken, effectiveHex, MINES, tokenName, tokensLeft, removalOptions, applyRemoval, removalLog, canRemove, type ArmToken, type RemovalOption } from '$lib/tokens';
 	import {
-		colorHex, movePiece, teamForSeat, throneHex, minionCoins, heroDefeatSummary, canRespawn, freeSpawns, teamOf, clearable, type BoardLook,
+		colorHex, movePiece, teamForSeat, throneHex, minionCoins, heroDefeatSummary, canRespawn, freeSpawns, teamOf, clearable, boardLookOf, zoneGlowOf, boardFxOf,
 		type MatchState, type Player, type MatchSession, type Team, type ConnStatus
 	} from '$lib/match';
 
@@ -150,11 +151,48 @@
 
 	let board: BoardCanvas;
 	let cardLayer: CardLayer;
-	// 1.0 plays on the CLASSIC board only, still: the island look, the battle-zone outline and the
-	// moving effects (and the host's switches for them) wait for the 2.0 launch
-	const boardLook: BoardLook = 'classic';
-	const glowZone = null;
-	const boardFx = false;
+	// the board: the host's three switches (shared state; unset = island, outline on, effects on), set from the
+	// control centre. The outline follows the lane and goes once the game is won.
+	$: boardLook = boardLookOf($ms);
+	$: zoneGlow = zoneGlowOf($ms);
+	$: glowZone = boardLook === 'island' && zoneGlow && !$ms.wonBy ? battleZone($ms) : null;
+	$: boardFx = boardFxOf($ms);
+	function setBoard(text: string, patch: Partial<MatchState>) { if (iAmHost) session.act(text, patch); }
+
+	// ── the control centre: one button → a wheel over the board (view controls inside, the board's switches outside)
+	let wheelOpen = false;
+	const ICON = {
+		recenter: '<circle cx="12" cy="12" r="7" /><path d="M12 2v4M12 18v4M2 12h4M18 12h4" /><circle cx="12" cy="12" r="1.4" />',
+		rotl: '<path d="M4 10a8 8 0 1 1 2 6" /><path d="M4 4v6h6" />',
+		rotr: '<path d="M20 10a8 8 0 1 0-2 6" /><path d="M20 4v6h-6" />',
+		zin: '<circle cx="10.5" cy="10.5" r="6.5" /><path d="M15.5 15.5L21 21M10.5 7.5v6M7.5 10.5h6" />',
+		zout: '<circle cx="10.5" cy="10.5" r="6.5" /><path d="M15.5 15.5L21 21M7.5 10.5h6" />',
+		views: '<path d="M3 8.5a2 2 0 0 1 2-2h2.2l1.4-2h6.8l1.4 2H19a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><circle cx="12" cy="13" r="3.6" />',
+		island: '<path d="M12 2.5l8.2 4.75v9.5L12 21.5l-8.2-4.75v-9.5z" /><path d="M7 14c1.5-2 3-2.6 5-1.2s3.4.8 5-1.3" />',
+		classic: '<path d="M12 2.5l8.2 4.75v9.5L12 21.5l-8.2-4.75v-9.5z" /><path d="M12 2.5v19M3.8 7.25l16.4 9.5M20.2 7.25l-16.4 9.5" />',
+		zone: '<path d="M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9z" stroke-dasharray="3 2.4" /><circle cx="12" cy="12" r="2.4" />',
+		fx: '<path d="M2 15c2.5-2.5 4.5-2.5 7 0s4.5 2.5 7 0 4.5-2.5 6 0" /><path d="M12 3v3M6.5 5.5l1.6 2M17.5 5.5l-1.6 2" />'
+	};
+	$: wheelView = [
+		{ id: 'recenter', label: 'Recenter', icon: ICON.recenter, act: () => board?.reset() },
+		{ id: 'rotr', label: 'Turn', icon: ICON.rotr, title: 'Turn clockwise (45°)', act: () => board?.rotateBy(45) },
+		{ id: 'zin', label: 'Zoom in', icon: ICON.zin, act: () => board?.zoomBtn(1.2) },
+		{ id: 'views', label: 'Views', icon: ICON.views, title: 'Saved views', act: () => {} },
+		{ id: 'zout', label: 'Zoom out', icon: ICON.zout, act: () => board?.zoomBtn(1 / 1.2) },
+		{ id: 'rotl', label: 'Turn', icon: ICON.rotl, title: 'Turn anticlockwise (45°)', act: () => board?.rotateBy(-45) }
+	] as WheelItem[];
+	$: hostOnly = iAmHost ? '' : ' — the host sets this';
+	$: wheelBoard = [
+		{ id: 'look', label: boardLook === 'island' ? 'Island' : 'Classic', icon: boardLook === 'island' ? ICON.island : ICON.classic, on: boardLook === 'island', disabled: !iAmHost,
+			title: `Map: ${boardLook === 'island' ? 'the island' : 'classic tiles'}${hostOnly}`,
+			act: () => setBoard(`switched the board to ${boardLook === 'island' ? 'Classic' : 'the Island'}`, { boardLook: boardLook === 'island' ? 'classic' : 'island' }) },
+		{ id: 'zone', label: 'Outline', icon: ICON.zone, on: zoneGlow && boardLook === 'island', disabled: !iAmHost || boardLook !== 'island',
+			title: boardLook !== 'island' ? 'The battle zone outline is drawn on the island only' : `Battle zone outline: ${zoneGlow ? 'on' : 'off'}${hostOnly}`,
+			act: () => setBoard(`turned the battle zone outline ${zoneGlow ? 'off' : 'on'}`, { zoneGlow: !zoneGlow }) },
+		{ id: 'fx', label: 'Effects', icon: ICON.fx, on: boardFx, disabled: !iAmHost,
+			title: `Moving effects (the sea, the minions' rims, the outline's pulse): ${boardFx ? 'on' : 'off'}${hostOnly}`,
+			act: () => setBoard(`turned the moving effects ${boardFx ? 'off' : 'on'}`, { boardFx: !boardFx }) }
+	] as WheelItem[];
 	// every lingering card effect in play (switched on from a played card)
 	$: activeFx = $ms.effects ?? [];
 	// area radii (set from each player's dash): centred on that player's hero, in their colour
@@ -525,7 +563,6 @@
 	const VIEWS_KEY = 'goa2-views-v1';
 	let views: (SavedView | null)[] = [null, null, null];
 	try { const v = JSON.parse(localStorage.getItem(VIEWS_KEY) ?? 'null'); if (Array.isArray(v)) views = [0, 1, 2].map((i) => v[i] ?? null); } catch {}
-	let viewsOpen = false;
 	function saveView(i: number) {
 		if (!board) return;
 		views = views.map((v, k) => (k === i ? board.getView() : v));
@@ -533,9 +570,6 @@
 	}
 	function goView(i: number) { const v = views[i]; if (v && board) board.setView(v); }
 	const viewLabel = (v: SavedView) => `${Math.round(v.spin)}° · ${v.scale.toFixed(1)}×`;
-	function viewsOutside(e: PointerEvent) {
-		if (viewsOpen && !(e.target as Element | null)?.closest?.('.viewswrap, .mviews')) viewsOpen = false;
-	}
 	$: log = $ms.log ?? [];
 	const hhmm = (t: number) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
@@ -564,9 +598,9 @@
 	</div>
 {/snippet}
 
-<svelte:window on:keydown={(e) => { if (e.key !== 'Escape') return; if (confirmLeave) confirmLeave = false; else { pendingSpawn = null; pendingToken = null; pingArmed = false; if (clearing) cancelClear(); } }} on:pointerdown={(e) => { viewsOutside(e); }} bind:innerWidth={gvw} bind:innerHeight={gvh} />
+<svelte:window on:keydown={(e) => { if (e.key !== 'Escape') return; if (wheelOpen) wheelOpen = false; else if (confirmLeave) confirmLeave = false; else { pendingSpawn = null; pendingToken = null; pingArmed = false; if (clearing) cancelClear(); } }} bind:innerWidth={gvw} bind:innerHeight={gvh} />
 
-<div class="gamewrap" class:mob={mobile} class:dashfull={!mobile && lay.underHud} style={mobile ? '' : layoutVars(lay)}>
+<div class="gamewrap" class:sea={boardLook === 'island'} class:mob={mobile} class:dashfull={!mobile && lay.underHud} style={mobile ? '' : layoutVars(lay)}>
 	{#if $ms.wonBy}
 		<button class="placehint won" on:click={() => (victoryClosed = false)} title="Show the victory screen again">🏆 {teamName($ms.wonBy.team)} win — {$ms.wonBy.reason}</button>
 	{:else if clearing}
@@ -631,6 +665,7 @@
 	{#if $ms.wonBy && !victoryClosed && !victoryHold}
 		<VictorySplash team={$ms.wonBy.team} reason={$ms.wonBy.reason} myTeam={mySeat >= 0 && mySeat < $ms.seats ? myTeam : null} {mobile} onClose={() => (victoryClosed = true)} round={$ms.round} />
 	{/if}
+	<ControlWheel open={wheelOpen} view={wheelView} board={wheelBoard} boardNote={iAmHost ? 'Board' : 'Board · host'} {mobile} {views} {viewLabel} onGo={goView} onSave={saveView} onClose={() => (wheelOpen = false)} />
 	{#if askLifeEnd && lifeOut}
 		<div class="modal-scrim" role="presentation">
 			<div class="modal" role="dialog" aria-modal="true" tabindex="-1">
@@ -859,25 +894,10 @@
 					{/each}
 				</div>
 				<div class="msec mviews">
-					<div class="mlbl">View</div>
-					<div class="mvg">
-						<button class="mvb rec" on:click={() => board?.reset()} aria-label="Recenter">⌖</button>
-						<button class="mvb" on:click={() => board?.rotateBy(-45)} aria-label="Rotate left">⟲</button>
-						<button class="mvb" on:click={() => board?.rotateBy(45)} aria-label="Rotate right">⟳</button>
-						<button class="mvb" on:click={() => board?.zoomBtn(1.2)} aria-label="Zoom in">＋</button>
-						<button class="mvb" on:click={() => board?.zoomBtn(1 / 1.2)} aria-label="Zoom out">−</button>
-						<button class="mvb" class:on={viewsOpen} on:click={() => (viewsOpen = !viewsOpen)} aria-label="Saved views">
-							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M3 8.5a2 2 0 0 1 2-2h2.2l1.4-2h6.8l1.4 2H19a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><circle cx="12" cy="13" r="3.6" /></svg>
-						</button>
-					</div>
-					{#if viewsOpen}
-						{#each views as v, i}
-							<div class="vslot">
-								<button class="vgo" disabled={!v} on:click={() => { goView(i); menuOpen = false; }}><b>{i + 1}</b><span>{v ? viewLabel(v) : 'Empty'}</span></button>
-								<button class="vsave" on:click={() => saveView(i)}>{v ? 'Overwrite' : 'Save'}</button>
-							</div>
-						{/each}
-					{/if}
+					<button class="ctlbtn mctl" on:click={() => { menuOpen = false; wheelOpen = true; }}>
+						<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5" /><circle cx="12" cy="12" r="3" /><path d="M12 1.5v4M12 18.5v4M1.5 12h4M18.5 12h4" /></svg>
+						Controls · view &amp; board
+					</button>
 				</div>
 				<div class="msec">
 					<div class="mlbl">Active abilities</div>
@@ -1037,33 +1057,12 @@
 			{/if}
 		</div>
 
-		<!-- view controls, docked at the bottom of the HUD -->
+		<!-- the control centre: view and board, behind one button -->
 		<div class="viewctl">
-			<button class="vbtn recenter" on:click={() => board?.reset()} title="Recenter & reset view">⌖</button>
-			<button class="vbtn" on:click={() => board?.rotateBy(-45)} title="Rotate counter-clockwise (45°)">⟲</button>
-			<button class="vbtn" on:click={() => board?.rotateBy(45)} title="Rotate clockwise (45°)">⟳</button>
-			<button class="vbtn" on:click={() => board?.zoomBtn(1.2)} title="Zoom in">＋</button>
-			<button class="vbtn" on:click={() => board?.zoomBtn(1 / 1.2)} title="Zoom out">−</button>
-			<!-- saved views: jump to (or overwrite) one of three remembered angles -->
-			<div class="viewswrap">
-				<button class="vbtn views" class:on={viewsOpen} on:click={() => (viewsOpen = !viewsOpen)} title="Saved views" aria-label="Saved views">
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M3 8.5a2 2 0 0 1 2-2h2.2l1.4-2h6.8l1.4 2H19a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><circle cx="12" cy="13" r="3.6" /></svg>
-				</button>
-				{#if viewsOpen}
-					<div class="viewspop">
-						<div class="vplbl">Saved views</div>
-						{#each views as v, i}
-							<div class="vslot">
-								<button class="vgo" disabled={!v} on:click={() => goView(i)} title={v ? 'Jump to this view' : 'Empty — save a view here first'}>
-									<b>{i + 1}</b><span>{v ? viewLabel(v) : 'Empty'}</span>
-								</button>
-								<button class="vsave" on:click={() => saveView(i)} title={v ? 'Overwrite with the current view' : 'Save the current view here'}>{v ? 'Overwrite' : 'Save'}</button>
-							</div>
-						{/each}
-						<div class="vphint">Saves rotation, zoom &amp; position in this browser.</div>
-					</div>
-				{/if}
-			</div>
+			<button class="ctlbtn" on:click={() => (wheelOpen = true)} title="Control centre — recenter, turn, zoom, saved views and the board">
+				<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5" /><circle cx="12" cy="12" r="3" /><path d="M12 1.5v4M12 18.5v4M1.5 12h4M18.5 12h4" /></svg>
+				Controls
+			</button>
 		</div>
 	</div>
 	{/if}
@@ -1085,28 +1084,11 @@
 	}
 
 	.viewctl { display: flex; gap: 5px; margin-top: auto; padding-top: 4px; }
-	.vbtn { flex: 1; height: 2rem; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.18); background: rgba(255, 255, 255, 0.05); color: #e5e7eb; cursor: pointer; font-size: 1rem; line-height: 1; }
-	.vbtn:hover { background: rgba(255, 255, 255, 0.16); }
-	/* recenter: brass accent so it's easy to find */
-	.vbtn.recenter { background: rgba(199, 154, 78, 0.22); border-color: rgba(214, 170, 92, 0.65); color: #f6e3b4; }
-	.vbtn.recenter:hover { background: rgba(199, 154, 78, 0.36); }
-	.viewswrap { position: relative; flex: 1; display: flex; }
-	.vbtn.views { display: grid; place-items: center; }
-	.vbtn.views svg { width: 1.05rem; height: 1.05rem; }
-	.vbtn.views.on { background: rgba(255, 255, 255, 0.16); }
-	.viewspop { position: absolute; right: 0; bottom: calc(100% + 8px); z-index: 12; width: 196px; padding: 9px; border-radius: 12px;
-		background: rgba(11, 16, 26, 0.96); border: 1px solid rgba(199, 154, 78, 0.5); box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6); }
-	.vplbl { font-size: 0.56rem; letter-spacing: 0.1em; text-transform: uppercase; color: #b8a06a; margin: 1px 2px 6px; }
-	.vslot { display: flex; gap: 5px; margin-bottom: 5px; }
-	.vgo { flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px; padding: 5px 8px; border-radius: 8px; cursor: pointer; color: #e5e7eb; font-size: 0.72rem;
-		background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.14); text-align: left; }
-	.vgo b { color: #f0dcae; }
-	.vgo span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-	.vgo:hover:not(:disabled) { background: rgba(199, 154, 78, 0.2); border-color: rgba(199, 154, 78, 0.5); }
-	.vgo:disabled { cursor: default; color: #7b8697; }
-	.vsave { flex: none; padding: 0 8px; border-radius: 8px; cursor: pointer; font-size: 0.62rem; color: #f6e3b4; background: rgba(199, 154, 78, 0.16); border: 1px solid rgba(199, 154, 78, 0.45); }
-	.vsave:hover { background: rgba(199, 154, 78, 0.3); }
-	.vphint { font-size: 0.56rem; color: #8b9bb0; margin: 2px 2px 0; }
+	.ctlbtn { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 2.4rem; border-radius: 9px; cursor: pointer; font: inherit; font-size: 0.95rem; letter-spacing: 0.06em;
+		color: #1c1408; background: linear-gradient(180deg, #f3dca0 0%, #d8b36a 55%, #b98e42 100%); border: 1px solid #fff1c8; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4); }
+	.ctlbtn:hover { filter: brightness(1.06); }
+	.ctlbtn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+	.ctlbtn.mctl { width: 100%; height: 40px; }
 	/* exit sits left of the map name */
 	.mapline { display: flex; align-items: center; gap: 6px; }
 	.hud .mapline .mapname { flex: 1; min-width: 0; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -1410,11 +1392,6 @@
 	.mn { flex: 1; height: 28px; border-radius: 7px; cursor: pointer; font-size: 12px; color: #e5e7eb; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.16); }
 	.mlogb p { font-size: 10.5px; line-height: 1.3; color: #d1d5db; margin-top: 2px; }
 	.mlogb b { font-weight: normal; color: #fff; }
-	.mvg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
-	.mvb { height: 32px; border-radius: 8px; cursor: pointer; display: grid; place-items: center; font-size: 15px; color: #f0dcae; background: rgba(199, 154, 78, 0.14); border: 1px solid rgba(199, 154, 78, 0.4); }
-	.mvb svg { width: 16px; height: 16px; }
-	.mvb.rec, .mvb.on { background: rgba(199, 154, 78, 0.3); border-color: rgba(214, 170, 92, 0.7); }
-	.mdrawer .vslot { margin-top: 5px; }
 	.mrow2 { display: flex; gap: 6px; margin-top: auto; }
 	.mbtn { position: relative; flex: 1; height: 32px; border-radius: 9px; cursor: pointer; font-size: 12px; color: #e5e7eb; background: rgba(255, 255, 255, 0.05); }
 	.mbtn.lob { border: 1px solid rgba(199, 154, 78, 0.5); }
