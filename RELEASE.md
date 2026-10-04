@@ -11,8 +11,8 @@ or friends) → tick it off. Fixes the live game needs go into 1.0 AND here.
 ## Order
 
 1. [x] Reliability — a lone host's reload rejoins; no shared colours; joins always end
-2. [ ] Battle report from real games — the recorder's game events, the stats screen after a win
-3. [ ] End of the game — the game-winning push sequence; the end-game polish (review it first)
+2. [x] Battle report from real games — the recorder's structured events (hero / minion defeats, read off the state, Undo followed; stored inside the row's `data`), `gamestats.ts` statsFromJournal, the stats screen after a win (columns: Level · Hero Kills · Deaths · Assists · Minion Kills · Coins Earned; the tide chart's kill faces never run past the band)
+3. [x] End of the game — the game-winning push as one sequence into the victory card (THE THRONE FALLS / FINAL PUSH with the team crests; a Life win shows the hearts); the WIP polish reviewed on screen (desktop + phone, every win) and kept
 4. [x] New hero symbols on card backs; the crest on the turn cards (the new symbols everywhere; ONE card back — `cards/CardBack.svelte`, the old colours with a faint honeycomb; the turn / round cards carry the gear-and-ice crest with the GEAR centred, sized so the ice stays inside)
 5. [x] The island board — with the battle zone outline and moving effects. The host's three switches (Island / Classic, Outline, Effects) and the view controls (recenter, turn, zoom, saved views) live in ONE control centre: a Controls button (desktop: the bottom of the panel; phones: the ☰ menu) opens a wheel over the board (the board switches only for the host; Views puts the three saved views on the outer circle). Waves tested on every zone (`battle.test.ts`: through both beaches and back, each minion on its own team's spawn point, the map's role); effects off = ~1 ms/s idle (on ≈ 21)
 6. [ ] Speed pass — the parts that apply to what's here by then

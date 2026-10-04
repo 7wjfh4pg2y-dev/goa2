@@ -11,6 +11,7 @@
 	import { heroById, heroLogo } from '$lib/heroes';
 	import { teamName, teamAdj, aMinion, placeName } from '$lib/teams';
 	import { createRecorder } from '$lib/recorder';
+	import { statsFromJournal } from '$lib/gamestats'; // battle report
 	import { zoneName } from '$lib/zones';
 	import { effectLabel } from '$lib/effects';
 	import { battleZone, canBattleRemove, pushLane, laneNotes, heavyImmune } from '$lib/battle';
@@ -33,6 +34,7 @@
 	// quietly journal the game; a full game (first turn → win) is filed away when it ends
 	const recorder = createRecorder(room, clientId);
 	$: recorder.tick($ms);
+	$: gameStats = $ms.wonBy ? statsFromJournal(recorder.journal()) : null; // battle report: this browser's journal (null = it did not see the whole game)
 	// pings (match.ts): the dash button arms one (the next board tap pings; pressed again =
 	// a general ping on your own hero), Alt+click / a long press ping straight away
 	const pingsS = session.pings ?? readable([]);
@@ -662,7 +664,7 @@
 		</div>
 	{/if}
 	{#if $ms.wonBy && !victoryClosed && !victoryHold}
-		<VictorySplash team={$ms.wonBy.team} reason={$ms.wonBy.reason} myTeam={mySeat >= 0 && mySeat < $ms.seats ? myTeam : null} {mobile} onClose={() => (victoryClosed = true)} round={$ms.round} />
+		<VictorySplash team={$ms.wonBy.team} reason={$ms.wonBy.reason} myTeam={mySeat >= 0 && mySeat < $ms.seats ? myTeam : null} {mobile} onClose={() => (victoryClosed = true)} round={$ms.round} stats={gameStats} />
 	{/if}
 	<ControlWheel open={wheelOpen} view={wheelView} board={iAmHost ? wheelBoard : []} boardNote="Board" {mobile} {views} {viewLabel} onGo={goView} onSave={saveView} onClose={() => (wheelOpen = false)} />
 	{#if askLifeEnd && lifeOut}

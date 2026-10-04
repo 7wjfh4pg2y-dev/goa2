@@ -26,7 +26,7 @@ describe('game recorder', () => {
 		expect(j.log.map((e) => e.id)).toEqual(logs.map((e) => e.id))
 		expect(j.turns).toHaveLength(1)
 		expect(j.cur?.turn).toBe(2)
-		expect(j.players.a).toEqual({ name: 'Zara', seat: 0, hero: 'arien' })
+		expect(j.players.a).toEqual({ name: 'Zara', seat: 0, hero: 'arien', team: 'orange' })
 		expect(j.draft?.picks).toEqual({ a: 'arien', b: 'brogan' })
 		// turn 1's card is filled in when the turn moves on
 		expect(j.turns[0].cards.a.played).toBe(7)
@@ -48,6 +48,16 @@ describe('game recorder', () => {
 		const row = gameRow(j)
 		expect(row).toMatchObject({ id: 'ROOM-123', winner: 'blue', reason: 'won the Final Push', rounds: 4, players: 2 })
 		expect(row.data.turns.length).toBeGreaterThan(0)
+	})
+	it('keeps structured events: one per hero-defeat news id (a stale one in the room is not this game\'s)', () => {
+		const news = (id: string) => ({ id, victim: 'b', by: 'a', coins: 1, assist: 1, assists: [], lives: 1, team: 'blue', at: 1 })
+		const stale = base({ lastDefeat: news('old') } as Partial<MatchState>)
+		let j = journalUpdate(newJournal('ROOM', stale), stale)
+		expect(j.ev).toEqual([])
+		j = journalUpdate(j, base({ turn: 2, lastDefeat: news('d1'), defeated: { b: { round: 1, turn: 2, piece: {} } } } as unknown as Partial<MatchState>))
+		const same = journalUpdate(j, base({ turn: 2, lastDefeat: news('d1') } as Partial<MatchState>))
+		expect(same.ev).toEqual([{ k: 'hero', id: 'd1', r: 1, t: 2, by: 'a', v: 'b', a: [], c: 1, ac: 1, l: 1, team: 'blue' }])
+		expect(gameRow(same).data.ev).toHaveLength(1)
 	})
 	it('joining mid-game, or playing alone, is a test run', () => {
 		const late = journalUpdate(newJournal('ROOM', base({ round: 2 })), base({ round: 3, wonBy: { team: 'orange', reason: 'x' } }))
