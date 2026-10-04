@@ -120,7 +120,7 @@
 	<div class="arena">
 		{#each [{ team: 'orange', ids: orange }, { team: 'blue', ids: blue }] as side, si (side.team)}
 			{#if si === 1}
-				<div class="seam"><i></i><div class="disc"><span>VS</span></div></div>
+				<div class="seam"><i></i><div class="disc"><svg viewBox="-50 -50 100 100" aria-label="versus"><defs><linearGradient id="mvs-o" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffb46a" /><stop offset=".55" stop-color="#ef7d22" /><stop offset="1" stop-color="#7a3208" /></linearGradient><linearGradient id="mvs-b" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9ccbff" /><stop offset=".55" stop-color="#2f7fe6" /><stop offset="1" stop-color="#0f3474" /></linearGradient><linearGradient id="mvs-t" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff" /><stop offset=".45" stop-color="#fff2c9" /><stop offset="1" stop-color="#f0bb55" /></linearGradient><linearGradient id="mvs-r" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fbe3a6" /><stop offset=".5" stop-color="#c8963f" /><stop offset="1" stop-color="#7d5418" /></linearGradient><radialGradient id="mvs-v" cx=".5" cy=".38" r=".62"><stop offset=".55" stop-color="#000" stop-opacity="0" /><stop offset="1" stop-color="#000" stop-opacity=".5" /></radialGradient><clipPath id="mvs-c"><circle r="44" /></clipPath></defs><circle r="49.5" fill="#06101c" /><g clip-path="url(#mvs-c)"><rect x="-50" y="-50" width="100" height="100" fill="url(#mvs-b)" /><polygon points="-50,-50 7,-50 -7,50 -50,50" fill="url(#mvs-o)" /><g fill="#fff4dc" fill-opacity=".26" stroke="#000" stroke-opacity=".35" stroke-width="1.2"><g transform="rotate(-38)"><path d="M-2.4 -38 L0 -45 L2.4 -38 L2.4 18 L-2.4 18 Z M-11 18 H11 V22.5 H-11 Z M-1.9 22.5 H1.9 V33 H-1.9 Z" /><circle cy="36" r="3.2" /></g><g transform="rotate(38)"><path d="M-2.4 -38 L0 -45 L2.4 -38 L2.4 18 L-2.4 18 Z M-11 18 H11 V22.5 H-11 Z M-1.9 22.5 H1.9 V33 H-1.9 Z" /><circle cy="36" r="3.2" /></g></g><line x1="7" y1="-50" x2="-7" y2="50" stroke="#fff6dc" stroke-width="2.4" /><circle r="44" fill="url(#mvs-v)" /></g><circle r="45.5" fill="none" stroke="url(#mvs-r)" stroke-width="3.4" /><g transform="skewX(-10)" font-size="42" text-anchor="middle" letter-spacing="-1"><text class="vs-x" x="3" y="17.5" fill="#1a0b02" stroke="#1a0b02" stroke-width="6" stroke-linejoin="round">VS</text><text class="vs-x" x="0" y="14" fill="url(#mvs-t)" stroke="#1a0b02" stroke-width="4.6" stroke-linejoin="round" paint-order="stroke">VS</text></g></svg></div></div>
 			{/if}
 			<div class="mteam {side.team}">
 				<div class="teamname">{teamName(side.team)}</div>
@@ -244,10 +244,13 @@
 	.seam > i { display: none; position: absolute; left: -3px; top: 0; bottom: 0; width: 6px; transform: skewX(-8deg); transform-origin: 50% 0; border-radius: 3px;
 		background: linear-gradient(180deg, transparent, #ffe9b8 18%, #fff 50%, #ffe9b8 82%, transparent); box-shadow: 0 0 24px 6px rgba(244,223,168,0.5); animation: blade 0.22s var(--seam) cubic-bezier(0.3, 0, 0.2, 1) both; }
 	@keyframes blade { from { opacity: 0; transform: skewX(-8deg) scaleY(0); } to { opacity: 1; transform: skewX(-8deg) scaleY(1); } }
-	.disc { position: absolute; left: -44px; top: calc(50% - 44px); width: 88px; height: 88px; border-radius: 50%; display: grid; place-items: center;
-		background: radial-gradient(circle at 50% 30%, #1d4468, #0a1f35 75%); border: 2px solid var(--brass, #d8b36a);
-		box-shadow: 0 0 0 6px rgba(216,179,106,0.14), 0 0 40px rgba(216,179,106,0.28), inset 0 0 18px rgba(0,0,0,0.6); animation: crestIn 0.5s calc(var(--seam) + 0.16s) cubic-bezier(0.2,0.9,0.2,1.3) both; }
-	.disc span { font-size: 33px; line-height: 1; color: var(--brass-hi, #f4dfa8); letter-spacing: 0.04em; text-shadow: 0 0 18px rgba(244,223,168,0.4); }
+	/* the VS: an emblem split along the slices' lean — Atlantean orange | Titan blue — crossed blades behind,
+	   the letters in pale gold with a heavy outline; each side glows in its team's colour */
+	.disc { position: absolute; left: -54px; top: calc(50% - 54px); width: 108px; height: 108px; border-radius: 50%;
+		box-shadow: -14px 0 34px rgba(239,125,34,0.55), 14px 0 34px rgba(47,127,230,0.6), 0 10px 24px rgba(0,0,0,0.6);
+		animation: crestIn 0.5s calc(var(--seam) + 0.16s) cubic-bezier(0.2,0.9,0.2,1.3) both; }
+	.disc svg { display: block; width: 100%; height: 100%; overflow: visible; }
+	.vs-x { font-family: inherit; }
 	@keyframes crestIn { from { opacity: 0; transform: scale(2.2); } to { opacity: 1; transform: none; } }
 
 	.foot { position: relative; z-index: 4; flex: none; min-height: 106px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
@@ -317,8 +320,7 @@
 		.seam { position: relative; left: 0; top: 0; bottom: auto; width: 100%; height: 0; flex: none; }
 		.seam > i { display: block; left: 0; right: 0; width: auto; top: -2px; bottom: auto; height: 4px; transform: skewY(-4deg); transform-origin: 0 50%;
 			background: linear-gradient(90deg, transparent, #ffe9b8 18%, #fff 50%, #ffe9b8 82%, transparent); animation-name: bladeX; }
-		.disc { left: calc(50% - 23px); top: -23px; width: 46px; height: 46px; box-shadow: 0 0 0 4px rgba(216,179,106,0.16), 0 0 24px rgba(216,179,106,0.32), inset 0 0 12px rgba(0,0,0,0.6); }
-		.disc span { font-size: 18px; }
+		.disc { left: calc(50% - 27px); top: -27px; width: 54px; height: 54px; box-shadow: -7px 0 18px rgba(239,125,34,0.55), 7px 0 18px rgba(47,127,230,0.6), 0 5px 12px rgba(0,0,0,0.6); }
 		.foot { min-height: 0; gap: 6px; padding: 10px 12px calc(12px + env(safe-area-inset-bottom)); }
 		.splash .begin { min-width: 0; padding: 0 28px; }
 		.prep i { width: 150px; }
