@@ -11,6 +11,8 @@
 		act: () => void
 		/** a fan of switches on the outer circle, opened by this item (e.g. Effects) */
 		sub?: WheelItem[]
+		/** a colour of its own: a team (the push buttons) or confirm / cancel */
+		tone?: 'orange' | 'blue' | 'ok' | 'bad'
 	}
 </script>
 
@@ -53,14 +55,14 @@
 				{@const a = at(i, ring.length)}
 				{@const isViews = it.id === 'views'}
 				{@const hasFan = isViews || !!it.sub}
-				<button class="wb inner" class:on={it.on || (hasFan && fans[it.id])} disabled={it.disabled} style="--a:{a}deg; --d:{i * 0.025}s" title={it.title ?? it.label}
+				<button class="wb inner {it.tone ? `t-${it.tone}` : ''}" class:on={it.on || (hasFan && fans[it.id])} disabled={it.disabled} style="--a:{a}deg; --d:{i * 0.025}s" title={it.title ?? it.label}
 					on:click={() => (hasFan ? toggle(it.id) : it.act())}>
 					<svg viewBox="0 0 24 24" aria-hidden="true">{@html it.icon}</svg>
 					<span class="lb">{it.label}</span>
 				</button>
 				{#if it.sub && fans[it.id]}
 					{#each it.sub as sb, j (sb.id)}
-						<button class="wb outer" class:on={sb.on} disabled={sb.disabled} style="--a:{arc(j, it.sub.length, mobile ? 40 : 34, a)}deg; --d:{j * 0.03}s" title={sb.title ?? sb.label} on:click={sb.act}>
+						<button class="wb outer {sb.tone ? `t-${sb.tone}` : ''}" class:on={sb.on} disabled={sb.disabled} style="--a:{arc(j, it.sub.length, mobile ? 40 : 34, a)}deg; --d:{j * 0.03}s" title={sb.title ?? sb.label} on:click={sb.act}>
 							<svg viewBox="0 0 24 24" aria-hidden="true">{@html sb.icon}</svg>
 							<span class="lb">{sb.label}</span>
 						</button>
@@ -117,6 +119,12 @@
 	/* a switch that is on: brass */
 	.wb.on { color: #1c1408; background: linear-gradient(180deg, #f3dca0 0%, #d8b36a 55%, #b98e42 100%); border-color: #fff1c8; }
 	.wb.on .lb { color: #2a1d08; }
+	/* toned buttons: the two teams (push) and confirm / cancel */
+	.wb.t-orange { color: #ffd9b8; border-color: #ef7d22; background: radial-gradient(circle at 50% 30%, #b8611c, #5a2a08 78%); }
+	.wb.t-blue { color: #d3e6ff; border-color: #2f7fe6; background: radial-gradient(circle at 50% 30%, #2a64c4, #0e2a5c 78%); }
+	.wb.t-ok { color: #e8ffe9; border-color: #4ade80; background: radial-gradient(circle at 50% 30%, #22a052, #0b4a24 78%); }
+	.wb.t-bad { color: #ffe1dc; border-color: #f87171; background: radial-gradient(circle at 50% 30%, #c2412f, #5c160d 78%); }
+	.wb.t-orange .lb, .wb.t-blue .lb, .wb.t-ok .lb, .wb.t-bad .lb { color: inherit; }
 	.wb:disabled { cursor: default; opacity: 0.45; }
 
 	.hub { position: absolute; left: 0; top: 0; width: 64px; height: 64px; margin: -32px 0 0 -32px; padding: 0; border-radius: 50%; display: grid; place-items: center; cursor: pointer;

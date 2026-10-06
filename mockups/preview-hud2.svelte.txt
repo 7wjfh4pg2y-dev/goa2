@@ -238,6 +238,7 @@
 	};
 
 	// OVERLAY MOCKS: ?splash=attack (&still=1) · ?rad=hero|own|heavy|minion|spawn|confirm · ?menu=1 · ?wheel=1 · ?beamfx=1
+	// ?splash=attack → an enemy attacks your team · ?splash=attacked → your team attacks an enemy (the enemy is always on the left)
 	const SPLASH = q.get('splash'), STILL = q.get('still') === '1';
 	const MENU = q.get('menu') === '1', WHEEL = q.get('wheel') === '1';
 	const BEAMFX = q.get('beamfx') === '1'; // the beam's spark + pulses (a personal effect, off by default like the rest)
@@ -245,15 +246,16 @@
 	const SKULL = '<path d="M12 3.5c-4.3 0-7.5 3-7.5 7 0 2.3 1.1 4 2.8 5v3.2h9.4v-3.2c1.7-1 2.8-2.7 2.8-5 0-4-3.2-7-7.5-7z" /><circle cx="9" cy="11" r="1.7" class="f" /><circle cx="15" cy="11" r="1.7" class="f" /><path d="M10.2 18.7v-2.2M13.8 18.7v-2.2" />';
 	const TRASH = '<path d="M4 7h16M9 7V4.5h6V7M6 7l1 13h10l1-13" />';
 	const BROOM = '<path d="M15.5 3.5 10 12M6.5 12h8l1.8 8.5H4.2z" /><path d="M8.5 15.5v5M12 15.5v5" />';
-	type RItem = { label: string; icon?: string; cls?: string; badge?: string; pill?: boolean; minion?: string };
+	type RItem = { label: string; icon?: string; cls?: string; coin?: number; pill?: boolean };
 	const RADS: Record<string, { name: string; items: RItem[] }> = {
-		hero: { name: 'Tali (Lena)', items: [{ label: 'Attack', icon: SW, cls: 'go' }, { label: 'Defeat', icon: SKULL, cls: 'bad', badge: '+3' }, { label: 'Remove', icon: TRASH, cls: 'bad' }] },
+		hero: { name: 'Tali (Lena)', items: [{ label: 'Attack', icon: SW, cls: 'go' }, { label: 'Defeat', icon: SKULL, cls: 'bad', coin: 3 }] },
 		confirm: { name: 'Tali (Lena)', items: [] },
-		own: { name: 'Arien (you)', items: [{ label: 'Clear', icon: BROOM, badge: '2' }, { label: 'Defeated', icon: SKULL, cls: 'bad' }, { label: 'Remove', icon: TRASH, cls: 'bad' }] },
-		heavy: { name: 'Titan heavy minion', items: [{ label: 'Immune', pill: true }, { label: 'Defeat', icon: SKULL, cls: 'bad', badge: '+4' }, { label: 'Remove', icon: TRASH, cls: 'bad' }] },
-		minion: { name: 'Titan melee minion', items: [{ label: 'Defeat', icon: SKULL, cls: 'bad', badge: '+2' }, { label: 'Remove', icon: TRASH, cls: 'bad' }] },
-		spawn: { name: 'Spawn a minion', items: ['orange-melee', 'orange-ranged', 'orange-heavy', 'blue-melee', 'blue-ranged', 'blue-heavy'].map((m) => ({ label: `${m.startsWith('orange') ? 'Atl.' : 'Titan'} ${m.split('-')[1]}`, minion: m })) }
+		own: { name: 'Arien (you)', items: [{ label: 'Clear 2', icon: BROOM }, { label: 'Defeated', icon: SKULL, cls: 'bad' }, { label: 'Remove', cls: 'bad' }] },
+		heavy: { name: 'Titan heavy minion', items: [{ label: 'Immune', pill: true }, { label: 'Defeat', icon: SKULL, cls: 'bad', coin: 4 }, { label: 'Remove', cls: 'bad' }] },
+		minion: { name: 'Titan melee minion', items: [{ label: 'Defeat', icon: SKULL, cls: 'bad', coin: 2 }, { label: 'Remove', cls: 'bad' }] }
 	};
+	// clockwise from 12 o'clock: 12 · 3 · 6 · 9, then the diagonals
+	const CLOCK = [0, 90, 180, 270, 45, 135, 225, 315];
 	const RAD = q.get('rad');
 	let radAt: { x: number; y: number; r: number } | null = null;
 	const radTarget = (k: string) => {
@@ -266,9 +268,10 @@
 			const id = radTarget(RAD);
 			const g = id ? document.querySelector(`[data-piece="${id}"]`) : null;
 			// the token's own disc (a hero's group also holds its hidden name label)
-			const el = g ? [...g.querySelectorAll('circle, use, image')].sort((a, b) => b.getBoundingClientRect().width - a.getBoundingClientRect().width)[0] ?? g : null;
+			const big = (sel: string) => (g ? [...g.querySelectorAll(sel)].sort((a, b) => b.getBoundingClientRect().width - a.getBoundingClientRect().width)[0] : null);
+			const el = big('circle:not([fill="#000"])') ?? big('use') ?? g;
 			const r = el?.getBoundingClientRect();
-			if (r) radAt = { x: r.left + r.width / 2, y: r.top + r.height / 2, r: 80 }; // 46 px buttons 36° apart need ≥ 78 px
+			if (r) radAt = { x: r.left + r.width / 2, y: r.top + r.height / 2, r: r.width / 2 + 8 }; // just off the token's edge
 			else { const b = document.querySelector('.boardarea')!.getBoundingClientRect(); radAt = { x: b.left + b.width / 2, y: b.top + b.height * 0.47, r: 78 }; }
 		}, 600);
 	});
@@ -289,12 +292,27 @@
 	};
 	const noop = () => {};
 	const wheelHub: WheelItem = { id: 'recenter', label: 'Recenter', icon: WI.recenter, act: noop };
+	const PUSHQ = q.get('push'); // ?push=blue|orange → the Push fan asks to confirm
+	const minionImg = (k: string) => Object.entries(minionArt).find(([f]) => f.endsWith(`/${k}.png`))?.[1] ?? '';
+	const MI = (k: string) => `<image href="${minionImg(k)}" x="-1" y="-1" width="26" height="26" />`;
+	const WX = {
+		hud: '<rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 9h18M8 9v11M16 9v11" />',
+		spawn: '<path d="M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9z" /><path d="M12 8v8M8 12h8" />',
+		push: '<path d="M4 12h12M12 7l5 5-5 5" /><path d="M20 5v14" />',
+		ok: '<path d="M5 12.5l4.5 4.5L19 7.5" />', bad: '<path d="M6 6l12 12M18 6L6 18" />'
+	};
 	const wheelRing: WheelItem[] = [
 		{ id: 'fx', label: 'Effects', icon: WI.fx, act: noop, sub: [
 			{ id: 'rims', label: 'Rims', icon: WI.rims, act: noop }, { id: 'zone', label: 'Zone', icon: WI.zone, act: noop }, { id: 'sea', label: 'Waves', icon: WI.waves, act: noop },
 			{ id: 'beam', label: 'Beam', icon: WI.beam, on: BEAMFX, act: noop }, { id: 'look', label: 'Island', icon: WI.island, on: true, act: noop }] },
 		{ id: 'zoom', label: 'Zoom', icon: WI.zoom, act: noop, sub: [{ id: 'zin', label: 'In', icon: WI.zin, act: noop }, { id: 'zout', label: 'Out', icon: WI.zout, act: noop }] },
+		{ id: 'hud', label: V === 'expanded' ? 'Expanded' : 'Compact', icon: WX.hud, title: 'HUD: expanded / compact (only on your screen)', act: noop },
 		{ id: 'views', label: 'Views', icon: WI.views, act: noop },
+		{ id: 'spawn', label: 'Spawn', icon: WX.spawn, disabled: !HOST, title: HOST ? 'Spawn a minion' : 'Spawn a minion (host)', act: noop,
+			sub: ['orange_melee', 'orange_ranged', 'orange_heavy', 'blue_melee', 'blue_ranged', 'blue_heavy'].map((k) => ({ id: k, label: `${k.startsWith('orange') ? 'Atl.' : 'Titan'} ${k.split('_')[1]}`, icon: MI(k), act: noop })) },
+		{ id: 'push', label: PUSHQ ? `${PUSHQ === 'blue' ? 'Titan' : 'Atl.'} push?` : 'Push', icon: WX.push, disabled: !HOST, title: HOST ? 'Push the wave (host)' : 'Push the wave (host)', act: noop,
+			sub: PUSHQ ? [{ id: 'ok', label: 'Confirm', icon: WX.ok, tone: 'ok', act: noop }, { id: 'no', label: 'Cancel', icon: WX.bad, tone: 'bad', act: noop }]
+				: [{ id: 'pb', label: 'Titan push', icon: WX.push, tone: 'blue', act: noop }, { id: 'po', label: 'Atlantean push', icon: WX.push, tone: 'orange', act: noop }] },
 		{ id: 'rot', label: 'Rotate', icon: WI.rot, act: noop, sub: [{ id: 'rotl', label: 'Left', icon: WI.rotl, act: noop }, { id: 'rotr', label: 'Right', icon: WI.rotr, act: noop }] }
 	];
 </script>
@@ -597,48 +615,43 @@
 				</div>
 			</div>
 		</div>
-		<!-- ── ATTACK splash: shown to the two heroes involved (both in colour — nobody has fallen yet) ── -->
-		{#if SPLASH === 'attack'}
-			{@const atk = ALL.find((x) => x.id === 'p6')}
-			{@const def = ALL.find((x) => x.id === 'p1')}
-			{#if atk && def}
-				<div class="atks" class:still={STILL}>
+		<!-- ── ATTACK splash, for EVERYONE: the enemy always on the left, your team on the right; both in colour (nobody has fallen yet).
+		     An enemy attacks yours: "Enemy attacks Ally" (the strike comes from the left); yours attacks: "Enemy attacked by Ally" (from the right) ── -->
+		{#if SPLASH === 'attack' || SPLASH === 'attacked'}
+			{@const enemyAtk = SPLASH === 'attack'}
+			{@const L = enemyAtk ? ALL.find((x) => x.id === 'p6') : ALL.find((x) => x.id === 'p4')}
+			{@const R = ALL.find((x) => x.id === 'p1')}
+			{#if L && R}
+				<div class="atks" class:still={STILL} class:fromR={!enemyAtk}>
 					<div class="aband">
-						<img class="aart l" src={heroSplash(atk.hero)} alt="" />
-						<img class="aart r" src={heroSplash(def.hero)} alt="" />
+						<img class="aart l" src={heroSplash(L.hero)} alt="" />
+						<img class="aart r" src={heroSplash(R.hero)} alt="" />
 						<div class="atxt">
-							<div class="anm a"><span style:color="#8cc0ff">{hn(atk.hero)}</span> <small>({atk.name})</small></div>
-							<div class="al2">attacks</div>
-							<div class="anm b"><span style:color="#ffb27a">{hn(def.hero)}</span> <small>({def.name})</small></div>
+							<div class="anm a"><span style:color="#8cc0ff">{hn(L.hero)}</span> <small>({L.name})</small></div>
+							<div class="al2">{enemyAtk ? 'attacks' : 'attacked by'}</div>
+							<div class="anm b"><span style:color="#ffb27a">{hn(R.hero)}</span> <small>({R.name})</small></div>
 						</div>
 					</div>
 				</div>
 			{/if}
 		{/if}
 
-		<!-- ── the PIECE RADIAL: the actions round the token, clockwise from 12 o'clock ── -->
+		<!-- ── the PIECE PILLS: the 1.0 toolbar's pills, round the piece, clockwise from 12 o'clock (12 · 3 · 6 · 9) ── -->
 		{#if RAD && radAt}
-			<div class="radial" style="left:{radAt.x}px; top:{radAt.y}px; --r:{radAt.r}px">
-				<span class="rname">{RADS[RAD].name}</span>
+			<div class="pills" style="left:{radAt.x}px; top:{radAt.y}px; --r:{radAt.r}px">
 				{#if RAD === 'confirm'}
-					<div class="rconf">
-						<b>Attack <span class="t-blue">Tali</span>?</b>
-						<span class="rrew"><span><i class="cn"></i>+3</span><span><i class="cn"></i>+1 <em>assist</em></span><span class="loss"><img src={ic('life_counter_blue_back')} alt="" />−1</span></span>
-						<span class="rbtns"><button class="rgo">Attack</button><button class="rx" aria-label="Back">✕</button></span>
+					<div class="pconf">
+						<span class="pcn">Attack <b class="t-blue">Tali</b></span>
+						<span class="pgain"><i class="cn"></i>3</span><span class="pgain"><i class="cn"></i>1 <em>assist</em></span><span class="pgain loss"><img src={ic('life_counter_blue_back')} alt="" />1</span>
+						<button class="pp go">Attack</button><button class="pp x" aria-label="Back">✕</button>
 					</div>
 				{:else}
 					{#each RADS[RAD].items as it, k (k)}
-						{@const a = ((-90 + k * 36) * Math.PI) / 180}
-						{#if it.pill}
-							<span class="rpill" style="left:{Math.cos(a) * (radAt.r + 4)}px; top:{Math.sin(a) * (radAt.r + 4)}px">Immune</span>
-						{:else}
-							<button class="rb {it.cls ?? ''}" style="left:{Math.cos(a) * radAt.r}px; top:{Math.sin(a) * radAt.r}px" title={it.label}>
-								{#if it.minion}<svg viewBox="-110 -110 220 220"><use href="#mn-token-{it.minion}" /></svg>
-								{:else}<svg viewBox="0 0 24 24">{@html it.icon}</svg>{/if}
-								{#if it.badge}<b>{it.badge}</b>{/if}
-								<span class="rl" style="--dx:{Math.cos(a)}; --dy:{Math.sin(a)}">{it.label}</span>
-							</button>
-						{/if}
+						{@const a = CLOCK[k]}
+						<span class="pslot" style="--a:{a}deg; --x:{Math.sin((a * Math.PI) / 180)}; --y:{-Math.cos((a * Math.PI) / 180)}">
+							{#if it.pill}<span class="pp imm">Immune</span>
+							{:else}<button class="pp {it.cls ?? ''}">{#if it.icon}<svg viewBox="0 0 24 24">{@html it.icon}</svg>{/if}{it.label}{#if it.coin}<i class="cn"></i>{it.coin}{/if}</button>{/if}
+						</span>
 					{/each}
 				{/if}
 			</div>
@@ -663,8 +676,8 @@
 					{/each}
 				</div>
 				<div class="gspec"><small>Watching</small><span class="gp"><span class="gface blank"></span><span class="gn"><b>Kai</b><em>wants to sit</em></span><button class="gok">Approve</button><button class="gkick">Deny</button></span></div>
-				<div class="grow"><small>Your HUD</small><span class="gseg"><button class="on">2.0</button><button>Classic</button><button>Custom</button></span><span class="gseg"><button class="on">Expanded</button><button>Compact</button></span></div>
-				<div class="grow host"><small>Host</small><button class="gpush">Atlantean push</button><button class="gpush">Titan push</button><button class="gend">End the game</button></div>
+				<div class="grow"><small>Your HUD</small><span class="gseg"><button class="on">2.0</button><button>Classic</button><button>Custom</button></span></div>
+				<div class="grow host"><small>Host</small><button class="gend">End the game</button></div>
 				<button class="gleave">Leave the game</button>
 			</div>
 		{/if}
@@ -1143,37 +1156,31 @@
 	.al2 { font-size: 15px; letter-spacing: 0.35em; text-transform: uppercase; color: #ffd6a0; }
 	@keyframes astrike { 0% { transform: translateY(-50%) skewY(-4deg) translateX(-105%); } 10% { transform: translateY(-50%) skewY(-4deg) translateX(1.5%); } 13%, 86% { transform: translateY(-50%) skewY(-4deg) translateX(0); opacity: 1; } 100% { transform: translateY(-50%) skewY(-4deg) translateX(105%); opacity: 0.2; } }
 
-	/* the PIECE RADIAL */
-	.radial { position: absolute; z-index: 12; width: 0; height: 0; }
-	.radial::before { content: ''; position: absolute; left: calc(var(--r) * -1 - 26px); top: calc(var(--r) * -1 - 26px); width: calc(var(--r) * 2 + 52px); height: calc(var(--r) * 2 + 52px); border-radius: 50%;
-		background: radial-gradient(circle, transparent calc(var(--r) - 30px), rgba(6, 21, 38, 0.55) calc(var(--r) - 28px), rgba(6, 21, 38, 0.55) calc(var(--r) + 28px), transparent calc(var(--r) + 30px)); pointer-events: none; }
-	.rname { position: absolute; left: 0; top: calc(var(--r) + 50px); transform: translateX(-50%); padding: 4px 12px; border-radius: 999px; font-size: 13px; white-space: nowrap; color: #fff; background: rgba(6, 21, 38, 0.92); box-shadow: 0 0 0 1px var(--line); }
-	.rb { position: absolute; width: 46px; height: 46px; margin: -23px 0 0 -23px; padding: 0; border-radius: 50%; display: grid; place-items: center; cursor: pointer; color: var(--brass-hi);
-		background: radial-gradient(circle at 50% 35%, #1d3d60, #0b1d33 75%); border: 0; box-shadow: 0 0 0 2px var(--brass), 0 0 0 3.5px #0a1a2c, 0 6px 14px rgba(0, 0, 0, 0.55); }
-	.rb svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-	.rb svg .f { fill: currentColor; stroke: none; }
-	.rb:has(use) svg { width: 34px; height: 34px; }
-	.rb.go { color: #1b1204; background: radial-gradient(circle at 50% 35%, #fff1c4, var(--brass-hi) 40%, var(--brass) 80%); }
-	.rb.bad { color: #ffd2cc; box-shadow: 0 0 0 2px #c2412f, 0 0 0 3.5px #0a1a2c, 0 6px 14px rgba(0, 0, 0, 0.55); }
-	.rb b { position: absolute; right: -8px; top: -6px; min-width: 18px; height: 18px; padding: 0 3px; border-radius: 9px; display: grid; place-items: center; font-weight: 400; font-size: 11px; color: #2a1d08; background: radial-gradient(circle at 35% 30%, #fff2c0, #e2b54f 60%, #a8792a); box-shadow: 0 0 0 1.5px #0a1a2c; box-sizing: border-box; }
-	.rl { position: absolute; left: 50%; top: 50%; transform: translate(calc(-50% + var(--dx) * 44px), calc(-50% + var(--dy) * 40px)); font-size: 11px; white-space: nowrap; color: #fff; text-shadow: 0 0 4px #000, 0 0 8px #000; pointer-events: none; }
-	.rpill { position: absolute; transform: translate(-50%, -50%); font-size: 12px; color: #2a2f38; padding: 4px 13px; border-radius: 999px; white-space: nowrap; letter-spacing: .04em; text-shadow: 0 1px 0 rgba(255,255,255,.6);
-		background: linear-gradient(180deg, #ffffff, #d4d9df 48%, #a3acb7); border: 2px solid #d9a845; box-shadow: 0 0 0 1px #6b4a10, 0 2px 6px rgba(0,0,0,.45), inset 0 1px 0 #fff; }
-	.rconf { position: absolute; left: 0; bottom: 34px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 14px; white-space: nowrap;
-		background: var(--glass); box-shadow: 0 0 0 1px var(--line), 0 10px 24px rgba(0, 0, 0, 0.6); border-top: 3px solid var(--brass); }
-	.rconf b { font-weight: 400; font-size: 16px; }
-	.rconf .t-blue { color: #a8d0ff; }
-	.rrew { display: flex; gap: 12px; font-size: 13px; color: #ffe7a1; }
-	.rrew span { display: inline-flex; align-items: center; gap: 4px; }
-	.rrew em { font-style: normal; font-size: 10px; color: var(--ink3); }
-	.rrew .loss { color: #ffb4a8; }
-	.rrew img { width: 18px; height: 18px; }
-	.rbtns { display: flex; gap: 8px; }
-	.rgo { height: 30px; padding: 0 18px; border-radius: 999px; border: 0; font: inherit; font-size: 14px; color: #1b1204; background: linear-gradient(180deg, var(--brass-hi), var(--brass)); cursor: pointer; }
-	.rx { width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--line); background: none; color: var(--ink2); cursor: pointer; }
+	/* the PIECE PILLS: plain pills round the token; each sits just off the token's edge on its clock position */
+	.pills { position: absolute; z-index: 12; width: 0; height: 0; }
+	.pslot { position: absolute; left: calc(var(--x) * var(--r)); top: calc(var(--y) * var(--r));
+		/* anchor the pill by the edge that faces the token */
+		transform: translate(calc(-50% + var(--x) * 50%), calc(-50% + var(--y) * 50%)); }
+	.pp { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 999px; font: inherit; font-size: 14px; line-height: 1; white-space: nowrap; cursor: pointer;
+		color: var(--ink); background: rgba(8, 22, 38, 0.94); border: 1px solid var(--line); box-shadow: 0 6px 14px rgba(0, 0, 0, 0.55); }
+	.pp svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+	.pp svg .f { fill: currentColor; stroke: none; }
+	.pp .cn { width: 15px; height: 15px; margin-left: 2px; }
+	.pp.go { color: #1b1204; border-color: #8a6a2c; background: linear-gradient(180deg, var(--brass-hi), var(--brass)); }
+	.pp.bad { color: #ffc9c2; border-color: rgba(229, 72, 77, 0.7); background: rgba(70, 16, 18, 0.94); }
+	.pp.x { width: 32px; padding: 0; justify-content: center; color: var(--ink2); }
+	.pp.imm { cursor: default; color: #2a2f38; letter-spacing: .04em; text-shadow: 0 1px 0 rgba(255,255,255,.6); background: linear-gradient(180deg, #ffffff, #d4d9df 48%, #a3acb7); border: 2px solid #d9a845; box-shadow: 0 0 0 1px #6b4a10, 0 2px 6px rgba(0,0,0,.45), inset 0 1px 0 #fff; }
+	/* the confirm: one bar above the piece (as in 1.0) */
+	.pconf { position: absolute; left: 0; bottom: calc(var(--r) + 6px); transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 5px 5px 5px 12px; border-radius: 999px; white-space: nowrap;
+		background: rgba(8, 22, 38, 0.96); border: 1px solid var(--line); box-shadow: 0 8px 18px rgba(0, 0, 0, 0.6); font-size: 14px; }
+	.pcn b { font-weight: 400; } .pcn .t-blue { color: #a8d0ff; }
+	.pgain { display: inline-flex; align-items: center; gap: 3px; color: #ffe7a1; } .pgain em { font-style: normal; font-size: 10px; color: var(--ink3); }
+	.pgain.loss { color: #ffb4a8; } .pgain img { width: 18px; height: 18px; }
+	.atks.fromR .aband { animation-name: astrikeR; }
+	@keyframes astrikeR { 0% { transform: translateY(-50%) skewY(-4deg) translateX(105%); } 10% { transform: translateY(-50%) skewY(-4deg) translateX(-1.5%); } 13%, 86% { transform: translateY(-50%) skewY(-4deg) translateX(0); opacity: 1; } 100% { transform: translateY(-50%) skewY(-4deg) translateX(-105%); opacity: 0.2; } }
 
 	/* the ☰ MENU: the game lobby */
-	.glob { position: absolute; z-index: 20; left: 20px; top: 88px; width: 520px; display: flex; flex-direction: column; gap: 14px; padding: 0 18px 18px; border-radius: 18px;
+	.glob { position: absolute; z-index: 20; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 520px; display: flex; flex-direction: column; gap: 14px; padding: 0 18px 18px; border-radius: 18px;
 		background: var(--glass); border: 1px solid var(--line); border-top: 3px solid var(--brass); box-shadow: 0 18px 44px rgba(0, 0, 0, 0.7); }
 	.ghead { display: flex; align-items: center; gap: 12px; margin: 0 -18px; padding: 12px 18px; border-bottom: 1px solid var(--line); }
 	.ghead b { font-weight: 400; font-size: 20px; }
