@@ -240,6 +240,18 @@ describe('minions outside the battle zone (rulebook p.18)', () => {
 		for (const h of opts) { expect(zoneTable(M)[h]).toBe('Center'); expect(occupied(s).has(h)).toBe(false) }
 	})
 
+	it('the options are exactly the nearest empty spaces of the zone (straight distance)', () => {
+		let s = game()
+		const id = someMinion(s)
+		const base = Object.keys(cells).find((h) => cells[h] === 'baseBlue')!
+		s = { ...s, pieces: { ...s.pieces, [id]: { ...s.pieces[id], hex: base } } }
+		const opts = returnHexes(s, id)
+		const free = Object.keys(cells).filter((h) => zoneTable(M)[h] === 'Center' && cells[h] !== 'terrain' && !occupied(s).has(h))
+		const d = (h: string) => cubeDist(hexCube(h), hexCube(base))
+		const best = Math.min(...free.map(d))
+		expect(opts).toEqual(free.filter((h) => d(h) === best).sort())
+	})
+
 	it('the battle settles a minion still waiting, and a push clears every minion — one left outside the zone too', () => {
 		let s = game({ turn: 4 } as Partial<MatchState>)
 		const id = someMinion(s), out = outsideNextTo(s)

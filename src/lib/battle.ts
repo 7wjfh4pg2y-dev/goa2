@@ -133,24 +133,8 @@ export function spawnWave(map: GameMap | null, zone: string, pieces: Record<stri
 	return { minions, cleared }
 }
 
-// ── minions outside the battle zone (rulebook p.18) ─────────────────────────────
-// A minion that ends an action outside the battle zone goes back in at once: along the shortest path of
-// empty spaces to an empty space of the battle zone (several such spaces → its own team picks); with no
-// path, to the nearest empty space of the battle zone. Moving a minion never triggers a push.
-let nbrMap: { map: object; n: Map<string, string[]> } | null = null
-function neighbours(map: GameMap | null, hex: string): string[] {
-	const cells = map?.cells ?? {}
-	if (!map || nbrMap?.map !== map) {
-		const ids = Object.keys(cells)
-		const cubes = new Map(ids.map((h) => [h, hexCube(h)]))
-		const n = new Map<string, string[]>()
-		for (const a of ids) n.set(a, ids.filter((b) => cubeDist(cubes.get(a)!, cubes.get(b)!) === 1))
-		nbrMap = { map: map ?? {}, n }
-	}
-	return nbrMap.n.get(hex) ?? []
-}
-/** Where a minion standing outside the battle zone has to go: the battle-zone spaces it can reach
- *  first (one = it just goes there; several = its team chooses). [] when it's inside the zone. */
+/** Where a minion standing outside the battle zone has to go: the NEAREST empty spaces of the battle zone
+ *  (straight hex distance; one = it just goes there; several = its team or the host chooses). [] when it's inside the zone. */
 export function returnHexes(s: Pick<MatchState, 'map' | 'lane' | 'pieces'>, pieceId: string): string[] {
 	const p = s.pieces?.[pieceId]
 	if (!p || p.kind !== 'minion' || !s.map || inZone(s, p.hex)) return []
@@ -158,21 +142,9 @@ export function returnHexes(s: Pick<MatchState, 'map' | 'lane' | 'pieces'>, piec
 	const zones = zoneTable(s.map)
 	const zone = battleZone(s)
 	const taken = new Set(Object.values(s.pieces ?? {}).filter((q) => q.id !== pieceId && !q.attachedTo).map((q) => q.hex))
-	const empty = (h: string) => !!cells[h] && !BLOCKED.has(cells[h]) && !taken.has(h)
-	// breadth-first over empty spaces: the first ring that reaches an empty space of the battle zone
-	let ring = [p.hex]
-	const seen = new Set(ring)
-	while (ring.length) {
-		const next: string[] = []
-		for (const h of ring) for (const n of neighbours(s.map, h)) if (!seen.has(n) && empty(n)) { seen.add(n); next.push(n) }
-		const hit = next.filter((h) => zones[h] === zone)
-		if (hit.length) return hit.sort()
-		ring = next
-	}
-	// walled in: the nearest empty spaces of the battle zone
-	const c = hexCube(p.hex)
-	const opts = Object.keys(cells).filter((h) => zones[h] === zone && empty(h))
+	const opts = Object.keys(cells).filter((h) => zones[h] === zone && !BLOCKED.has(cells[h]) && !taken.has(h))
 	if (!opts.length) return []
+	const c = hexCube(p.hex)
 	const d = Math.min(...opts.map((h) => cubeDist(hexCube(h), c)))
 	return opts.filter((h) => cubeDist(hexCube(h), c) === d).sort()
 }

@@ -219,10 +219,10 @@
 	$: zoneCount = minionCount($ms);
 	$: strays = Object.entries($ms.strays ?? {}).filter(([id, opts]) => $ms.pieces?.[id] && opts?.length);
 	// its team picks; the host only when nobody of that team is here
-	$: teamHere = (t: string) => $players.some((p) => p.seat >= 0 && p.seat < $ms.seats && teamForSeat(p.seat, $ms.seats) === t);
-	$: myStray = strays.find(([id]) => (iPlay && $ms.pieces[id].team === myTeam) || (iAmHost && !teamHere($ms.pieces[id].team))) ?? null;
+	$: myStray = strays.find(([id]) => (iPlay && $ms.pieces[id].team === myTeam) || iAmHost) ?? null;
 	$: strayWait = !myStray ? strays[0] ?? null : null;
-	$: strayMarks = myStray ? myStray[1].map((hex) => ({ hex, r: 0, color: '#fff3a8' })) : [];
+	// the choices glow in the minion's team colour (its team and the host may pick)
+	$: strayMarks = myStray ? myStray[1].map((hex) => ({ hex, r: 0, color: $ms.pieces[myStray[0]].team === 'orange' ? '#ef7d22' : '#2f7fe6' })) : [];
 	$: selImmune = !!selPiece && selPiece.role === 'heavy' && heavyImmune($ms, selPiece.id);
 	$: canBattleSel = !!selPiece && iChooseBattle && canBattleRemove($ms, selPiece.id);
 	function battleTakeSel() {
@@ -285,7 +285,7 @@
 		}
 		const moved = movePiece($ms, id, hex);
 		// a minion that ends outside the battle zone goes straight back in (rulebook p.18): one way back → there;
-		// several → its team picks (strays)
+		// several → its team or the host picks (strays)
 		if (p?.kind === 'minion') {
 			const back = returnPatch({ ...$ms, ...moved } as MatchState, id);
 			const to = back.pieces?.[id]?.hex;
