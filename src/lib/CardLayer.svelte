@@ -616,6 +616,9 @@
 	$: h2allies = others.filter((p) => pTeam(p) === viewTeam);
 	$: h2tight = Math.max(h2enemies.length, h2allies.length + 1) > 2; // 3 to a column (6 players)
 	$: h2compact = compact || Math.max(h2enemies.length, h2allies.length + 1) > 3; // 8+ players: nameplates
+	// the docked hand's banner row (design px): across the screen, or — when three full boards a column come down to the
+	// dash's height — only the gap between the columns (it wraps there)
+	$: h2rowMax = h2tight && !h2compact ? vw / lay.s - 2 * (20 + 344 + 16) : Math.min(1400, vw / lay.s - 40);
 	const SHORT_DUR: Record<string, string> = { 'This turn': 'Turn', 'Next turn': 'Next turn', 'This round': 'Round' };
 	// the Chronicle: who wrote a line (log entries carry the player's name) → their hero and colour
 	$: chronWho = (name: string) => {
@@ -1369,7 +1372,7 @@
 		<div class="h2dash">
 			<HudDash cs={mine} name={myName} color={colorHex(myColor)} team={myTeam === 'blue' ? 'blue' : 'orange'} {turnIdx} {revealed} ini={myInit} marks={statusMap[clientId] ?? EMPTY_STATUS} {markArt}
 				ultIdx={myUlt} {ultReady} deckCount={deckCards(mine).length} levelUp={iMustLevel} order={order2} fxAt={(t) => !!fxFor(clientId, slotIdx(mine, t))}
-				autoHide={autoRetract} spread={spreadHand} docked={dockHand} hand={handOrdered} {armed} {pingArmed} discOpen={discOpen === 'dash'} radius={radiusCtl} tokens={tokenCtl}
+				autoHide={autoRetract} spread={spreadHand} docked={dockHand} hand={handOrdered} rowMax={h2rowMax} {armed} {pingArmed} discOpen={discOpen === 'dash'} radius={radiusCtl} tokens={tokenCtl}
 				onMe={() => (overlayId = clientId)} onCoins={changeCoins} onSlot={(e, t) => peekSlot(e, mine, t)}
 				onDiscard={() => (mine.discard.length === 1 ? openDiscard(mine.hero, mine.discard[0], true) : discTap('dash'))} onDiscPick={(i) => openDiscard(mine.hero, i, true)}
 				onDeck={() => (deckOpen = true)} {onUlt} onPing={onPing} onAutoHide={toggleRetract} onSpread={toggleSpread} onDock={toggleDock} onPick={(i) => (canCommit && armed !== i ? (armed = i) : preview(i))} />

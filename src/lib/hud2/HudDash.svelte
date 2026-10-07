@@ -40,6 +40,7 @@
 	export let docked = false;
 	export let hand: number[] = [];
 	export let armed: number | null = null;
+	export let rowMax = 1400; // the widest the kept-up banner row may be (design px; it wraps to fit)
 	export let pingArmed = false;
 	export let discOpen = false;
 	export let radius: Snippet | undefined = undefined;
@@ -68,6 +69,9 @@
 	$: words = order.label.split(' ');
 	$: labelFs = Math.min(16, 70 / (Math.max(...words.map((w) => w.length)) * 0.62));
 	$: subLong = (order.sub ?? '').length > 16;
+	// the kept-up banner row: as many a line as fit at a readable width (220+), centred, wrapping upward
+	$: perRow = Math.max(1, Math.min(hand.length, Math.floor((rowMax + 8) / 228)));
+	$: cellW = Math.min(270, (rowMax - (perRow - 1) * 8) / perRow);
 	// the dock slides (transform only); the rack is clipped only while it moves, so its pop-ups can rise above the dash
 	let sliding = false;
 	let slideT: ReturnType<typeof setTimeout> | null = null;
@@ -152,7 +156,7 @@
 
 		<!-- the hand kept up (auto-hide off) while docked: every banner in one row above the dash, edge to edge if need be -->
 		{#if docked && !autoHide && hand.length}
-			<div class="brow" style="--n:{hand.length}">
+			<div class="brow" style="width:{(perRow * cellW + (perRow - 1) * 8).toFixed(0)}px; --cw:{cellW.toFixed(1)}px">
 				{#each hand as i, k (i)}<div class="bcell" style="--k:{k}"><CardBanner heroId={cs.hero} idx={i} sel={armed === i} on:click={() => onPick(i)} /></div>{/each}
 			</div>
 		{/if}
@@ -257,9 +261,9 @@
 		border: 1px solid var(--line); border-left: 0; border-top: 2px solid var(--tc); transition: transform 0.42s cubic-bezier(0.2, 0.8, 0.2, 1); }
 	.open .dext { transform: none; }
 	.dock { height: 76px; padding-left: 10px; border-left: 1px solid var(--line); }
-	.brow { position: absolute; z-index: 3; left: 50%; bottom: calc(100% + 22px); transform: translateX(-50%); display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 8px;
-		width: min(1400px, calc(var(--n) * 278px - 8px)); }
-	.bcell { filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.6)); animation: bup 0.22s ease-out both; animation-delay: calc(var(--k) * 40ms); }
+	.brow { position: absolute; z-index: 3; left: 50%; bottom: calc(100% + 26px); transform: translateX(-50%); display: flex; flex-wrap: wrap-reverse; justify-content: center; gap: 8px; }
+	.bcell { width: var(--cw); }
+	.bcell:not(:empty) { filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.6)); animation: bup 0.22s ease-out both; animation-delay: calc(var(--k) * 40ms); }
 	@keyframes bup { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 	@media (prefers-reduced-motion: reduce) { .bcell { animation: none; } }
 	/* the action cap */
