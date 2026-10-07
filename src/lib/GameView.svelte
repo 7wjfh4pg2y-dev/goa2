@@ -211,6 +211,7 @@
 		rims: '<circle cx="12" cy="12" r="8" /><path d="M12 4v2M20 12h-2M12 20v-2M4 12h2M17.7 6.3l-1.4 1.4M17.7 17.7l-1.4-1.4M6.3 17.7l1.4-1.4M6.3 6.3l1.4 1.4" />',
 		waves: '<path d="M2 9c2.5-2.5 4.5-2.5 7 0s4.5 2.5 7 0 4.5-2.5 6 0" /><path d="M2 15c2.5-2.5 4.5-2.5 7 0s4.5 2.5 7 0 4.5-2.5 6 0" />',
 		fx: '<path d="M2 15c2.5-2.5 4.5-2.5 7 0s4.5 2.5 7 0 4.5-2.5 6 0" /><path d="M12 3v3M6.5 5.5l1.6 2M17.5 5.5l-1.6 2" />',
+		wisps: '<path d="M12 12a1.5 1.5 0 0 1 3 0a3 3 0 0 1-6 0a4.5 4.5 0 0 1 9 0a6 6 0 0 1-12 0a7.5 7.5 0 0 1 15 0" />',
 		beam: '<path d="M2 14h7M15 14h7" /><circle cx="12" cy="14" r="2.6" /><path d="M12 8.5v-3M8.6 9.8 7 8M15.4 9.8 17 8" />',
 		hud: '<rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 9h18M8 9v11M16 9v11" />',
 		spawn: '<path d="M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9z" /><path d="M12 8v8M8 12h8" />',
@@ -240,6 +241,7 @@
 				title: onIsland ? `Moving sea: ${$boardPrefs.sea ? 'on' : 'off'}` : 'The sea is drawn on the island only', act: () => boardPrefs.set({ sea: !$boardPrefs.sea }) },
 			{ id: 'look', label: onIsland ? 'Island' : 'Classic', icon: onIsland ? ICON.island : ICON.classic, on: onIsland,
 				title: `Map: ${onIsland ? 'the island' : 'classic tiles'} (only on your screen)`, act: () => boardPrefs.set({ look: onIsland ? 'classic' : 'island' }) },
+			{ id: 'wisps', label: 'Wisps', icon: ICON.wisps, on: $boardPrefs.wisps, title: `The spirit swirl on spaces to act on: ${$boardPrefs.wisps ? 'on' : 'off'}`, act: () => boardPrefs.set({ wisps: !$boardPrefs.wisps }) },
 			...(hud2 ? [{ id: 'beam', label: 'Beam', icon: ICON.beam, on: $boardPrefs.beam, title: `The beam's spark and pulses: ${$boardPrefs.beam ? 'on' : 'off'}`, act: () => boardPrefs.set({ beam: !$boardPrefs.beam }) }] : [])
 		] },
 		{ id: 'rotr', label: 'Turn', icon: ICON.rotr, title: 'Turn clockwise (45°)', act: () => board?.rotateBy(45) },
@@ -274,7 +276,7 @@
 	$: armBattleFallback(battleSplashing ? battleNews?.id ?? null : null);
 	function armBattleFallback(id: string | null) { if (id) setTimeout(() => (battleDoneId = id), 5000); } // if the splash never reports back
 	$: battle = battleSplashing ? null : $ms.battle ?? null;
-	$: battleMarks = battle ? Object.values($ms.pieces ?? {}).filter((p) => canBattleRemove($ms, p.id)).map((p) => ({ hex: p.hex, r: 0, color: battle?.loser === 'blue' ? '#8cc0ff' : '#ffb27a' })) : []; // the losing team's own colour
+	$: battleMarks = battle ? Object.values($ms.pieces ?? {}).filter((p) => canBattleRemove($ms, p.id)).map((p) => ({ hex: p.hex, r: 0, team: battle?.loser ?? 'orange', color: '' })) : []; // the losing team's own colour
 	$: iChooseBattle = !!battle && (iAmHost || (iPlay && myTeam === battle.loser));
 	// a minion left outside the battle zone with several ways back: its team (or the host) picks the space
 	// the minions the battle would count right now (only those inside the battle zone)
@@ -284,7 +286,7 @@
 	$: myStray = strays.find(([id]) => (iPlay && $ms.pieces[id].team === myTeam) || iAmHost) ?? null;
 	$: strayWait = !myStray ? strays[0] ?? null : null;
 	// the choices glow in the minion's team colour (its team and the host may pick)
-	$: strayMarks = myStray ? myStray[1].map((hex) => ({ hex, r: 0, color: $ms.pieces[myStray[0]].team === 'orange' ? '#ef7d22' : '#2f7fe6' })) : [];
+	$: strayMarks = myStray ? myStray[1].map((hex) => ({ hex, r: 0, team: $ms.pieces[myStray[0]].team, color: '' })) : [];
 	$: selImmune = !!selPiece && selPiece.role === 'heavy' && heavyImmune($ms, selPiece.id);
 	$: canBattleSel = !!selPiece && iChooseBattle && canBattleRemove($ms, selPiece.id);
 	function battleTakeSel() {
@@ -383,7 +385,7 @@
 	$: placing = !!pendingSpawn || !!pendingToken || pendingRespawn || !!myStray;
 	function placeMyHero() { cancelPlace(); selPieceId = null; actId = null; pendingRespawn = true; }
 	// the free spawn points of your base light up while you place your hero
-	$: spawnMarks = pendingRespawn && heroToPlace ? freeSpawns($ms, heroToPlace.team as Team).map((hex) => ({ hex, r: 0, color: '#fff3a8' })) : [];
+	$: spawnMarks = pendingRespawn && heroToPlace ? freeSpawns($ms, heroToPlace.team as Team).map((hex) => ({ hex, r: 0, team: heroToPlace?.team ?? 'orange', color: '#fff3a8' })) : [];
 	// what's held, drawn by the board as a see-through ghost under the cursor
 	$: placeGhost = pendingRespawn && heroToPlace
 		? { id: '__ghost', hex: '', team: heroToPlace.team, hero: heroToPlace.hero, sym: heroLogo(heroToPlace.hero ?? ''),
@@ -499,7 +501,7 @@
 	let clearSel: string[] = [];
 	$: clearCands = clearing ? clearable($ms, clientId) : [];
 	$: clearPick = clearSel.filter((id) => clearCands.some((p) => p.id === id)); // still there and still adjacent
-	$: clearMarks = clearCands.map((p) => ({ hex: p.hex, r: 0, color: clearPick.includes(p.id) ? '#ff5a4d' : '#ffe7a8' }));
+	$: clearMarks = clearCands.map((p) => ({ hex: p.hex, r: 0, team: viewTeam, picked: clearPick.includes(p.id), color: '' }));
 	$: if (clearing && !ownAttack) cancelClear(); // the turn moved on
 	function startClear() { board?.release(); selPieceId = null; actId = null; cancelPlace(); clearSel = []; clearing = true; }
 	function cancelClear() { clearing = false; clearSel = []; }
@@ -785,7 +787,7 @@
 	<div class="ocean"></div>
 	<!-- on a phone the board sits between the top bar + player strip and the dash -->
 	<div class="boardarea" class:mob={mobile}>
-	<BoardCanvas bind:this={board} map={$ms.map ?? {}} inset={boardInset} look={boardLook} {glowZone} activeZone={$ms.wonBy ? null : battleZone($ms)} effects={true} sea={$boardPrefs.sea} rims={$boardPrefs.rims} rotation={orientation} interactive={true} {placing} {placeGhost} holdColor={myHoldColor} onCancelPlace={cancelPlace} {areas} marks={boardMarks} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} pings={boardPings} onPing={doPing} {pingArmed} />
+	<BoardCanvas bind:this={board} map={$ms.map ?? {}} inset={boardInset} look={boardLook} {glowZone} activeZone={$ms.wonBy ? null : battleZone($ms)} effects={true} sea={$boardPrefs.sea} rims={$boardPrefs.rims} rotation={orientation} interactive={true} {placing} {placeGhost} holdColor={myHoldColor} onCancelPlace={cancelPlace} {areas} marks={boardMarks} wisps={$boardPrefs.wisps} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} pings={boardPings} onPing={doPing} {pingArmed} />
 	</div>
 
 	<CardLayer bind:this={cardLayer} {mobile} {hud2} compact={$boardPrefs.compact} {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} onRespawn={placeMyHero} onEnter={placeMyHero} onArmToken={armToken} holdingToken={!!pendingToken} {pingArmed} onPing={pingButton} bind:previewId />

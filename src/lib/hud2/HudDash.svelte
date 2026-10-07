@@ -14,6 +14,7 @@
 	import Card from '$lib/cards/Card.svelte';
 	import DockHand from '$lib/DockHand.svelte';
 	import CardBanner from '$lib/CardBanner.svelte';
+	import CardBack from '$lib/cards/CardBack.svelte';
 	import StatBubbles from './StatBubbles.svelte';
 	import { heroCards, heroName } from '$lib/cards/deck';
 	import { portraitCss, heroLogo } from '$lib/heroes';
@@ -40,6 +41,7 @@
 	export let docked = false;
 	export let hand: number[] = [];
 	export let armed: number | null = null;
+	export let ringColor = ''; // the card picked in your hand (to commit, defend or discard): the ring's middle takes its colour
 	export let rowMax = 1400; // the widest the kept-up banner row may be (design px; it wraps to fit)
 	export let pingArmed = false;
 	export let discOpen = false;
@@ -70,8 +72,9 @@
 	$: labelFs = Math.min(16, 70 / (Math.max(...words.map((w) => w.length)) * 0.62));
 	$: subLong = (order.sub ?? '').length > 16;
 	// the kept-up banner row: as many a line as fit at a readable width (220+), centred, wrapping upward
-	$: perRow = Math.max(1, Math.min(hand.length, Math.floor((rowMax + 8) / 228)));
-	$: cellW = Math.min(270, (rowMax - (perRow - 1) * 8) / perRow);
+	$: fit = Math.max(1, Math.min(hand.length, Math.floor((rowMax + 8) / 228))); // the most a line can hold
+	$: perRow = Math.ceil(hand.length / Math.ceil(hand.length / fit)); // …spread evenly: 5 → 3 + 2, 4 → 2 + 2, 3 → 3
+	$: cellW = Math.min(270, (rowMax - (fit - 1) * 8) / fit);
 	// the dock slides (transform only); the rack is clipped only while it moves, so its pop-ups can rise above the dash
 	let sliding = false;
 	let slideT: ReturnType<typeof setTimeout> | null = null;
@@ -130,7 +133,7 @@
 				{/if}
 			</span>
 			<button class="dw deckw" class:lvup={levelUp} on:click={onDeck} title="Your deck">
-				<span class="dwc stack"><i></i><i></i><span class="top"><img src={heroLogo(cs.hero)} alt="" /></span><em>{deckCount}</em></span>
+				<span class="dwc stack"><i><CardBack hero={cs.hero} blank /></i><i><CardBack hero={cs.hero} blank /></i><span class="top"><CardBack hero={cs.hero} /></span><em>{deckCount}</em></span>
 				<small>Deck</small>
 			</button>
 			<button class="dw ultw" class:on={cs.ultimate} class:ready={ultReady} on:click={onUlt} title={cs.ultimate ? 'Your ultimate' : ultReady ? 'Unlock your ultimate' : 'Ultimate — unlocks at level 8'} disabled={ultIdx < 0}>
@@ -167,7 +170,7 @@
 		</div>
 
 		<div class="dgo">
-			<button class="cap gob {order.kind}" class:pulse={order.pulse} disabled={!order.run} on:click={() => order.run?.()}>
+			<button class="cap gob {order.kind}" class:tinted={!!ringColor} style={ringColor ? `--rc:${ringColor}` : ''} class:pulse={order.pulse} disabled={!order.run} on:click={() => order.run?.()}>
 				<span class="gin">
 					<i></i>
 					<b style="font-size:{labelFs.toFixed(1)}px">{#each words as w, i (i)}{#if i}<br />{/if}{w}{/each}</b>
@@ -227,10 +230,8 @@
 	.discpop { position: absolute; bottom: calc(100% + 14px); left: 50%; transform: translateX(-50%); z-index: 5; display: flex; gap: 6px; padding: 8px; border-radius: 12px; background: rgba(8, 22, 38, 0.97); border: 1px solid var(--line); box-shadow: 0 10px 24px rgba(0, 0, 0, 0.6); }
 	.discpop button { width: 78px; padding: 0; border: 0; background: none; cursor: pointer; }
 	.deckw, .ultw { cursor: pointer; }
-	.stack i, .stack .top { position: absolute; inset: 0; border-radius: 5px; background: linear-gradient(160deg, #1d3c5e, #0b1b2e); box-shadow: 0 0 0 1px var(--line), 0 2px 5px rgba(0, 0, 0, 0.5); }
+	.stack i, .stack .top { position: absolute; inset: 0; border-radius: 5px; overflow: hidden; box-shadow: 0 0 0 1px rgba(120, 95, 55, 0.5), 0 2px 5px rgba(0, 0, 0, 0.5); }
 	.stack i:nth-child(1) { transform: translate(3px, -3px); opacity: 0.6; } .stack i:nth-child(2) { transform: translate(1.5px, -1.5px); opacity: 0.8; }
-	.stack .top { display: grid; place-items: center; }
-	.stack .top img { width: 74%; opacity: 0.9; }
 	.deckw.lvup .stack .top { box-shadow: 0 0 0 2px var(--brass-hi), 0 0 14px 3px rgba(244, 223, 168, 0.55); }
 	.ultw .dwc { border: 1px solid rgba(164, 107, 232, 0.35); background: rgba(90, 50, 150, 0.18); }
 	.ultw .dwc b { font-weight: 400; font-size: 14px; color: rgba(196, 160, 255, 0.5); }
@@ -243,6 +244,8 @@
 	.tslot { position: relative; width: 28px; height: 28px; }
 	.tslot :global(.radbtn b) { position: absolute; right: -4px; bottom: -4px; min-width: 14px; height: 14px; border-radius: 7px; display: grid; place-items: center; font-weight: 400; font-size: 9px; color: #f5f1e8; background: #0a1a2c; border: 1px solid var(--line); }
 	.tslot :global(.radbtn svg), .tslot :global(.tokbtn img) { width: 16px; height: 16px; }
+	.tslot :global(.tokbtn) { border: 1.5px solid var(--brass); background: radial-gradient(circle at 50% 35%, #3a5f86, #13304f 70%); box-shadow: 0 0 0 2px rgba(216, 179, 106, 0.18), 0 0 10px 1px rgba(244, 223, 168, 0.35); }
+	.tslot :global(.tokbtn img) { width: 19px; height: 19px; }
 	.tslot :global(.radbtn.on), .tslot :global(.tokbtn.on) { color: #1b1204; background: linear-gradient(180deg, var(--brass-hi), var(--brass)); }
 	.tslot :global(.radpop), .tslot :global(.tokdrawer) { bottom: calc(100% + 16px); top: auto; }
 	.tl svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
@@ -282,6 +285,8 @@
 	.gin small.long { font-size: 8px; }
 	.gob.go .gin, .gob.team .gin { background: radial-gradient(circle at 50% 40%, #3a5f86, #13304f 62%, #081626); color: #fff3c8; }
 	.gob.team .gin { background: radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--tc) 70%, #fff 10%), color-mix(in srgb, var(--tc) 55%, #000) 70%); color: #fff; }
+	.gob.tinted .gin { background: radial-gradient(circle at 50% 38%, color-mix(in srgb, var(--rc) 80%, #fff 12%), color-mix(in srgb, var(--rc) 62%, #000) 72%); color: #fff; }
+	.gob.tinted .gin small { color: rgba(255, 255, 255, 0.82); }
 	.gob.pulse::after { content: ''; position: absolute; inset: -10px; border-radius: 50%; box-shadow: 0 0 22px 7px rgba(244, 223, 168, 0.5); opacity: 0.35; animation: gopulse 1.6s ease-in-out infinite; pointer-events: none; }
 	@keyframes gopulse { 50% { opacity: 1; } }
 	.gob.quiet { filter: saturate(0.4) brightness(0.85); }

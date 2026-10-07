@@ -32,7 +32,10 @@
 	export let areas: Array<{ hex: string; r: number; color: string }> = [];
 	// single hexes to act on (spawn points, minions to remove, where a stray goes, tokens to clear): a spirit swirl
 	// round each, in its colour (the `.marks` layer: html spans turning on the GPU, like the minion rims)
-	export let marks: Array<{ hex: string; color: string }> = [];
+	// (the team picks the colours: Titans deep blue with light blue, Atlanteans deep red with pale yellow; `picked` = ticked)
+	export let marks: Array<{ hex: string; team?: string; picked?: boolean; color?: string }> = [];
+	/** the swirl itself (each player's own Effects → Wisps); off = the hex still glows, nothing turns */
+	export let wisps = true;
 	// something being placed from outside (minion spawn / shelf token), drawn as the ghost
 	export let placeGhost: (typeof pieces)[number] | null = null;
 	// the highlight colour for the hex under a held object (the viewer's chosen colour)
@@ -586,7 +589,7 @@
 		return { color: a.color, cells: [...inside].map((id) => centerOf(id)), outline: edges.join('') };
 	});
 	// the spirit swirl (hex radius 100): tapered spiral wisps, built once — three arms close in, two finer ones out
-	function wisps(n: number, r0: number, r1: number, sweep: number, w: number, at = 0) {
+	function wispPath(n: number, r0: number, r1: number, sweep: number, w: number, at = 0) {
 		const out: string[] = [];
 		for (let k = 0; k < n; k++) {
 			const L: string[] = [], R: string[] = [];
@@ -599,9 +602,14 @@
 		}
 		return out.join('');
 	}
-	const WISP_A = wisps(3, 48, 120, 210, 12);
-	const WISP_CORE = wisps(3, 52, 116, 200, 4.5, 4);
-	const WISP_B = wisps(3, 82, 130, 130, 5.5, 60);
+	// round the hex's edge, not over it: the ground and whatever stands there stay readable
+	const WISP_A = wispPath(3, 70, 124, 200, 10);
+	const WISP_CORE = wispPath(3, 74, 120, 190, 3.5, 4);
+	const WISP_B = wispPath(3, 92, 132, 120, 5, 60);
+	const MARK_HUE: Record<string, [string, string]> = { orange: ['#8e1b12', '#ffe9a3'], blue: ['#0f3a8c', '#a8d4ff'] };
+	const markVars = (m: (typeof marks)[number]) => { const [deep, hi] = MARK_HUE[m.team ?? ''] ?? [m.color || '#8e1b12', '#fff3c8']; return `--mc:${deep}; --mh:${hi};`; };
+	// immune heavies: the glint that crosses their shield (a rim effect: on with the rims)
+	$: shinePieces = pieces.filter((p) => p.immune && p.role && !p.attachTo);
 	const HEXPTS = [0, 1, 2, 3, 4, 5].map((i) => { const a = ((60 * i - 90) * Math.PI) / 180; return `${(96 * Math.cos(a)).toFixed(1)},${(96 * Math.sin(a)).toFixed(1)}`; }).join(' ');
 	const pieceColor = (t: string) => (t === 'orange' ? '#ea6a1e' : t === 'blue' ? '#2f79e6' : '#9aa4b2');
 </script>
@@ -681,10 +689,10 @@
 			{#each markSpots as m (m.hex)}
 				{@const c = centerOf(m.hex)}
 				{@const d = size * 2.6 * fit.s}
-				<span class="mark" data-mark={m.hex} style="--mc:{m.color}; left:{(c.x * fit.s + fit.ox - d / 2).toFixed(2)}px; top:{(c.y * fit.s + fit.oy - d / 2).toFixed(2)}px; width:{d.toFixed(2)}px; height:{d.toFixed(2)}px">
+				<span class="mark" class:picked={m.picked} data-mark={m.hex} style="{markVars(m)} left:{(c.x * fit.s + fit.ox - d / 2).toFixed(2)}px; top:{(c.y * fit.s + fit.oy - d / 2).toFixed(2)}px; width:{d.toFixed(2)}px; height:{d.toFixed(2)}px">
 					<span class="mk base"><svg viewBox="-130 -130 260 260"><polygon points={HEXPTS} class="hx" /><polygon points={HEXPTS} class="hxe" /></svg></span>
-					<span class="mk spin"><svg viewBox="-130 -130 260 260"><path d={WISP_A} class="wa" /><path d={WISP_CORE} class="wc" /><circle r="8" cx="0" cy="-118" class="mote" transform="rotate(120)" /><circle r="7" cx="0" cy="-118" class="mote" transform="rotate(240)" /><circle r="7" cx="0" cy="-118" class="mote" transform="rotate(0)" /></svg></span>
-					<span class="mk spin rev"><svg viewBox="-130 -130 260 260"><path d={WISP_B} class="wb" /></svg></span>
+					{#if wisps}<span class="mk spin"><svg viewBox="-130 -130 260 260"><path d={WISP_A} class="wa" /><path d={WISP_CORE} class="wc" /><circle r="8" cx="0" cy="-118" class="mote" transform="rotate(120)" /><circle r="7" cx="0" cy="-118" class="mote" transform="rotate(240)" /><circle r="7" cx="0" cy="-118" class="mote" transform="rotate(0)" /></svg></span>
+					<span class="mk spin rev"><svg viewBox="-130 -130 260 260"><path d={WISP_B} class="wb" /></svg></span>{/if}
 				</span>
 			{/each}
 		</div>
@@ -791,6 +799,20 @@
 			{/if}
 		</g>
 	</svg>
+	{#if fit && viewM && rims && effects && shinePieces.length}
+		<div class="shines" style:transform={landTf} aria-hidden="true">
+			{#each shinePieces as p (p.id)}
+				{@const base = centerOf(p.hex)}
+				{@const off = pieceOffset[p.id] ?? { x: 0, y: 0 }}
+				{@const k = fit.s}
+				<!-- a box round the piece, turned back like the piece itself (kept upright on screen); in it the shield's box
+				     (see the immune <g> in pieceBody: 76 × 89 of its 150-per-hex units, up and right of the centre) -->
+				<span class="shbox" style="left:{((base.x + off.x - size) * k + fit.ox).toFixed(2)}px; top:{((base.y + off.y - size) * k + fit.oy).toFixed(2)}px; width:{(2 * size * k).toFixed(2)}px; height:{(2 * size * k).toFixed(2)}px; transform:rotate({-rotEff}deg)">
+					<span class="shine" style="left:{(1.247 * size * k).toFixed(2)}px; top:{(0.187 * size * k).toFixed(2)}px; width:{(size * 0.507 * k).toFixed(2)}px; height:{(size * 0.593 * k).toFixed(2)}px"><i></i></span>
+				</span>
+			{/each}
+		</div>
+	{/if}
 	{#if hoverName}<div class="pname" style="left:{hoverName.x}px; top:{hoverName.y}px; color:{hoverName.color}">{hoverName.text}</div>{/if}
 </div>
 
@@ -841,13 +863,22 @@
 	.mark { position: absolute; }
 	.mk { position: absolute; inset: 0; }
 	.mk svg { position: absolute; inset: -100%; width: 300%; height: 300%; scale: 0.33333; overflow: visible; }
-	.mk.base { background: radial-gradient(closest-side, color-mix(in srgb, var(--mc) 45%, transparent) 55%, transparent); }
-	.mk .hx { fill: var(--mc); fill-opacity: 0.38; }
-	.mk .hxe { fill: none; stroke: color-mix(in srgb, var(--mc) 70%, #fff); stroke-width: 7; stroke-linejoin: round; filter: drop-shadow(0 0 8px var(--mc)); }
-	.mk .wa { fill: var(--mc); opacity: 0.9; filter: drop-shadow(0 0 7px var(--mc)); }
-	.mk .wc { fill: color-mix(in srgb, var(--mc) 25%, #fff); }
-	.mk .wb { fill: color-mix(in srgb, var(--mc) 45%, #fff); opacity: 0.8; filter: drop-shadow(0 0 4px var(--mc)); }
-	.mk .mote { fill: #fff; filter: drop-shadow(0 0 4px var(--mc)); }
+	.mk .hx { fill: var(--mh); fill-opacity: 0.16; }
+	.mk .hxe { fill: none; stroke: var(--mh); stroke-width: 5; stroke-linejoin: round; filter: drop-shadow(0 0 3px var(--mc)) drop-shadow(0 0 7px var(--mc)); }
+	.mark.picked .hx { fill-opacity: 0.38; }
+	.mark.picked .hxe { stroke: #fff; stroke-width: 8; }
+	.mk .wa { fill: var(--mc); opacity: 0.92; filter: drop-shadow(0 0 5px var(--mh)); }
+	.mk .wc { fill: var(--mh); }
+	.mk .wb { fill: var(--mh); opacity: 0.7; filter: drop-shadow(0 0 4px var(--mc)); }
+	.mk .mote { fill: var(--mh); filter: drop-shadow(0 0 4px #fff); }
+	/* the shine on an immune heavy's shield: a glint sweeps across it now and then, clipped to the shield's outline */
+	.shines { position: absolute; inset: 0; transform-origin: 0 0; pointer-events: none; }
+	.shbox { position: absolute; }
+	.shine { position: absolute; overflow: hidden; clip-path: polygon(50% 0, 100% 13.5%, 100% 45%, 96% 63%, 83% 83%, 50% 100%, 17% 83%, 4% 63%, 0 45%, 0 13.5%); }
+	.shine i { position: absolute; top: -20%; bottom: -20%; left: 0; width: 45%; background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.85) 50%, transparent); transform: translateX(-120%) skewX(-12deg);
+		animation: shieldglint 3.4s ease-in-out infinite; }
+	@keyframes shieldglint { 0%, 55% { transform: translateX(-120%) skewX(-12deg); } 85%, 100% { transform: translateX(260%) skewX(-12deg); } }
+	@media (prefers-reduced-motion: reduce) { .shine i { animation: none; opacity: 0; } }
 	.mk.base { animation: markpulse 1.8s ease-in-out infinite; }
 	.mk.spin { animation: rimturn 4.5s linear infinite; }
 	.mk.spin.rev { animation-duration: 7s; animation-direction: reverse; }

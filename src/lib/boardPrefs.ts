@@ -6,8 +6,9 @@ import { writable } from 'svelte/store'
 
 // hud: the in-game screen — the 2.0 HUD (top bar, side boards, Chronicle, dash) or the classic one; compact: the
 // 2.0 side boards shrink to nameplates; beam: the spark and pulses on the top bar's minion beam
-export type BoardPrefs = { rims: boolean; zone: boolean; sea: boolean; look: 'island' | 'classic'; hud: '2.0' | 'classic'; compact: boolean; beam: boolean }
-export const DEFAULT_PREFS: BoardPrefs = { rims: true, zone: true, sea: true, look: 'island', hud: '2.0', compact: false, beam: true }
+// wisps: the spirit swirl on hexes to act on (spawn points, minions to remove, …); off = a still glowing hex
+export type BoardPrefs = { rims: boolean; zone: boolean; sea: boolean; look: 'island' | 'classic'; hud: '2.0' | 'classic'; compact: boolean; beam: boolean; wisps: boolean }
+export const DEFAULT_PREFS: BoardPrefs = { rims: true, zone: true, sea: true, look: 'island', hud: '2.0', compact: false, beam: true, wisps: true }
 const VERSION = 2
 const KEY = 'goa2-board-prefs'
 
@@ -22,7 +23,8 @@ export function readPrefs(raw: string | null): BoardPrefs {
 			look: p.look === 'classic' ? 'classic' : 'island',
 			hud: p.hud === 'classic' ? 'classic' : '2.0',
 			compact: p.compact === true,
-			beam: fx.beam !== false
+			beam: fx.beam !== false,
+			wisps: fx.wisps !== false
 		}
 	} catch {
 		return { ...DEFAULT_PREFS }

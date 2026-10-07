@@ -643,7 +643,13 @@
 		.sort((a, b) => b.ini - a.ini || (pTeam(a.p) === $ms.tieBreaker ? -1 : 1) - (pTeam(b.p) === $ms.tieBreaker ? -1 : 1))
 		.map((x, k, all): OrderEntry => ({ pid: x.p.id, hero: x.cs.hero, heroName: heroName(x.cs.hero), player: x.p.name, team: pTeam(x.p), idx: cards[x.p.id].pending!, ini: x.ini,
 			tied: k > 0 && all[k - 1].ini === x.ini, portrait: portraitCss(x.cs.hero), color: colorHex(x.p.color) }));
-	$: h2dots = seatedWithCards.map((p) => ({ team: pTeam(p), ok: isReady(cards[p.id]) }));
+	// the planning dots in each player's colour: the enemy on the left, your team on the right (you last)
+	$: h2dots = [...seatedWithCards.filter((p) => pTeam(p) !== viewTeam), ...seatedWithCards.filter((p) => pTeam(p) === viewTeam && p.id !== clientId), ...seatedWithCards.filter((p) => p.id === clientId)]
+		.map((p) => ({ team: pTeam(p), color: colorHex(p.color), ok: isReady(cards[p.id]) }));
+	// the card picked in your hand (armed to commit, or open to defend / discard): the action ring takes its colour
+	const CARD_HUE: Record<string, string> = { RED: '#b8322f', BLUE: '#2a64c4', GREEN: '#2b8a43', GOLD: '#c9982f', SILVER: '#8d99a8' };
+	$: ringCard = armed ?? (selected != null && previewSrc === 'hand' && mine?.hand.includes(selected) ? selected : null);
+	$: ringColor = mine && ringCard != null ? CARD_HUE[heroCards(mine.hero)[ringCard]?.color ?? ''] ?? '' : '';
 	const itemBonus = (pid: string, act: string) => { const d = cards[pid] ? statDeltas(cards[pid]) : {}; return (act === 'attack' ? d.atk : act === 'defense' ? d.def : act === 'movement' ? d.move : 0) ?? 0; };
 	// arm, then commit: a click on a hand card arms it, the action ring commits it; a click on the armed card reads it
 	let armed: number | null = null;
@@ -1372,7 +1378,7 @@
 		<div class="h2dash">
 			<HudDash cs={mine} name={myName} color={colorHex(myColor)} team={myTeam === 'blue' ? 'blue' : 'orange'} {turnIdx} {revealed} ini={myInit} marks={statusMap[clientId] ?? EMPTY_STATUS} {markArt}
 				ultIdx={myUlt} {ultReady} deckCount={deckCards(mine).length} levelUp={iMustLevel} order={order2} fxAt={(t) => !!fxFor(clientId, slotIdx(mine, t))}
-				autoHide={autoRetract} spread={spreadHand} docked={dockHand} hand={handOrdered} rowMax={h2rowMax} {armed} {pingArmed} discOpen={discOpen === 'dash'} radius={radiusCtl} tokens={tokenCtl}
+				autoHide={autoRetract} spread={spreadHand} docked={dockHand} hand={handOrdered} rowMax={h2rowMax} {ringColor} {armed} {pingArmed} discOpen={discOpen === 'dash'} radius={radiusCtl} tokens={tokenCtl}
 				onMe={() => (overlayId = clientId)} onCoins={changeCoins} onSlot={(e, t) => peekSlot(e, mine, t)}
 				onDiscard={() => (mine.discard.length === 1 ? openDiscard(mine.hero, mine.discard[0], true) : discTap('dash'))} onDiscPick={(i) => openDiscard(mine.hero, i, true)}
 				onDeck={() => (deckOpen = true)} {onUlt} onPing={onPing} onAutoHide={toggleRetract} onSpread={toggleSpread} onDock={toggleDock} onPick={(i) => (canCommit && armed !== i ? (armed = i) : preview(i))} />
@@ -1594,7 +1600,7 @@
 <style>
 	/* ── the 2.0 HUD: one layer in design px (1440 × 900), zoomed as a whole; only the parts take clicks ── */
 	.h2helm { position: absolute; inset: 0; z-index: 7; zoom: var(--uis, 1); pointer-events: none; }
-	.h2order { position: absolute; top: 108px; left: 0; right: 0; }
+	.h2order { position: absolute; top: 100px; left: 0; right: 0; }
 	.h2col { position: absolute; top: 194px; width: 344px; display: flex; flex-direction: column; gap: 24px; }
 	.h2col.tight { gap: 10px; }
 	.h2col.l { left: 20px; } .h2col.r { right: 20px; }

@@ -12,7 +12,7 @@
 
 	export let planning = true;
 	export let countdown = '';
-	export let dots: { team: string; ok: boolean }[] = [];
+	export let dots: { team: string; color?: string; ok: boolean }[] = [];
 	export let order: OrderEntry[] = [];
 	export let bonus: (pid: string, act: string) => number = () => 0;
 	export let tieArt = '';
@@ -44,7 +44,7 @@
 	{#if planning}
 		<div class="status">
 			{#if countdown}<b>Revealing</b><span class="cd">{countdown}</span>
-			{:else}<b>Planning</b><span class="sdots">{#each dots as d, i (i)}<i class="t-{d.team}" class:ok={d.ok}></i>{/each}</span><em>{ready} of {dots.length} ready</em>{/if}
+			{:else}<b>Planning</b><span class="sdots">{#each dots as d, i (i)}<i class="t-{d.team}" class:ok={d.ok} style={d.color ? `--tc:${d.color}` : ''}></i>{/each}</span><em>{ready} of {dots.length} ready</em>{/if}
 		</div>
 	{:else}
 		{#each order as e, k (e.pid)}
@@ -77,6 +77,7 @@
 	.cd { min-width: 28px; text-align: center; font-size: 22px; color: #fff; }
 	.sdots { display: flex; gap: 6px; }
 	.sdots i { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid var(--tc); box-sizing: border-box; opacity: 0.6; }
+	.sdots i:nth-child(n) { box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45); }
 	.sdots i.ok { background: var(--tc); opacity: 1; }
 	.t-orange, .is-orange { --tc: #ef7d22; --th: #ffb878; } .t-blue, .is-blue { --tc: #2f7fe6; --th: #9ccbff; }
 	.ban { position: relative; display: flex; align-items: center; gap: 12px; height: 60px; width: 240px; padding: 0 10px 0 0; border-radius: 10px; box-sizing: border-box; font: inherit; color: inherit; text-align: left; cursor: pointer; pointer-events: auto;

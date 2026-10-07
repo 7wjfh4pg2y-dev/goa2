@@ -24,6 +24,7 @@
 	export let starts: Record<Team, number> = { orange: 0, blue: 0 };
 	export let won: Team | null = null;
 	export let fx = false;
+	const SPARKS = [0, 1, 2, 3, 4, 5, 6]; // the welding sparks at the clash (they spit upward and sideways — never into the Planning bar)
 	export let lifeArt: (t: Team, side: 'front' | 'back') => string;
 	export let tieArt: (t: Team) => string;
 	export let onLife: (t: Team, i: number) => void = () => {};
@@ -125,7 +126,7 @@
 		{#each marks as m, i (i)}<rect x={m.x - 4.5} y={m.y - 4.5} width="9" height="9" transform="rotate(45 {m.x} {m.y})" class="bmark" />{/each}
 		<circle cx={BX0} cy={BY} r="5" fill={cA} class="src" /><circle cx={BX1} cy={BY} r="5" fill={cB} class="src" />
 	</svg>
-	{#if fx && BL}<span class="clash" style="left:{clash.x}px; top:{clash.y}px"><i class="fl"></i><i class="sp a"></i><i class="sp b"></i><i class="sp c"></i></span>{/if}
+	{#if fx && BL}<span class="clash" style="left:{clash.x}px; top:{clash.y}px"><i class="fl"></i>{#each SPARKS as k (k)}<i class="sp" style="--a:{196 + ((k * 61) % 150)}deg; --d:{(k * 0.13) % 0.6}s; --t:{0.42 + (k % 3) * 0.09}s; --l:{9 + (k % 4) * 3}px"></i>{/each}</span>{/if}
 	<button class="tiecoin" class:flip={tieFlip} style="left:{CX}px; top:{CY}px" on:click={onTie} title="Tie-breaker — the {TEAMNAME[tieBreaker]} win ties (click to flip)"><img src={tieArt(tieBreaker)} alt="Tie-breaker" /></button>
 </div>
 
@@ -169,10 +170,11 @@
 	@keyframes flowR { to { stroke-dashoffset: 52; } }
 	.clash { position: absolute; z-index: 3; width: 0; height: 0; pointer-events: none; }
 	.clash i { position: absolute; left: 0; top: 0; border-radius: 50%; }
-	.fl { width: 44px; height: 44px; margin: -22px 0 0 -22px; background: radial-gradient(circle, #fff 0 14%, rgba(255, 240, 214, 0.95) 24%, rgba(200, 160, 255, 0.5) 46%, transparent 70%); animation: clash 0.9s ease-in-out infinite alternate; }
-	.sp { width: 6px; height: 6px; margin: -3px 0 0 -3px; background: #fff; box-shadow: 0 0 6px 2px rgba(255, 220, 170, 0.8); opacity: 0; animation: spark 1.1s ease-out infinite; }
-	.sp.a { --dx: -20px; --dy: -14px; } .sp.b { --dx: 22px; --dy: -10px; animation-delay: 0.35s; } .sp.c { --dx: 3px; --dy: 20px; animation-delay: 0.7s; }
-	@keyframes clash { from { transform: scale(0.8); opacity: 0.8; } to { transform: scale(1.15); opacity: 1; } }
-	@keyframes spark { 0% { transform: translate(0, 0); opacity: 1; } 100% { transform: translate(var(--dx), var(--dy)); opacity: 0; } }
+	/* a welding spark: a small white-hot point that flickers, and short bright streaks spitting out of it */
+	.fl { width: 16px; height: 16px; margin: -8px 0 0 -8px; background: radial-gradient(circle, #fff 0 22%, #fff4c8 34%, rgba(255, 186, 90, 0.75) 52%, transparent 72%); animation: weld 0.5s steps(5) infinite; }
+	.sp { width: var(--l); height: 1.6px; margin: -0.8px 0 0 0; border-radius: 1px; background: linear-gradient(90deg, transparent, #ffd27a 40%, #fff); transform-origin: 0 50%; opacity: 0;
+		animation: spark var(--t) ease-out var(--d) infinite; }
+	@keyframes weld { 0% { opacity: 1; transform: scale(1); } 20% { opacity: 0.7; transform: scale(0.8); } 40% { opacity: 1; transform: scale(1.15); } 60% { opacity: 0.85; transform: scale(0.9); } 80% { opacity: 1; transform: scale(1.05); } 100% { opacity: 0.9; transform: scale(1); } }
+	@keyframes spark { 0% { transform: rotate(var(--a)) translateX(2px) scaleX(0.4); opacity: 1; } 70% { opacity: 1; } 100% { transform: rotate(var(--a)) translateX(16px) scaleX(1); opacity: 0; } }
 	@media (prefers-reduced-motion: reduce) { .fl, .sp, .beam .pulse { animation: none; } }
 </style>

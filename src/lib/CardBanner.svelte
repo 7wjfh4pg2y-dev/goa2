@@ -58,7 +58,8 @@
 <style>
 	/* sizes follow the banner's height (--bh) so it scales as a whole */
 	.bn { --bh: 40px; --mw: calc(var(--bh) * 1.4); position: relative; display: flex; width: 100%; height: var(--bh); flex: none; padding: 0; border: none; border-radius: 5px; overflow: hidden; cursor: pointer;
-		font: inherit; text-align: left; color: inherit; background: #0d121c; box-shadow: inset 0 0 0 1px rgba(255,255,255,.07); }
+		font: inherit; text-align: left; color: inherit; background: #0d121c; box-shadow: inset 0 0 0 1px rgba(255,255,255,.07);
+		outline: 1.5px solid color-mix(in srgb, var(--c) 60%, #fff); outline-offset: -1.5px; } /* a lighter edge of its own colour */
 	.bn:hover { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 70%, transparent); }
 	.bn.dim { opacity: .42; filter: grayscale(.5); }
 	.bn.sel { opacity: 1; filter: none; box-shadow: 0 0 0 2px #fff, 0 0 12px var(--c); }
