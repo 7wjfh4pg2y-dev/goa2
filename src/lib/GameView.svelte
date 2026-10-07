@@ -9,11 +9,15 @@
 	import VictorySplash from '$lib/VictorySplash.svelte';
 	import ControlWheel, { type WheelItem } from '$lib/ControlWheel.svelte';
 	import { boardPrefs } from '$lib/boardPrefs';
+	import HudTop from '$lib/hud2/HudTop.svelte';
+	import AttackSplash from '$lib/hud2/AttackSplash.svelte';
+	import GameLobby from '$lib/hud2/GameLobby.svelte';
+	import { LANE } from '$lib/battle';
 	import { heroById, heroLogo } from '$lib/heroes';
 	import { teamName, teamAdj, aMinion, placeName } from '$lib/teams';
 	import { createRecorder } from '$lib/recorder';
 	import { statsFromJournal } from '$lib/gamestats'; // battle report
-	import { zoneName } from '$lib/zones';
+	import { zoneName, zoneTable } from '$lib/zones';
 	import { effectLabel } from '$lib/effects';
 	import { battleZone, canBattleRemove, pushLane, laneNotes, heavyImmune, returnPatch, minionCount } from '$lib/battle';
 	import lifeSplit from '$lib/images/life_split.png';
@@ -159,6 +163,37 @@
 	// the board's look and its effects are each player's OWN choice (boardPrefs: this browser only, all effects
 	// off by default) — switching one changes nobody else's screen
 	$: boardLook = $boardPrefs.look;
+	// the 2.0 HUD (each player's own choice; phones keep their own layout)
+	$: hud2 = !mobile && $boardPrefs.hud === '2.0';
+	let lobbyOpen = false;
+	$: zoneNow = battleZone($ms);
+	// how many minions each team's wave started with in the battle zone (its spawn points there)
+	$: waveStarts = (() => {
+		const cells = $ms.map?.cells ?? {}, zt = zoneTable($ms.map);
+		const n = { orange: 0, blue: 0 };
+		for (const h in cells) if (zt[h] === zoneNow) { if (cells[h] === 'spawnOrange') n.orange++; else if (cells[h] === 'spawnBlue') n.blue++; }
+		return n;
+	})();
+	$: beamWon = $ms.wonBy && /throne|push/i.test($ms.wonBy.reason ?? '') ? $ms.wonBy.team : null;
+	$: designW = gvw / lay.s;
+	// the board's resting view leaves room for the bar, the columns and the dash (px)
+	$: boardInset = hud2 ? { t: 172 * lay.s, b: 112 * lay.s, l: 372 * lay.s, r: 372 * lay.s } : null;
+	// a piece's pills ring its token: [immune] then the actions, clockwise from 12 o'clock
+	const CLOCK = [0, 90, 180, 270, 45, 135, 225, 315];
+	type Pill = { label: string; run?: () => void; kind?: 'go' | 'bad' | 'imm'; coin?: number; off?: boolean; title?: string };
+	$: pills = !hud2 || !selPiece ? [] : ([
+		selImmune ? { label: 'Immune', kind: 'imm', title: 'Heavy minions can\'t be moved, defeated or removed while another minion of their team is in the battle zone' } : null,
+		canFlip ? { label: selPiece.faceDown ? 'Flip — reveal' : 'Flip face down', run: flipMine } : null,
+		canDefeatSel && selPiece.kind === 'hero' ? { label: attacks[selPiece.id] ? 'Under attack…' : 'Attack', kind: 'go', off: !!attacks[selPiece.id], run: () => attackSel('attack') } : null,
+		canDefeatSel && selPiece.kind === 'hero' ? { label: 'Defeat', kind: 'bad', coin: heroDefeatSummary($ms, clientId, selPiece.id).coins, run: () => attackSel('defeat'), title: 'Not an attack (e.g. a discard-or-die effect): defeat them outright — same rewards' } : null,
+		canDefeatSel && selPiece.kind !== 'hero' && (!selImmune || iAmHost) ? { label: 'Defeat', kind: 'bad', coin: minionCoins(selPiece.role), run: defeatSel } : null,
+		ownHeroSel && ownAttack ? { label: `Clear${clearCount ? ` ${clearCount}` : ''}`, off: !clearCount, run: startClear } : null,
+		ownHeroSel ? { label: 'Defeated', kind: 'bad', run: selfDefeatAsk, title: 'You were defeated (not by an Attack): choose who gets the reward' } : null,
+		ownHeroSel ? { label: 'Remove', kind: 'bad', run: selfRemoveAsk, title: 'A card effect takes your hero off the board — back with your next card' } : null,
+		canBattleSel ? { label: 'Remove for the battle', kind: 'go', run: battleTakeSel } : null,
+		canRemoveSel && selPiece.kind !== 'hero' && (!selImmune || iAmHost) ? { label: 'Remove', kind: 'bad', run: openRemove } : null
+	].filter(Boolean) as Pill[]);
+	const touchOnly = typeof matchMedia !== 'undefined' && matchMedia('(hover: none)').matches;
 	$: glowZone = boardLook === 'island' && $boardPrefs.zone && !$ms.wonBy ? battleZone($ms) : null;
 
 	// ── the control centre: one button → a wheel over the board (view controls inside, the board's switches outside)
@@ -175,8 +210,25 @@
 		zone: '<path d="M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9z" stroke-dasharray="3 2.4" /><circle cx="12" cy="12" r="2.4" />',
 		rims: '<circle cx="12" cy="12" r="8" /><path d="M12 4v2M20 12h-2M12 20v-2M4 12h2M17.7 6.3l-1.4 1.4M17.7 17.7l-1.4-1.4M6.3 17.7l1.4-1.4M6.3 6.3l1.4 1.4" />',
 		waves: '<path d="M2 9c2.5-2.5 4.5-2.5 7 0s4.5 2.5 7 0 4.5-2.5 6 0" /><path d="M2 15c2.5-2.5 4.5-2.5 7 0s4.5 2.5 7 0 4.5-2.5 6 0" />',
-		fx: '<path d="M2 15c2.5-2.5 4.5-2.5 7 0s4.5 2.5 7 0 4.5-2.5 6 0" /><path d="M12 3v3M6.5 5.5l1.6 2M17.5 5.5l-1.6 2" />'
+		fx: '<path d="M2 15c2.5-2.5 4.5-2.5 7 0s4.5 2.5 7 0 4.5-2.5 6 0" /><path d="M12 3v3M6.5 5.5l1.6 2M17.5 5.5l-1.6 2" />',
+		beam: '<path d="M2 14h7M15 14h7" /><circle cx="12" cy="14" r="2.6" /><path d="M12 8.5v-3M8.6 9.8 7 8M15.4 9.8 17 8" />',
+		hud: '<rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 9h18M8 9v11M16 9v11" />',
+		spawn: '<path d="M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9z" /><path d="M12 8v8M8 12h8" />',
+		push: '<path d="M4 12h12M12 7l5 5-5 5" /><path d="M20 5v14" />',
+		ok: '<path d="M5 12.5l4.5 4.5L19 7.5" />',
+		no: '<path d="M6 6l12 12M18 6L6 18" />'
 	};
+	// the host's wave push from the wheel: pick a side, then a green Confirm (or a red Cancel) — no accidental pushes
+	let pushAsk: Team | null = null;
+	$: if (!wheelOpen) pushAsk = null;
+	function wheelPush(t: Team) {
+		pushAsk = null;
+		const patch = pushLane($ms, t);
+		session.act(laneNotes($ms, patch).join(' · ') + ' (by hand)', patch);
+		wheelOpen = false;
+	}
+	const minionSprites = import.meta.glob('./images/minions/*.png', { eager: true, import: 'default' }) as Record<string, string>;
+	const minionIcon = (t: Team, r: string) => `<image href="${minionSprites[`./images/minions/${t}_${r}.png`] ?? ''}" x="-1" y="-1" width="26" height="26" />`;
 	const wheelHub: WheelItem = { id: 'recenter', label: 'Recenter', icon: ICON.recenter, act: () => board?.reset() };
 	$: onIsland = boardLook === 'island';
 	$: wheelRing = [
@@ -187,13 +239,21 @@
 			{ id: 'sea', label: 'Waves', icon: ICON.waves, on: onIsland && $boardPrefs.sea, disabled: !onIsland,
 				title: onIsland ? `Moving sea: ${$boardPrefs.sea ? 'on' : 'off'}` : 'The sea is drawn on the island only', act: () => boardPrefs.set({ sea: !$boardPrefs.sea }) },
 			{ id: 'look', label: onIsland ? 'Island' : 'Classic', icon: onIsland ? ICON.island : ICON.classic, on: onIsland,
-				title: `Map: ${onIsland ? 'the island' : 'classic tiles'} (only on your screen)`, act: () => boardPrefs.set({ look: onIsland ? 'classic' : 'island' }) }
+				title: `Map: ${onIsland ? 'the island' : 'classic tiles'} (only on your screen)`, act: () => boardPrefs.set({ look: onIsland ? 'classic' : 'island' }) },
+			...(hud2 ? [{ id: 'beam', label: 'Beam', icon: ICON.beam, on: $boardPrefs.beam, title: `The beam's spark and pulses: ${$boardPrefs.beam ? 'on' : 'off'}`, act: () => boardPrefs.set({ beam: !$boardPrefs.beam }) }] : [])
 		] },
 		{ id: 'rotr', label: 'Turn', icon: ICON.rotr, title: 'Turn clockwise (45°)', act: () => board?.rotateBy(45) },
 		{ id: 'zin', label: 'Zoom in', icon: ICON.zin, act: () => board?.zoomBtn(1.2) },
 		{ id: 'views', label: 'Views', icon: ICON.views, title: 'Saved views', act: () => {} },
 		{ id: 'zout', label: 'Zoom out', icon: ICON.zout, act: () => board?.zoomBtn(1 / 1.2) },
-		{ id: 'rotl', label: 'Turn', icon: ICON.rotl, title: 'Turn anticlockwise (45°)', act: () => board?.rotateBy(-45) }
+		{ id: 'rotl', label: 'Turn', icon: ICON.rotl, title: 'Turn anticlockwise (45°)', act: () => board?.rotateBy(-45) },
+		...(hud2 ? [{ id: 'hudsize', label: $boardPrefs.compact ? 'Compact' : 'Expanded', icon: ICON.hud, on: $boardPrefs.compact, title: 'Player boards: expanded or compact (only on your screen)', act: () => boardPrefs.set({ compact: !$boardPrefs.compact }) }] : []),
+		{ id: 'spawn', label: 'Spawn', icon: ICON.spawn, disabled: !iAmHost, title: iAmHost ? 'Spawn a minion — then tap a hex' : 'Spawn a minion (the host)', act: () => {},
+			sub: (['orange', 'blue'] as Team[]).flatMap((t) => MINION_ROLES.map((r) => ({ id: `sp-${t}-${r}`, label: `${t === 'orange' ? 'Atl.' : 'Titan'} ${r}`, icon: minionIcon(t, r), act: () => { armSpawn(t, r); wheelOpen = false; } }))) },
+		{ id: 'push', label: pushAsk ? `${pushAsk === 'blue' ? 'Titan' : 'Atl.'} push?` : 'Push', icon: ICON.push, disabled: !iAmHost || !!$ms.wonBy, title: iAmHost ? 'Push the wave (host override)' : 'Push the wave (the host)', act: () => {},
+			sub: pushAsk
+				? [{ id: 'push-ok', label: 'Confirm', icon: ICON.ok, tone: 'ok', act: () => pushAsk && wheelPush(pushAsk) }, { id: 'push-no', label: 'Cancel', icon: ICON.no, tone: 'bad', act: () => (pushAsk = null) }]
+				: [{ id: 'push-b', label: 'Titan push', icon: ICON.push, tone: 'blue', act: () => (pushAsk = 'blue') }, { id: 'push-o', label: 'Atlantean push', icon: ICON.push, tone: 'orange', act: () => (pushAsk = 'orange') }] }
 	] as WheelItem[];
 	// every lingering card effect in play (switched on from a played card)
 	$: activeFx = $ms.effects ?? [];
@@ -498,7 +558,7 @@
 	// only Min (the mine's owner) and the host may flip a mine
 	$: canFlip = !!selPiece?.token && MINES.has(selPiece.token) && (selPiece.owner === clientId || iAmHost);
 	// desktop: the toolbar floats just above the selected piece (not across the board at the top)
-	let tipPos: { x: number; y: number } | null = null;
+	let tipPos: { x: number; y: number; cy?: number; r?: number } | null = null;
 	let tipRaf = 0;
 	function trackTip() {
 		if (typeof window === 'undefined') return;
@@ -509,13 +569,13 @@
 			// only touch the toolbar when the piece actually moved (not 60 re-renders a second)
 			const x = p ? Math.round(p.x) : null, y = p ? Math.round(p.y - p.r - 8) : null;
 			if (x == null || y == null) { if (tipPos) tipPos = null; }
-			else if (!tipPos || tipPos.x !== x || tipPos.y !== y) tipPos = { x, y };
+			else if (!tipPos || tipPos.x !== x || tipPos.y !== y) tipPos = { x, y, cy: Math.round(p!.y), r: p!.r };
 			if (tipId) tipRaf = requestAnimationFrame(loop);
 		};
 		loop();
 	}
 	$: tipId = actId && confirmKind ? actId : selPieceId;
-	$: tipId, mobile, trackTip();
+	$: tipId, mobile, hud2, trackTip();
 	onDestroy(() => { if (typeof window !== 'undefined') cancelAnimationFrame(tipRaf); });
 	// hero / minion names read in their team colour (a lighter tint so they stay legible)
 	const teamText = (p: { kind?: string; role?: string; team: string } | null | undefined) =>
@@ -629,9 +689,9 @@
 	</div>
 {/snippet}
 
-<svelte:window on:keydown={(e) => { if (e.key !== 'Escape') return; if (wheelOpen) wheelOpen = false; else if (confirmLeave) confirmLeave = false; else { pendingSpawn = null; pendingToken = null; pingArmed = false; if (clearing) cancelClear(); } }} bind:innerWidth={gvw} bind:innerHeight={gvh} />
+<svelte:window on:keydown={(e) => { if (e.key !== 'Escape') return; if (wheelOpen) wheelOpen = false; else if (lobbyOpen) lobbyOpen = false; else if (confirmLeave) confirmLeave = false; else { pendingSpawn = null; pendingToken = null; pingArmed = false; if (clearing) cancelClear(); } }} bind:innerWidth={gvw} bind:innerHeight={gvh} />
 
-<div class="gamewrap" class:sea={boardLook === 'island'} class:mob={mobile} class:dashfull={!mobile && lay.underHud} style={mobile ? '' : layoutVars(lay)}>
+<div class="gamewrap" class:sea={boardLook === 'island'} class:mob={mobile} class:h2={hud2} class:dashfull={!mobile && !hud2 && lay.underHud} style={mobile ? '' : layoutVars(lay) + (hud2 ? `; --dh:${88 * lay.s}px` : '')}>
 	{#if $ms.wonBy}
 		<button class="placehint won" on:click={() => (victoryClosed = false)} title="Show the victory screen again">🏆 {teamName($ms.wonBy.team)} win — {$ms.wonBy.reason}</button>
 	{:else if clearing}
@@ -723,13 +783,15 @@
 	<div class="ocean"></div>
 	<!-- on a phone the board sits between the top bar + player strip and the dash -->
 	<div class="boardarea" class:mob={mobile}>
-	<BoardCanvas bind:this={board} map={$ms.map ?? {}} look={boardLook} {glowZone} activeZone={$ms.wonBy ? null : battleZone($ms)} effects={true} sea={$boardPrefs.sea} rims={$boardPrefs.rims} rotation={orientation} interactive={true} {placing} {placeGhost} holdColor={myHoldColor} onCancelPlace={cancelPlace} {areas} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} pings={boardPings} onPing={doPing} {pingArmed} />
+	<BoardCanvas bind:this={board} map={$ms.map ?? {}} inset={boardInset} look={boardLook} {glowZone} activeZone={$ms.wonBy ? null : battleZone($ms)} effects={true} sea={$boardPrefs.sea} rims={$boardPrefs.rims} rotation={orientation} interactive={true} {placing} {placeGhost} holdColor={myHoldColor} onCancelPlace={cancelPlace} {areas} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} pings={boardPings} onPing={doPing} {pingArmed} />
 	</div>
 
-	<CardLayer bind:this={cardLayer} {mobile} {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} onRespawn={placeMyHero} onEnter={placeMyHero} onArmToken={armToken} holdingToken={!!pendingToken} {pingArmed} onPing={pingButton} bind:previewId />
+	<CardLayer bind:this={cardLayer} {mobile} {hud2} compact={$boardPrefs.compact} {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} onRespawn={placeMyHero} onEnter={placeMyHero} onArmToken={armToken} holdingToken={!!pendingToken} {pingArmed} onPing={pingButton} bind:previewId />
 
 	<!-- selected minion/token: offer delete (heroes aren't deletable) -->
-	{#if confirmKind && actPiece}
+	{#if hud2}
+		<!-- (the 2.0 HUD rings the piece with pills: see the .h2top layer) -->
+	{:else if confirmKind && actPiece}
 		<div class="pietool confirm" class:anchored={!!tipPos} style={tipPos ? `left:${tipPos.x / lay.s}px; top:${tipPos.y / lay.s}px` : ''}>
 			{#if (confirmKind === 'attack' || confirmKind === 'defeat') && attackSum}
 				<span class="pietxt nc">{confirmKind === 'attack' ? 'Attack' : 'Defeat'} <b style:color={teamText(actPiece)}>{whoOf(actPiece.id)}</b>?</span>
@@ -769,6 +831,63 @@
 			{#if canBattleSel}<button class="piedefeat" on:click={battleTakeSel}>Remove for the battle</button>{/if}
 			{#if canRemoveSel && selPiece.kind !== 'hero' && (!selImmune || iAmHost)}<button class="piedel" on:click={openRemove}>Remove</button>{/if}
 		</div>
+	{/if}
+
+	{#if hud2}
+		<!-- ───────── the 2.0 HUD's top layer (design px, zoomed as one): ☰ · the top bar · the control wheel · the pills ───────── -->
+		<div class="h2top">
+			<button class="h2corner menu" on:click={() => (lobbyOpen = true)} title="Game lobby — the room, the players, your HUD, leave" aria-label="Game lobby">
+				<svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
+				<i class="cdot {$status}"></i>{#if iAmHost && seatRequests.length}<b class="h2badge">{seatRequests.length}</b>{/if}
+			</button>
+			<div class="h2bar">
+				<HudTop W={designW} round={$ms.round} turn={$ms.turn} lifeTok={$ms.lifeTok ?? { orange: [], blue: [] }} waveTok={$ms.waveTok ?? []} tieBreaker={$ms.tieBreaker} {flips} {tieFlip}
+					left={viewTeam === 'orange' ? 'blue' : 'orange'} zone={$ms.lane ?? 1} zones={LANE.length} counts={zoneCount} starts={waveStarts} won={beamWon} fx={$boardPrefs.beam}
+					{lifeArt} {tieArt} onLife={toggleLife} onWave={toggleWave} onTie={flipTie} />
+			</div>
+			<button class="h2corner ctl" on:click={() => (wheelOpen = true)} title="Control centre — view, effects, spawn, push" aria-label="Control centre">
+				<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" /><path d="M12 6.5l1.6 4 4 1.5-4 1.5-1.6 4-1.6-4-4-1.5 4-1.5z" /></svg>
+			</button>
+			<!-- the selected piece: its actions as pills round the token, clockwise from 12 o'clock; a confirm is one bar above it -->
+			{#if tipPos && tipPos.cy != null && tipPos.r != null}
+				{#if confirmKind && actPiece}
+					<div class="h2conf" style="left:{tipPos.x / lay.s}px; top:{(tipPos.cy - tipPos.r) / lay.s - 8}px">
+						{#if (confirmKind === 'attack' || confirmKind === 'defeat') && attackSum}
+							<span class="cn">{confirmKind === 'attack' ? 'Attack' : 'Defeat'} <b style:color={teamText(actPiece)}>{heroOf(actPiece.id)}</b></span>
+							<span class="gain" title="You get {attackSum.coins}"><i class="gc"></i>{attackSum.coins}</span>
+							{#if attackSum.assists.length}<span class="gain" title="Each teammate: {attackSum.assist}"><i class="gc"></i>{attackSum.assist} <em>assist</em></span>{/if}
+							<span class="gain loss" title="The {teamName(attackSum.team)} lose {attackSum.lives} Life"><img src={lifeArt((attackSum.team ?? 'orange') as Team, 'back')} alt="" />{attackSum.lives}</span>
+							{#if confirmKind === 'attack'}<button class="pp go" on:click={doAttack}>Attack</button>{:else}<button class="pp bad" on:click={doDefeatHero}>Defeat</button>{/if}
+						{:else if confirmKind === 'selfremove'}
+							<span class="cn">Take your hero off the board?</span>
+							<button class="pp bad" on:click={doSelfRemove}>Remove</button>
+						{:else}
+							<span class="cn">Remove <b style:color={teamText(actPiece)}>{cap(actPiece.role ?? '')} minion</b></span>
+							<button class="pp bad" on:click={doRemoveMinion}>Remove</button>
+						{/if}
+						<button class="pp x" on:click={closeConfirm} aria-label="Cancel">✕</button>
+					</div>
+				{:else if pills.length}
+					<div class="h2pills" style="left:{tipPos.x / lay.s}px; top:{tipPos.cy / lay.s}px; --r:{tipPos.r / lay.s + 6}px">
+						{#each pills as pl, k (pl.label + k)}
+							{@const a = CLOCK[k] ?? 0}
+							<span class="pslot" style="--x:{Math.sin((a * Math.PI) / 180).toFixed(3)}; --y:{(-Math.cos((a * Math.PI) / 180)).toFixed(3)}">
+								{#if pl.kind === 'imm'}<span class="pp imm" title={pl.title}>Immune</span>
+								{:else}<button class="pp {pl.kind ?? ''}" disabled={pl.off} on:click={() => pl.run?.()} title={pl.title}>{pl.label}{#if pl.coin != null}<i class="gc"></i>{pl.coin}{/if}</button>{/if}
+							</span>
+						{/each}
+						{#if touchOnly && selLabel}<span class="pname" style:color={teamText(selPiece)}>{selLabel}</span>{/if}
+					</div>
+				{/if}
+			{/if}
+		</div>
+		<AttackSplash attacks={$ms.attacks ?? {}} heroOf={(pid) => { const h = $ms.pieces?.[pid]?.hero ?? $ms.cards?.[pid]?.hero ?? $ms.defeated?.[pid]?.piece.hero ?? ''; return h ? { id: h, name: heroById(h)?.name ?? 'A hero' } : null; }}
+			nameOf={playerName} teamOf={(pid) => teamOf($ms, pid) as Team | null} myTeam={viewTeam} />
+		{#if lobbyOpen}
+			<GameLobby {room} conn={connLabel($status)} connClass={$status} seats={seatRows} watchers={spectators} requests={seatRequests} host={iAmHost} {clientId} {mySeat} myRequest={myRequestSeat}
+				colorOf={(id) => colorHex($players.find((p) => p.id === id)?.color ?? '')} hud={$boardPrefs.hud} onHud={(h) => boardPrefs.set({ hud: h })}
+				onKick={kickSeat} onSit={requestSeat} onResolve={resolveSeat} onLeave={() => { lobbyOpen = false; confirmLeave = true; }} onClose={() => (lobbyOpen = false)} />
+		{/if}
 	{/if}
 
 	{#if pickKiller}
@@ -884,6 +1003,10 @@
 					{:else}<span class="empty-note">None</span>{/if}
 				</div>
 
+				<div class="mpsec">
+					<div class="mplbl">Your HUD</div>
+					<div class="mpspecs"><button class="act sm" class:primary={$boardPrefs.hud === '2.0'} on:click={() => { boardPrefs.set({ hud: '2.0' }); manageOpen = false; }}>2.0</button><button class="act sm" class:primary={$boardPrefs.hud === 'classic'} on:click={() => boardPrefs.set({ hud: 'classic' })}>Classic</button></div>
+				</div>
 				{#if mySeat < 0}<p class="mphint">You're spectating. Request an open/away seat above — the host approves takeovers.</p>{/if}
 			</div>
 		</div>
@@ -975,7 +1098,7 @@
 				{/each}
 			</div>
 		{/if}
-	{:else}
+	{:else if !hud2}
 	<!-- game HUD: right-side panel -->
 	<div class="hud">
 		<div class="mapline">
@@ -1365,6 +1488,36 @@
 	.logempty { font-size: 0.72rem; color: #64748b; }
 
 	/* ═══════════ phone layout (≤760px wide) ═══════════ */
+	/* ── the 2.0 HUD's top layer: design px, zoomed as one; only its children take clicks ── */
+	.h2top { position: absolute; inset: 0; z-index: 9; zoom: var(--uis, 1); pointer-events: none; --brass: #d8b36a; --brass-hi: #f4dfa8; --line: rgba(216, 179, 106, 0.4); }
+	.h2bar { position: absolute; top: 24px; left: 50%; transform: translateX(-50%); }
+	.h2corner { position: absolute; top: 26px; width: 52px; height: 52px; border-radius: 14px; display: grid; place-items: center; padding: 0; cursor: pointer; pointer-events: auto; color: var(--brass-hi);
+		background: linear-gradient(180deg, rgba(16, 44, 72, 0.97), rgba(6, 21, 38, 0.97)); border: 1px solid var(--line); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45); box-sizing: border-box; }
+	.h2corner svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+	.h2corner.menu { left: 20px; } .h2corner.ctl { right: 20px; }
+	.h2corner .cdot { position: absolute; right: 7px; top: 7px; width: 8px; height: 8px; border-radius: 50%; background: #f59e0b; }
+	.h2corner .cdot.connected { background: #22c55e; } .h2corner .cdot.closed { background: #ef4444; }
+	.h2badge { position: absolute; left: -6px; top: -6px; min-width: 18px; height: 18px; border-radius: 9px; display: grid; place-items: center; font-weight: 400; font-size: 11px; color: #fff; background: #dc2626; }
+	.h2pills { position: absolute; z-index: 10; width: 0; height: 0; }
+	.pslot { position: absolute; left: calc(var(--x) * var(--r)); top: calc(var(--y) * var(--r)); transform: translate(calc(-50% + var(--x) * 50%), calc(-50% + var(--y) * 50%)); }
+	.pp { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 13px; border-radius: 999px; font: inherit; font-size: 14px; line-height: 1; white-space: nowrap; cursor: pointer; pointer-events: auto;
+		color: #f5f1e8; background: rgba(8, 22, 38, 0.95); border: 1px solid var(--line); box-shadow: 0 6px 14px rgba(0, 0, 0, 0.55); }
+	.pp:hover:not(:disabled) { background: rgba(26, 52, 80, 0.97); }
+	.pp:disabled { opacity: 0.5; cursor: default; }
+	.pp.go { color: #1b1204; border-color: #8a6a2c; background: linear-gradient(180deg, var(--brass-hi), var(--brass)); }
+	.pp.bad { color: #ffc9c2; border-color: rgba(229, 72, 77, 0.7); background: rgba(70, 16, 18, 0.95); }
+	.pp.x { width: 32px; padding: 0; justify-content: center; color: #bccbd9; }
+	.pp.imm { cursor: default; color: #2a2f38; letter-spacing: .04em; text-shadow: 0 1px 0 rgba(255,255,255,.6); background: linear-gradient(180deg, #ffffff, #d4d9df 48%, #a3acb7); border: 2px solid #d9a845; box-shadow: 0 0 0 1px #6b4a10, 0 2px 6px rgba(0,0,0,.45), inset 0 1px 0 #fff; }
+	.h2top .gc { display: inline-block; width: 15px; height: 15px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff2c0, #e2b54f 60%, #a8792a); box-shadow: 0 0 0 1px #6b4a14; }
+	.pname { position: absolute; left: 0; top: calc(var(--r) + 46px); transform: translateX(-50%); padding: 3px 10px; border-radius: 999px; font-size: 12px; white-space: nowrap; background: rgba(6, 21, 38, 0.92); text-transform: capitalize; }
+	.h2conf { position: absolute; z-index: 10; transform: translate(-50%, -100%); display: flex; align-items: center; gap: 8px; padding: 5px 5px 5px 12px; border-radius: 999px; white-space: nowrap; pointer-events: auto;
+		background: rgba(8, 22, 38, 0.97); border: 1px solid var(--line); box-shadow: 0 8px 18px rgba(0, 0, 0, 0.6); font-size: 14px; color: #f5f1e8; }
+	.h2conf .cn b { font-weight: 400; }
+	.h2conf .gain { display: inline-flex; align-items: center; gap: 3px; color: #ffe7a1; } .h2conf .gain em { font-style: normal; font-size: 10px; color: #8a9fb3; }
+	.h2conf .gain.loss { color: #ffb4a8; } .h2conf .gain img { width: 18px; height: 18px; }
+	/* the prompts sit under the 2.0 top bar and its order row */
+	.gamewrap.h2 .placehint, .gamewrap.h2 .battlebox { top: calc(176px * var(--uis, 1)); z-index: 10; }
+	.gamewrap.h2 .atkask { top: calc(226px * var(--uis, 1)); }
 	.boardarea { position: absolute; inset: 0; }
 	.boardarea.mob { top: 116px; bottom: 106px; }
 	.gamewrap.mob .pietool, .gamewrap.mob .placehint { top: 124px; max-width: 94vw; }

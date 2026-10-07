@@ -26,6 +26,11 @@
 	import TurnSplash from '$lib/TurnSplash.svelte';
 	import DockHand from '$lib/DockHand.svelte';
 	import LevelSplash from '$lib/LevelSplash.svelte';
+	import HudBoard from '$lib/hud2/HudBoard.svelte';
+	import HudOrder, { type OrderEntry } from '$lib/hud2/HudOrder.svelte';
+	import HudDash, { type Order } from '$lib/hud2/HudDash.svelte';
+	import Chronicle, { type FxGroup } from '$lib/hud2/Chronicle.svelte';
+	import { portraitCss } from '$lib/heroes';
 
 	export let session: MatchSession;
 	export let ms: Readable<MatchState>;
@@ -40,6 +45,8 @@
 	export let pingArmed = false; // the next board tap pings
 	export let onPing: () => void = () => {}; // arm a ping (pressed again: ping your own hero)
 	export let mobile = false; // phone layout (set by GameView at ≤760px wide): strip + compact dash
+	export let hud2 = false; // the 2.0 HUD (desktop / tablet): side boards, the Chronicle, the order row, the new dash
+	export let compact = false; // 2.0: the side boards shrink to nameplates
 
 	const ORANGE = '#ef7d22';
 	const BLUE = '#2f7fe6';
@@ -603,6 +610,86 @@
 		if (tokenDrawer && !t?.closest?.('.tokwrap') && !(holdingToken && t?.closest?.('.board-wrap, .placehint'))) tokenDrawer = false;
 	}
 	$: retracted = autoRetract && !handUp;
+	// ── the 2.0 HUD (desktop / tablet) ─────────────────────────────────────────
+	// viewer-relative: the enemy on the left, your teammates on the right (spectators watch as the Titans)
+	$: viewTeam = (mySeat >= 0 ? myTeam : 'blue') as 'orange' | 'blue';
+	$: h2enemies = others.filter((p) => pTeam(p) !== viewTeam);
+	$: h2allies = others.filter((p) => pTeam(p) === viewTeam);
+	$: h2tight = Math.max(h2enemies.length, h2allies.length + 1) > 2; // 3 to a column (6 players)
+	$: h2compact = compact || Math.max(h2enemies.length, h2allies.length + 1) > 3; // 8+ players: nameplates
+	const SHORT_DUR: Record<string, string> = { 'This turn': 'Turn', 'Next turn': 'Next turn', 'This round': 'Round' };
+	// the Chronicle: who wrote a line (log entries carry the player's name) → their hero and colour
+	$: chronWho = (name: string) => {
+		const p = seated.find((x) => x.name === name);
+		const cs = p ? cards[p.id] : null;
+		return p && cs ? { hero: heroName(cs.hero), color: colorHex(p.color), team: pTeam(p) } : null;
+	};
+	$: chronFx = seated.flatMap((p): FxGroup[] => {
+		const list = effects.filter((e) => e.pid === p.id);
+		if (!list.length || !cards[p.id]) return [];
+		return [{ pid: p.id, hero: cards[p.id].hero, heroName: heroName(cards[p.id].hero), team: pTeam(p), color: colorHex(p.color),
+			list: list.map((e) => ({ idx: e.idx, name: e.name, color: GLOW[heroCards(e.hero)[e.idx]?.color] ?? '#888', dur: SHORT_DUR[fxLabel(e)] ?? fxLabel(e) })) }];
+	});
+	function readFx(pid: string, hero: string, idx: number) {
+		const list = effects.filter((e) => e.pid === pid).map((e) => ({ hid: e.hero, idx: e.idx, pid: e.pid }));
+		examine = { hid: hero, idx, pid, list };
+	}
+	// the order row after the reveal: highest initiative first; a tie goes to the team holding the tie-breaker
+	$: h2order = !revealed ? [] : seatedWithCards
+		.filter((p) => { const i = cards[p.id].pending; return i != null && i !== PASS; })
+		.map((p) => ({ p, cs: viewCards[p.id] ?? cards[p.id], ini: initOf(cards[p.id], true) ?? 0 }))
+		.sort((a, b) => b.ini - a.ini || (pTeam(a.p) === $ms.tieBreaker ? -1 : 1) - (pTeam(b.p) === $ms.tieBreaker ? -1 : 1))
+		.map((x, k, all): OrderEntry => ({ pid: x.p.id, hero: x.cs.hero, heroName: heroName(x.cs.hero), player: x.p.name, team: pTeam(x.p), idx: cards[x.p.id].pending!, ini: x.ini,
+			tied: k > 0 && all[k - 1].ini === x.ini, portrait: portraitCss(x.cs.hero), color: colorHex(x.p.color) }));
+	$: h2dots = seatedWithCards.map((p) => ({ team: pTeam(p), ok: isReady(cards[p.id]) }));
+	const itemBonus = (pid: string, act: string) => { const d = cards[pid] ? statDeltas(cards[pid]) : {}; return (act === 'attack' ? d.atk : act === 'defense' ? d.def : act === 'movement' ? d.move : 0) ?? 0; };
+	// arm, then commit: a click on a hand card arms it, the action ring commits it; a click on the armed card reads it
+	let armed: number | null = null;
+	$: if (armed != null && (!mine || !mine.hand.includes(armed) || !canCommit)) armed = null;
+	function handCardClick2(idx: number) {
+		if (autoRetract && !handUp && !dockHand) { handUp = true; return; }
+		if (canCommit && armed !== idx) { armed = idx; return; }
+		armed = null;
+		preview(idx);
+	}
+	function commitArmed() {
+		if (armed == null || !canCommit) return;
+		session.cardAction({ kind: 'commit', pid: clientId, idx: armed });
+		armed = null;
+	}
+	$: ultReady = !!mine && myUlt >= 0 && allowedMoves(mine, myUlt).includes('hand');
+	function onUlt() {
+		if (!mine || myUlt < 0) return;
+		if (!mine.ultimate && ultReady) lvConfirm = { kind: 'take', idx: myUlt };
+		else examineCard(mine.hero, myUlt);
+	}
+	const waitFor = (ps: Player[]) => (ps.length === 1 ? ps[0].name : `${ps.length} players`);
+	// the ONE action, in a word (the same steps as the classic dash's action slot)
+	$: order2 = ((): Order => {
+		if ($ms.wonBy) return { label: 'Game over', kind: 'off' };
+		if (iCanRespawn) return { label: 'Respawn', kind: 'team', pulse: true, run: onRespawn };
+		if (iMustEnter) return { label: 'Spawn hero', kind: 'team', pulse: true, run: onEnter };
+		if (iDefending) return { label: 'Defended', kind: 'team', run: () => answerAttack('defended'), alt: { label: 'Defeated', run: () => answerAttack('defeated') } };
+		if (spawnWaiting.length) return { label: 'Waiting', sub: waitFor(spawnWaiting), kind: 'wait' };
+		if (battlePhase) {
+			if ($ms.battle?.remove) return { label: 'Waiting', sub: teamName($ms.battle.loser), kind: 'wait' };
+			if (!levelPhase) return iAmHost ? { label: 'Level up', kind: 'go', run: startLevelUp } : { label: 'Waiting', sub: 'Host', kind: 'wait' };
+			if (iMustLevel) return { label: 'Level up', kind: 'go', pulse: true, run: () => { deckOpen = true; deckTab = 'deck'; } };
+			if (levelWaiting.length) return { label: 'Waiting', sub: waitFor(levelWaiting), kind: 'wait' };
+			return iAmHost ? { label: 'Next round', kind: 'go', run: onAdvanceTurn } : { label: 'Waiting', sub: 'Host', kind: 'wait' };
+		}
+		if (revealed) {
+			if (fxAsking && mine && myTurnCard != null) { const c = myTurnCard; const hero = mine.hero; return { label: 'Effect?', sub: heroCards(hero)[c]?.name, kind: 'go', run: () => (examine = { hid: hero, idx: c, pid: clientId }), alt: { label: 'No', run: fxNo } }; }
+			if (!iAmHost) return { label: 'Waiting', sub: 'Host', kind: 'wait' };
+			return isFinalTurn ? { label: 'Minion battle', kind: 'go', run: startBattle } : { label: 'Next turn', kind: 'go', run: onAdvanceTurn };
+		}
+		if (myReady) return { label: 'Take back', sub: `${readyCount} of ${seatedWithCards.length} in`, kind: 'quiet', run: takeBack };
+		if (armed != null && canCommit && mine) return { label: 'Commit', sub: heroCards(mine.hero)[armed]?.name, kind: 'go', pulse: true, run: commitArmed };
+		if (mine && !mine.hand.length) return { label: 'Waiting', kind: 'wait' };
+		return { label: 'Commit', kind: 'off' };
+	})();
+	const markArt = (k: 'poison' | 'bounty') => icon(`marker_${k}`);
+	const canUndoNow = session.canUndo;
 </script>
 
 <svelte:window on:pointerdown={onWindowDown} bind:innerWidth={vw} bind:innerHeight={vhPx} />
@@ -725,7 +812,7 @@
 				{/if}
 			{/each}
 		</div>
-	{:else}
+	{:else if !hud2}
 	<!-- ───────── right side: the OTHER players ───────── -->
 		<div class="ppanel" class:dense class:withdash={!!mine && dashUnderPanel} style={dashVars}>
 			<div class="pptitle">
@@ -800,6 +887,32 @@
 			{/each}
 		</div>
 
+	{/if}
+
+
+	<!-- ───────── 2.0 HUD: the order row, the side columns (the enemy left · your teammates + the Chronicle right) ───────── -->
+	{#if hud2 && !mobile}
+		<div class="h2helm">
+			<div class="h2order">
+				<HudOrder planning={!revealed} countdown={countdownActive ? countdownLabel : ''} dots={h2dots} order={h2order} bonus={itemBonus} tieArt={icon(`tiebreaker_${$ms.tieBreaker}`)}
+					small={h2order.length > 4} turnKey="{$ms.round}.{$ms.turn}" onRead={(pid, hid, idx) => (examine = { hid, idx, pid })} />
+			</div>
+			<div class="h2col l" class:tight={h2tight}>
+				{#each h2enemies as p (p.id)}
+					{@const cs = viewCards[p.id]}
+					{#if cs}<HudBoard {cs} name={p.name} color={colorHex(p.color)} team={pTeam(p)} {turnIdx} {revealed} ready={isReady(cards[p.id] ?? cs)} compact={h2compact} small={h2tight}
+						fxAt={(t) => !!fxFor(p.id, slotIdx(cs, t))} onOpen={() => (overlayId = p.id)} onSlot={(e, t) => peekSlot(e, cs, t)} />{/if}
+				{/each}
+			</div>
+			<div class="h2col r" class:tight={h2tight}>
+				{#each h2allies as p (p.id)}
+					{@const cs = viewCards[p.id]}
+					{#if cs}<HudBoard {cs} name={p.name} color={colorHex(p.color)} team={pTeam(p)} {turnIdx} {revealed} ready={isReady(cards[p.id] ?? cs)} compact={h2compact} small={h2tight}
+						fxAt={(t) => !!fxFor(p.id, slotIdx(cs, t))} onOpen={() => (overlayId = p.id)} onSlot={(e, t) => peekSlot(e, cs, t)} />{/if}
+				{/each}
+				<Chronicle log={$ms.log ?? []} who={chronWho} fx={chronFx} host={iAmHost} canUndo={$canUndoNow} team={viewTeam} small={h2tight} onUndo={() => session.undo()} onRead={readFx} />
+			</div>
+		</div>
 	{/if}
 
 	<!-- ───────── overlay: a player's whole board ───────── -->
@@ -1242,6 +1355,26 @@
 				<button class="mb undo" disabled={!iAmHost || !$canUndoS} on:click={() => session.undo()} title={iAmHost ? 'Undo the last move this turn' : 'Only the host can undo'} aria-label="Undo">↶</button>
 			</div>
 		</div>
+	{:else if mine && hud2}
+		{#if !dockHand}
+			<div class="tray h2" class:retracted class:spread={spreadHand}>
+				{#each handOrdered as idx, k (idx)}
+					{@const f = fan(k, handOrdered.length)}
+					<button class="hc" class:armed={armed === idx} style="--rot:{spreadHand ? 0 : f.rot}deg; --y:{spreadHand ? 0 : f.y * lay.s}px"
+						on:click={() => handCardClick2(idx)} on:pointerenter={raiseHand} on:pointerleave={lowerHandSoon}>
+						<Card heroId={mine.hero} card={heroCards(mine.hero)[idx]} />
+					</button>
+				{/each}
+			</div>
+		{/if}
+		<div class="h2dash">
+			<HudDash cs={mine} name={myName} color={colorHex(myColor)} team={myTeam === 'blue' ? 'blue' : 'orange'} {turnIdx} {revealed} ini={myInit} marks={statusMap[clientId] ?? EMPTY_STATUS} {markArt}
+				ultIdx={myUlt} {ultReady} deckCount={deckCards(mine).length} levelUp={iMustLevel} order={order2} fxAt={(t) => !!fxFor(clientId, slotIdx(mine, t))}
+				autoHide={autoRetract} spread={spreadHand} docked={dockHand} hand={handOrdered} {armed} {pingArmed} discOpen={discOpen === 'dash'} radius={radiusCtl} tokens={tokenCtl}
+				onMe={() => (overlayId = clientId)} onCoins={changeCoins} onSlot={(e, t) => peekSlot(e, mine, t)}
+				onDiscard={() => (mine.discard.length === 1 ? openDiscard(mine.hero, mine.discard[0], true) : discTap('dash'))} onDiscPick={(i) => openDiscard(mine.hero, i, true)}
+				onDeck={() => (deckOpen = true)} {onUlt} onPing={onPing} onAutoHide={toggleRetract} onSpread={toggleSpread} onDock={toggleDock} onPick={(i) => (canCommit && armed !== i ? (armed = i) : preview(i))} />
+		</div>
 	{:else if mine}
 		{@const mst = statusMap[clientId] ?? EMPTY_STATUS}
 		{#if !dockHand}
@@ -1457,6 +1590,19 @@
 {/if}
 
 <style>
+	/* ── the 2.0 HUD: one layer in design px (1440 × 900), zoomed as a whole; only the parts take clicks ── */
+	.h2helm { position: absolute; inset: 0; z-index: 7; zoom: var(--uis, 1); pointer-events: none; }
+	.h2order { position: absolute; top: 108px; left: 0; right: 0; }
+	.h2col { position: absolute; top: 194px; width: 344px; display: flex; flex-direction: column; gap: 24px; }
+	.h2col.tight { gap: 10px; }
+	.h2col.l { left: 20px; } .h2col.r { right: 20px; }
+	.h2dash { position: absolute; left: 0; right: 0; bottom: 12px; z-index: 11; display: flex; justify-content: center; zoom: var(--uis, 1); pointer-events: none; }
+	.tray.h2 { left: calc(380px * var(--uis, 1)); right: calc(380px * var(--uis, 1)); bottom: calc(12px * var(--uis, 1) + var(--dh, 88px) + 24px * var(--uis, 1)); }
+	.tray .hc.armed { z-index: 2; }
+	.tray .hc.armed :global(.cardface) { box-shadow: 0 0 0 3px #f4dfa8, 0 0 18px 4px rgba(244, 223, 168, 0.6); border-radius: 8px; }
+	.tray.retracted .hc.armed { transform: translateY(calc(var(--y) - 26px * var(--uis, 1))) rotate(var(--rot)); }
+	/* tucked behind the dash: only the tops show above it (the rest is cut off at the dash's top edge) */
+	.tray.h2.retracted { transform: translateY(calc(var(--cw) * 1.396 - 2px * var(--uis, 1))); clip-path: inset(-800px -800px calc(var(--cw) * 1.396 - 22px * var(--uis, 1)) -800px); }
 	/* right-side player panel */
 	.ppanel { position: absolute; top: 12px; right: 12px; bottom: 12px; z-index: 6; width: 244px; padding: 10px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; color: #e5e7eb; background: rgba(9,13,22,.72); backdrop-filter: blur(9px); border: 1px solid rgba(199,154,78,.4); border-radius: 14px; zoom: var(--uis, 1); }
 	.pptitle { font-size: .6rem; letter-spacing: .16em; text-transform: uppercase; font-weight: 800; color: #b8a06a; padding: 2px 4px 4px; display: flex; flex-direction: column; gap: 3px; }

@@ -3,8 +3,10 @@
 // default: playtesters found the motion too much.
 import { writable } from 'svelte/store'
 
-export type BoardPrefs = { rims: boolean; zone: boolean; sea: boolean; look: 'island' | 'classic' }
-export const DEFAULT_PREFS: BoardPrefs = { rims: false, zone: false, sea: false, look: 'island' }
+// hud: the in-game screen — the 2.0 HUD (top bar, side boards, Chronicle, dash) or the classic one; compact: the
+// 2.0 side boards shrink to nameplates; beam: the spark and pulses on the top bar's minion beam
+export type BoardPrefs = { rims: boolean; zone: boolean; sea: boolean; look: 'island' | 'classic'; hud: '2.0' | 'classic'; compact: boolean; beam: boolean }
+export const DEFAULT_PREFS: BoardPrefs = { rims: false, zone: false, sea: false, look: 'island', hud: '2.0', compact: false, beam: false }
 const KEY = 'goa2-board-prefs'
 
 export function readPrefs(raw: string | null): BoardPrefs {
@@ -14,7 +16,10 @@ export function readPrefs(raw: string | null): BoardPrefs {
 			rims: p.rims === true,
 			zone: p.zone === true,
 			sea: p.sea === true,
-			look: p.look === 'classic' ? 'classic' : 'island'
+			look: p.look === 'classic' ? 'classic' : 'island',
+			hud: p.hud === 'classic' ? 'classic' : '2.0',
+			compact: p.compact === true,
+			beam: p.beam === true
 		}
 	} catch {
 		return { ...DEFAULT_PREFS }
