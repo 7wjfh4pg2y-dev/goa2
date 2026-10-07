@@ -315,8 +315,8 @@
 	$: crestW = crestL ? Math.round(Math.max(240, Math.min(400, crestL * 0.62))) : 0;
 	let createPic: HTMLCanvasElement | null = null, lobbyPic: HTMLCanvasElement | null = null;
 	let cw = 0, ch = 0, lw = 0, lh = 0;
-	$: pic = mode === 'create' ? { el: createPic, w: cw, h: ch, inset: mobile ? { t: 2, r: 2, b: 2, l: 2 } : { t: 8, r: 8, b: 58, l: 8 } }
-		: mode === 'lobby' ? { el: lobbyPic, w: lw, h: lh, inset: mobile ? { t: 3, r: 3, b: 36, l: 3 } : { t: 8, r: 8, b: 50, l: 8 } }
+	$: pic = mode === 'create' ? { el: createPic, w: cw, h: ch, inset: mobile ? { t: 2, r: 2, b: 2, l: 2 } : { t: 6, r: 6, b: 24, l: 6 }, sea: 0.4 }
+		: mode === 'lobby' ? { el: lobbyPic, w: lw, h: lh, inset: mobile ? { t: 3, r: 3, b: 36, l: 3 } : { t: 8, r: 8, b: 50, l: 8 }, sea: 1.35 }
 		: null;
 	$: schedulePic(pic, bgKey);
 	let picEl: HTMLCanvasElement | null = null, picKey = '';
@@ -328,7 +328,7 @@
 		if (picT) clearTimeout(picT);
 		picT = setTimeout(async () => {
 			picT = null;
-			if (await sea?.paintPicture(el, p.w, p.h, p.inset)) { picEl = el; picKey = k; el.classList.add('on'); }
+			if (await sea?.paintPicture(el, p.w, p.h, p.inset, p.sea)) { picEl = el; picKey = k; el.classList.add('on'); }
 		}, el === picEl ? 60 : 320);
 	}
 	// The sea moves only on the landing screens and in the game: on Create and in the lobby it is still (it stops a
@@ -925,11 +925,13 @@
 								<div class="fld g-map">
 									<span class="t-label">Map</span>
 									<div class="mapbox">
-										<div class="boardframe mapframe" bind:clientWidth={cw} bind:clientHeight={ch}>
-											<canvas class="pic" bind:this={createPic} aria-hidden="true"></canvas>
-											<button class="mapnav prev" on:click={() => cycleMap(-1)} disabled={maps.length < 2} aria-label="Previous map"><Icon name="back" /></button>
-											<button class="mapnav next" on:click={() => cycleMap(1)} disabled={maps.length < 2} aria-label="Next map"><Icon name="go" /></button>
-											<div class="cap mapcap"><span><b>{chosenMap?.label ?? 'No map'}</b>{#if maps.length > 1} · {mapIndex + 1} / {maps.length}{/if}</span></div>
+										<div class="mapstage">
+											<div class="boardframe mapframe" bind:clientWidth={cw} bind:clientHeight={ch}>
+												<canvas class="pic" bind:this={createPic} aria-hidden="true"></canvas>
+												<button class="mapnav prev" on:click={() => cycleMap(-1)} disabled={maps.length < 2} aria-label="Previous map"><Icon name="back" /></button>
+												<button class="mapnav next" on:click={() => cycleMap(1)} disabled={maps.length < 2} aria-label="Next map"><Icon name="go" /></button>
+											</div>
+											<div class="mapcap"><span><b>{chosenMap?.label ?? 'No map'}</b>{#if maps.length > 1} · {mapIndex + 1} / {maps.length}{/if}</span></div>
 										</div>
 										<div class="mapmeta">
 											<div class="maprow">
@@ -966,7 +968,6 @@
 											</button>
 										{/each}
 									</div>
-									<p class="t-small cxhint">Light up every complexity you want in the hero pool. 4-star heroes are coming soon.</p>
 								</div>
 							</div>
 						</div>
@@ -1177,13 +1178,16 @@
 	.g-map { min-height: 0; }
 	.mapbox { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 	.mapframe { flex: 1; min-height: 240px; }
-	.mapframe .mapcap { justify-content: flex-start; }
-	.mapframe .mapcap > span { font-size: var(--fs-h3); padding: 8px 18px; }
+	/* the map's name sits on the picture's bottom edge, half in, half out (the stage leaves room under the frame) */
+	.mapstage { position: relative; flex: 1; display: flex; flex-direction: column; min-height: 0; padding-bottom: 22px; }
+	.mapcap { position: absolute; left: 50%; bottom: 22px; z-index: 3; max-width: 86%; transform: translate(-50%, 50%); pointer-events: none; }
+	.mapcap > span { display: block; padding: 8px 20px; border-radius: var(--r-pill); background: linear-gradient(180deg, #0f2c48, #071a2e); border: 1px solid var(--brass);
+		box-shadow: 0 0 0 3px rgba(216, 179, 106, 0.14), 0 6px 14px rgba(0, 0, 0, 0.5); font-size: var(--fs-h3); color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.mapcap b { font-weight: 400; color: var(--brass-hi); }
 	.mapmeta .mapname, .mapmeta .msum { display: none; } /* (phones show these beside a small picture) */
 	.cxchips { display: flex; gap: 8px; }
 	.cxchips .chip { flex: 1 1 0; min-width: 0; min-height: 56px; padding: 0 4px; }
 	.cxchips :global(.ico) { width: 20px; height: 20px; }
-	.cxhint { color: var(--ink-2); max-width: 44ch; }
 	.cfoot { display: flex; align-items: center; gap: 16px; margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--hair); }
 	.csum { display: flex; flex-wrap: nowrap; justify-content: center; align-items: center; gap: 8px; margin: 0 auto; white-space: nowrap; }
 	/* waves / Life with their own ± — the counts are edited where they are shown */
@@ -1316,10 +1320,10 @@
 					.cxchips { gap: 6px; }
 		.cxchips .chip { min-height: 46px; }
 		.cxchips :global(.ico) { width: 15px; height: 15px; }
-		.cxhint { display: none; }
 		.mapbox { flex-direction: row; align-items: center; gap: 12px; }
 		.mapbox .mapframe { flex: none; width: 118px; height: 72px; min-height: 0; border-radius: var(--r-md); }
-		.mapframe .mapcap { display: none; }
+		.mapstage { flex: none; padding-bottom: 0; }
+		.mapcap { display: none; }
 		.mapmeta { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; }
 		.mapmeta .mapname { display: inline-flex; }
 		.mapmeta .msum { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }

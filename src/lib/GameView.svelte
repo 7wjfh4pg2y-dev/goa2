@@ -261,7 +261,9 @@
 	$: areas = [...Object.entries($ms.radii ?? {}).flatMap(([pid, r]) => {
 		const hero = $ms.pieces?.[pid];
 		return hero && r > 0 ? [{ hex: hero.hex, r, color: colorHex(hero.color ?? '') }] : [];
-	}), ...battleMarks, ...spawnMarks, ...clearMarks, ...strayMarks];
+	})];
+	// single hexes to act on: a spirit swirl round each (BoardCanvas `marks`)
+	$: boardMarks = [...battleMarks, ...spawnMarks, ...clearMarks, ...strayMarks];
 
 	// ── minion battle / lane (battle.ts) ──
 	// the minions the battle's loser may take off glow red on the board
@@ -783,7 +785,7 @@
 	<div class="ocean"></div>
 	<!-- on a phone the board sits between the top bar + player strip and the dash -->
 	<div class="boardarea" class:mob={mobile}>
-	<BoardCanvas bind:this={board} map={$ms.map ?? {}} inset={boardInset} look={boardLook} {glowZone} activeZone={$ms.wonBy ? null : battleZone($ms)} effects={true} sea={$boardPrefs.sea} rims={$boardPrefs.rims} rotation={orientation} interactive={true} {placing} {placeGhost} holdColor={myHoldColor} onCancelPlace={cancelPlace} {areas} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} pings={boardPings} onPing={doPing} {pingArmed} />
+	<BoardCanvas bind:this={board} map={$ms.map ?? {}} inset={boardInset} look={boardLook} {glowZone} activeZone={$ms.wonBy ? null : battleZone($ms)} effects={true} sea={$boardPrefs.sea} rims={$boardPrefs.rims} rotation={orientation} interactive={true} {placing} {placeGhost} holdColor={myHoldColor} onCancelPlace={cancelPlace} {areas} marks={boardMarks} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} pings={boardPings} onPing={doPing} {pingArmed} />
 	</div>
 
 	<CardLayer bind:this={cardLayer} {mobile} {hud2} compact={$boardPrefs.compact} {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} onRespawn={placeMyHero} onEnter={placeMyHero} onArmToken={armToken} holdingToken={!!pendingToken} {pingArmed} onPing={pingButton} bind:previewId />

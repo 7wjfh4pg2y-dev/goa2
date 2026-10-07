@@ -28,6 +28,10 @@
 	$: seatedIds = [...rosters.orange, ...rosters.blue];
 	$: mySeat = $players.find((p) => p.id === clientId)?.seat ?? -1;
 	$: myTeam = teamForSeat(mySeat, seats);
+	// your team on the RIGHT, the enemy on the left (spectators watch as the Titans)
+	$: railSides = (myTeam === 'orange'
+		? [{ team: 'blue', ids: rosters.blue, pos: 'sl' }, { team: 'orange', ids: rosters.orange, pos: 'sr' }]
+		: [{ team: 'orange', ids: rosters.orange, pos: 'sl' }, { team: 'blue', ids: rosters.blue, pos: 'sr' }]) as { team: Team; ids: string[]; pos: 'sl' | 'sr' }[];
 	$: iAmHost = $state.host === clientId;
 
 	$: turn = d ? draftTurn(d) : null;
@@ -413,9 +417,9 @@
 	</div>
 
 	<!-- the dash: both teams' players either side of the coins, the tide line along its top edge -->
-	<footer class="rails" class:dense={Math.max(rosters.orange.length, rosters.blue.length) >= 3} class:packed={Math.max(rosters.orange.length, rosters.blue.length) >= 4}>
-		{#each [{ team: 'orange', ids: rosters.orange }, { team: 'blue', ids: rosters.blue }] as r (r.team)}
-			<div class="rail {r.team} is-{r.team}" aria-label="{teamName(r.team)}">
+	<footer class="rails" style="--lt:var(--{railSides[0].team}); --rt:var(--{railSides[1].team})" class:dense={Math.max(rosters.orange.length, rosters.blue.length) >= 3} class:packed={Math.max(rosters.orange.length, rosters.blue.length) >= 4}>
+		{#each railSides as r (r.team)}
+			<div class="rail {r.pos} is-{r.team}" aria-label="{teamName(r.team)}">
 				{#each r.ids as id (id)}
 					{@const ph = d.picks[id] ? heroById(d.picks[id]) : undefined}
 					<div class="pcard" class:filled={!!ph} class:active={id === activeActor} class:me={id === clientId} title={ph ? `${nameOf(id)} — ${ph.name}, ${ph.title}` : nameOf(id)}>
@@ -442,11 +446,11 @@
 					</div>
 				{/each}
 			</div>
-			{#if r.team === 'orange'}
+			{#if r.pos === 'sl'}
 				{#if d.system === 'pick-ban' || d.bans.length}
 					<div class="banrail"><span class="rl">Bans</span>{#each d.bans as b (b)}<span class="banav"><img src={heroAvatar(b)} alt="" /><i>✕</i></span>{/each}{#if !d.bans.length}<span class="nobans">—</span>{/if}</div>
 				{:else}
-					<div class="vs"><img src={coinOrange} alt={teamName('orange')} /><span>vs</span><img src={coinBlue} alt={teamName('blue')} /></div>
+					<div class="vs"><img src={r.team === 'orange' ? coinOrange : coinBlue} alt={teamName(r.team)} /><span>vs</span><img src={r.team === 'orange' ? coinBlue : coinOrange} alt={teamName(r.team === 'orange' ? 'blue' : 'orange')} /></div>
 				{/if}
 			{/if}
 		{/each}
@@ -472,7 +476,7 @@
 
 	<!-- every hero locked: Team vs Team war banners; the host begins from here -->
 	{#if complete}
-		<MatchupSplash orange={rosters.orange} blue={rosters.blue} picks={d.picks} {nameOf} {colorOf} {clientId} {iAmHost} onStart={startGame} />
+		<MatchupSplash orange={rosters.orange} blue={rosters.blue} picks={d.picks} {nameOf} {colorOf} {clientId} {iAmHost} {myTeam} onStart={startGame} />
 	{/if}
 </div>
 {/if}
@@ -651,10 +655,10 @@
 	.rails { position: relative; flex: none; height: 90px; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 18px; padding: 0 20px;
 		background: linear-gradient(180deg, rgba(12,36,60,0.98), rgba(5,18,33,1)); box-shadow: 0 -10px 30px rgba(0,6,14,0.5); }
 	/* the tide line: where the two teams meet */
-	.rails::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 2px; background: linear-gradient(90deg, var(--orange) 0%, var(--brass) 50%, var(--blue) 100%); }
+	.rails::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 2px; background: linear-gradient(90deg, var(--lt) 0%, var(--brass) 50%, var(--rt) 100%); }
 	.rail { display: flex; gap: 10px; min-width: 0; }
-	.rail.orange { justify-content: flex-end; }
-	.rail.blue { justify-content: flex-start; }
+	.rail.sl { justify-content: flex-end; }
+	.rail.sr { justify-content: flex-start; }
 	.pcard { flex: 1 1 0; max-width: 372px; min-width: 0; height: 74px; box-sizing: border-box; display: flex; align-items: center; gap: 10px; padding: 8px 10px 8px 8px; border-radius: var(--r-md);
 		background: var(--well); border: 1px solid var(--hair); border-bottom: 3px solid var(--tc); transition: border-color 0.2s, box-shadow 0.2s; }
 	.pav { flex: none; width: 72px; height: 56px; border-radius: 7px; overflow: hidden; display: grid; place-items: center; background: rgba(255,255,255,0.04); border: 1px solid var(--hair); }
@@ -833,7 +837,7 @@
 		.rails, .rails.dense { height: auto; display: flex; flex-direction: column; align-items: stretch; gap: 5px; padding: 8px 12px calc(10px + env(safe-area-inset-bottom)); background: var(--abyss); box-shadow: none; }
 		.rails::before { display: none; }
 		.rail, .rails.dense .rail { gap: 6px; }
-		.rail.orange, .rail.blue { justify-content: flex-start; }
+		.rail.sl, .rail.sr { justify-content: flex-start; }
 		.pcard, .rails.dense .pcard { display: flex; max-width: none; height: auto; gap: 8px; padding: 4px 8px 4px 4px; border-bottom-width: 2px; }
 		.pav, .rails.dense .pav { width: 46px; height: 38px; border-radius: 6px; }
 		.pq { font-size: var(--fs-h3); }

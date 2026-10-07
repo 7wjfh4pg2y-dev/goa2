@@ -1,7 +1,7 @@
 <script lang="ts">
 	// Team-vs-Team splash shown once every hero is locked: each hero is a leaning SLICE of
-	// their painting that slashes in — the Atlanteans (orange) from above on the left, the
-	// Titans (blue) from below on the right — tinted in the team's colour, edged in the
+	// their painting that slashes in — the enemy from above on the left, the viewer's
+	// team from below on the right — tinted in the team's colour, edged in the
 	// player's own colour. A bright blade lands between the teams with the VS on it, and each
 	// team's symbol (the tie-breaker coin's gear / star) looms faintly behind its heroes. On phones the slices lie
 	// flat, Atlanteans above the blade and Titans below. The host starts the game from here.
@@ -27,6 +27,8 @@
 	export let onStart: () => void;
 	/** the widest a slice may be (design px; 0 = they share the row) — thinner slices, the row centred */
 	export let slim = 0;
+	/** whose screen this is: their team on the RIGHT, the enemy on the left (spectators watch as the Titans) */
+	export let myTeam: 'orange' | 'blue' | null = null;
 
 	// the host's button appears once the slices and the blade have landed
 	let ready = false;
@@ -52,8 +54,13 @@
 	$: packed = n >= 4; // 4–5 a side go most compact
 	const roles = (traits: Trait[]) => [...traits].sort((a, b) => TRAIT_LABELS[a].localeCompare(TRAIT_LABELS[b]));
 	// the slices land one after another, alternating sides, from the outside in; then the blade
-	const rank = (team: string, i: number, len: number) => (team === 'orange' ? 2 * i : 2 * (len - 1 - i) + 1);
-	const delay = (team: string, i: number, len: number) => 0.15 + rank(team, i, len) * 0.11;
+	$: leftTeam = myTeam === 'orange' ? 'blue' : 'orange';
+	$: sides = leftTeam === 'orange'
+		? [{ team: 'orange', ids: orange, pos: 'sl' }, { team: 'blue', ids: blue, pos: 'sr' }]
+		: [{ team: 'blue', ids: blue, pos: 'sl' }, { team: 'orange', ids: orange, pos: 'sr' }];
+	const rank = (pos: string, i: number, len: number) => (pos === 'sl' ? 2 * i : 2 * (len - 1 - i) + 1);
+	const delay = (pos: string, i: number, len: number) => 0.15 + rank(pos, i, len) * 0.11;
+	const RGB: Record<string, string> = { orange: '239,125,34', blue: '47,127,230' };
 	$: seamAt = 0.15 + 2 * n * 0.11 + 0.12;
 
 	// the measured row (one team's slices), for sizing names and framing the art
@@ -80,12 +87,12 @@
 
 <svelte:window bind:innerWidth={vw} />
 
-{#snippet slices(side: { team: string; ids: string[] })}
+{#snippet slices(side: { team: string; ids: string[]; pos: string })}
 	<!-- the team's symbol, looming behind its heroes (it shows in the gaps; each slice carries the same drawing over its art) -->
 	<img class="loom" src={coin(side.team)} alt="" aria-hidden="true" />
 	{#each side.ids as id, i (id)}
 		{@const h = picks[id] ? heroById(picks[id]) : undefined}
-		<article class="slice" class:me={id === clientId} style="--pc:{colorOf(id)}; --i:{i}; --d:{delay(side.team, i, side.ids.length)}s">
+		<article class="slice" class:me={id === clientId} style="--pc:{colorOf(id)}; --i:{i}; --d:{delay(side.pos, i, side.ids.length)}s">
 			<div class="slice-in">
 				{#if h}<div class="fill" style={artOf(h.id)}></div>{:else}<div class="fill empty"><span>?</span></div>{/if}
 				<div class="shade"></div>
@@ -112,17 +119,17 @@
 	{/each}
 {/snippet}
 
-<div class="splash" class:dense class:packed class:slim={slim > 0} style="--n:{n}; --sw:{sw}px; --seam:{seamAt}s; --slim:{slim}px" role="dialog" aria-label="Team versus team">
-	<div class="wash orange"></div>
-	<div class="wash blue"></div>
+<div class="splash" class:dense class:packed class:slim={slim > 0} style="--n:{n}; --sw:{sw}px; --seam:{seamAt}s; --slim:{slim}px; --lrgb:{RGB[leftTeam]}; --rrgb:{RGB[leftTeam === 'orange' ? 'blue' : 'orange']}" role="dialog" aria-label="Team versus team">
+	<div class="wash sl"></div>
+	<div class="wash sr"></div>
 	<div class="head"><i class="hrule"></i><span>The battle lines are drawn</span><i class="hrule r"></i></div>
 
 	<div class="arena">
-		{#each [{ team: 'orange', ids: orange }, { team: 'blue', ids: blue }] as side, si (side.team)}
+		{#each sides as side, si (side.team)}
 			{#if si === 1}
-				<div class="seam"><i></i><div class="disc"><svg viewBox="-50 -50 100 100" aria-label="versus"><defs><linearGradient id="mvs-o" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffb46a" /><stop offset=".55" stop-color="#ef7d22" /><stop offset="1" stop-color="#7a3208" /></linearGradient><linearGradient id="mvs-b" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9ccbff" /><stop offset=".55" stop-color="#2f7fe6" /><stop offset="1" stop-color="#0f3474" /></linearGradient><linearGradient id="mvs-t" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff" /><stop offset=".45" stop-color="#fff2c9" /><stop offset="1" stop-color="#f0bb55" /></linearGradient><linearGradient id="mvs-r" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fbe3a6" /><stop offset=".5" stop-color="#c8963f" /><stop offset="1" stop-color="#7d5418" /></linearGradient><radialGradient id="mvs-v" cx=".5" cy=".38" r=".62"><stop offset=".55" stop-color="#000" stop-opacity="0" /><stop offset="1" stop-color="#000" stop-opacity=".5" /></radialGradient><clipPath id="mvs-c"><circle r="44" /></clipPath></defs><circle r="49.5" fill="#06101c" /><g clip-path="url(#mvs-c)"><rect x="-50" y="-50" width="100" height="100" fill="url(#mvs-b)" /><polygon points="-50,-50 7,-50 -7,50 -50,50" fill="url(#mvs-o)" /><g fill="#fff4dc" fill-opacity=".26" stroke="#000" stroke-opacity=".35" stroke-width="1.2"><g transform="rotate(-38)"><path d="M-2.4 -38 L0 -45 L2.4 -38 L2.4 18 L-2.4 18 Z M-11 18 H11 V22.5 H-11 Z M-1.9 22.5 H1.9 V33 H-1.9 Z" /><circle cy="36" r="3.2" /></g><g transform="rotate(38)"><path d="M-2.4 -38 L0 -45 L2.4 -38 L2.4 18 L-2.4 18 Z M-11 18 H11 V22.5 H-11 Z M-1.9 22.5 H1.9 V33 H-1.9 Z" /><circle cy="36" r="3.2" /></g></g><line x1="7" y1="-50" x2="-7" y2="50" stroke="#fff6dc" stroke-width="2.4" /><circle r="44" fill="url(#mvs-v)" /></g><circle r="45.5" fill="none" stroke="url(#mvs-r)" stroke-width="3.4" /><g transform="skewX(-10)" font-size="42" text-anchor="middle" letter-spacing="-1"><text class="vs-x" x="3" y="17.5" fill="#1a0b02" stroke="#1a0b02" stroke-width="6" stroke-linejoin="round">VS</text><text class="vs-x" x="0" y="14" fill="url(#mvs-t)" stroke="#1a0b02" stroke-width="4.6" stroke-linejoin="round" paint-order="stroke">VS</text></g></svg></div></div>
+				<div class="seam"><i></i><div class="disc"><svg viewBox="-50 -50 100 100" aria-label="versus"><defs><linearGradient id="mvs-o" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffb46a" /><stop offset=".55" stop-color="#ef7d22" /><stop offset="1" stop-color="#7a3208" /></linearGradient><linearGradient id="mvs-b" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9ccbff" /><stop offset=".55" stop-color="#2f7fe6" /><stop offset="1" stop-color="#0f3474" /></linearGradient><linearGradient id="mvs-t" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff" /><stop offset=".45" stop-color="#fff2c9" /><stop offset="1" stop-color="#f0bb55" /></linearGradient><linearGradient id="mvs-r" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fbe3a6" /><stop offset=".5" stop-color="#c8963f" /><stop offset="1" stop-color="#7d5418" /></linearGradient><radialGradient id="mvs-v" cx=".5" cy=".38" r=".62"><stop offset=".55" stop-color="#000" stop-opacity="0" /><stop offset="1" stop-color="#000" stop-opacity=".5" /></radialGradient><clipPath id="mvs-c"><circle r="44" /></clipPath></defs><circle r="49.5" fill="#06101c" /><g clip-path="url(#mvs-c)"><rect x="-50" y="-50" width="100" height="100" fill="url(#mvs-{leftTeam === 'orange' ? 'b' : 'o'})" /><polygon points="-50,-50 7,-50 -7,50 -50,50" fill="url(#mvs-{leftTeam === 'orange' ? 'o' : 'b'})" /><g fill="#fff4dc" fill-opacity=".26" stroke="#000" stroke-opacity=".35" stroke-width="1.2"><g transform="rotate(-38)"><path d="M-2.4 -38 L0 -45 L2.4 -38 L2.4 18 L-2.4 18 Z M-11 18 H11 V22.5 H-11 Z M-1.9 22.5 H1.9 V33 H-1.9 Z" /><circle cy="36" r="3.2" /></g><g transform="rotate(38)"><path d="M-2.4 -38 L0 -45 L2.4 -38 L2.4 18 L-2.4 18 Z M-11 18 H11 V22.5 H-11 Z M-1.9 22.5 H1.9 V33 H-1.9 Z" /><circle cy="36" r="3.2" /></g></g><line x1="7" y1="-50" x2="-7" y2="50" stroke="#fff6dc" stroke-width="2.4" /><circle r="44" fill="url(#mvs-v)" /></g><circle r="45.5" fill="none" stroke="url(#mvs-r)" stroke-width="3.4" /><g transform="skewX(-10)" font-size="42" text-anchor="middle" letter-spacing="-1"><text class="vs-x" x="3" y="17.5" fill="#1a0b02" stroke="#1a0b02" stroke-width="6" stroke-linejoin="round">VS</text><text class="vs-x" x="0" y="14" fill="url(#mvs-t)" stroke="#1a0b02" stroke-width="4.6" stroke-linejoin="round" paint-order="stroke">VS</text></g></svg></div></div>
 			{/if}
-			<div class="mteam {side.team}">
+			<div class="mteam {side.team} {side.pos}">
 				<div class="teamname">{teamName(side.team)}</div>
 				{#if si === 0}
 					<div class="row" bind:clientWidth={rowW} bind:clientHeight={rowH}>{@render slices(side)}</div>
@@ -154,8 +161,8 @@
 		background: radial-gradient(120% 90% at 50% 42%, #0e2a46, #04101d 78%, #030b15); animation: fade 0.45s ease both; }
 	@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 	.wash { position: absolute; top: 0; bottom: 0; width: 55%; pointer-events: none; opacity: 0; animation: fade 1.2s 0.3s ease forwards; }
-	.wash.orange { left: 0; background: radial-gradient(70% 60% at 14% 45%, rgba(239,125,34,0.24), transparent 70%); }
-	.wash.blue { right: 0; background: radial-gradient(70% 60% at 86% 45%, rgba(47,127,230,0.28), transparent 70%); }
+	.wash.sl { left: 0; background: radial-gradient(70% 60% at 14% 45%, rgba(var(--lrgb), 0.26), transparent 70%); }
+	.wash.sr { right: 0; background: radial-gradient(70% 60% at 86% 45%, rgba(var(--rrgb), 0.26), transparent 70%); }
 
 	/* title: brass capitals between two rules */
 	.head { position: relative; z-index: 4; flex: none; margin-top: 18px; display: flex; align-items: center; justify-content: center; gap: 22px;
@@ -168,19 +175,19 @@
 	.mteam.orange { --t: #ef7d22; --t-hi: #ffb878; --t-mid: #9a4514; --t-deep: #4a1c06; --t-rgb: 239, 125, 34; }
 	.mteam.blue { --t: #2f7fe6; --t-hi: #9ccbff; --t-mid: #1c4a8f; --t-deep: #0a2148; --t-rgb: 47, 127, 230; }
 
-	/* the arena: the Atlanteans left of the blade, the Titans right; it shudders once as the blade lands */
+	/* the arena: the enemy left of the blade, your team right; it shudders once as the blade lands */
 	.arena { position: relative; flex: 1; min-height: 0; width: 100%; animation: shudder 0.32s var(--seam) linear both; }
 	@keyframes shudder { 0%, 100% { transform: none; } 20% { transform: translate(-5px, 3px); } 40% { transform: translate(5px, -3px); } 60% { transform: translate(-3px, -2px); } 80% { transform: translate(2px, 2px); } }
 	.mteam { position: absolute; top: 4px; bottom: 0; display: flex; flex-direction: column; gap: 10px; }
-	.mteam.orange { left: 5%; right: calc(50% + 34px); }
-	.mteam.blue { left: calc(50% + 34px); right: 5%; }
+	.mteam.sl { left: 5%; right: calc(50% + 34px); }
+	.mteam.sr { left: calc(50% + 34px); right: 5%; }
 	.teamname { position: relative; z-index: 2; flex: none; font-size: 24px; line-height: 1.15; letter-spacing: 0.14em; text-transform: uppercase; text-align: center;
 		color: var(--t-hi); text-shadow: 0 0 16px rgba(var(--t-rgb), 0.6); animation: fade 0.8s 0.2s ease both; }
 	.row { position: relative; flex: 1; min-height: 0; display: flex; gap: 12px; margin-bottom: 26px; }
 	/* slim: the slices keep at most --slim wide and each row (and its team name) shrinks round them, drawn in to the
 	   blade — so the symbols still line up */
-	.slim .orange .row, .slim .orange .teamname { align-self: flex-end; }
-	.slim .blue .row, .slim .blue .teamname { align-self: flex-start; }
+	.slim .sl .row, .slim .sl .teamname { align-self: flex-end; }
+	.slim .sr .row, .slim .sr .teamname { align-self: flex-start; }
 	.slim .row, .slim .teamname { width: min(100%, calc(var(--n) * var(--slim) + (var(--n) - 1) * 12px)); }
 
 	/* the team's symbol: huge and faint behind the row … */
@@ -195,14 +202,14 @@
 	.slice { flex: 1 1 0; min-width: 0; position: relative; z-index: 1; overflow: hidden; transform: skewX(-8deg); background: #07111f;
 		border-left: 4px solid var(--pc); border-right: 4px solid var(--pc);
 		box-shadow: 0 0 26px rgba(var(--t-rgb), 0.38), 0 18px 26px rgba(0,0,0,0.6); animation: slashDown 0.42s var(--d) cubic-bezier(0.16, 0.9, 0.25, 1) both; }
-	.blue .slice { animation-name: slashUp; }
+	.sr .slice { animation-name: slashUp; }
 	/* they travel along their own lean: 8° over the height is ~14% sideways */
 	@keyframes slashDown { 0% { opacity: 0; transform: translate(126px, -900px) skewX(-8deg); filter: brightness(2.6); } 30% { opacity: 1; } 78% { filter: brightness(1.9); } 100% { opacity: 1; transform: skewX(-8deg); filter: brightness(1); } }
 	@keyframes slashUp { 0% { opacity: 0; transform: translate(-126px, 900px) skewX(-8deg); filter: brightness(2.6); } 30% { opacity: 1; } 78% { filter: brightness(1.9); } 100% { opacity: 1; transform: skewX(-8deg); filter: brightness(1); } }
 	/* a glint runs down (up) the slice as it lands */
 	.slice::after { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 45%; pointer-events: none; opacity: 0;
 		background: linear-gradient(180deg, transparent, rgba(255,255,255,0.5) 50%, transparent); animation: glintDown 0.5s calc(var(--d) + 0.3s) ease-out both; }
-	.blue .slice::after { animation-name: glintUp; }
+	.sr .slice::after { animation-name: glintUp; }
 	@keyframes glintDown { 0% { opacity: 1; transform: translateY(-100%); } 100% { opacity: 0; transform: translateY(240%); } }
 	@keyframes glintUp { 0% { opacity: 1; transform: translateY(240%); } 100% { opacity: 0; transform: translateY(-100%); } }
 	.slice-in { position: absolute; top: 0; bottom: 0; left: -50px; right: -50px; transform: skewX(8deg); }
@@ -247,7 +254,7 @@
 	/* the VS: an emblem split along the slices' lean — Atlantean orange | Titan blue — crossed blades behind,
 	   the letters in pale gold with a heavy outline; each side glows in its team's colour */
 	.disc { position: absolute; left: -54px; top: calc(50% - 54px); width: 108px; height: 108px; border-radius: 50%;
-		box-shadow: -14px 0 34px rgba(239,125,34,0.55), 14px 0 34px rgba(47,127,230,0.6), 0 10px 24px rgba(0,0,0,0.6);
+		box-shadow: -14px 0 34px rgba(var(--lrgb),0.58), 14px 0 34px rgba(var(--rrgb),0.58), 0 10px 24px rgba(0,0,0,0.6);
 		animation: crestIn 0.5s calc(var(--seam) + 0.16s) cubic-bezier(0.2,0.9,0.2,1.3) both; }
 	.disc svg { display: block; width: 100%; height: 100%; overflow: visible; }
 	.vs-x { font-family: inherit; }
@@ -285,14 +292,14 @@
 		.head { margin-top: 62px; font-size: 17px; letter-spacing: 0.12em; }
 		.hrule { display: none; }
 		.arena { display: flex; flex-direction: column; padding-top: 8px; }
-		.mteam, .mteam.orange, .mteam.blue { position: relative; left: auto; right: auto; top: auto; bottom: auto; flex: 1 1 0; min-height: 0; gap: 4px; }
-		.mteam.blue { flex-direction: column-reverse; }
+		.mteam, .mteam.sl, .mteam.sr { position: relative; left: auto; right: auto; top: auto; bottom: auto; flex: 1 1 0; min-height: 0; gap: 4px; }
+		.mteam.sr { flex-direction: column-reverse; }
 		.teamname { font-size: 16px; letter-spacing: 0.1em; }
 		.row { flex-direction: column; gap: 9px; margin: 8px 0; }
 		.slice { transform: skewY(-4deg); border: 0; border-top: 3px solid var(--pc); border-bottom: 3px solid var(--pc); animation-name: lieL; box-shadow: 0 0 18px rgba(var(--t-rgb), 0.35), 0 8px 14px rgba(0,0,0,0.5); }
-		.blue .slice { animation-name: lieR; }
+		.sr .slice { animation-name: lieR; }
 		.slice::after { top: 0; bottom: 0; left: 0; right: auto; width: 40%; height: auto; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.5) 50%, transparent); animation-name: glintR; }
-		.blue .slice::after { animation-name: glintL; }
+		.sr .slice::after { animation-name: glintL; }
 		.slice-in { left: 0; right: 0; top: -16px; bottom: -16px; transform: skewY(4deg); }
 		.shade { background:
 			linear-gradient(90deg, var(--t-deep) 0%, color-mix(in srgb, var(--t-deep) 72%, transparent) 34%, rgba(var(--t-rgb), 0) 62%),
@@ -320,7 +327,7 @@
 		.seam { position: relative; left: 0; top: 0; bottom: auto; width: 100%; height: 0; flex: none; }
 		.seam > i { display: block; left: 0; right: 0; width: auto; top: -2px; bottom: auto; height: 4px; transform: skewY(-4deg); transform-origin: 0 50%;
 			background: linear-gradient(90deg, transparent, #ffe9b8 18%, #fff 50%, #ffe9b8 82%, transparent); animation-name: bladeX; }
-		.disc { left: calc(50% - 27px); top: -27px; width: 54px; height: 54px; box-shadow: -7px 0 18px rgba(239,125,34,0.55), 7px 0 18px rgba(47,127,230,0.6), 0 5px 12px rgba(0,0,0,0.6); }
+		.disc { left: calc(50% - 27px); top: -27px; width: 54px; height: 54px; box-shadow: -7px 0 18px rgba(var(--lrgb),0.58), 7px 0 18px rgba(var(--rrgb),0.58), 0 5px 12px rgba(0,0,0,0.6); }
 		.foot { min-height: 0; gap: 6px; padding: 10px 12px calc(12px + env(safe-area-inset-bottom)); }
 		.splash .begin { min-width: 0; padding: 0 28px; }
 		.prep i { width: 150px; }

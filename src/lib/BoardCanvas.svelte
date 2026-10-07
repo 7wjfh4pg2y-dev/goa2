@@ -30,6 +30,9 @@
 	export let placing = false;
 	// temporary area-effect radii: every hex within r of a hero, in that player's colour
 	export let areas: Array<{ hex: string; r: number; color: string }> = [];
+	// single hexes to act on (spawn points, minions to remove, where a stray goes, tokens to clear): a spirit swirl
+	// round each, in its colour (the `.marks` layer: html spans turning on the GPU, like the minion rims)
+	export let marks: Array<{ hex: string; color: string }> = [];
 	// something being placed from outside (minion spawn / shelf token), drawn as the ghost
 	export let placeGhost: (typeof pieces)[number] | null = null;
 	// the highlight colour for the hex under a held object (the viewer's chosen colour)
@@ -204,6 +207,7 @@
 	// for free; the same animation on a <g> inside the pieces svg made the browser redo that svg ten times a
 	// second (measured: idle frames went from 4 ms to 14 ms on a slowed-down phone profile).
 	$: rimPieces = pieces.filter((p) => p.role && !p.attachTo);
+	$: markSpots = [...new Map(marks.map((m) => [m.hex, m])).values()].filter((m) => cells[m.hex] !== undefined);
 	// the minions' ground shadow (island look) falls down-SCREEN, so in the turned layer it is offset the other way
 	$: rimShade = (() => { const t = (rotEff * Math.PI) / 180, vx = 0.035, vy = 0.09; return { x: (vx * Math.cos(t) + vy * Math.sin(t)) * 100, y: (-vx * Math.sin(t) + vy * Math.cos(t)) * 100 }; })();
 	// while the view is moving the layer is only slid about (it may soften when zoomed in);
@@ -296,12 +300,12 @@
 		return r && r.width > 0 ? r : null;
 	}
 	let picImg: { xml: string; img: HTMLImageElement } | null = null;
-	export async function paintPicture(target: HTMLCanvasElement, w: number, h: number, inset = { t: 0, r: 0, b: 0, l: 0 }): Promise<boolean> {
+	export async function paintPicture(target: HTMLCanvasElement, w: number, h: number, inset = { t: 0, r: 0, b: 0, l: 0 }, sea = 1.35): Promise<boolean> {
 		if (look !== 'island' || !landEl || !hexes.length || w < 2 || h < 2) return false;
 		const dpr = Math.min(window.devicePixelRatio || 1, 2);
 		// the island's extent (board units), a little sea round it
 		const xs = hexes.map((q) => q.x), ys = hexes.map((q) => q.y);
-		const m0 = size * 1.35;
+		const m0 = size * sea; // the sea kept round the island, in hexes
 		const ix0 = Math.min(...xs) - size * 0.87 - m0, ix1 = Math.max(...xs) + size * 0.87 + m0;
 		const iy0 = Math.min(...ys) - size - m0, iy1 = Math.max(...ys) + size + m0;
 		const aw = Math.max(1, w - inset.l - inset.r), ah = Math.max(1, h - inset.t - inset.b);
@@ -581,6 +585,24 @@
 		}
 		return { color: a.color, cells: [...inside].map((id) => centerOf(id)), outline: edges.join('') };
 	});
+	// the spirit swirl (hex radius 100): tapered spiral wisps, built once — three arms close in, two finer ones out
+	function wisps(n: number, r0: number, r1: number, sweep: number, w: number, at = 0) {
+		const out: string[] = [];
+		for (let k = 0; k < n; k++) {
+			const L: string[] = [], R: string[] = [];
+			for (let i = 0; i <= 24; i++) {
+				const t = i / 24, a = ((at + (k * 360) / n + t * sweep) * Math.PI) / 180, rr = r0 + (r1 - r0) * t, hw = w * Math.sin(Math.PI * Math.min(1, t * 1.15));
+				L.push(`${((rr + hw) * Math.cos(a)).toFixed(1)} ${((rr + hw) * Math.sin(a)).toFixed(1)}`);
+				R.push(`${((rr - hw) * Math.cos(a)).toFixed(1)} ${((rr - hw) * Math.sin(a)).toFixed(1)}`);
+			}
+			out.push(`M${L.join('L')}L${R.reverse().join('L')}Z`);
+		}
+		return out.join('');
+	}
+	const WISP_A = wisps(3, 48, 120, 210, 12);
+	const WISP_CORE = wisps(3, 52, 116, 200, 4.5, 4);
+	const WISP_B = wisps(3, 82, 130, 130, 5.5, 60);
+	const HEXPTS = [0, 1, 2, 3, 4, 5].map((i) => { const a = ((60 * i - 90) * Math.PI) / 180; return `${(96 * Math.cos(a)).toFixed(1)},${(96 * Math.sin(a)).toFixed(1)}`; }).join(' ');
 	const pieceColor = (t: string) => (t === 'orange' ? '#ea6a1e' : t === 'blue' ? '#2f79e6' : '#9aa4b2');
 </script>
 
@@ -650,6 +672,19 @@
 					style="left:{((base.x + off.x) * fit.s + fit.ox - d / 2).toFixed(2)}px; top:{((base.y + off.y) * fit.s + fit.oy - d / 2).toFixed(2)}px; width:{d.toFixed(2)}px; height:{d.toFixed(2)}px">
 					{#if look === 'island'}<i class="sh" style="translate:{rimShade.x.toFixed(1)}% {rimShade.y.toFixed(1)}%"></i>{/if}
 					<span class="turn" class:ccw={p.team === 'blue'}><svg viewBox="-100 -100 200 200"><use href={minionRef(p.team, p.role, 'rim')} /></svg></span>
+				</span>
+			{/each}
+		</div>
+	{/if}
+	{#if fit && viewM && markSpots.length}
+		<div class="marks" style:transform={landTf} aria-hidden="true">
+			{#each markSpots as m (m.hex)}
+				{@const c = centerOf(m.hex)}
+				{@const d = size * 2.6 * fit.s}
+				<span class="mark" data-mark={m.hex} style="--mc:{m.color}; left:{(c.x * fit.s + fit.ox - d / 2).toFixed(2)}px; top:{(c.y * fit.s + fit.oy - d / 2).toFixed(2)}px; width:{d.toFixed(2)}px; height:{d.toFixed(2)}px">
+					<span class="mk base"><svg viewBox="-130 -130 260 260"><polygon points={HEXPTS} class="hx" /><polygon points={HEXPTS} class="hxe" /></svg></span>
+					<span class="mk spin"><svg viewBox="-130 -130 260 260"><path d={WISP_A} class="wa" /><path d={WISP_CORE} class="wc" /><circle r="8" cx="0" cy="-118" class="mote" transform="rotate(120)" /><circle r="7" cx="0" cy="-118" class="mote" transform="rotate(240)" /><circle r="7" cx="0" cy="-118" class="mote" transform="rotate(0)" /></svg></span>
+					<span class="mk spin rev"><svg viewBox="-130 -130 260 260"><path d={WISP_B} class="wb" /></svg></span>
 				</span>
 			{/each}
 		</div>
@@ -800,4 +835,23 @@
 	@media (prefers-reduced-motion: reduce) { .rim .turn { animation: none; } }
 	.board-wrap.calm .rim .turn, .board-wrap.calm svg.zone, .board-wrap.rimstill .rim .turn { animation: none; } /* effects off */
 	@keyframes spin { to { transform: rotate(360deg); } }
+	/* the spirit swirl on a hex to act on: a glowing hex that breathes and wisps that circle it (transform / opacity on
+	   html spans only — the GPU's work); drawn three times too big and scaled down, like the rims */
+	.marks { position: absolute; inset: 0; transform-origin: 0 0; pointer-events: none; }
+	.mark { position: absolute; }
+	.mk { position: absolute; inset: 0; }
+	.mk svg { position: absolute; inset: -100%; width: 300%; height: 300%; scale: 0.33333; overflow: visible; }
+	.mk.base { background: radial-gradient(closest-side, color-mix(in srgb, var(--mc) 45%, transparent) 55%, transparent); }
+	.mk .hx { fill: var(--mc); fill-opacity: 0.38; }
+	.mk .hxe { fill: none; stroke: color-mix(in srgb, var(--mc) 70%, #fff); stroke-width: 7; stroke-linejoin: round; filter: drop-shadow(0 0 8px var(--mc)); }
+	.mk .wa { fill: var(--mc); opacity: 0.9; filter: drop-shadow(0 0 7px var(--mc)); }
+	.mk .wc { fill: color-mix(in srgb, var(--mc) 25%, #fff); }
+	.mk .wb { fill: color-mix(in srgb, var(--mc) 45%, #fff); opacity: 0.8; filter: drop-shadow(0 0 4px var(--mc)); }
+	.mk .mote { fill: #fff; filter: drop-shadow(0 0 4px var(--mc)); }
+	.mk.base { animation: markpulse 1.8s ease-in-out infinite; }
+	.mk.spin { animation: rimturn 4.5s linear infinite; }
+	.mk.spin.rev { animation-duration: 7s; animation-direction: reverse; }
+	@keyframes markpulse { 0%, 100% { opacity: 0.65; } 50% { opacity: 1; } }
+	@media (prefers-reduced-motion: reduce) { .mk.base, .mk.spin { animation: none; } }
+	.board-wrap.calm .mk.base, .board-wrap.calm .mk.spin { animation: none; }
 </style>

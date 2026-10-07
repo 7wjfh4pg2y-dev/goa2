@@ -7,9 +7,9 @@
 	// level arcs as its outer ring (the 8th purple), your initiative this turn, the crown and the status markers; on the
 	// right the gold action ring (the one thing to do, in a word). Between them: your hero (the player under it) and
 	// your coins on a coin with − / +, the six stats 3 × 2, this round's wells I–IV, the discard pile, the deck and the
-	// ultimate, the tools (radius · ping · tokens) over the hand options (auto-hide · fan / side by side · dock), and —
-	// only while docked — the ribbon rack, for which the dash grows wider.
-	import type { Snippet } from 'svelte';
+	// ultimate, the tools (tokens · radius · ping) over the hand options (auto-hide · fan / side by side · dock). Docking
+	// the hand slides the action ring out to the right and the ribbon rack out from behind it — nothing else moves.
+	import { onDestroy, type Snippet } from 'svelte';
 	import TurnSlot from '$lib/cards/TurnSlot.svelte';
 	import Card from '$lib/cards/Card.svelte';
 	import DockHand from '$lib/DockHand.svelte';
@@ -63,7 +63,21 @@
 		return `M ${(70 + r * Math.sin(a0)).toFixed(2)} ${(70 - r * Math.cos(a0)).toFixed(2)} A ${r} ${r} 0 0 1 ${(70 + r * Math.sin(a1)).toFixed(2)} ${(70 - r * Math.cos(a1)).toFixed(2)}`;
 	};
 	$: top = cs.discard.length ? cs.discard[cs.discard.length - 1] : null;
+	// the ring's word(s): one line per word, sized so the longest fits across the ring
+	$: words = order.label.split(' ');
+	$: labelFs = Math.min(16, 70 / (Math.max(...words.map((w) => w.length)) * 0.62));
 	$: subLong = (order.sub ?? '').length > 16;
+	// the dock slides (transform only); the rack is clipped only while it moves, so its pop-ups can rise above the dash
+	let sliding = false;
+	let slideT: ReturnType<typeof setTimeout> | null = null;
+	let wasDocked = docked;
+	$: if (docked !== wasDocked) { wasDocked = docked; slide(); }
+	function slide() {
+		sliding = true;
+		if (slideT) clearTimeout(slideT);
+		slideT = setTimeout(() => (sliding = false), 460);
+	}
+	onDestroy(() => { if (slideT) clearTimeout(slideT); });
 </script>
 
 <div class="mydash is-{team}" class:docked>
@@ -121,9 +135,9 @@
 		</div>
 
 		<div class="dtools">
+			<span class="tslot">{#if tokens}{@render tokens()}{/if}</span>
 			<span class="tslot">{#if radius}{@render radius()}{/if}</span>
 			<button class="tl" class:on={pingArmed} on:click={onPing} title={pingArmed ? 'Tap the board to ping — or press again to ping your hero' : 'Ping (or Alt+click the board)'} aria-label="Ping"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.6" class="f" /><path d="M6.3 6.3a8 8 0 0 0 0 11.4M17.7 6.3a8 8 0 0 1 0 11.4M3.5 3.5a12 12 0 0 0 0 17M20.5 3.5a12 12 0 0 1 0 17" /></svg></button>
-			<span class="tslot">{#if tokens}{@render tokens()}{/if}</span>
 			<button class="tl" class:on={autoHide} on:click={onAutoHide} title={autoHide ? 'Auto-hide hand: on' : 'Auto-hide hand: off'} aria-label="Auto-hide hand">
 				<svg viewBox="0 0 24 24"><rect x="4.5" y="2.5" width="8" height="11" rx="1.4" class="cardf" transform="rotate(-9 8.5 8)" /><rect x="11.5" y="2.5" width="8" height="11" rx="1.4" class="cardf" transform="rotate(9 15.5 8)" /><path d="M2.5 15.5h19" />{#if autoHide}<path d="M9 18.5l3 3 3-3" />{:else}<path d="M9 21.5l3-3 3 3" />{/if}</svg>
 			</button>
@@ -135,15 +149,18 @@
 			</button>
 		</div>
 
-		{#if docked}
-			<div class="dock" class:armed={armed != null}><DockHand heroId={cs.hero} {hand} fanned={!autoHide} {onPick} /></div>
-		{/if}
+		<div class="dexw" class:open={docked} class:sliding aria-hidden={!docked}>
+			<div class="dext">
+				{#if docked || sliding}<div class="dock" class:armed={armed != null}><DockHand heroId={cs.hero} {hand} fanned={!autoHide} {onPick} /></div>{/if}
+			</div>
+		</div>
 
 		<div class="dgo">
 			<button class="cap gob {order.kind}" class:pulse={order.pulse} disabled={!order.run} on:click={() => order.run?.()}>
 				<span class="gin">
-					<b>{#each order.label.split(' ') as w, i (i)}{#if i}<br />{/if}{w}{/each}</b>
-					{#if order.sub}<small class:long={subLong}>{order.sub}</small>{/if}
+					<i></i>
+					<b style="font-size:{labelFs.toFixed(1)}px">{#each words as w, i (i)}{#if i}<br />{/if}{w}{/each}</b>
+					<span class="gsub">{#if order.sub}<small class:long={subLong}>{order.sub}</small>{/if}</span>
 				</span>
 			</button>
 			{#if order.alt}<button class="galt" on:click={order.alt.run}>{order.alt.label}</button>{/if}
@@ -152,7 +169,7 @@
 </div>
 
 <style>
-	.mydash { --brass: #d8b36a; --brass-hi: #f4dfa8; --line: rgba(216, 179, 106, 0.4); --cap: 104px; height: 88px; color: #f5f1e8; pointer-events: auto; }
+	.mydash { --brass: #d8b36a; --brass-hi: #f4dfa8; --line: rgba(216, 179, 106, 0.4); --cap: 104px; --dw: 170px; height: 88px; color: #f5f1e8; pointer-events: auto; }
 	.is-orange { --tc: #ef7d22; --tg: rgba(239, 125, 34, 0.18); --th: #ffb878; } .is-blue { --tc: #2f7fe6; --tg: rgba(47, 127, 230, 0.2); --th: #9ccbff; }
 	.dbody { position: relative; height: 100%; display: flex; align-items: center; gap: 16px; padding: 0 calc(var(--cap) - 2px); box-sizing: border-box; border-radius: 44px;
 		background: linear-gradient(180deg, var(--tg), transparent 50%), linear-gradient(180deg, rgba(16, 44, 72, 0.97), rgba(6, 21, 38, 0.97)); border: 1px solid var(--line); border-top: 2px solid var(--tc); box-shadow: 0 12px 30px rgba(0, 0, 0, 0.6); }
@@ -223,17 +240,29 @@
 	.tl.on svg .cardf { fill: rgba(255, 240, 200, 0.6); }
 	.tl.on { color: #1b1204; background: linear-gradient(180deg, var(--brass-hi), var(--brass)); }
 	.tl:disabled { opacity: 0.35; cursor: default; }
+	/* the dock: a length of the dash that slides out from under the action ring (which slides --dw to the right) */
+	.dexw { position: absolute; z-index: 1; top: -2px; bottom: -1px; left: calc(100% - var(--cap)); width: calc(var(--cap) + var(--dw)); visibility: hidden; pointer-events: none; }
+	.dexw.open, .dexw.sliding { visibility: visible; }
+	.dexw.open { pointer-events: auto; }
+	.dexw.sliding { overflow: hidden; }
+	.dext { position: absolute; inset: 0; display: flex; align-items: center; padding-left: 14px; box-sizing: border-box; border-radius: 0 44px 44px 0; transform: translateX(-100%);
+		background: linear-gradient(180deg, var(--tg), transparent 50%), linear-gradient(180deg, rgba(16, 44, 72, 0.97), rgba(6, 21, 38, 0.97));
+		border: 1px solid var(--line); border-left: 0; border-top: 2px solid var(--tc); transition: transform 0.42s cubic-bezier(0.2, 0.8, 0.2, 1); }
+	.open .dext { transform: none; }
 	.dock { height: 76px; padding-left: 10px; border-left: 1px solid var(--line); }
 	/* the action cap */
-	.dgo { position: absolute; right: -14px; top: 50%; width: var(--cap); height: var(--cap); transform: translateY(-50%); }
+	.dgo { position: absolute; z-index: 2; right: -14px; top: 50%; width: var(--cap); height: var(--cap); transform: translateY(-50%); transition: transform 0.42s cubic-bezier(0.2, 0.8, 0.2, 1); }
+	.docked .dgo { transform: translate(var(--dw), -50%); }
 	.gob { top: 0; left: 0; transform: none;
 		background: conic-gradient(from 200deg, #8f6a28, #f6e2a6, #c9a050, #fff3c8, #9c7a34, #e8c97c, #8f6a28);
 		box-shadow: 0 0 0 2px #0a1a2c, 0 0 0 3px rgba(244, 223, 168, 0.5), 0 12px 26px rgba(0, 0, 0, 0.65); }
 	.gob:disabled { cursor: default; }
-	.gin { width: 100%; height: 100%; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-align: center;
+	/* the word(s) dead centre, the second line in the lower half (never wider than the ring there) */
+	.gin { width: 100%; height: 100%; border-radius: 50%; display: grid; grid-template-rows: 1fr auto 1fr; justify-items: center; text-align: center; overflow: hidden;
 		background: radial-gradient(circle at 50% 35%, #1d3d60, #0b1d33 70%, #06111f); box-shadow: inset 0 0 0 2px #0a1a2c, inset 0 6px 14px rgba(0, 0, 0, 0.6); color: var(--brass-hi); }
-	.gin b { font-weight: 400; font-size: 16px; line-height: 1.05; letter-spacing: 0.04em; text-transform: uppercase; text-shadow: 0 1px 6px rgba(0, 0, 0, 0.7); }
-	.gin small { max-width: 74%; font-size: 9px; line-height: 1.2; letter-spacing: 0.05em; text-transform: uppercase; text-align: center; text-wrap: balance; color: #bccbd9; }
+	.gin b { font-weight: 400; line-height: 1.05; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; text-shadow: 0 1px 6px rgba(0, 0, 0, 0.7); }
+	.gsub { align-self: start; width: 66%; padding-top: 4px; }
+	.gin small { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; font-size: 9px; line-height: 1.2; letter-spacing: 0.05em; text-transform: uppercase; text-align: center; text-wrap: balance; overflow-wrap: anywhere; color: #bccbd9; }
 	.gin small.long { font-size: 8px; }
 	.gob.go .gin, .gob.team .gin { background: radial-gradient(circle at 50% 40%, #3a5f86, #13304f 62%, #081626); color: #fff3c8; }
 	.gob.team .gin { background: radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--tc) 70%, #fff 10%), color-mix(in srgb, var(--tc) 55%, #000) 70%); color: #fff; }

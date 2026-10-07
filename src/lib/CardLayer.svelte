@@ -79,7 +79,6 @@
 	$: others = seated.filter((p) => p.id !== clientId);
 	$: dense = others.length > 6;
 	$: teamTint = (p: Player) => (teamForSeat(p.seat, $ms.seats) === 'orange' ? ORANGE : BLUE);
-	$: seatTeamName = (p: Player) => teamName(teamForSeat(p.seat, $ms.seats));
 	$: firstBlueId = others.find((p) => teamForSeat(p.seat, $ms.seats) === 'blue')?.id ?? '';
 	// team hue as CSS vars: --tc hex, --tcr base rgb, --tcl light rgb (for highlights)
 	const TEAM_VARS: Record<'orange' | 'blue', string> = {
@@ -929,8 +928,8 @@
 				<div class="mhead">
 					<PlayerIcon hero={oh} team={pTeam(ovPlayer)} color={colorHex(ovPlayer.color)} size="3rem" ult={cs.ultimate} />
 					<div class="mtitle">
-						<div class="mnm">{ovPlayer.name} · {heroName(oh)}</div>
-						<div class="mtt" style="color:{teamTint(ovPlayer)}">{heroTitle(oh)} · {seatTeamName(ovPlayer)} · Lv {levelOf(cs)}</div>
+						<div class="mnm hero">{heroName(oh)}</div>
+						<div class="mtt" style="color:{teamTint(ovPlayer)}">{heroTitle(oh)} · {ovPlayer.name} · Lv {levelOf(cs)}</div>
 					</div>
 					{#if cs.ultimate && ultimateIndex(oh) >= 0}
 						<button class="ultchip" on:click={() => examineCard(oh, ultimateIndex(oh))} title="Ultimate — click to enlarge">
@@ -955,7 +954,7 @@
 					{#each allStats(cs) as r}
 						<div class="stat6" class:up={r.delta > 0}>
 							<div class="stripes">{#each Array(r.delta) as _}<span class="stripe"></span>{/each}</div>
-							<img class="si" src={icon(r.icon)} alt={r.label} />
+							<img class="si" src={statImg(r.key)} alt={r.label} />
 							<div class="sv">{r.delta > 0 ? '+' + r.delta : '–'}</div>
 							<div class="slbl">{r.label}</div>
 						</div>
@@ -1692,6 +1691,7 @@
 	.mav { position: relative; width: 3rem; height: 3rem; border-radius: 50%; overflow: hidden; border: 2px solid var(--tint); flex: none; }
 	.mav img { width: 100%; height: 100%; object-fit: cover; }
 	.mnm { font-family: 'Modesto Poster', serif; font-size: 1.25rem; color: #f6ead2; }
+	.mnm.hero { color: #fff; }
 	.mtt { font-family: 'Modesto Poster', serif; font-size: .72rem; letter-spacing: .03em; color: #b8a06a; }
 	/* opponent overlay: compact ultimate chip next to the name (only once unlocked) */
 	.ultchip { display: flex; align-items: center; gap: 8px; padding: 4px 10px 4px 4px; border-radius: 10px; cursor: zoom-in;
@@ -1707,7 +1707,7 @@
 	.ilabel .ct { color: #f1f5f9; background: rgba(255,255,255,.08); border-radius: 5px; padding: 0 6px; }
 	.stats6 { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
 	.stat6 { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 12px 4px 7px; border-radius: 12px; background: rgba(12,18,32,.5); border: 1px solid rgba(255,255,255,.1); }
-	.stat6 .si { height: 1.3rem; filter: brightness(0) invert(1); opacity: .55; }
+	.stat6 .si { width: 1.9rem; height: 1.9rem; object-fit: contain; opacity: .6; }
 	.stat6 .sv { font-size: 1.1rem; font-weight: 800; color: #c3ccd8; font-variant-numeric: tabular-nums; display: flex; align-items: baseline; gap: 3px; }
 	.stat6 .slbl { font-size: .5rem; letter-spacing: .08em; text-transform: uppercase; color: #6b7a8d; }
 	.stat6 .stripes { position: absolute; top: 5px; left: 0; right: 0; display: flex; justify-content: center; gap: 3px; height: 5px; }
