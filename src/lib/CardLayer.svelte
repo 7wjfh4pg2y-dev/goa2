@@ -8,7 +8,7 @@
 	import { teamName } from '$lib/teams';
 	import type { Readable } from 'svelte/store';
 	import type { MatchSession, MatchState, Player } from '$lib/match';
-	import { teamForSeat, colorHex, battlePatch, levelPatch, canRespawn } from '$lib/match';
+	import { teamForSeat, colorHex, battlePatch, levelPatch, canRespawn, turnOrder, actingIdx, actorOf } from '$lib/match';
 	import { battleResult, battleText, laneNotes } from '$lib/battle';
 	import Card from '$lib/cards/Card.svelte';
 	import CardBack from '$lib/cards/CardBack.svelte';
@@ -114,7 +114,7 @@
 	$: iAmHost = $ms.host === clientId;
 	$: turnIdx = $ms.turn - 1;
 	// the temp action slot, most urgent first: respawn · enter the board · defend
-	$: iCanRespawn = !!$ms.defeated?.[clientId] && canRespawn($ms, clientId);
+	$: iCanRespawn = revealed && !!$ms.defeated?.[clientId] && canRespawn($ms, clientId); // only when your card acts
 	$: iMustEnter = !!$ms.toSpawn?.[clientId];
 	$: spawnWaiting = seated.filter((p) => $ms.toSpawn?.[p.id]);
 	$: myAttack = $ms.attacks?.[clientId] ?? null;
@@ -173,6 +173,14 @@
 	}
 	// end-of-round flow: turn 4 → Minion Battle (battle.ts) → removals → host's Level Up → Next round
 	$: isFinalTurn = $ms.turn >= 4;
+	// active turns (match.ts): after the reveal the cards act one at a time; the acting player ends their turn,
+	// the host can skip someone away; after the last card the turn moves on (turn 4: the host's minion battle)
+	$: actOrder = revealed ? turnOrder($ms) : [];
+	$: actAt = actingIdx($ms);
+	$: actor = revealed ? actorOf($ms) : null;
+	$: actorName = actor ? heroName(cards[actor]?.hero ?? '') : '';
+	function endAct() { session.cardAction({ kind: 'endAct', pid: clientId }); }
+	function pointAct(k: number) { if (iAmHost) session.cardAction({ kind: 'setAct', pid: clientId, idx: k }); }
 	$: battlePhase = $ms.battlePhase ?? false;
 	$: levelPhase = $ms.levelPhase ?? false;
 	// the battle's removals come first; then the host opens the level-up step
@@ -637,12 +645,12 @@
 		examine = { hid: hero, idx, pid, list };
 	}
 	// the order row after the reveal: highest initiative first; a tie goes to the team holding the tie-breaker
-	$: h2order = !revealed ? [] : seatedWithCards
-		.filter((p) => { const i = cards[p.id].pending; return i != null && i !== PASS; })
-		.map((p) => ({ p, cs: viewCards[p.id] ?? cards[p.id], ini: initOf(cards[p.id], true) ?? 0 }))
-		.sort((a, b) => b.ini - a.ini || (pTeam(a.p) === $ms.tieBreaker ? -1 : 1) - (pTeam(b.p) === $ms.tieBreaker ? -1 : 1))
-		.map((x, k, all): OrderEntry => ({ pid: x.p.id, hero: x.cs.hero, heroName: heroName(x.cs.hero), player: x.p.name, team: pTeam(x.p), idx: cards[x.p.id].pending!, ini: x.ini,
-			tied: k > 0 && all[k - 1].ini === x.ini, portrait: portraitCss(x.cs.hero), color: colorHex(x.p.color) }));
+	$: h2order = actOrder
+		.map((pid) => ({ p: $players.find((q: Player) => q.id === pid), pid, cs: viewCards[pid] ?? cards[pid], ini: initOf(cards[pid], true) ?? 0 }))
+		.filter((x) => !!x.cs)
+		.map((x, k, all): OrderEntry => ({ pid: x.pid, hero: x.cs.hero, heroName: heroName(x.cs.hero), player: x.p?.name ?? '', team: (teamOfPid(x.pid) ?? 'orange'), idx: cards[x.pid].pending!, ini: x.ini,
+			tied: k > 0 && all[k - 1].ini === x.ini, portrait: portraitCss(x.cs.hero), color: colorHex(x.p?.color ?? '') }));
+	const teamOfPid = (pid: string) => { const p = $players.find((q: Player) => q.id === pid); return p ? pTeam(p) : ($ms.pieces?.[pid]?.team as 'orange' | 'blue' | undefined) ?? null; };
 	// the planning dots in each player's colour: the enemy on the left, your team on the right (you last)
 	$: h2dots = [...seatedWithCards.filter((p) => pTeam(p) !== viewTeam), ...seatedWithCards.filter((p) => pTeam(p) === viewTeam && p.id !== clientId), ...seatedWithCards.filter((p) => p.id === clientId)]
 		.map((p) => ({ team: pTeam(p), color: colorHex(p.color), ok: isReady(cards[p.id]) }));
@@ -688,6 +696,9 @@
 		}
 		if (revealed) {
 			if (fxAsking && mine && myTurnCard != null) { const c = myTurnCard; const hero = mine.hero; return { label: 'Effect?', sub: heroCards(hero)[c]?.name, kind: 'go', run: () => (examine = { hid: hero, idx: c, pid: clientId }), alt: { label: 'No', run: fxNo } }; }
+			if (actor === clientId) return { label: 'End turn', kind: 'go', pulse: true, run: endAct };
+			if (actor) return { label: 'Waiting', sub: actorName, kind: 'wait', alt: iAmHost ? { label: 'Skip', run: endAct } : undefined };
+			// everyone has acted (turn 4: the minion battle comes next)
 			if (!iAmHost) return { label: 'Waiting', sub: 'Host', kind: 'wait' };
 			return isFinalTurn ? { label: 'Minion battle', kind: 'go', run: startBattle } : { label: 'Next turn', kind: 'go', run: onAdvanceTurn };
 		}
@@ -787,6 +798,11 @@
 			{/if}
 		{:else if battlePhase}
 			<span class="waithost">Waiting for host…</span>
+		{:else if revealed && actor === clientId}
+			<button class="act primary" on:click={endAct}>End turn →</button>
+		{:else if revealed && actor}
+			<span class="waithost">{actorName} is acting…</span>
+			{#if iAmHost}<button class="act takeback" on:click={endAct} title="Skip their turn (they're away)">Skip</button>{/if}
 		{:else if revealed && iAmHost}
 			{#if !isFinalTurn}
 				<button class="act primary" on:click={onAdvanceTurn}>Next turn →</button>
@@ -903,7 +919,7 @@
 		<div class="h2helm">
 			<div class="h2order">
 				<HudOrder planning={!revealed} countdown={countdownActive ? countdownLabel : ''} dots={h2dots} order={h2order} bonus={itemBonus} tieArt={icon(`tiebreaker_${$ms.tieBreaker}`)}
-					small={h2order.length > 4} turnKey="{$ms.round}.{$ms.turn}" onRead={(pid, hid, idx) => (examine = { hid, idx, pid })} />
+					small={h2order.length > 4} acting={actAt} canPoint={iAmHost} onPoint={pointAct} onRead={(pid, hid, idx) => (examine = { hid, idx, pid })} />
 			</div>
 			<div class="h2col l" class:tight={h2tight}>
 				{#each h2enemies as p (p.id)}

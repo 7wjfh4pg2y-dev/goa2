@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { applyCardReq, canRespawn, lifeTier, cardInitiative, cardResolved, clearable, boardLookOf, zoneGlowOf, boardFxOf, type MatchState, type Piece } from './match'
+import { applyCardReq, canRespawn, turnOrder, turnKey, actorOf, lifeTier, cardInitiative, cardResolved, clearable, boardLookOf, zoneGlowOf, boardFxOf, type MatchState, type Piece } from './match'
 import { newPlayerCardState } from './cards/cardstate'
 
 // A (orange) + C (orange, A's teammate) vs B (blue, level 3) and D (blue)
@@ -131,6 +131,11 @@ describe('defeating and removing units', () => {
 		expect(s.turn).toBe(3)
 		expect(canRespawn(s, 'B')).toBe(false) // next turn, but no card played yet
 		s = { ...s, cards: { ...s.cards, B: { ...s.cards!.B, pending: s.cards!.B.hand[0] } } } as MatchState
+		// active turns: only once B's card is the one acting
+		const bAt = turnOrder(s).indexOf('B')
+		s = { ...s, acting: { key: turnKey(s), idx: bAt === 0 ? 1 : 0 } } as MatchState
+		expect(canRespawn(s, 'B')).toBe(false) // someone else is acting
+		s = { ...s, acting: { key: turnKey(s), idx: bAt } } as MatchState
 		expect(canRespawn(s, 'B')).toBe(true)
 		const back = applyCardReq(s, { kind: 'respawn', pid: 'B', hex: '9_9' })
 		expect(back.pieces!.B).toMatchObject({ kind: 'hero', team: 'blue', hex: '9_9' })
@@ -182,5 +187,53 @@ describe('entering the board', () => {
 		expect(p.pieces!.E.hex).toBe('2_2')
 		expect(p.toSpawn).toEqual({})
 		expect(applyCardReq(s, { kind: 'spawn', pid: 'A', hex: '2_2' })).toEqual({}) // already on the board
+	})
+})
+
+describe('active turns (after the reveal the cards act one at a time)', () => {
+	// everyone has a card out; A, C, D play the same card (a tie), B plays another
+	function play(coin: 'orange' | 'blue' = 'orange'): MatchState {
+		const s = game()
+		const c = s.cards!
+		return { ...s, host: 'H', tieBreaker: coin, cards: { ...c, A: { ...c.A, pending: 0 }, C: { ...c.C, pending: 0 }, D: { ...c.D, pending: 0 } } } as MatchState
+	}
+	it('orders the cards by initiative, a tie going to the team holding the coin', () => {
+		for (const coin of ['orange', 'blue'] as const) {
+			const s = play(coin)
+			const order = turnOrder(s)
+			expect(order.sort()).toEqual(['A', 'B', 'C', 'D'])
+			const ord = turnOrder(s), ini = ord.map((p) => cardInitiative(s, p)!)
+			for (let i = 1; i < ini.length; i++) expect(ini[i]).toBeLessThanOrEqual(ini[i - 1])
+			// A, C (orange) and D (blue) tie: the coin's team first
+			const tied = ord.filter((p) => p !== 'B')
+			expect(tied[coin === 'orange' ? 2 : 0]).toBe('D')
+		}
+		expect(turnOrder({ ...play(), cards: { ...play().cards, D: { ...play().cards!.D, pending: -1 } } } as MatchState)).not.toContain('D') // a pass doesn't act
+	})
+	it('only the acting player (or the host) ends a turn; the next card acts', () => {
+		let s = play()
+		const [first, second] = turnOrder(s)
+		expect(actorOf(s)).toBe(first)
+		expect(applyCardReq(s, { kind: 'endAct', pid: second })).toEqual({})
+		s = { ...s, ...applyCardReq(s, { kind: 'endAct', pid: first }) } as MatchState
+		expect(actorOf(s)).toBe(second)
+		s = { ...s, ...applyCardReq(s, { kind: 'endAct', pid: 'H' }) } as MatchState // the host skips someone away
+		expect(actorOf(s)).toBe(turnOrder(s)[2])
+		expect(applyCardReq(s, { kind: 'setAct', pid: first, idx: 0 })).toEqual({}) // only the host points
+		s = { ...s, ...applyCardReq(s, { kind: 'setAct', pid: 'H', idx: 0 }) } as MatchState
+		expect(actorOf(s)).toBe(first)
+		// a new turn starts from the first card again
+		expect(actorOf({ ...s, turn: 3 } as MatchState)).toBe(turnOrder({ ...s, turn: 3 } as MatchState)[0])
+	})
+	it('the last card ending its turn moves the game to the next turn; on turn 4 the host\'s minion battle is next', () => {
+		let s = play()
+		for (const p of turnOrder(play())) s = { ...s, ...applyCardReq(s, { kind: 'endAct', pid: p }) } as MatchState
+		expect(s.turn).toBe(3)
+		expect(s.cards!.A.turns[1]).toBe(0) // the card locked into its slot
+		let t = { ...play(), turn: 4 } as MatchState
+		for (const p of turnOrder(t)) t = { ...t, ...applyCardReq(t, { kind: 'endAct', pid: p }) } as MatchState
+		expect(t.turn).toBe(4)
+		expect(actorOf(t)).toBeNull()
+		expect(applyCardReq(t, { kind: 'endAct', pid: 'H' })).toEqual({})
 	})
 })

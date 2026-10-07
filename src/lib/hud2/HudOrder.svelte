@@ -5,9 +5,8 @@
 <script lang="ts">
 	// The row under the top bar. While players choose: "Planning", a dot per player (filled once they're in), "N of M
 	// ready" — or the countdown. After the reveal: the cards as banners, highest initiative first (a tie goes to the
-	// team holding the tie-breaker coin, marked by the coin between them). The lit banner is who acts now — LOCAL to
-	// this screen (the game doesn't say who is acting): click a later banner to move the light there, click the lit
-	// one (or one already done) to read the card.
+	// team holding the tie-breaker coin, marked by the coin between them). The lit banner is whose card acts now —
+	// shared (match.ts active turns); the host may click another banner to point at it, anyone else reads the card.
 	import { heroCards, backgroundSlug } from '$lib/cards/deck';
 
 	export let planning = true;
@@ -17,7 +16,9 @@
 	export let bonus: (pid: string, act: string) => number = () => 0;
 	export let tieArt = '';
 	export let small = false;
-	export let turnKey = '';
+	export let acting = 0; // whose card acts (shared: match.ts actingIdx)
+	export let canPoint = false; // the host may say who is acting
+	export let onPoint: (k: number) => void = () => {};
 	export let onRead: (pid: string, hero: string, idx: number) => void = () => {};
 
 	const ui = import.meta.glob('$lib/cards/images/*.png', { eager: true, import: 'default' }) as Record<string, string>;
@@ -25,9 +26,6 @@
 	const cardArt = import.meta.glob('$lib/cards/images/cards/*/*.webp', { eager: true, import: 'default' }) as Record<string, string>;
 	const artOf = (hero: string, i: number) => { const c = heroCards(hero)[i]; return c ? Object.entries(cardArt).find(([k]) => k.endsWith(`/cards/${hero}/${backgroundSlug(c)}.webp`))?.[1] ?? '' : ''; };
 	const COL: Record<string, string> = { GOLD: '#c9982f', SILVER: '#8d99a8', RED: '#b8322f', BLUE: '#2a64c4', GREEN: '#2b8a43', PURPLE: '#7a46bd' };
-	let acting = 0;
-	let lastKey = '';
-	$: if (turnKey !== lastKey) { lastKey = turnKey; acting = 0; }
 	$: ready = dots.filter((d) => d.ok).length;
 	function act(e: OrderEntry) {
 		const c = heroCards(e.hero)[e.idx] as { primaryAction?: string; primaryValue?: number; color?: string } | undefined;
@@ -35,7 +33,7 @@
 		return { icon: a ? ic(`${a}_${(c?.color ?? '').toLowerCase()}`) : '', value: c?.primaryValue, bonus: a ? bonus(e.pid, a) : 0, label: a };
 	}
 	function click(k: number, e: OrderEntry) {
-		if (k > acting) acting = k;
+		if (canPoint && k !== acting) onPoint(k);
 		else onRead(e.pid, e.hero, e.idx);
 	}
 </script>
@@ -51,7 +49,7 @@
 			{@const c = heroCards(e.hero)[e.idx]}
 			{@const a = act(e)}
 			{#if k}{#if e.tied}<img class="tiemark" src={tieArt} alt="Tie" title="A tie — the coin's holders go first" />{:else}<i class="chev">›</i>{/if}{/if}
-			<button class="ban is-{e.team}" class:done={k < acting} class:now={k === acting} style="--c:{COL[c?.color ?? ''] ?? '#666'}; --art:url({artOf(e.hero, e.idx)})" on:click={() => click(k, e)} title={k > acting ? 'Mark as acting' : 'Read the card'}>
+			<button class="ban is-{e.team}" class:done={k < acting} class:now={k === acting} style="--c:{COL[c?.color ?? ''] ?? '#666'}; --art:url({artOf(e.hero, e.idx)})" on:click={() => click(k, e)} title={canPoint && k !== acting ? 'Make this card the one acting' : 'Read the card'}>
 				<span class="bini">{e.ini}</span>
 				<span class="bbody">
 					<span class="bname">{c?.name ?? ''}</span>

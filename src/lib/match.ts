@@ -71,6 +71,8 @@ export type CardReq =
 	| { kind: 'battleAuto'; pid: string } // …or lets the game choose the rest
 	| { kind: 'forcepass'; pid: string } // host: pass everyone not yet committed
 	| { kind: 'advance'; pid: string } // host: lock this turn's cards into their slots, go to next turn
+	| { kind: 'endAct'; pid: string } // the acting player (or the host, for someone away) ends their turn: the next card acts; after the last, the turn moves on
+	| { kind: 'setAct'; pid: string; idx: number } // host: say who is acting (a click on the order row)
 
 /** Minion battle (after turn 4 is revealed): lock the last cards in, then every
  *  card goes back to its owner's hand as if the round had ended — so players can
@@ -90,6 +92,24 @@ export function battlePatch(s: MatchState): Partial<MatchState> {
 /** Host, after the minion battle (and its removals): open the level-up step. */
 export const levelPatch = (s?: Pick<MatchState, 'cards'>): Partial<MatchState> => ({ levelPhase: true, levelBase: s?.cards ?? null })
 
+// ── Active turns: after the reveal the cards act one at a time, highest initiative first ──
+export const turnKey = (s: Pick<MatchState, 'round' | 'turn'>) => `${s.round}-${s.turn}`
+/** This turn's acting order: every card in play (not a pass), highest initiative (items included) first; a tie
+ *  goes to the team holding the tie-breaker coin, then by id so every screen agrees. */
+export function turnOrder(s: MatchState): string[] {
+	const cards = s.cards ?? {}
+	const tie = (pid: string) => (teamOf(s, pid) === s.tieBreaker ? 0 : 1)
+	return Object.keys(cards)
+		.filter((pid) => { const i = cards[pid].pending; return i != null && i >= 0 })
+		.map((pid) => ({ pid, ini: cardInitiative(s, pid) ?? 0 }))
+		.sort((a, b) => b.ini - a.ini || tie(a.pid) - tie(b.pid) || (a.pid < b.pid ? -1 : 1))
+		.map((x) => x.pid)
+}
+/** How far this turn's acting has got (0 = the first card; the order's length = everyone has acted). */
+export const actingIdx = (s: MatchState) => (s.acting?.key === turnKey(s) ? s.acting.idx : 0)
+/** Whose card acts now (null once everyone has, or before anything is in play). */
+export const actorOf = (s: MatchState): string | null => turnOrder(s)[actingIdx(s)] ?? null
+
 /** Apply a card instruction to the shared state, returning the patch to broadcast. */
 export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 	const cards = s.cards ?? {}
@@ -100,6 +120,18 @@ export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 		const next: Record<string, PlayerCardState> = { ...cards }
 		for (const pid in next) if (next[pid].pending == null) next[pid] = passTurn(next[pid])
 		return { cards: next }
+	}
+	// the acting player ends their turn (the host may, for someone away): the next card acts; after the last
+	// one the turn moves on by itself — except turn 4, where the host's Minion battle comes next
+	if (req.kind === 'endAct') {
+		const order = turnOrder(s), at = actingIdx(s)
+		if (at >= order.length || (req.pid !== order[at] && req.pid !== s.host)) return {}
+		if (at + 1 >= order.length && s.turn < TURNS_PER_ROUND) return { ...applyCardReq(s, { kind: 'advance', pid: req.pid }), acting: null }
+		return { acting: { key: turnKey(s), idx: at + 1 } }
+	}
+	if (req.kind === 'setAct') {
+		if (req.pid !== s.host) return {}
+		return { acting: { key: turnKey(s), idx: Math.max(0, Math.min(turnOrder(s).length, req.idx)) } }
 	}
 	// host: lock each committed card into its turn slot, then move to the next turn;
 	// after turn 4 the round ends and hands refresh
@@ -293,6 +325,8 @@ export interface MatchState {
 	// the host the moment every seated player has committed; cleared if anyone
 	// uncommits (so the count restarts from 3 when they all commit again).
 	revealAt?: number | null
+	/** after the reveal, whose card is acting: `idx` into turnOrder(), for the turn `key` (round-turn); another turn = 0 */
+	acting?: { key: string; idx: number } | null
 	// per-player status markers shown on the HUD (Tigerclaw poison, Bain bounty),
 	// keyed by playerId. Counts so poison can stack; 0 = clear.
 	status?: Record<string, { poison: number; bounty: number }>
@@ -852,7 +886,8 @@ export function joinMatch(
 	// calls it synchronously) never hits it in the temporal dead zone.
 	const recordHistory = (before: MatchState, after: MatchState) => {
 		if (undoing || !before || !after) return
-		if (after.round !== before.round || after.turn !== before.turn) {
+		// a new turn — or the minion battle starting (it locks turn 4 in like a turn passing) — resets the stack
+		if (after.round !== before.round || after.turn !== before.turn || (after.battlePhase && !before.battlePhase)) {
 			if (undoStack.length) { undoStack = []; canUndo.set(false) }
 			return
 		}
@@ -1247,6 +1282,7 @@ export function joinMatch(
 			note(req.pid, req.kind === 'defeatMinion' ? `defeated ${what} (+${minionCoins(m?.role)} coins)` : `removed ${what} (no coins)`)
 		}
 		if (req.kind === 'respawn' && patch.pieces) note(req.pid, 'respawned ⤴')
+		if (req.kind === 'endAct' && (patch.acting !== undefined || patch.turn)) { const who = actorOf(local); if (who) note(who, req.pid === who ? 'ends their turn' : 'turn skipped by the host') }
 		if (req.kind === 'removeHero' && patch.defeated) note(req.pid, 'took their hero off the board — back with their next card')
 		if (req.kind === 'clearAround' && patch.pieces) { const n = Object.keys(local.pieces ?? {}).length - Object.keys(patch.pieces).length; note(req.pid, `cleared ${n} token${n === 1 ? '' : 's'} next to them`) }
 		if (req.kind === 'spawn' && patch.pieces) note(req.pid, 'entered the battlefield')
@@ -1506,7 +1542,8 @@ export function canRespawn(s: MatchState, pid: string): boolean {
 	if (!d) return false
 	const later = s.round > d.round || (s.round === d.round && s.turn > d.turn)
 	const cs = s.cards?.[pid]
-	return later && !!cs && ((cs.pending != null && cs.pending >= 0) || cs.turns[s.turn - 1] != null)
+	// …and only when their card acts (active turns: the order after the reveal)
+	return later && !!cs && cs.pending != null && cs.pending >= 0 && actorOf(s) === pid
 }
 
 /** A hero leaves the board by a card effect (or its own player's choice): no rewards, no
