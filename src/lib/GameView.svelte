@@ -13,7 +13,7 @@
 	import AttackSplash from '$lib/hud2/AttackSplash.svelte';
 	import GameLobby from '$lib/hud2/GameLobby.svelte';
 	import { LANE } from '$lib/battle';
-	import { heroById, heroLogo } from '$lib/heroes';
+	import { heroById, heroLogo, portraitCss } from '$lib/heroes';
 	import { teamName, teamAdj, aMinion, placeName } from '$lib/teams';
 	import { createRecorder } from '$lib/recorder';
 	import { statsFromJournal } from '$lib/gamestats'; // battle report
@@ -183,6 +183,7 @@
 	type Pill = { label: string; run?: () => void; kind?: 'go' | 'bad' | 'imm'; coin?: number; off?: boolean; title?: string };
 	$: pills = !hud2 || !selPiece ? [] : ([
 		selImmune ? { label: 'Immune', kind: 'imm', title: 'Heavy minions can\'t be moved, defeated or removed while another minion of their team is in the battle zone' } : null,
+		selMovable ? { label: 'Move', run: moveSel, title: 'Pick it up — click a hex to put it down (or drag the piece)' } : null,
 		canFlip ? { label: selPiece.faceDown ? 'Flip — reveal' : 'Flip face down', run: flipMine } : null,
 		canDefeatSel && selPiece.kind === 'hero' ? { label: attacks[selPiece.id] ? 'Under attack…' : 'Attack', kind: 'go', off: !!attacks[selPiece.id], run: () => attackSel('attack') } : null,
 		canDefeatSel && selPiece.kind === 'hero' ? { label: 'Defeat', kind: 'bad', coin: heroDefeatSummary($ms, clientId, selPiece.id).coins, run: () => attackSel('defeat'), title: 'Not an attack (e.g. a discard-or-die effect): defeat them outright — same rewards' } : null,
@@ -455,6 +456,9 @@
 		selPieceId = pc ? id : null;
 	}
 	$: selPiece = selPieceId ? $ms.pieces[selPieceId] : null;
+	// Move: pick the selected piece up (a click only selects it; a drag still moves it straight away)
+	$: selMovable = !!selPiece && !(selImmune && !iAmHost);
+	function moveSel() { if (selPiece) board?.carry(selPiece.id); }
 	// the piece a Defeat/Remove dialog is about — remembered before the board puts it down
 	let actId: string | null = null;
 	$: actPiece = actId ? $ms.pieces[actId] ?? null : null;
@@ -515,7 +519,10 @@
 	function doClear() { if (clearPick.length) session.cardAction({ kind: 'clearAround', pid: clientId, ids: clearPick }); cancelClear(); }
 	// attacks in flight (match.ts): the defender answers, the attacker waits
 	$: attacks = $ms.attacks ?? {};
-	$: incoming = attacks[clientId] && !attacks[clientId].defending ? attacks[clientId] : null;
+	// you're under attack until it's answered (Defeated, or Defended once you've discarded — the action button)
+	$: incoming = attacks[clientId] ?? null;
+	const heroIdOf = (pid: string) => $ms.pieces?.[pid]?.hero ?? $ms.cards?.[pid]?.hero ?? '';
+	const TEAM_HEX: Record<string, string> = { orange: '#ef7d22', blue: '#2f7fe6' };
 	$: outgoing = Object.entries(attacks).filter(([, a]) => a.by === clientId);
 	$: hostWatch = iAmHost ? Object.entries(attacks).filter(([t, a]) => a.by !== clientId && t !== clientId && !$players.some((p) => p.id === t)) : [];
 	const answer = (target: string, result: 'defend' | 'defended' | 'defeated' | 'cancel') => session.cardAction({ kind: 'attackResolve', pid: clientId, target, result });
@@ -737,11 +744,17 @@
 		<div class="placehint defeat"><span>Defeated — play a card on your next turn to respawn</span></div>
 	{/if}
 	{#if incoming}
-		<div class="atkask" role="alertdialog" aria-label="You are being attacked">
-			<span><b>{whoOf(incoming.by)}</b> is attacking. Defend?</span>
-			<span class="atkbtns">
-				<button class="ab yes" style:--tc={myTeam === 'blue' ? '#2f7fe6' : '#ef7d22'} on:click={() => answer(clientId, 'defend')}>Yes</button>
-				<button class="ab no" on:click={() => answer(clientId, 'defeated')}>No</button>
+		<!-- under attack: a war band — their face, crossed blades, yours; the choice itself is on the action button -->
+		<div class="atkask" role="alertdialog" aria-label="You are being attacked" style="--ec:{TEAM_HEX[myTeam === 'blue' ? 'orange' : 'blue']}; --mc:{TEAM_HEX[myTeam ?? 'blue'] ?? '#2f7fe6'}">
+			<span class="akglow" aria-hidden="true"></span>
+			<span class="akband">
+				<span class="akface" style={portraitCss(heroIdOf(incoming.by))}></span>
+				<span class="akmid">
+					<span class="aktitle"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3l9 9M3 4l1-1M11 14l-2 2-3-3 2-2M20 3l-9 9M21 4l-1-1M13 14l2 2 3-3-2-2M7 17l-3 3M17 17l3 3" /></svg>Under attack</span>
+					<span class="akwho"><b>{heroOf(incoming.by)}</b><em>{playerName(incoming.by)}</em></span>
+					<span class="akhint">{incoming.discarded ? 'Defended or defeated?' : 'Discard to defend'}</span>
+				</span>
+				<span class="akface me" style={portraitCss(heroIdOf(clientId))}></span>
 			</span>
 		</div>
 	{/if}
@@ -814,9 +827,10 @@
 			{/if}
 			<button class="piex" on:click={closeConfirm} aria-label="Cancel">✕</button>
 		</div>
-	{:else if selPiece && (selPiece.role || selPiece.token || (selPiece.kind === 'hero' && (canDefeatSel || ownHeroSel)))}
+	{:else if selPiece}
 		<div class="pietool" class:anchored={!!tipPos} style={tipPos ? `left:${tipPos.x / lay.s}px; top:${tipPos.y / lay.s}px` : ''}>
 			<span class="pietxt" style:color={teamText(selPiece)}>{selLabel}</span>
+			{#if selMovable}<button class="pieflip" on:click={moveSel} title="Pick it up — tap a hex to put it down">Move</button>{/if}
 			{#if canFlip}
 				<button class="pieflip" on:click={flipMine}>{selPiece.faceDown ? 'Flip — reveal' : 'Flip face down'}</button>
 			{/if}
@@ -1288,14 +1302,26 @@
 	.spcancel.red { border-color: rgba(239, 68, 68, 0.7); color: #ffb4b4; }
 	.spcancel:disabled { opacity: .45; cursor: default; }
 	.placehint.clr { border-color: rgba(255, 90, 77, 0.6); }
-	.atkask { position: absolute; top: 64px; left: 50%; transform: translateX(-50%); z-index: 12; display: flex; align-items: center; gap: 12px; padding: 8px 10px 8px 16px; border-radius: 12px;
-		background: rgba(30, 8, 8, 0.94); border: 1px solid rgba(239, 68, 68, 0.75); color: #ffe1dc; font-size: 0.9rem; box-shadow: 0 0 26px rgba(239, 68, 68, 0.35), 0 10px 28px rgba(0,0,0,.6); animation: atkpulse 1.2s ease-in-out infinite; }
-	.atkask b { font-weight: normal; color: #fff; }
-	.atkbtns { display: flex; gap: 6px; }
-	.ab { font: inherit; border-radius: 8px; padding: 5px 16px; cursor: pointer; border: 1px solid transparent; }
-	.ab.yes { background: var(--tc); color: #fff; }
-	.ab.no { background: rgba(220, 60, 60, 0.3); border-color: rgba(239, 68, 68, 0.7); color: #ffc9c2; }
-	@keyframes atkpulse { 50% { box-shadow: 0 0 40px rgba(239, 68, 68, 0.6), 0 10px 28px rgba(0,0,0,.6); } }
+	/* under attack: a slanted war band in blood red, the attacker's face (their team's ring) left, yours right; a red
+	   glow breathes behind it (opacity only — the glow itself is still) */
+	.atkask { position: absolute; top: 64px; left: 50%; transform: translateX(-50%); z-index: 12; pointer-events: none; animation: akin .35s cubic-bezier(.2, 1.3, .3, 1) both; }
+	.akglow { position: absolute; inset: -18px -40px; background: radial-gradient(50% 60% at 50% 50%, rgba(220, 40, 30, 0.55), transparent 70%); animation: akbreathe 1.4s ease-in-out infinite; }
+	.akband { position: relative; display: flex; align-items: center; gap: 14px; padding: 8px 30px; color: #ffe9e2;
+		clip-path: polygon(14px 0, 100% 0, calc(100% - 14px) 100%, 0 100%);
+		background: linear-gradient(90deg, color-mix(in srgb, var(--ec) 45%, #2a0605) 0%, #2a0605 24%, #3a0806 50%, #2a0605 76%, color-mix(in srgb, var(--mc) 40%, #2a0605) 100%);
+		box-shadow: inset 0 2px 0 rgba(255, 120, 90, 0.7), inset 0 -2px 0 rgba(255, 120, 90, 0.5); }
+	.akface { flex: none; width: 46px; height: 46px; border-radius: 50%; background-repeat: no-repeat; background-color: #0b101a; box-shadow: 0 0 0 2.5px var(--ec), 0 0 12px 2px rgba(255, 60, 40, 0.6); }
+	.akface.me { box-shadow: 0 0 0 2.5px var(--mc), 0 0 0 4px rgba(0, 0, 0, 0.6); filter: saturate(0.85); }
+	.akmid { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; }
+	.aktitle { display: inline-flex; align-items: center; gap: 8px; font-size: 11px; letter-spacing: 0.3em; text-transform: uppercase; color: #ff8f78; }
+	.aktitle svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+	.akwho { display: inline-flex; align-items: baseline; gap: 7px; white-space: nowrap; }
+	.akwho b { font-weight: normal; font-size: 20px; color: #fff; text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8); }
+	.akwho em { font-style: normal; font-size: 11px; color: #ffc2b4; }
+	.akhint { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #ffd8a8; }
+	@keyframes akin { from { opacity: 0; transform: translateX(-50%) scale(1.25); } to { opacity: 1; transform: translateX(-50%) scale(1); } }
+	@keyframes akbreathe { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
+	@media (prefers-reduced-motion: reduce) { .akglow { animation: none; } }
 	.pieimm { font-size: 0.76rem; color: #2a2f38; padding: 4px 13px; border-radius: 999px; white-space: nowrap; letter-spacing: .04em; text-shadow: 0 1px 0 rgba(255,255,255,.6);
 		background: linear-gradient(180deg, #ffffff, #d4d9df 48%, #a3acb7); border: 2px solid #d9a845; box-shadow: 0 0 0 1px #6b4a10, 0 2px 6px rgba(0,0,0,.45), inset 0 1px 0 #fff; }
 	/* minion battle removal: a bigger panel at the top, in the losing team's colour */

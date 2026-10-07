@@ -278,7 +278,10 @@
 	// saved views: rotation (relative to your team's orientation), zoom and pan
 	type BoardView = { spin: number; scale: number; panX: number; panY: number };
 	/** Put down whatever is picked up (tap-to-move hold / carry). */
-	export function release() { selected = null; dragId = null; hoverHex = null; }
+	export function release() { selected = null; carrying = false; dragId = null; hoverHex = null; }
+	/** Move (a piece's pill / toolbar): pick the selected piece up — it rides the pointer until a tap drops it on a hex
+	 *  (off the board = back where it was). A click on a piece only selects it; dragging still carries it at once. */
+	export function carry(id: string) { if (!onMovePiece || isLocked(id)) return; selected = id; carrying = true; }
 	/** Where a piece sits on screen (client px), for anchoring UI next to it. */
 	export function clientPos(id: string): { x: number; y: number; r: number } | null {
 		const p = pieces.find((q) => q.id === id);
@@ -388,7 +391,7 @@
 	let hoverHex: string | null = null;
 	// a locked piece (an immune heavy minion) can be selected but never carried
 	const isLocked = (id: string | null) => !!id && !!pieces.find((q) => q.id === id)?.locked;
-	$: carryId = dragId ?? (selected && !pieces.find((q) => q.id === selected)?.locked ? selected : null);
+	$: carryId = dragId ?? (carrying && selected && !pieces.find((q) => q.id === selected)?.locked ? selected : null);
 	$: ghostPiece = placing ? placeGhost : carryId ? pieces.find((q) => q.id === carryId) ?? null : null;
 	$: if (!ghostPiece) hoverHex = null;
 	function trackHover(clientX: number, clientY: number) {
@@ -396,7 +399,8 @@
 		hoverPt = { x: pt.x, y: pt.y };
 		hoverHex = hexAt(pt.x, pt.y);
 	}
-	let selected: string | null = null; // token picked up via tap (click-to-move)
+	let selected: string | null = null; // the piece clicked (its pills / toolbar show)
+	let carrying = false; // …and picked up by Move (it follows the pointer until a tap drops it)
 	let lastSel: string | null | undefined = undefined;
 	$: if (selected !== lastSel) { lastSel = selected; onSelect(selected); }
 	// ---- two-finger pinch-to-zoom (touch) ----
@@ -465,7 +469,7 @@
 			zoomAt(pinch.scale0 * (twoDist(a, b) / pinch.dist), (a.x + b.x) / 2, (a.y + b.y) / 2);
 			return;
 		}
-		if (dragId || selected || placing) trackHover(e.clientX, e.clientY);
+		if (dragId || carryId || placing) trackHover(e.clientX, e.clientY);
 		if (!panning && !dragId) return;
 		if (!moved) {
 			if (Math.hypot(e.clientX - downC.x, e.clientY - downC.y) < DRAG_THRESHOLD) return;
@@ -498,13 +502,13 @@
 			const hex = hexAt(pt.x, pt.y);
 			const from = pieces.find((q) => q.id === dragId)?.hex;
 			if (hex && hex !== from && onMovePiece) onMovePiece(dragId, hex);
-			dragId = null; selected = null;
+			dragId = null; selected = null; carrying = false;
 		} else if (!moved) {
 			handleTap(e);
 		}
 		panning = false; pressId = null;
 	}
-	$: if (placing) selected = null;
+	$: if (placing) { selected = null; carrying = false; }
 	function handleTap(e: PointerEvent) {
 		if (!interactive) return;
 		if (pingArmed && onPing) { // ping mode: this tap pings (off the board = cancel)
@@ -518,19 +522,20 @@
 			if (hex) onHex?.(hex); else onCancelPlace?.();
 			return;
 		}
-		if (selected != null && onMovePiece && pressId !== selected) { // holding a piece → drop it where tapped
+		if (selected != null && carrying && onMovePiece && pressId !== selected) { // carrying a piece (Move) → drop it where tapped
 			const pt = toChild(e.clientX, e.clientY);
 			const hex = hexAt(pt.x, pt.y);
 			const from = pieces.find((q) => q.id === selected)?.hex;
 			if (hex && hex !== from && !isLocked(selected)) onMovePiece(selected, hex); // off the board → stays where it was
-			selected = null;
+			selected = null; carrying = false;
 			return;
 		}
-		if (pressId != null && onMovePiece) { // pick up / put down
+		if (pressId != null && onMovePiece) { // a click on a piece selects it (again = deselect); nothing is picked up
 			selected = selected === pressId ? null : pressId;
-			if (selected) trackHover(e.clientX, e.clientY);
+			carrying = false;
 			return;
 		}
+		if (selected != null) { selected = null; carrying = false; return; } // a click on the board lets go of the selection
 		// empty-hex tap → report which hex (placement modes)
 		if (onHex && pressId == null) {
 			const pt = toChild(e.clientX, e.clientY);
@@ -676,7 +681,7 @@
 				{@const base = centerOf(p.hex)}
 				{@const off = pieceOffset[p.id] ?? { x: 0, y: 0 }}
 				{@const d = size * 1.44 * fit.s}
-				<span class="rim" class:lifted={(selected === p.id || dragId === p.id) && !!hoverHex}
+				<span class="rim" class:lifted={carryId === p.id && !!hoverHex}
 					style="left:{((base.x + off.x) * fit.s + fit.ox - d / 2).toFixed(2)}px; top:{((base.y + off.y) * fit.s + fit.oy - d / 2).toFixed(2)}px; width:{d.toFixed(2)}px; height:{d.toFixed(2)}px">
 					{#if look === 'island'}<i class="sh" style="translate:{rimShade.x.toFixed(1)}% {rimShade.y.toFixed(1)}%"></i>{/if}
 					<span class="turn" class:ccw={p.team === 'blue'}><svg viewBox="-100 -100 200 200"><use href={minionRef(p.team, p.role, 'rim')} /></svg></span>
@@ -748,7 +753,7 @@
 				{@const off = pieceOffset[p.id] ?? { x: 0, y: 0 }}
 				{@const c = { x: base.x + off.x, y: base.y + off.y }}
 				{@const sel = selected === p.id || dragId === p.id}
-				<g class="piece" class:selectable={!!onMovePiece} class:selected={sel} class:lifted={sel && !!hoverHex}
+				<g class="piece" class:selectable={!!onMovePiece} class:selected={sel} class:lifted={carryId === p.id && !!hoverHex}
 					role="button" tabindex="-1" data-piece={p.id}
 					aria-label={p.role ? `${p.team === "blue" ? "Titan" : "Atlantean"} ${p.role} minion` : (p.label ?? "piece")}
 					transform={rotEff ? `rotate(${-rotEff} ${c.x} ${c.y})` : undefined}
@@ -769,7 +774,7 @@
 					{@const c = { x: hc.x + Math.cos(ang) * size * 0.66, y: hc.y + Math.sin(ang) * size * 0.66 }}
 					{@const sel = selected === p.id || dragId === p.id}
 					<!-- a marker riding on a hero (poison / bounty): a small badge that moves with them -->
-					<g class="piece" class:selectable={!!onMovePiece} class:selected={sel} class:lifted={sel && !!hoverHex} role="button" tabindex="-1" data-piece={p.id} aria-label="{p.token ?? 'marker'} on a hero"
+					<g class="piece" class:selectable={!!onMovePiece} class:selected={sel} class:lifted={carryId === p.id && !!hoverHex} role="button" tabindex="-1" data-piece={p.id} aria-label="{p.token ?? 'marker'} on a hero"
 						transform={rotEff ? `rotate(${-rotEff} ${c.x} ${c.y})` : undefined}>
 						<circle cx={c.x} cy={c.y} r={size * 0.35} fill={sel ? '#fde047' : '#0d1118'} />
 						<circle cx={c.x} cy={c.y} r={size * 0.315} fill={p.color ?? '#f4ecd8'} />

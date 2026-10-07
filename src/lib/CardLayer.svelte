@@ -118,7 +118,6 @@
 	$: iMustEnter = !!$ms.toSpawn?.[clientId];
 	$: spawnWaiting = seated.filter((p) => $ms.toSpawn?.[p.id]);
 	$: myAttack = $ms.attacks?.[clientId] ?? null;
-	$: iDefending = !!myAttack?.defending;
 	const answerAttack = (result: 'defended' | 'defeated') => session.cardAction({ kind: 'attackResolve', pid: clientId, target: clientId, result });
 	$: seatedWithCards = seated.filter((p) => cards[p.id]);
 	// reveal layout: 1–2 players share one row; more split by team — your team on
@@ -661,10 +660,14 @@
 	const itemBonus = (pid: string, act: string) => { const d = cards[pid] ? statDeltas(cards[pid]) : {}; return (act === 'attack' ? d.atk : act === 'defense' ? d.def : act === 'movement' ? d.move : 0) ?? 0; };
 	// arm, then commit: a click on a hand card arms it, the action ring commits it; a click on the armed card reads it
 	let armed: number | null = null;
-	$: if (armed != null && (!mine || !mine.hand.includes(armed) || !canCommit)) armed = null;
+	// what the armed card is for: commit (a click on a hand card, or Commit in its preview) or discard (Discard in the
+	// preview — the ring then asks to confirm: "Discard <card>")
+	let armedKind: 'commit' | 'discard' = 'commit';
+	$: if (armed != null && (!mine || !mine.hand.includes(armed) || (armedKind === 'commit' && !canCommit))) armed = null;
+	function armFor(kind: 'commit' | 'discard', idx: number) { armed = idx; armedKind = kind; selected = null; }
 	function handCardClick2(idx: number) {
 		if (autoRetract && !handUp && !dockHand) { handUp = true; return; }
-		if (canCommit && armed !== idx) { armed = idx; return; }
+		if (canCommit && armed !== idx) { armed = idx; armedKind = 'commit'; return; }
 		armed = null;
 		preview(idx);
 	}
@@ -683,9 +686,14 @@
 	// the ONE action, in a word (the same steps as the classic dash's action slot)
 	$: order2 = ((): Order => {
 		if ($ms.wonBy) return { label: 'Game over', kind: 'off' };
+		// a card chosen in its preview to discard (any time — a defence, or an effect): the ring asks once more
+		if (armed != null && armedKind === 'discard' && mine) { const i = armed; return { label: 'Discard', sub: heroCards(mine.hero)[i]?.name, kind: 'bad', pulse: true, run: () => { defend(i); armed = null; } }; }
 		if (iCanRespawn) return { label: 'Respawn', kind: 'team', pulse: true, run: onRespawn };
 		if (iMustEnter) return { label: 'Spawn hero', kind: 'team', pulse: true, run: onEnter };
-		if (iDefending) return { label: 'Defended', kind: 'team', run: () => answerAttack('defended'), alt: { label: 'Defeated', run: () => answerAttack('defeated') } };
+		// attacked: Defeated until you discard a card (your defence); then the ring splits — Defended | Defeated
+		if (myAttack) return myAttack.discarded
+			? { label: 'Defended', kind: 'team', split: { left: { label: 'Defended', run: () => answerAttack('defended') }, right: { label: 'Defeated', run: () => answerAttack('defeated') } } }
+			: { label: 'Defeated', kind: 'bad', run: () => answerAttack('defeated') };
 		if (spawnWaiting.length) return { label: 'Waiting', sub: waitFor(spawnWaiting), kind: 'wait' };
 		if (battlePhase) {
 			if ($ms.battle?.remove) return { label: 'Waiting', sub: teamName($ms.battle.loser), kind: 'wait' };
@@ -703,7 +711,7 @@
 			return isFinalTurn ? { label: 'Minion battle', kind: 'go', run: startBattle } : { label: 'Next turn', kind: 'go', run: onAdvanceTurn };
 		}
 		if (myReady) return { label: 'Take back', sub: `${readyCount} of ${seatedWithCards.length} in`, kind: 'quiet', run: takeBack };
-		if (armed != null && canCommit && mine) return { label: 'Commit', sub: heroCards(mine.hero)[armed]?.name, kind: 'go', pulse: true, run: commitArmed };
+		if (armed != null && armedKind === 'commit' && canCommit && mine) return { label: 'Commit', sub: heroCards(mine.hero)[armed]?.name, kind: 'go', pulse: true, run: commitArmed };
 		if (mine && !mine.hand.length) return { label: 'Waiting', kind: 'wait' };
 		return { label: 'Commit', kind: 'off' };
 	})();
@@ -767,8 +775,8 @@
 			<button class="act tohand" style={teamVars(myTeam)} on:click={onRespawn}>⤴ Respawn</button>
 		{:else if iMustEnter}
 			<button class="act tohand spawnglow" style={teamVars(myTeam)} on:click={onEnter}>⤴ Spawn hero</button>
-		{:else if iDefending}
-			<button class="act tohand" style={teamVars(myTeam)} on:click={() => answerAttack('defended')} title="You defended (discard your defence card first)">🛡 Defended</button>
+		{:else if myAttack}
+			{#if myAttack.discarded}<button class="act tohand" style={teamVars(myTeam)} on:click={() => answerAttack('defended')}>🛡 Defended</button>{/if}
 			<button class="act takeback" on:click={() => answerAttack('defeated')}>Defeated</button>
 		{:else if spawnWaiting.length}
 			<span class="waithost">Waiting for {spawnWaiting.map((p) => p.name).join(', ')} to spawn…</span>
@@ -1278,9 +1286,10 @@
 			{#if previewSrc === 'discard'}
 				<button class="act tohand" style={teamVars(myTeam)} on:click={() => pullBack(selected!)}>Recover to hand</button>
 			{:else}
-				{#if canCommit}<button class="act tohand" style={teamVars(myTeam)} on:click={() => commit(selected!)}>Commit · Turn {$ms.turn}</button>{/if}
+				<!-- 2.0 HUD: the choice goes to the action ring, which asks to confirm; classic: straight away -->
+				{#if canCommit}<button class="act tohand" style={teamVars(myTeam)} on:click={() => (hud2 ? armFor('commit', selected!) : commit(selected!))}>Commit{hud2 ? '' : ` · Turn ${$ms.turn}`}</button>{/if}
 				<!-- discard any time, as often as effects demand -->
-				{#if mine?.hand.includes(selected!)}<button class="act discard" on:click={() => defend(selected!)}>Discard</button>{/if}
+				{#if mine?.hand.includes(selected!)}<button class="act discard" on:click={() => (hud2 ? armFor('discard', selected!) : defend(selected!))}>Discard</button>{/if}
 			{/if}
 			<button class="act" on:click={closePreview}>Close</button>
 		</div>
@@ -1952,7 +1961,7 @@
 
 	/* examine */
 	.scrim2 { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; background: rgba(2,4,9,.8); backdrop-filter: blur(4px); }
-	.bigcard { width: min(360px, 62vw); filter: drop-shadow(0 20px 50px rgba(0,0,0,.7)); }
+	.bigcard { width: min(400px, 62vw); filter: drop-shadow(0 20px 50px rgba(0,0,0,.7)); }
 	.exrow { display: flex; align-items: center; justify-content: center; }
 	.exrow.multi .bigcard { touch-action: pan-y; }
 	.exdots { display: flex; justify-content: center; gap: 6px; margin-top: 10px; }
@@ -1998,7 +2007,8 @@
 	/* centered preview of a picked hand card */
 	.pvscrim { position: fixed; inset: 0; z-index: 30; background: rgba(3,6,12,.55); backdrop-filter: blur(3px); }
 	.pvwrap { position: fixed; inset: 0 0 calc(var(--db, 12px) + var(--dh, 70px) + 14px * var(--uis, 1)) 0; z-index: 31; display: flex; align-items: center; justify-content: center; pointer-events: none; }
-	.pvcard { width: min(320px * var(--uis, 1), 56vw); border-radius: 5%; pointer-events: auto; perspective: 1400px; }
+	/* as large as the deck's preview: 400 design px, or whatever fits between the top and the dash */
+	.pvcard { width: min(400px * var(--uis, 1), 62vw, calc((100vh - var(--db, 12px) - var(--dh, 70px) - 150px * var(--uis, 1)) / 1.396)); border-radius: 5%; pointer-events: auto; perspective: 1400px; }
 	.pvflip { position: relative; width: 100%; aspect-ratio: 1192 / 1664; transform-style: preserve-3d; transition: transform .46s cubic-bezier(.4,.15,.2,1); }
 	.pvflip.up { transform: rotateY(180deg); }
 	.pvface { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; border-radius: 3%; overflow: hidden; }

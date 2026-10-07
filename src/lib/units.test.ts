@@ -162,8 +162,9 @@ describe('attacking heroes', () => {
 	})
 	it('defend → defended ends the attack with no rewards; the attacker can call it off', () => {
 		let s = { ...g(), ...applyCardReq(g(), { kind: 'attack', pid: 'A', target: 'B' }) } as MatchState
-		s = { ...s, ...applyCardReq(s, { kind: 'attackResolve', pid: 'B', target: 'B', result: 'defend' }) }
-		expect(s.attacks!.B.defending).toBe(true)
+		expect(applyCardReq(s, { kind: 'attackResolve', pid: 'B', target: 'B', result: 'defended' })).toEqual({}) // no card discarded yet
+		s = { ...s, ...applyCardReq(s, { kind: 'defend', pid: 'B', idx: s.cards!.B.hand.find((i) => i !== s.cards!.B.pending)! }) } as MatchState // B discards: the defence
+		expect(s.attacks!.B).toMatchObject({ defending: true, discarded: true })
 		const ok = applyCardReq(s, { kind: 'attackResolve', pid: 'B', target: 'B', result: 'defended' })
 		expect(ok.attacks).toEqual({})
 		expect(ok.cards).toBeUndefined()

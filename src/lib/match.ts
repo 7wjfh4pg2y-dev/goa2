@@ -187,6 +187,9 @@ export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 	else if (req.kind === 'ult') next = { ...cs, ultimate: req.on }
 	else if (req.kind === 'take') { if (!s.levelPhase) return {}; next = levelUp(cs, req.idx) }
 	else if (req.kind === 'swap') { if (!s.levelPhase) return {}; next = swapPick(cs, req.idx) }
+	// a discard while being attacked is the defence: the defender may now answer Defended
+	const atk = s.attacks?.[req.pid]
+	if (req.kind === 'defend' && atk && next !== cs) return { cards: { ...cards, [req.pid]: next }, attacks: { ...s.attacks, [req.pid]: { ...atk, defending: true, discarded: true } } }
 	return { cards: { ...cards, [req.pid]: next } }
 }
 
@@ -312,7 +315,8 @@ export interface MatchState {
 	strays?: Record<string, string[]> | null // minions outside the battle zone waiting for their team to pick the way back in (battle.ts returnPatch)
 	wonBy?: { team: Team; reason: string } | null // a push won the game (throne / last wave)
 	/** heroes under attack, keyed by the defender: who attacks, and whether they chose to defend */
-	attacks?: Record<string, { by: string; defending: boolean; at: number }>
+	/** discarded: the defender has discarded a card since the attack began — only then can they answer Defended */
+	attacks?: Record<string, { by: string; defending: boolean; at: number; discarded?: boolean }>
 	/** the latest lane push — every client plays the "wave advances" splash when `id` changes */
 	pushNews?: PushNews | null
 	/** the latest minion battle — every client plays the battle splash when `id` changes */
@@ -1636,6 +1640,8 @@ export function resolveAttack(s: MatchState, pid: string, target: string, result
 	const attacks = { ...s.attacks }
 	if (result === 'defend') return { attacks: { ...attacks, [target]: { ...at, defending: true } } }
 	if (result === 'defeated') return defeatHero(s, at.by, target)
+	// a defence is a discarded card: the defender can only say Defended once they've discarded (the host can, for someone away)
+	if (result === 'defended' && !isHost && !at.discarded) return {}
 	delete attacks[target]
 	return { attacks }
 }

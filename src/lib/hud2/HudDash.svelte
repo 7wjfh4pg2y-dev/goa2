@@ -1,5 +1,7 @@
 <script lang="ts" module>
-	export type Order = { label: string; sub?: string; kind: 'go' | 'quiet' | 'wait' | 'off' | 'team'; pulse?: boolean; run?: () => void; alt?: { label: string; run: () => void } };
+	// kind 'bad' = red (Defeated, Discard); split = the ring in two halves, each its own choice (Defended | Defeated)
+	export type Order = { label: string; sub?: string; kind: 'go' | 'quiet' | 'wait' | 'off' | 'team' | 'bad'; pulse?: boolean; run?: () => void; alt?: { label: string; run: () => void };
+		split?: { left: { label: string; run: () => void }; right: { label: string; run: () => void } } };
 </script>
 
 <script lang="ts">
@@ -170,14 +172,23 @@
 		</div>
 
 		<div class="dgo">
-			<button class="cap gob {order.kind}" class:tinted={!!ringColor} style={ringColor ? `--rc:${ringColor}` : ''} class:pulse={order.pulse} disabled={!order.run} on:click={() => order.run?.()}>
+			{#if order.split}
+				<div class="cap gob split">
+					<span class="gin">
+						<button class="half l" on:click={order.split.left.run}><b>{order.split.left.label}</b></button>
+						<button class="half r" on:click={order.split.right.run}><b>{order.split.right.label}</b></button>
+					</span>
+				</div>
+			{:else}
+			<button class="cap gob {order.kind}" class:tinted={!!ringColor && order.kind !== 'bad'} style={ringColor ? `--rc:${ringColor}` : ''} class:pulse={order.pulse} disabled={!order.run} on:click={() => order.run?.()}>
 				<span class="gin">
 					<i></i>
 					<b style="font-size:{labelFs.toFixed(1)}px">{#each words as w, i (i)}{#if i}<br />{/if}{w}{/each}</b>
 					<span class="gsub">{#if order.sub}<small class:long={subLong}>{order.sub}</small>{/if}</span>
 				</span>
 			</button>
-			{#if order.alt}<button class="galt" on:click={order.alt.run}>{order.alt.label}</button>{/if}
+			{/if}
+			{#if order.alt && !order.split}<button class="galt" on:click={order.alt.run}>{order.alt.label}</button>{/if}
 		</div>
 	</div>
 </div>
@@ -289,6 +300,18 @@
 	.gob.tinted .gin small { color: rgba(255, 255, 255, 0.82); }
 	.gob.pulse::after { content: ''; position: absolute; inset: -10px; border-radius: 50%; box-shadow: 0 0 22px 7px rgba(244, 223, 168, 0.5); opacity: 0.35; animation: gopulse 1.6s ease-in-out infinite; pointer-events: none; }
 	@keyframes gopulse { 50% { opacity: 1; } }
+	.gob.bad .gin { background: radial-gradient(circle at 50% 38%, #e0533f, #8f1d12 72%); color: #fff; }
+	.gob.bad .gin small { color: rgba(255, 255, 255, 0.85); }
+	/* the split ring: the team's colour (Defended) on the left, red (Defeated) on the right, a gold seam between */
+	.gob.split .gin { display: flex; padding: 0; position: relative; }
+	.gob.split .gin::after { content: ''; position: absolute; left: 50%; top: 8%; bottom: 8%; width: 2px; margin-left: -1px; background: linear-gradient(180deg, transparent, #f4dfa8 20%, #f4dfa8 80%, transparent); pointer-events: none; }
+	.half { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; cursor: pointer; display: grid; place-items: center; color: #fff; }
+	.half b { font-weight: 400; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.7); }
+	.half.l { background: radial-gradient(circle at 80% 45%, color-mix(in srgb, var(--tc) 75%, #fff 10%), color-mix(in srgb, var(--tc) 50%, #000) 80%); }
+	.half.l b { margin-left: 6px; }
+	.half.r { background: radial-gradient(circle at 20% 45%, #e0533f, #8f1d12 80%); }
+	.half.r b { margin-right: 6px; }
+	.half:hover { filter: brightness(1.15); }
 	.gob.quiet { filter: saturate(0.4) brightness(0.85); }
 	.gob.wait .gin, .gob.off .gin { color: #8a9fb3; }
 	.gob.off { filter: saturate(0.5) brightness(0.8); }
