@@ -199,6 +199,7 @@
 
 	// ── the control centre: one button → a wheel over the board (view controls inside, the board's switches outside)
 	let wheelOpen = false;
+	let deckCovered = false; // the deck / a level-up choice is open: the sea, rims and wisps rest under it
 	const ICON = {
 		recenter: '<circle cx="12" cy="12" r="7" /><path d="M12 2v4M12 18v4M2 12h4M18 12h4" /><circle cx="12" cy="12" r="1.4" />',
 		rotl: '<path d="M4 10a8 8 0 1 1 2 6" /><path d="M4 4v6h6" />',
@@ -216,7 +217,13 @@
 		beam: '<path d="M2 14h7M15 14h7" /><circle cx="12" cy="14" r="2.6" /><path d="M12 8.5v-3M8.6 9.8 7 8M15.4 9.8 17 8" />',
 		hud: '<rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 9h18M8 9v11M16 9v11" />',
 		spawn: '<path d="M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9z" /><path d="M12 8v8M8 12h8" />',
-		push: '<path d="M4 12h12M12 7l5 5-5 5" /><path d="M20 5v14" />',
+		push: '<path d="M2 9c2.5-2.5 4.5-2.5 7 0s4.5 2.5 7 0 4.5-2.5 6 0" /><path d="M2 15c2.5-2.5 4.5-2.5 7 0s4.5 2.5 7 0 4.5-2.5 6 0" />',
+		// a breaking wave, curling to the right (mirrored for the left)
+		waveR: '<path d="M2 19.5h20" /><path d="M3 19.5c1-6.5 5-10.5 10-10.5 3.6 0 6 2.3 6 5 0 1.8-1.4 3-3 3-1.4 0-2.4-1-2.4-2.3 0-1 .7-1.7 1.6-1.7" />',
+		waveL: '<g transform="matrix(-1 0 0 1 24 0)"><path d="M2 19.5h20" /><path d="M3 19.5c1-6.5 5-10.5 10-10.5 3.6 0 6 2.3 6 5 0 1.8-1.4 3-3 3-1.4 0-2.4-1-2.4-2.3 0-1 .7-1.7 1.6-1.7" /></g>',
+		zoom: '<circle cx="10.5" cy="10.5" r="6.5" /><path d="M15.5 15.5L21 21M8 8.8h5M10.5 6.3v5M8 12.6h5" />',
+		turn: '<path d="M4.5 11a7.5 7.5 0 0 1 13.2-4.6M19.5 13a7.5 7.5 0 0 1-13.2 4.6" /><path d="M18.4 2.8v4h-4M5.6 21.2v-4h4" />',
+		version: '<path d="M12 3l9 5-9 5-9-5z" /><path d="M3 12.5l9 5 9-5" /><path d="M3 16.5l9 5 9-5" />',
 		ok: '<path d="M5 12.5l4.5 4.5L19 7.5" />',
 		no: '<path d="M6 6l12 12M18 6L6 18" />'
 	};
@@ -230,7 +237,11 @@
 		wheelOpen = false;
 	}
 	const minionSprites = import.meta.glob('./images/minions/*.png', { eager: true, import: 'default' }) as Record<string, string>;
-	const minionIcon = (t: Team, r: string) => `<image href="${minionSprites[`./images/minions/${t}_${r}.png`] ?? ''}" x="-1" y="-1" width="26" height="26" />`;
+	// the board's own minion token (board/MinionDefs, on the page with the board), sized to the wheel's 24-unit icon
+	const minionIcon = (t: Team, r: string) => `<use href="#mn-token-${t}-${r}" transform="translate(12 12) scale(0.118)" />`;
+	void minionSprites;
+	const ROLE_NAME: Record<string, string> = { melee: 'Melee', ranged: 'Ranged', heavy: 'Heavy' };
+	const TEAM_LBL: Record<Team, string> = { orange: '#ffb27a', blue: '#9cc8ff' };
 	const wheelHub: WheelItem = { id: 'recenter', label: 'Recenter', icon: ICON.recenter, act: () => board?.reset() };
 	$: onIsland = boardLook === 'island';
 	$: wheelRing = [
@@ -240,23 +251,34 @@
 				title: onIsland ? `Battle zone outline: ${$boardPrefs.zone ? 'on' : 'off'}` : 'The battle zone outline is drawn on the island only', act: () => boardPrefs.set({ zone: !$boardPrefs.zone }) },
 			{ id: 'sea', label: 'Waves', icon: ICON.waves, on: onIsland && $boardPrefs.sea, disabled: !onIsland,
 				title: onIsland ? `Moving sea: ${$boardPrefs.sea ? 'on' : 'off'}` : 'The sea is drawn on the island only', act: () => boardPrefs.set({ sea: !$boardPrefs.sea }) },
-			{ id: 'look', label: onIsland ? 'Island' : 'Classic', icon: onIsland ? ICON.island : ICON.classic, on: onIsland,
-				title: `Map: ${onIsland ? 'the island' : 'classic tiles'} (only on your screen)`, act: () => boardPrefs.set({ look: onIsland ? 'classic' : 'island' }) },
 			{ id: 'wisps', label: 'Wisps', icon: ICON.wisps, on: $boardPrefs.wisps, title: `The spirit swirl on spaces to act on: ${$boardPrefs.wisps ? 'on' : 'off'}`, act: () => boardPrefs.set({ wisps: !$boardPrefs.wisps }) },
 			...(hud2 ? [{ id: 'beam', label: 'Beam', icon: ICON.beam, on: $boardPrefs.beam, title: `The beam's spark and pulses: ${$boardPrefs.beam ? 'on' : 'off'}`, act: () => boardPrefs.set({ beam: !$boardPrefs.beam }) }] : [])
 		] },
-		{ id: 'rotr', label: 'Turn', icon: ICON.rotr, title: 'Turn clockwise (45°)', act: () => board?.rotateBy(45) },
-		{ id: 'zin', label: 'Zoom in', icon: ICON.zin, act: () => board?.zoomBtn(1.2) },
-		{ id: 'views', label: 'Views', icon: ICON.views, title: 'Saved views', act: () => {} },
-		{ id: 'zout', label: 'Zoom out', icon: ICON.zout, act: () => board?.zoomBtn(1 / 1.2) },
-		{ id: 'rotl', label: 'Turn', icon: ICON.rotl, title: 'Turn anticlockwise (45°)', act: () => board?.rotateBy(-45) },
+		{ id: 'zoom', label: 'Zoom', icon: ICON.zoom, title: 'Zoom in / out', act: () => {}, sub: [
+			{ id: 'zout', label: 'Out', icon: ICON.zout, act: () => board?.zoomBtn(1 / 1.2) },
+			{ id: 'zin', label: 'In', icon: ICON.zin, act: () => board?.zoomBtn(1.2) }
+		] },
+		{ id: 'turn', label: 'Turn', icon: ICON.turn, title: 'Turn the board', act: () => {}, sub: [
+			{ id: 'rotl', label: 'Left', icon: ICON.rotl, title: 'Turn anticlockwise (45°)', act: () => board?.rotateBy(-45) },
+			{ id: 'rotr', label: 'Right', icon: ICON.rotr, title: 'Turn clockwise (45°)', act: () => board?.rotateBy(45) }
+		] },
 		...(hud2 ? [{ id: 'hudsize', label: $boardPrefs.compact ? 'Compact' : 'Expanded', icon: ICON.hud, on: $boardPrefs.compact, title: 'Player boards: expanded or compact (only on your screen)', act: () => boardPrefs.set({ compact: !$boardPrefs.compact }) }] : []),
+		{ id: 'views', label: 'Views', icon: ICON.views, title: 'Saved views', act: () => {} },
+		// which version of things you see: the map's look and (desktop) the HUD — only on your screen
+		{ id: 'version', label: 'Version', icon: ICON.version, title: 'Map and HUD — only on your screen', act: () => {}, sub: [
+			{ id: 'look', label: onIsland ? 'Island' : 'Classic', icon: onIsland ? ICON.island : ICON.classic, on: onIsland,
+				title: `Map: ${onIsland ? 'the island' : 'classic tiles'} (only on your screen)`, act: () => boardPrefs.set({ look: onIsland ? 'classic' : 'island' }) },
+			...(!mobile ? [{ id: 'hudv', label: hud2 ? 'HUD 2.0' : 'HUD 1.0', icon: ICON.hud, on: hud2, title: `HUD: ${hud2 ? '2.0' : 'classic'} (only on your screen)`, act: () => boardPrefs.set({ hud: hud2 ? 'classic' : '2.0' }) }] : [])
+		] },
 		{ id: 'spawn', label: 'Spawn', icon: ICON.spawn, disabled: !iAmHost, title: iAmHost ? 'Spawn a minion — then tap a hex' : 'Spawn a minion (the host)', act: () => {},
-			sub: (['orange', 'blue'] as Team[]).flatMap((t) => MINION_ROLES.map((r) => ({ id: `sp-${t}-${r}`, label: `${t === 'orange' ? 'Atl.' : 'Titan'} ${r}`, icon: minionIcon(t, r), act: () => { armSpawn(t, r); wheelOpen = false; } }))) },
-		{ id: 'push', label: pushAsk ? `${pushAsk === 'blue' ? 'Titan' : 'Atl.'} push?` : 'Push', icon: ICON.push, disabled: !iAmHost || !!$ms.wonBy, title: iAmHost ? 'Push the wave (host override)' : 'Push the wave (the host)', act: () => {},
-			sub: pushAsk
-				? [{ id: 'push-ok', label: 'Confirm', icon: ICON.ok, tone: 'ok', act: () => pushAsk && wheelPush(pushAsk) }, { id: 'push-no', label: 'Cancel', icon: ICON.no, tone: 'bad', act: () => (pushAsk = null) }]
-				: [{ id: 'push-b', label: 'Titan push', icon: ICON.push, tone: 'blue', act: () => (pushAsk = 'blue') }, { id: 'push-o', label: 'Atlantean push', icon: ICON.push, tone: 'orange', act: () => (pushAsk = 'orange') }] }
+			sub: (['orange', 'blue'] as Team[]).flatMap((t) => MINION_ROLES.map((r) => ({ id: `sp-${t}-${r}`, label: ROLE_NAME[r] ?? r, labelColor: TEAM_LBL[t], raw: true, icon: minionIcon(t, r),
+				title: `${t === 'orange' ? 'Atlantean' : 'Titan'} ${r} minion`, act: () => { armSpawn(t, r); wheelOpen = false; } }))) },
+		// the push: each side's wave breaks the way that side pushes on YOUR screen (your team towards the left);
+		// a pick turns that bubble into Confirm and the other into Cancel, where they stand
+		{ id: 'push', label: 'Push', icon: ICON.push, disabled: !iAmHost || !!$ms.wonBy, title: iAmHost ? 'Push the wave (host override)' : 'Push the wave (the host)', act: () => {},
+			sub: (['blue', 'orange'] as Team[]).map((t) => pushAsk
+				? (t === pushAsk ? { id: 'push-ok', label: 'Confirm', icon: ICON.ok, tone: 'ok', act: () => pushAsk && wheelPush(pushAsk) } : { id: 'push-no', label: 'Cancel', icon: ICON.no, tone: 'bad', act: () => (pushAsk = null) })
+				: { id: `push-${t}`, label: t === 'blue' ? 'Titan' : 'Atlantean', icon: t === viewTeam ? ICON.waveL : ICON.waveR, tone: t, title: `${t === 'blue' ? 'Titan' : 'Atlantean'} push`, act: () => (pushAsk = t) }) }
 	] as WheelItem[];
 	// every lingering card effect in play (switched on from a played card)
 	$: activeFx = $ms.effects ?? [];
@@ -800,10 +822,10 @@
 	<div class="ocean"></div>
 	<!-- on a phone the board sits between the top bar + player strip and the dash -->
 	<div class="boardarea" class:mob={mobile}>
-	<BoardCanvas bind:this={board} map={$ms.map ?? {}} inset={boardInset} look={boardLook} {glowZone} activeZone={$ms.wonBy ? null : battleZone($ms)} effects={true} sea={$boardPrefs.sea} rims={$boardPrefs.rims} rotation={orientation} interactive={true} {placing} {placeGhost} holdColor={myHoldColor} onCancelPlace={cancelPlace} {areas} marks={boardMarks} wisps={$boardPrefs.wisps} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} pings={boardPings} onPing={doPing} {pingArmed} />
+	<BoardCanvas bind:this={board} map={$ms.map ?? {}} inset={boardInset} look={boardLook} {glowZone} activeZone={$ms.wonBy ? null : battleZone($ms)} effects={!deckCovered} sea={$boardPrefs.sea} rims={$boardPrefs.rims} rotation={orientation} interactive={true} {placing} {placeGhost} holdColor={myHoldColor} onCancelPlace={cancelPlace} {areas} marks={boardMarks} wisps={$boardPrefs.wisps} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} pings={boardPings} onPing={doPing} {pingArmed} />
 	</div>
 
-	<CardLayer bind:this={cardLayer} {mobile} {hud2} compact={$boardPrefs.compact} {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} onRespawn={placeMyHero} onEnter={placeMyHero} onArmToken={armToken} holdingToken={!!pendingToken} {pingArmed} onPing={pingButton} bind:previewId />
+	<CardLayer bind:this={cardLayer} {mobile} {hud2} compact={$boardPrefs.compact} {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} bind:covered={deckCovered} onRespawn={placeMyHero} onEnter={placeMyHero} onArmToken={armToken} holdingToken={!!pendingToken} {pingArmed} onPing={pingButton} bind:previewId />
 
 	<!-- selected minion/token: offer delete (heroes aren't deletable) -->
 	{#if hud2}
@@ -903,7 +925,7 @@
 			nameOf={playerName} teamOf={(pid) => teamOf($ms, pid) as Team | null} myTeam={viewTeam} />
 		{#if lobbyOpen}
 			<GameLobby {room} conn={connLabel($status)} connClass={$status} seats={seatRows} watchers={spectators} requests={seatRequests} host={iAmHost} {clientId} {mySeat} myRequest={myRequestSeat}
-				colorOf={(id) => colorHex($players.find((p) => p.id === id)?.color ?? '')} hud={$boardPrefs.hud} onHud={(h) => boardPrefs.set({ hud: h })}
+				colorOf={(id) => colorHex($players.find((p) => p.id === id)?.color ?? '')}
 				onKick={kickSeat} onSit={requestSeat} onResolve={resolveSeat} onLeave={() => { lobbyOpen = false; confirmLeave = true; }} onClose={() => (lobbyOpen = false)} />
 		{/if}
 	{/if}
@@ -1021,10 +1043,6 @@
 					{:else}<span class="empty-note">None</span>{/if}
 				</div>
 
-				<div class="mpsec">
-					<div class="mplbl">Your HUD</div>
-					<div class="mpspecs"><button class="act sm" class:primary={$boardPrefs.hud === '2.0'} on:click={() => { boardPrefs.set({ hud: '2.0' }); manageOpen = false; }}>2.0</button><button class="act sm" class:primary={$boardPrefs.hud === 'classic'} on:click={() => boardPrefs.set({ hud: 'classic' })}>Classic</button></div>
-				</div>
 				{#if mySeat < 0}<p class="mphint">You're spectating. Request an open/away seat above — the host approves takeovers.</p>{/if}
 			</div>
 		</div>
@@ -1273,7 +1291,7 @@
 	.exitbtn { border-radius: 7px; cursor: pointer; font-size: 0.9rem; line-height: 1; padding: 0; color: #fca5a5; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.4); }
 	.exitbtn:hover { background: rgba(80, 20, 24, 0.7); }
 
-	.modal-scrim { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; background: rgba(3, 8, 14, 0.6); backdrop-filter: blur(3px); }
+	.modal-scrim { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; background: rgba(3, 8, 14, 0.6); }
 	.modal { width: min(360px, 90vw); background: rgba(12, 18, 32, 0.92); border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 16px; padding: 20px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6); }
 	.modal h3 { font-family: 'Modesto Poster', serif; font-size: 1.4rem; margin: 0 0 6px; }
 	.piedefeat:disabled { opacity: .55; cursor: default; }
@@ -1330,7 +1348,7 @@
 		background: linear-gradient(180deg, color-mix(in srgb, var(--lc) 30%, rgba(11, 16, 26, .95)), rgba(11, 16, 26, .95)); border: 2px solid var(--lc);
 		box-shadow: 0 0 26px color-mix(in srgb, var(--lc) 45%, transparent), 0 10px 28px rgba(0, 0, 0, .55); animation: bbIn .35s cubic-bezier(.3, 1.4, .5, 1) both, bbGlow 2s ease-in-out .4s infinite; }
 	@keyframes bbIn { from { opacity: 0; transform: translateX(-50%) translateY(-14px) scale(.9); } to { opacity: 1; transform: translateX(-50%); } }
-	@keyframes bbGlow { 50% { box-shadow: 0 0 40px color-mix(in srgb, var(--lc) 70%, transparent), 0 10px 28px rgba(0, 0, 0, .55); } }
+	@keyframes bbGlow { 0%, 100% { opacity: 1; } 50% { opacity: 0.72; } }
 	.battlebox b { font-weight: normal; } .battlebox .to { color: #ffb27a; } .battlebox .tb { color: #8cc0ff; }
 	.bbhead { font-size: .72rem; letter-spacing: .2em; text-transform: uppercase; color: #d9c79a; }
 	.bbmain { display: flex; align-items: center; gap: 10px; font-size: 1.3rem; }
@@ -1407,7 +1425,7 @@
 
 	/* left-side HUD panel — tightened */
 	.hud { position: absolute; top: 12px; left: 12px; bottom: 12px; z-index: 6; width: 204px; display: flex; flex-direction: column; gap: 6px;
-		overflow-y: auto; background: rgba(9, 13, 22, 0.74); backdrop-filter: blur(8px); border: 1px solid rgba(199, 154, 78, 0.4);
+		overflow-y: auto; background: rgba(9, 13, 22, 0.74); border: 1px solid rgba(199, 154, 78, 0.4);
 		border-radius: 12px; padding: 9px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), inset 0 0 26px rgba(199, 154, 78, 0.06); }
 	/* zoomed as a whole; its insets are design px, so the real-px dash is divided back */
 	.gamewrap:not(.mob) .hud { zoom: var(--uis, 1); }
@@ -1485,7 +1503,7 @@
 
 	/* floating delete toolbar for a selected minion/token */
 	.pietool { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); z-index: 8; display: flex; align-items: center; gap: 10px;
-		padding: 6px 8px 6px 12px; border-radius: 999px; background: rgba(9, 13, 22, 0.9); backdrop-filter: blur(8px);
+		padding: 6px 8px 6px 12px; border-radius: 999px; background: rgba(9, 13, 22, 0.9);
 		border: 1px solid rgba(255, 255, 255, 0.18); box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5); }
 	/* desktop: floats right above the selected piece */
 	.pietool.anchored { position: fixed; transform: translate(-50%, -100%); padding: 4px 6px 4px 10px; gap: 7px; }
@@ -1592,12 +1610,12 @@
 	.mib.ult .ulk { position: absolute; top: -5px; right: -4px; font-size: 8px; filter: grayscale(1); }
 	/* ready to unlock: gold edge, pulsing — tap opens the unlock confirmation */
 	.mib.ult.ready { color: #f6e3b4; background: rgba(120, 60, 190, 0.28); border-color: #f0c060; animation: ultrdy 1.3s ease-in-out infinite; }
-	@keyframes ultrdy { 0%, 100% { box-shadow: 0 0 4px rgba(240, 192, 96, 0.5); } 50% { box-shadow: 0 0 14px rgba(240, 192, 96, 1); } }
+	@keyframes ultrdy { 0%, 100% { opacity: 1; } 50% { opacity: 0.72; } }
 	.mib.ult .ulk.rdy { filter: none; color: #f0c060; font-size: 10px; }
 	/* unlocked: purple with the same breathing glow as the desktop dash */
 	.mib.ult.on { color: #fff; background: linear-gradient(160deg, #9a5ce6, #5b2aa0); border-color: rgba(210, 175, 255, 0.85); text-shadow: 0 0 6px rgba(255, 255, 255, 0.6);
 		animation: ultbtn 2.4s ease-in-out infinite; }
-	@keyframes ultbtn { 0%, 100% { box-shadow: 0 0 6px rgba(165, 110, 230, 0.5), inset 0 0 6px rgba(255, 255, 255, 0.15); } 50% { box-shadow: 0 0 16px rgba(185, 130, 250, 0.95), inset 0 0 8px rgba(255, 255, 255, 0.3); } }
+	@keyframes ultbtn { 0%, 100% { opacity: 1; } 50% { opacity: 0.72; } }
 	.mpill.gold { background: rgba(199, 154, 78, 0.14); border-color: rgba(199, 154, 78, 0.45); padding-left: 3px; }
 	.gc { width: 18px; height: 18px; border-radius: 50%; display: inline-grid; place-items: center; background: radial-gradient(circle at 35% 30%, #ffe7a1, #d4a64a 60%, #9a6f22); border: 1px solid #fbe7b0; }
 	.mscrim { position: fixed; inset: 0; z-index: 30; background: rgba(2, 5, 10, 0.55); }

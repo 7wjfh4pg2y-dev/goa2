@@ -13,6 +13,10 @@
 		sub?: WheelItem[]
 		/** a colour of its own: a team (the push buttons) or confirm / cancel */
 		tone?: 'orange' | 'blue' | 'ok' | 'bad'
+		/** the icon is a picture of its own (e.g. a minion token): drawn as is, not as a stroked line icon */
+		raw?: boolean
+		/** the label's own colour (e.g. a team's) */
+		labelColor?: string
 	}
 </script>
 
@@ -35,7 +39,8 @@
 
 	let fans: Record<string, boolean> = {};
 	$: if (!open) fans = {};
-	const toggle = (id: string) => (fans = { ...fans, [id]: !fans[id] });
+	// one bubble open at a time: opening one closes the other
+	const toggle = (id: string) => (fans = fans[id] ? {} : { [id]: true });
 	// the inner ring: evenly round the hub, the first item on top
 	const at = (i: number, n: number) => -90 + (360 / n) * i;
 	// the outer circle: an arc centred on `mid` degrees, spread by `step`
@@ -57,14 +62,14 @@
 				{@const hasFan = isViews || !!it.sub}
 				<button class="wb inner {it.tone ? `t-${it.tone}` : ''}" class:on={it.on || (hasFan && fans[it.id])} disabled={it.disabled} style="--a:{a}deg; --d:{i * 0.025}s" title={it.title ?? it.label}
 					on:click={() => (hasFan ? toggle(it.id) : it.act())}>
-					<svg viewBox="0 0 24 24" aria-hidden="true">{@html it.icon}</svg>
-					<span class="lb">{it.label}</span>
+					<svg viewBox="0 0 24 24" aria-hidden="true" class:raw={it.raw}>{@html it.icon}</svg>
+					<span class="lb" class:long={it.label.length > 7}>{it.label}</span>
 				</button>
 				{#if it.sub && fans[it.id]}
 					{#each it.sub as sb, j (sb.id)}
 						<button class="wb outer {sb.tone ? `t-${sb.tone}` : ''}" class:on={sb.on} disabled={sb.disabled} style="--a:{arc(j, it.sub.length, mobile ? 40 : 34, a)}deg; --d:{j * 0.03}s" title={sb.title ?? sb.label} on:click={sb.act}>
-							<svg viewBox="0 0 24 24" aria-hidden="true">{@html sb.icon}</svg>
-							<span class="lb">{sb.label}</span>
+							<svg viewBox="0 0 24 24" aria-hidden="true" class:raw={sb.raw}>{@html sb.icon}</svg>
+							<span class="lb" class:long={sb.label.length > 7} style={sb.labelColor ? `color:${sb.labelColor}` : ''}>{sb.label}</span>
 						</button>
 					{/each}
 				{/if}
@@ -115,6 +120,8 @@
 	@keyframes out { from { opacity: 0; transform: rotate(var(--a)) translate(0) rotate(calc(-1 * var(--a))) scale(0.4); } }
 	.wb svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; margin-top: -10px; }
 	.lb { position: absolute; left: 50%; bottom: 7px; transform: translateX(-50%); font-size: 10px; line-height: 1; letter-spacing: 0.04em; white-space: nowrap; color: #e9dcc0; }
+	.lb.long { font-size: 8.5px; letter-spacing: 0; }
+	.wb svg.raw { fill: initial; stroke: none; width: 34px; height: 34px; margin-top: -12px; }
 	.wb:hover:not(:disabled) { background: radial-gradient(circle at 50% 30%, #2a5a86, #10304e 78%); border-color: #f4dfa8; }
 	/* a switch that is on: brass */
 	.wb.on { color: #1c1408; background: linear-gradient(180deg, #f3dca0 0%, #d8b36a 55%, #b98e42 100%); border-color: #fff1c8; }

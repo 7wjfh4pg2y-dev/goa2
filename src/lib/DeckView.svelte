@@ -351,7 +351,7 @@
 </div>
 
 <style>
-	.dv-scrim { position: fixed; inset: 0; z-index: 20; background: rgba(3,6,12,.66); backdrop-filter: blur(3px); }
+	.dv-scrim { position: fixed; inset: 0; z-index: 20; background: rgba(3,6,12,.66); }
 	.dv { position: absolute; left: 50%; top: 50%; box-sizing: border-box; display: flex; gap: 14px; padding: 12px; transform-origin: 50% 50%;
 		border-radius: 18px; color: #e5e7eb; background: rgba(11,16,26,.98); border: 1px solid rgba(199,154,78,.5); box-shadow: 0 30px 80px rgba(0,0,0,.7); }
 	button { font: inherit; }
@@ -370,7 +370,7 @@
 	.colh .cn { font-size: .78rem; color: #93a3b8; }
 	.colh .cnext { align-self: flex-start; margin-top: 4px; padding: 4px 10px; border-radius: 8px; font-size: .78rem; color: #fff; background: color-mix(in srgb, var(--c) 40%, transparent); border: 1px solid var(--c); box-shadow: 0 0 12px color-mix(in srgb, var(--c) 45%, transparent); }
 	.colh .cnext.hot { background: color-mix(in srgb, var(--c) 70%, #000); animation: hot 1.6s ease-in-out infinite; }
-	@keyframes hot { 0%, 100% { box-shadow: 0 0 8px color-mix(in srgb, var(--c) 45%, transparent); } 50% { box-shadow: 0 0 20px var(--c); } }
+	@keyframes hot { 0%, 100% { opacity: 1; } 50% { opacity: 0.72; } }
 	.colh .cdone { align-self: flex-start; margin-top: 4px; font-size: .74rem; color: #d7c4f5; }
 	.tb { position: absolute; transform: translate(-50%, -50%); width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: .76rem; background: #0c0f16; border: 2px solid #4a4f5c; color: #8b93a6; z-index: 1; }
 	.tb.lit { border-color: #d9b25e; color: #fff1c9; box-shadow: 0 0 10px rgba(217,178,94,.55); }
@@ -415,7 +415,7 @@
 		border: 1px solid rgba(0,0,0,.3); box-shadow: inset 0 1px 0 rgba(255,255,255,.45); }
 	.lvbar { flex: none; padding: 2px 8px; border-radius: 7px; font-size: .62rem; line-height: 1.2; text-align: center; color: #93a3b8; background: rgba(255,255,255,.035); border: 1px solid rgba(255,255,255,.08); }
 	.lvbar.hot { color: #1a1206; background: linear-gradient(180deg, #f0c060, #c98a26); border-color: #fbe7b0; animation: lvpulse 1.6s ease-in-out infinite; }
-	@keyframes lvpulse { 0%, 100% { box-shadow: 0 0 6px rgba(240,192,96,.35); } 50% { box-shadow: 0 0 18px rgba(240,192,96,.8); } }
+	@keyframes lvpulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.72; } }
 	.lvbar.done { color: #cfe3ff; border-color: rgba(63,127,224,.5); background: rgba(63,127,224,.14); }
 	.lvl { flex: none; display: flex; flex-direction: column; align-items: center; line-height: 1; padding: 4px 8px; border-radius: 8px; border: 1px solid rgba(199,154,78,.5); background: rgba(199,154,78,.12); }
 	.lvl span { font-size: .5rem; letter-spacing: .1em; text-transform: uppercase; color: #b8a06a; }
@@ -474,6 +474,6 @@
 	.seg { display: inline-flex; align-items: center; gap: 2px; }
 	.seg i { width: 9px; height: 7px; background: rgba(255,255,255,.12); transform: skewX(-18deg); border-radius: 1px; }
 	.seg i.rdy { animation: rdy 1.2s ease-in-out infinite; }
-	@keyframes rdy { 50% { filter: brightness(1.6); box-shadow: 0 0 10px rgba(212,168,255,1); } }
+	@keyframes rdy { 0%, 100% { opacity: 1; } 50% { opacity: 0.72; } }
 	.seg i.on { background: linear-gradient(180deg, #d4a8ff, #8a4fd6); box-shadow: 0 0 5px rgba(180,130,240,.8); }
 </style>

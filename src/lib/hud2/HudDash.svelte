@@ -175,8 +175,8 @@
 			{#if order.split}
 				<div class="cap gob split">
 					<span class="gin">
-						<button class="half l" on:click={order.split.left.run}><b>{order.split.left.label}</b></button>
-						<button class="half r" on:click={order.split.right.run}><b>{order.split.right.label}</b></button>
+						<button class="half l" on:click={order.split.left.run} title={order.split.left.label}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9.5C8 18.5 5 15.5 5 11V6z" /></svg><b>{order.split.left.label}</b></button>
+						<button class="half r" on:click={order.split.right.run} title={order.split.right.label}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5a7 7 0 0 0-7 7c0 2.3 1.1 4 2.8 5v3.2h8.4v-3.2c1.7-1 2.8-2.7 2.8-5a7 7 0 0 0-7-7z" /><circle cx="9.3" cy="11" r="1.5" class="f" /><circle cx="14.7" cy="11" r="1.5" class="f" /></svg><b>{order.split.right.label}</b></button>
 					</span>
 				</div>
 			{:else}
@@ -305,12 +305,14 @@
 	/* the split ring: the team's colour (Defended) on the left, red (Defeated) on the right, a gold seam between */
 	.gob.split .gin { display: flex; padding: 0; position: relative; }
 	.gob.split .gin::after { content: ''; position: absolute; left: 50%; top: 8%; bottom: 8%; width: 2px; margin-left: -1px; background: linear-gradient(180deg, transparent, #f4dfa8 20%, #f4dfa8 80%, transparent); pointer-events: none; }
-	.half { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; cursor: pointer; display: grid; place-items: center; color: #fff; }
-	.half b { font-weight: 400; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.7); }
+	.half { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #fff; }
+	.half svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; }
+	.half svg .f { fill: currentColor; stroke: none; }
+	.half b { font-weight: 400; font-size: 6.6px; letter-spacing: 0; text-transform: uppercase; white-space: nowrap; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.7); }
 	.half.l { background: radial-gradient(circle at 80% 45%, color-mix(in srgb, var(--tc) 75%, #fff 10%), color-mix(in srgb, var(--tc) 50%, #000) 80%); }
-	.half.l b { margin-left: 6px; }
+	.half.l { padding: 0 6px 0 2px; }
 	.half.r { background: radial-gradient(circle at 20% 45%, #e0533f, #8f1d12 80%); }
-	.half.r b { margin-right: 6px; }
+	.half.r { padding: 0 2px 0 6px; }
 	.half:hover { filter: brightness(1.15); }
 	.gob.quiet { filter: saturate(0.4) brightness(0.85); }
 	.gob.wait .gin, .gob.off .gin { color: #8a9fb3; }

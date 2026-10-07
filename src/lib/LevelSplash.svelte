@@ -112,7 +112,7 @@
 		box-shadow: 0 0 0 2px rgba(0, 0, 0, .55), inset 0 0 12px rgba(255, 255, 255, .35), 0 0 30px 6px rgba(164, 92, 240, .75), 0 0 70px rgba(164, 92, 240, .5);
 		animation: forge .6s cubic-bezier(.2, 1.6, .4, 1) 1.45s forwards, pulse 1.1s ease-in-out 2.1s infinite; }
 	@keyframes forge { from { opacity: 0; transform: rotate(-135deg) scale(.2); filter: brightness(3); } to { opacity: 1; transform: rotate(45deg) scale(1); filter: none; } }
-	@keyframes pulse { 0%, 100% { opacity: 1; transform: rotate(45deg) scale(1); } 50% { opacity: 1; transform: rotate(45deg) scale(1.08); filter: brightness(1.25); } }
+	@keyframes pulse { 0%, 100% { opacity: 1; transform: rotate(45deg) scale(1); } 50% { opacity: 1; transform: rotate(45deg) scale(1.08); } }
 	/* the light turns violet as they fuse */
 	.ultm .beam { animation: beam 3.2s ease both, violet .5s ease 1.4s forwards; }
 	@keyframes violet { to { background: linear-gradient(0deg, rgba(190, 130, 255, .6), rgba(190, 130, 255, .14) 60%, transparent); } }

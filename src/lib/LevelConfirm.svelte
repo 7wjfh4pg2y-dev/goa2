@@ -58,7 +58,7 @@
 </div>
 
 <style>
-	.lc { position: absolute; inset: 0; z-index: 30; display: grid; place-items: center; background: rgba(3,6,12,.72); backdrop-filter: blur(3px); border-radius: inherit; }
+	.lc { position: absolute; inset: 0; z-index: 30; display: grid; place-items: center; background: rgba(3,6,12,.72); border-radius: inherit; }
 	.box { display: flex; gap: 22px; align-items: center; padding: 20px 24px; border-radius: 16px; background: rgba(11,16,26,.97); border: 1px solid rgba(199,154,78,.6); box-shadow: 0 24px 70px rgba(0,0,0,.7); color: #e5e7eb; }
 	.cardw { width: 250px; flex: none; }
 	.cardw :global(.cardface) { display: block; width: 100%; border-radius: 8px; box-shadow: 0 10px 26px rgba(0,0,0,.6); }

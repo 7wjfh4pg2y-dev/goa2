@@ -41,7 +41,7 @@
 <div class="orow" class:small>
 	{#if planning}
 		<div class="status">
-			{#if countdown}<b>Revealing</b><span class="cd">{countdown}</span>
+			{#if countdown}<b>Revealing</b>
 			{:else}<b>Planning</b><span class="sdots">{#each dots as d, i (i)}<i class="t-{d.team}" class:ok={d.ok} style={d.color ? `--tc:${d.color}` : ''}></i>{/each}</span><em>{ready} of {dots.length} ready</em>{/if}
 		</div>
 	{:else}
@@ -72,7 +72,6 @@
 		background: linear-gradient(180deg, rgba(16, 44, 72, 0.97), rgba(6, 21, 38, 0.97)); border: 1px solid var(--line); box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45); font-size: 15px; }
 	.status b { font-weight: 400; font-size: 13px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--brass-hi); }
 	.status em { font-style: normal; color: #bccbd9; }
-	.cd { min-width: 28px; text-align: center; font-size: 22px; color: #fff; }
 	.sdots { display: flex; gap: 6px; }
 	.sdots i { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid var(--tc); box-sizing: border-box; opacity: 0.6; }
 	.sdots i:nth-child(n) { box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45); }

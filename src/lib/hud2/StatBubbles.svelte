@@ -37,7 +37,7 @@
 	svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 	path { fill: none; stroke: rgba(255, 255, 255, 0.14); stroke-width: 3.6; stroke-linecap: round; }
 	path.on { stroke: #f4dfa8; }
-	img { width: 70%; height: 70%; object-fit: contain; opacity: 0.6; }
+	img { width: 58%; height: 58%; object-fit: contain; opacity: 0.6; } /* clear of the bubble's edge */
 	.bub.up img { opacity: 0.55; }
 	b { position: absolute; inset: 0; display: grid; place-items: center; font-weight: 400; font-size: calc(var(--b) * 0.42); color: #fff; text-shadow: 0 0 3px #000, 0 0 6px #000, 0 1px 2px #000; }
 </style>

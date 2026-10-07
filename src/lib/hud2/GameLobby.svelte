@@ -4,7 +4,7 @@
 
 <script lang="ts">
 	// ☰ in the 2.0 HUD = the game lobby, in the middle of the screen: the room and the connection, both teams (the
-	// host can kick), the watchers and their seat requests, your own HUD (2.0 / Classic — only on your screen), Leave.
+	// host can kick), the watchers and their seat requests, Leave. (Your HUD — 2.0 / classic — is in the wheel's Version.)
 	import { portraitCss, heroById } from '$lib/heroes';
 
 	export let room = '';
@@ -18,8 +18,6 @@
 	export let mySeat = -1;
 	export let myRequest = -1;
 	export let colorOf: (id: string) => string = () => '#888';
-	export let hud: '2.0' | 'classic' = '2.0';
-	export let onHud: (h: '2.0' | 'classic') => void = () => {};
 	export let onKick: (id: string) => void = () => {};
 	export let onSit: (seat: number) => void = () => {};
 	export let onResolve: (id: string, ok: boolean) => void = () => {};
@@ -65,7 +63,6 @@
 				{/each}
 			</div>
 		{/if}
-		<div class="grow"><small>Your HUD</small><span class="gseg"><button class:on={hud === '2.0'} on:click={() => onHud('2.0')}>2.0</button><button class:on={hud === 'classic'} on:click={() => onHud('classic')}>Classic</button></span><em class="gnote">Only on your screen</em></div>
 		<button class="gleave" on:click={onLeave}>Leave the game</button>
 	</div>
 </div>
@@ -100,11 +97,5 @@
 	.gok:disabled { opacity: 0.4; cursor: default; }
 	.greq { font-size: 11px; color: #8a9fb3; }
 	.gspec { display: flex; flex-direction: column; gap: 8px; }
-	.grow { display: flex; align-items: center; gap: 10px; }
-	.grow small { width: 74px; }
-	.gnote { font-style: normal; font-size: 11px; color: #8a9fb3; }
-	.gseg { display: inline-flex; padding: 2px; border-radius: 999px; background: rgba(0, 0, 0, 0.35); border: 1px solid var(--line); }
-	.gseg button { height: 26px; padding: 0 14px; border-radius: 999px; border: 0; font-size: 12px; color: #bccbd9; background: none; cursor: pointer; }
-	.gseg button.on { color: #1b1204; background: linear-gradient(180deg, var(--brass-hi), var(--brass)); }
 	.gleave { align-self: stretch; height: 38px; border-radius: 12px; font-size: 14px; color: #fff; background: linear-gradient(180deg, #c2412f, #8f2a1c); border: 0; cursor: pointer; }
 </style>
