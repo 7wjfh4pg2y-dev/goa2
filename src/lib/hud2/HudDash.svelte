@@ -13,6 +13,7 @@
 	import TurnSlot from '$lib/cards/TurnSlot.svelte';
 	import Card from '$lib/cards/Card.svelte';
 	import DockHand from '$lib/DockHand.svelte';
+	import CardBanner from '$lib/CardBanner.svelte';
 	import StatBubbles from './StatBubbles.svelte';
 	import { heroCards, heroName } from '$lib/cards/deck';
 	import { portraitCss, heroLogo } from '$lib/heroes';
@@ -149,9 +150,15 @@
 			</button>
 		</div>
 
+		<!-- the hand kept up (auto-hide off) while docked: every banner in one row above the dash, edge to edge if need be -->
+		{#if docked && !autoHide && hand.length}
+			<div class="brow" style="--n:{hand.length}">
+				{#each hand as i, k (i)}<div class="bcell" style="--k:{k}"><CardBanner heroId={cs.hero} idx={i} sel={armed === i} on:click={() => onPick(i)} /></div>{/each}
+			</div>
+		{/if}
 		<div class="dexw" class:open={docked} class:sliding aria-hidden={!docked}>
 			<div class="dext">
-				{#if docked || sliding}<div class="dock" class:armed={armed != null}><DockHand heroId={cs.hero} {hand} fanned={!autoHide} {onPick} /></div>{/if}
+				{#if docked || sliding}<div class="dock" class:armed={armed != null}><DockHand heroId={cs.hero} {hand} fanned={!autoHide} stack={false} {onPick} /></div>{/if}
 			</div>
 		</div>
 
@@ -250,6 +257,11 @@
 		border: 1px solid var(--line); border-left: 0; border-top: 2px solid var(--tc); transition: transform 0.42s cubic-bezier(0.2, 0.8, 0.2, 1); }
 	.open .dext { transform: none; }
 	.dock { height: 76px; padding-left: 10px; border-left: 1px solid var(--line); }
+	.brow { position: absolute; z-index: 3; left: 50%; bottom: calc(100% + 22px); transform: translateX(-50%); display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 8px;
+		width: min(1400px, calc(var(--n) * 278px - 8px)); }
+	.bcell { filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.6)); animation: bup 0.22s ease-out both; animation-delay: calc(var(--k) * 40ms); }
+	@keyframes bup { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+	@media (prefers-reduced-motion: reduce) { .bcell { animation: none; } }
 	/* the action cap */
 	.dgo { position: absolute; z-index: 2; right: -14px; top: 50%; width: var(--cap); height: var(--cap); transform: translateY(-50%); transition: transform 0.42s cubic-bezier(0.2, 0.8, 0.2, 1); }
 	.docked .dgo { transform: translate(var(--dw), -50%); }

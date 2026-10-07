@@ -11,6 +11,7 @@
 	export let hand: number[] = [];
 	export let onPick: (idx: number) => void = () => {};
 	export let fanned = false; // the hand stays up as banners (auto-hide off)
+	export let stack = true; // false: someone else lays the kept-up hand out (the 2.0 dash: one row across the screen)
 
 	const icons = import.meta.glob('./cards/images/*.png', { eager: true, import: 'default' }) as Record<string, string>;
 	const ic = (n: string) => icons[`./cards/images/${n}.png`] ?? '';
@@ -38,7 +39,9 @@
 	</div>
 
 	<!-- one card's banner on hover / the whole hand when it stays up: above the dash -->
-	{#if fanned}
+	{#if fanned && !stack}
+		<!-- (the hand is up elsewhere: nothing pops up here) -->
+	{:else if fanned}
 		<div class="pop stack">
 			{#each hand as i (i)}<div class="bw"><CardBanner {heroId} idx={i} on:click={() => pick(i)} /></div>{/each}
 		</div>
