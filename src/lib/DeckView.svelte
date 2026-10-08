@@ -179,7 +179,7 @@
 	// ── the Ascension's geometry (design px inside the tree box) ──
 	const R = 1192 / 1664, TH = DH - 2 * PAD;
 	const LBL = 92; // the tier labels on the left
-	const BY = 46, BH = 104; // the ultimate box
+	const BY = 10, BH = 104; // the ultimate box
 	const FOOT = 32, GY = 8, MID = 36, SP = 6;
 	$: TW = DW - 2 * PAD - INS - IGAP;
 	$: AW = TW - LBL;
@@ -190,9 +190,10 @@
 	const RT = BY + BH + 24;
 	$: RB = TH - 6;
 	// the basics sit in the top corners, beside the box: gold over the red tree, silver over the green
-	const BCH = RT - 22;
-	$: BCW = Math.round(BCH * R);
-	$: basX = [xOf(0, 2, 0) + 4, xOf(2, 2, 1) + CW - BCW - 4];
+	// the basics sit on the Tier I row, between red and blue and between blue and green
+	$: BCW = Math.round(CW * 0.9);
+	$: basX = [(cx(0) + cx(1)) / 2 - BCW / 2, (cx(1) + cx(2)) / 2 - BCW / 2];
+	$: basY = Y1 + (CH - Math.round(BCW / R)) / 2;
 	// faint rules between the tiers
 	$: seps = [(Y3 + CH + FOOT + Y2) / 2, (Y2 + CH + FOOT + Y1) / 2];
 	$: CW = Math.floor(Math.min((COLW - MID - 2 * SP) / 2, (R * (RB - RT - 3 * FOOT - 2 * GY)) / 3));
@@ -311,7 +312,6 @@
 <div class="dv-scrim" on:click={onClose} on:keydown={() => {}} role="presentation">
 	<div class="dv tide" style="{teamStyle}; width:{DW}px; height:{DH}px; transform: translate(-50%, -50%) scale({scale})" on:click|stopPropagation={bgClick} on:keydown={() => {}} role="dialog" aria-modal="true" aria-label="Deck" tabindex="-1">
 		<div class="tree" style="width:{TW}px; height:{TH}px">
-			<div class="ttl" style="left:{LBL}px; width:{AW}px"><b>{hero?.name ?? H}</b>{#if hero?.title}<em>{hero.title}</em>{/if}</div>
 			{#each seps as y, n (n)}<span class="sep" style="top:{y}px"></span>{/each}
 			<div class="rays">
 				{#each COLS as c, k}<span class="ray t{tiers[k]}" style="--c:{COL[c]}; left:{cx(k)}px; width:{COLW * 1.4}px"></span>{/each}
@@ -335,7 +335,6 @@
 					<span class="valve" class:lit={tiers[k] >= n + 2} class:nx={pair.length > 0 && canPick(cs, pair[0])} style="--c:{COL[c]}; left:{cx(k)}px; top:{n ? V3 : V2}px"><img src={ic(n ? 'level_iii' : 'level_ii')} alt="" /></span>
 				{/each}
 				{#if t.I != null}{@render node(t.I, k, 0, 0)}{/if}
-				<div class="cl" style="--c:{COL[c]}; left:{cx(k) + CW / 2 + 14}px; top:{Y1 + CH / 2}px"><b>{NAME[c]}</b><em>Tier {ROM[tiers[k] - 1]}</em></div>
 				{#each t.II as i, a (i)}{@render node(i, k, 1, a)}{/each}
 				{#each t.III as i, a (i)}{@render node(i, k, 2, a)}{/each}
 			{/each}
@@ -372,7 +371,7 @@
 
 			<!-- the basics, in the top corners -->
 			{#each basics as i, n (i)}
-				<button class="bth" class:sel={i === sel} class:foc={i === hov} style="--c:{COL[cards[i].color]}; left:{basX[n]}px; top:10px; width:{BCW}px" on:click={() => pick(i)} on:dblclick={() => onPreview(i)} on:pointerenter={() => over(i)} on:pointerleave={out} title={cards[i].name}><Card heroId={H} card={cards[i]} /></button>
+				<button class="bth" class:sel={i === sel} class:foc={i === hov} style="--c:{COL[cards[i].color]}; left:{basX[n]}px; top:{basY}px; width:{BCW}px" on:click={() => pick(i)} on:dblclick={() => onPreview(i)} on:pointerenter={() => over(i)} on:pointerleave={out} title={cards[i].name}><Card heroId={H} card={cards[i]} /></button>
 			{/each}
 		</div>
 
@@ -426,7 +425,7 @@
 				{/if}
 			</div>
 
-			<div class="gau" aria-label="Your items"><StatBubbles {cs} size={44} /></div>
+			<div class="gau" aria-label="Your items"><StatBubbles {cs} size={44} pill /></div>
 
 			<div class="iact">
 				{#if sel != null && moves(sel).length}
@@ -455,9 +454,6 @@
 
 	/* ───────── the Ascension ───────── */
 	.tree { position: relative; flex: none; }
-	.ttl { position: absolute; top: 4px; display: flex; align-items: baseline; justify-content: center; gap: 12px; white-space: nowrap; pointer-events: none; }
-	.ttl b { font-weight: normal; font-size: 30px; line-height: 1; letter-spacing: .04em; color: var(--brass-hi); text-shadow: 0 2px 10px rgba(0, 0, 0, .6); }
-	.ttl em { font-style: normal; font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
 	.rays { position: absolute; inset: 0; overflow: hidden; pointer-events: none; -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 92%, transparent); mask-image: linear-gradient(90deg, transparent, #000 12%, #000 92%, transparent); }
 	.ray { --h: 44%; position: absolute; bottom: 0; height: 100%; transform: translateX(-50%); opacity: .45;
 		background: radial-gradient(50% var(--h) at 50% 100%, color-mix(in srgb, var(--c) 70%, transparent), color-mix(in srgb, var(--c) 28%, transparent) 45%, transparent 100%); }
@@ -467,9 +463,6 @@
 	.tl span { font-size: 19px; line-height: 1; letter-spacing: .06em; text-transform: uppercase; color: var(--brass-hi); }
 	.tl em { font-style: normal; font-size: 12px; line-height: 1; color: var(--ink-3); }
 	.sep { position: absolute; left: 0; right: 0; height: 1px; pointer-events: none; background: linear-gradient(90deg, rgba(216, 179, 106, .35), rgba(216, 179, 106, .12) 40%, rgba(216, 179, 106, .12) 60%, transparent); }
-	.cl { position: absolute; transform: translateY(-50%); display: flex; flex-direction: column; gap: 4px; white-space: nowrap; }
-	.cl b { font-weight: normal; font-size: 22px; line-height: 1; letter-spacing: .12em; text-transform: uppercase; color: var(--c); text-shadow: 0 0 16px color-mix(in srgb, var(--c) 50%, transparent); }
-	.cl em { font-style: normal; font-size: 13px; color: var(--ink-3); }
 	.pipes { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
 	.pipes path { fill: none; }
 	.p0 { stroke: #030b15; stroke-width: 15; stroke-linecap: round; }
@@ -637,7 +630,7 @@
 	.k.it { background: color-mix(in srgb, var(--c) 55%, transparent); }
 	.k.rm { background: rgba(150, 160, 175, .25); color: #c6cfdb; }
 	/* your items */
-	.gau { flex: none; }
+	.gau { flex: none; padding-bottom: 20px; }
 	/* the selected card's moves */
 	.iact { flex: none; height: 34px; display: flex; align-items: center; justify-content: center; gap: 6px; }
 	.a { flex: 1; height: 34px; padding: 0 6px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, .22); background: rgba(255, 255, 255, .03); color: var(--ink-2); font-size: 16px; line-height: 1; display: flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; cursor: pointer; transition: transform .12s; }
