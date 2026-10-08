@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import Ocean, { paintSea, seaPatterns } from '$lib/board/Ocean.svelte';
+	import Ocean from '$lib/board/Ocean.svelte';
+	import { paintSea, seaPatterns } from '$lib/board/seaPaint';
 	import IslandLayer from '$lib/board/IslandLayer.svelte';
 	import SpawnMark from '$lib/board/SpawnMark.svelte';
 	import PieceDefs from '$lib/board/PieceDefs.svelte';
@@ -831,7 +832,9 @@
 					{@const k = fit.s}
 					{@const w = size * k * (b.total ? 1.1 : 0.8)}
 					<span class="bbox" style="left:{((base.x + off.x) * k + fit.ox).toFixed(2)}px; top:{((base.y + off.y) * k + fit.oy).toFixed(2)}px; transform:rotate({-rotEff}deg)">
-						<span class="bdg {b.tone}" class:tot={b.total} style="width:{w.toFixed(1)}px; height:{(w * 1.12).toFixed(1)}px; top:{(-size * k * (b.total ? 1.8 : 1.4)).toFixed(1)}px; font-size:{(w * (b.total ? 0.36 : 0.46)).toFixed(1)}px"><b>{b.text}</b></span>
+						<!-- the bob and the pop-in are on different elements: two transform animations on one element (one of
+						     them finished but filling) pushed the bob off the GPU — ~285 ms of main-thread work a second -->
+						<span class="bfloat"><span class="bdg {b.tone}" class:tot={b.total} style="width:{w.toFixed(1)}px; height:{(w * 1.12).toFixed(1)}px; top:{(-size * k * (b.total ? 1.8 : 1.4)).toFixed(1)}px; font-size:{(w * (b.total ? 0.36 : 0.46)).toFixed(1)}px"><b>{b.text}</b></span></span>
 					</span>
 				{/if}
 			{/each}
@@ -909,10 +912,11 @@
 	.bdg.down { --fill: linear-gradient(180deg, #ef5a4a, #8f1d12); } .bdg.down::before { background: #ffd0c8; }
 	.bdg.even { --fill: linear-gradient(180deg, #8a96a6, #47505c); } .bdg.even::before { background: #e5e9ee; }
 	.bdg.tot::before { background: linear-gradient(180deg, #fff3cf, #d8b36a); }
-	.badges.bob .bdg { animation: bdgin .35s cubic-bezier(.2, 1.5, .4, 1) both, bdgbob 2.2s ease-in-out .35s infinite; }
+	.bfloat { position: absolute; left: 0; top: 0; width: 0; height: 0; }
+	.badges.bob .bfloat { animation: bdgbob 2.2s ease-in-out .35s infinite; }
 	@keyframes bdgin { from { transform: translateX(-50%) translateY(6px) scale(.3); opacity: 0; } }
-	@keyframes bdgbob { 0%, 100% { transform: translateX(-50%) translateY(0); } 50% { transform: translateX(-50%) translateY(-3px); } }
-	@media (prefers-reduced-motion: reduce) { .bdg { animation: none !important; } }
+	@keyframes bdgbob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+	@media (prefers-reduced-motion: reduce) { .bdg, .bfloat { animation: none !important; } }
 	.shine { position: absolute; overflow: hidden; clip-path: polygon(50% 0, 100% 13.5%, 100% 45%, 96% 63%, 83% 83%, 50% 100%, 17% 83%, 4% 63%, 0 45%, 0 13.5%); }
 	.shine i { position: absolute; top: -20%; bottom: -20%; left: 0; width: 45%; background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.85) 50%, transparent); transform: translateX(-120%) skewX(-12deg);
 		animation: shieldglint 3.4s ease-in-out infinite; }

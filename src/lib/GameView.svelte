@@ -587,6 +587,14 @@
 	$: incoming = attacks[clientId] ?? null;
 	// forced discards: the demand on you, and the one you made
 	$: forcedMe = $ms.forced?.[clientId] ?? null;
+	// the notice says its piece for 5 s, fades (`akout`), then leaves the page — its burst and glow kept animating
+	// while invisible otherwise (the choice stays on the action button)
+	$: noticeKey = incoming ? `a${incoming.by}${incoming.at}` : forcedMe ? `f${forcedMe.by}${forcedMe.at}` : '';
+	let noticeGone = '';
+	let noticeT: ReturnType<typeof setTimeout> | null = null;
+	let noticeFor = '';
+	$: if (noticeKey !== noticeFor) { noticeFor = noticeKey; if (noticeT) clearTimeout(noticeT); const k = noticeKey; noticeT = k ? setTimeout(() => (noticeGone = k), 5800) : null; }
+	$: noticeOn = !!noticeKey && noticeGone !== noticeKey;
 	let forceMenu = false; // the Forced discard pill opens its two options
 	$: if (!selPieceId) forceMenu = false;
 	function forceSel(die: boolean) {
@@ -840,7 +848,7 @@
 	{:else if myDefeat && !iCanRespawn && !pendingRespawn && !pendingToken}
 		<div class="placehint defeat"><span>Defeated — play a card on your next turn to respawn</span></div>
 	{/if}
-	{#if incoming}
+	{#if incoming && noticeOn}
 		<!-- under attack: an emblem in the middle of the screen — the attacker's face, a blood-red seal with crossed
 		     blades, yours; a slow red starburst turns behind (transform / opacity only). The choice is on the action button. -->
 		<div class="atkask" role="alertdialog" aria-label="You are being attacked" style="--ec:{TEAM_HEX[myTeam === 'blue' ? 'orange' : 'blue']}; --mc:{TEAM_HEX[myTeam ?? 'blue'] ?? '#2f7fe6'}">
@@ -858,7 +866,7 @@
 			</div>
 		</div>
 	{/if}
-	{#if forcedMe && !incoming}
+	{#if forcedMe && !incoming && noticeOn}
 		<!-- a card makes you discard: the forcer's face, a discard seal, yours — the choice is on the action button -->
 		<div class="atkask fd" class:die={forcedMe.die} role="alertdialog" aria-label="You must discard" style="--ec:{TEAM_HEX[myTeam === 'blue' ? 'orange' : 'blue']}; --mc:{TEAM_HEX[myTeam ?? 'blue'] ?? '#2f7fe6'}">
 			<div class="akwrap">
@@ -1483,7 +1491,7 @@
 	.battlebox { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 9; min-width: 380px; max-width: 92vw; box-sizing: border-box;
 		display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 18px 12px; border-radius: 14px; text-align: center; color: #f6ead2;
 		background: linear-gradient(180deg, color-mix(in srgb, var(--lc) 30%, rgba(11, 16, 26, .95)), rgba(11, 16, 26, .95)); border: 2px solid var(--lc);
-		box-shadow: 0 0 26px color-mix(in srgb, var(--lc) 45%, transparent), 0 10px 28px rgba(0, 0, 0, .55); animation: bbIn .35s cubic-bezier(.3, 1.4, .5, 1) both, bbGlow 2s ease-in-out .4s infinite; }
+		box-shadow: 0 0 26px color-mix(in srgb, var(--lc) 45%, transparent), 0 10px 28px rgba(0, 0, 0, .55); animation: bbIn .35s cubic-bezier(.3, 1.4, .5, 1) backwards, bbGlow 2s ease-in-out .4s infinite; }
 	@keyframes bbIn { from { opacity: 0; transform: translateX(-50%) translateY(-14px) scale(.9); } to { opacity: 1; transform: translateX(-50%); } }
 	@keyframes bbGlow { 0%, 100% { opacity: 1; } 50% { opacity: 0.72; } }
 	.battlebox b { font-weight: normal; } .battlebox .to { color: #ffb27a; } .battlebox .tb { color: #8cc0ff; }

@@ -69,6 +69,16 @@
 	$: target = BL ? clashAt({ L: BL, lifeW: LIFEW, left, zone, zones, orange: counts.orange, blue: counts.blue, startO: starts.orange, startB: starts.blue, won }) : 0;
 	$: if (BL) cl.set(target);
 	$: clash = BL && beamEl ? at($cl) : clash;
+	// the pulses flowing into the clash: html strips over the beam's two straight runs, slid by transform only (the GPU
+	// moves them — an animated dash offset on the svg repainted the whole beam every frame, ~95 ms of work a second)
+	$: lanes = ((): Array<{ x: number; w: number; back: boolean }> => {
+		const a = CX - fc - 14, b = CX + fc + 14, cx = clash.x, out: Array<{ x: number; w: number; back: boolean }> = [];
+		for (const [x0, x1] of [[BX0, a], [b, BX1]]) {
+			if (Math.min(x1, cx) - x0 > 4) out.push({ x: x0, w: Math.min(x1, cx) - x0, back: false });
+			if (x1 - Math.max(x0, cx) > 4) out.push({ x: Math.max(x0, cx), w: x1 - Math.max(x0, cx), back: true });
+		}
+		return out;
+	})();
 	$: leftTeam = left;
 	$: cA = left === 'blue' ? '#2f7fe6' : '#ef7d22';
 	$: cB = left === 'blue' ? '#ef7d22' : '#2f7fe6';
@@ -116,16 +126,11 @@
 		<path d={beamD} class="bmid" stroke="url(#h2-bm-r)" stroke-dasharray="0 {$cl} {BL * 2 + 1}" />
 		<path d={beamD} class="bcore" stroke-dasharray="{$cl} {BL * 2 + 1}" stroke={left === 'blue' ? '#e6f4ff' : '#fff1dc'} />
 		<path d={beamD} class="bcore" stroke-dasharray="0 {$cl} {BL * 2 + 1}" stroke={left === 'blue' ? '#fff1dc' : '#e6f4ff'} />
-		{#if fx && BL}
-			<mask id="h2-bm-ml" maskUnits="userSpaceOnUse"><path d={beamD} fill="none" stroke="#fff" stroke-width="22" stroke-dasharray="{$cl} {BL * 2 + 1}" /></mask>
-			<mask id="h2-bm-mr" maskUnits="userSpaceOnUse"><path d={beamD} fill="none" stroke="#fff" stroke-width="22" stroke-dasharray="0 {$cl} {BL * 2 + 1}" /></mask>
-			<path d={beamD} class="pulse l" mask="url(#h2-bm-ml)" />
-			<path d={beamD} class="pulse r" mask="url(#h2-bm-mr)" />
-		{/if}
 		{#each ticks as t, i (i)}<circle cx={t.x} cy={t.y} r="2.2" class="tick" />{/each}
 		{#each marks as m, i (i)}<rect x={m.x - 4.5} y={m.y - 4.5} width="9" height="9" transform="rotate(45 {m.x} {m.y})" class="bmark" />{/each}
 		<circle cx={BX0} cy={BY} r="5" fill={cA} class="src" /><circle cx={BX1} cy={BY} r="5" fill={cB} class="src" />
 	</svg>
+	{#if fx && BL}{#each lanes as ln, i (i)}<span class="lane" style="left:{ln.x.toFixed(1)}px; top:{BY - 1.5}px; width:{ln.w.toFixed(1)}px"><i class:back={ln.back}></i></span>{/each}{/if}
 	{#if fx && BL}<span class="clash" style="left:{clash.x}px; top:{clash.y}px"><i class="fl"></i>{#each SPARKS as k (k)}<i class="sp" style="--a:{196 + ((k * 61) % 150)}deg; --d:{(k * 0.13) % 0.6}s; --t:{0.42 + (k % 3) * 0.09}s; --l:{9 + (k % 4) * 3}px"></i>{/each}</span>{/if}
 	<button class="tiecoin" class:flip={tieFlip} style="left:{CX}px; top:{CY}px" on:click={onTie} title="Tie-breaker — the {TEAMNAME[tieBreaker]} win ties (click to flip)"><img src={tieArt(tieBreaker)} alt="Tie-breaker" /></button>
 </div>
@@ -164,10 +169,11 @@
 	.beam .tick { fill: rgba(255, 255, 255, 0.55); }
 	.beam .bmark { fill: var(--brass-hi); stroke: #0a1a2c; stroke-width: 1.5; }
 	.beam .src { stroke: #fff; stroke-width: 2; }
-	.beam .pulse { fill: none; stroke: #fff; stroke-width: 3; stroke-linecap: round; stroke-dasharray: 8 44; opacity: 0.85; animation: flowL 1.2s linear infinite; }
-	.beam .pulse.r { animation-name: flowR; }
-	@keyframes flowL { to { stroke-dashoffset: -52; } }
-	@keyframes flowR { to { stroke-dashoffset: 52; } }
+	.lane { position: absolute; z-index: 2; height: 3px; overflow: hidden; pointer-events: none; opacity: 0.85; }
+	.lane i { position: absolute; top: 0; bottom: 0; left: -52px; right: -52px; border-radius: 1.5px;
+		background: repeating-linear-gradient(90deg, #fff 0 11px, transparent 11px 52px); will-change: transform; animation: lane 1.2s linear infinite; }
+	.lane i.back { animation-direction: reverse; }
+	@keyframes lane { from { transform: translateX(0); } to { transform: translateX(52px); } }
 	.clash { position: absolute; z-index: 3; width: 0; height: 0; pointer-events: none; }
 	.clash i { position: absolute; left: 0; top: 0; border-radius: 50%; }
 	/* a welding spark: a small white-hot point that flickers, and short bright streaks spitting out of it */
@@ -176,5 +182,5 @@
 		animation: spark var(--t) ease-out var(--d) infinite; }
 	@keyframes weld { 0% { opacity: 1; transform: scale(1); } 20% { opacity: 0.7; transform: scale(0.8); } 40% { opacity: 1; transform: scale(1.15); } 60% { opacity: 0.85; transform: scale(0.9); } 80% { opacity: 1; transform: scale(1.05); } 100% { opacity: 0.9; transform: scale(1); } }
 	@keyframes spark { 0% { transform: rotate(var(--a)) translateX(2px) scaleX(0.4); opacity: 1; } 70% { opacity: 1; } 100% { transform: rotate(var(--a)) translateX(16px) scaleX(1); opacity: 0; } }
-	@media (prefers-reduced-motion: reduce) { .fl, .sp, .beam .pulse { animation: none; } }
+	@media (prefers-reduced-motion: reduce) { .fl, .sp, .lane i { animation: none; } }
 </style>

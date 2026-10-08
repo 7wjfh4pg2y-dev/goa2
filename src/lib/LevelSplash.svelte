@@ -110,7 +110,7 @@
 	.ultgem { position: absolute; left: 50%; top: 50%; width: 58px; height: 58px; margin: -29px 0 0 -29px; transform: rotate(45deg); opacity: 0;
 		border: 3px solid #fbe0a0; background: radial-gradient(circle at 32% 28%, #fff, #e7c8ff 14%, #a45cf0 45%, #5b1f9e 80%, #2a0b4d);
 		box-shadow: 0 0 0 2px rgba(0, 0, 0, .55), inset 0 0 12px rgba(255, 255, 255, .35), 0 0 30px 6px rgba(164, 92, 240, .75), 0 0 70px rgba(164, 92, 240, .5);
-		animation: forge .6s cubic-bezier(.2, 1.6, .4, 1) 1.45s forwards, pulse 1.1s ease-in-out 2.1s infinite; }
+		animation: forge .6s cubic-bezier(.2, 1.6, .4, 1) 1.45s, pulse 1.1s ease-in-out 2.05s infinite; } /* forge does not fill: two transform animations at once take both off the GPU */
 	@keyframes forge { from { opacity: 0; transform: rotate(-135deg) scale(.2); filter: brightness(3); } to { opacity: 1; transform: rotate(45deg) scale(1); filter: none; } }
 	@keyframes pulse { 0%, 100% { opacity: 1; transform: rotate(45deg) scale(1); } 50% { opacity: 1; transform: rotate(45deg) scale(1.08); } }
 	/* the light turns violet as they fuse */
