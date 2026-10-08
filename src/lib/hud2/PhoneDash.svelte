@@ -58,7 +58,7 @@
 			<span class="face" style="--pc:{color}; {portraitCss(cs.hero)}"></span>
 			<span class="ini" class:off={ini == null}>{ini ?? '–'}</span>
 		</button>
-		<StatBubbles deltas={statDeltas(cs)} size={15} cols={3} />
+		<StatBubbles deltas={statDeltas(cs)} size={21} cols={3} />
 		<span class="wells">
 			{#each [0, 1, 2, 3] as t (t)}
 				<span class="w" class:now={t === turnIdx} class:glow={fxAt(t)}><TurnSlot heroId={cs.hero} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} label={ROMAN[t]} peekable examinable on:click={(e) => onSlot(e, t)} /></span>
@@ -89,11 +89,16 @@
 		</span>
 		{#if order.split}
 			<span class="act split"><button class="h l" on:click={order.split.left.run}>{order.split.left.label}</button><button class="h r" on:click={order.split.right.run}>{order.split.right.label}</button></span>
+		{:else if order.alt}
+			<!-- a second choice rides on the same pill: two thirds the main one (e.g. Waiting · hero), a third the other (Skip) -->
+			<span class="act joined {order.kind}">
+				<button class="m" disabled={!order.run} on:click={() => order.run?.()}><b>{order.label}</b>{#if order.sub}<small>{order.sub}</small>{/if}</button>
+				<button class="o" on:click={order.alt.run}>{order.alt.label}</button>
+			</span>
 		{:else}
 			<button class="act {order.kind}" class:tinted={!!ringColor && order.kind !== 'bad'} style={ringColor ? `--rc:${ringColor}` : ''} class:pulse={order.pulse} disabled={!order.run} on:click={() => order.run?.()}>
 				<b>{order.label}</b>{#if order.sub}<small>{order.sub}</small>{/if}
 			</button>
-			{#if order.alt}<button class="alt" on:click={order.alt.run}>{order.alt.label}</button>{/if}
 		{/if}
 	</div>
 </div>
@@ -162,6 +167,11 @@
 	.h { flex: 1; height: 100%; border: 0; font-size: 13px; letter-spacing: 0.05em; text-transform: uppercase; color: #fff; }
 	.h.l { background: linear-gradient(180deg, color-mix(in srgb, var(--tc) 85%, #fff 10%), color-mix(in srgb, var(--tc) 65%, #000)); }
 	.h.r { background: linear-gradient(180deg, #e0533f, #8f1d12); border-left: 1px solid #f4dfa8; }
+	.act.joined { padding: 0; gap: 0; }
+	.joined .m { flex: 2; min-width: 0; height: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 0 8px; border: 0; color: inherit; background: none; overflow: hidden; }
+	.joined .m b { flex: none; font-weight: 400; font-size: 14px; letter-spacing: 0.06em; text-transform: uppercase; }
+	.joined .m small { min-width: 0; font-size: 10px; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0.85; }
+	.joined .o { flex: 1; min-width: 0; height: 100%; border: 0; border-left: 1px solid rgba(255, 170, 160, 0.6); font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: #fff; background: linear-gradient(180deg, #e0533f, #8f1d12); }
 	.alt { flex: none; height: 30px; padding: 0 10px; border-radius: 999px; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: #fff; background: #b42318; border: 1px solid rgba(255, 170, 160, 0.6); }
 	@media (prefers-reduced-motion: reduce) { .act.pulse::after { animation: none; } }
 </style>

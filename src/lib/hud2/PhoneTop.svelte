@@ -14,7 +14,6 @@
 	export let tieArt: (t: Team) => string;
 	export let tieFlip = false;
 	export let waves = 0;
-	export let waveIcon = '';
 	export let life: Record<Team, number> = { orange: 0, blue: 0 };
 	export let lifeSplit = '';
 	export let left: Team = 'blue'; // the viewer's enemy
@@ -33,6 +32,8 @@
 	export let onTie: () => void = () => {};
 	export let onSheet: () => void = () => {}; // waves / Life: the sheet where tokens flip
 	export let onCoins: (d: number) => void = () => {};
+	/** the turn's state for the free middle: planning dots (player colours, filled = in) or the acting order (lit = acting) */
+	export let status: { planning: boolean; countdown: boolean; dots: { color: string; ok: boolean }[]; order: { portrait: string; color: string; team: string }[]; acting: number } | null = null;
 
 	$: right = (left === 'orange' ? 'blue' : 'orange') as Team;
 	const TC: Record<Team, string> = { orange: '#ef7d22', blue: '#2f7fe6' };
@@ -51,8 +52,24 @@
 		<button class="ib menu" on:click={onMenu} aria-label="Room"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" /></svg><i class="cdot {conn}"></i>{#if badge}<em>{badge}</em>{/if}</button>
 		<span class="rt" title="Round {round}, turn {turn}"><b>R{round}</b><span class="tcard">{turn}</span></span>
 		<button class="ib coin" on:click={onTie} title="Tie-breaker — tap to flip" aria-label="Tie-breaker"><img src={tieArt(tieBreaker)} class:flip={tieFlip} alt="" /></button>
-		<button class="pill" on:click={onSheet} aria-label="Waves"><img class="wv" src={waveIcon} alt="" /><b>{waves}</b></button>
+		<button class="pill" on:click={onSheet} aria-label="Waves">
+			<svg class="wv" viewBox="0 0 24 24" aria-hidden="true">
+				<defs><linearGradient id="pt-wt-split" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f08a34" /><stop offset="0.5" stop-color="#d0681a" /><stop offset="0.5" stop-color="#2a74d6" /><stop offset="1" stop-color="#1a4f9e" /></linearGradient></defs>
+				<circle cx="12" cy="12" r="11" fill="url(#pt-wt-split)" stroke="#0a1a2c" stroke-width="1.2" />
+				<circle cx="12" cy="12" r="9.6" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="0.8" />
+				<path d="M4.6 15.2c2.2 0 3.2-1.6 4.4-3.8 1.2-2.3 2.8-4.2 5.6-4.2 2.4 0 4.2 1.5 4.2 3.6 0 1.6-1.1 2.7-2.6 2.7-1.1 0-1.9-.7-1.9-1.6" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" />
+				<path d="M4.6 18.4c1.4 0 2-.9 3.3-.9s1.9.9 3.3.9 2-.9 3.3-.9 1.9.9 3.3.9" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" />
+			</svg><b>{waves}</b>
+		</button>
 		<button class="pill life" on:click={onSheet} aria-label="Life"><b style="color:{TC[left]}">{life[left]}</b><img src={lifeSplit} alt="" class:mir={left === 'blue'} /><b style="color:{TC[right]}">{life[right]}</b></button>
+		<span class="mid">
+			{#if status?.planning}
+				{#if status.countdown}<em class="rv">Revealing</em>
+				{:else}<span class="dots">{#each status.dots as d, i (i)}<i class:ok={d.ok} style="--c:{d.color}"></i>{/each}</span>{/if}
+			{:else if status}
+				<span class="ord">{#each status.order as o, k (k)}<i class="f" class:now={k === status.acting} class:done={k < status.acting} style="--pc:{o.color}; {o.portrait}"></i>{/each}</span>
+			{/if}
+		</span>
 		{#if coins != null}
 			<span class="purse">
 				<button class="pill gold" on:click={() => (purse = !purse)} aria-label="Coins"><i class="gc"></i><b>{coins}</b></button>
@@ -88,10 +105,21 @@
 	.coin img.flip { transform: rotateY(180deg); transition: transform 0.4s; }
 	.pill { flex: none; height: 28px; display: inline-flex; align-items: center; gap: 3px; padding: 0 7px; border-radius: 999px; background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(255, 255, 255, 0.12); }
 	.pill b { font-weight: 400; font-size: 14px; min-width: 1ch; text-align: center; font-variant-numeric: tabular-nums; }
-	.wv { width: 18px; height: 18px; object-fit: contain; }
+	.wv { width: 20px; height: 20px; }
 	.life img { width: 22px; height: 22px; object-fit: contain; }
 	.life img.mir { transform: scaleX(-1); }
-	.purse { position: relative; flex: none; margin-left: auto; }
+	.purse { position: relative; flex: none; }
+	/* the free middle: the turn's state */
+	.mid { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+	.dots { display: flex; gap: 4px; }
+	.dots i { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--c); box-sizing: border-box; opacity: 0.55; }
+	.dots i.ok { background: var(--c); opacity: 1; }
+	.rv { font-style: normal; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #f4dfa8; }
+	.ord { display: flex; align-items: center; }
+	.ord .f { width: 18px; height: 18px; margin-left: -3px; border-radius: 50%; background-repeat: no-repeat; background-color: #0b101a; box-shadow: 0 0 0 1.5px var(--pc), 0 0 0 2.5px #0a1a2c; }
+	.ord .f:first-child { margin-left: 0; }
+	.ord .f.done { opacity: 0.4; filter: grayscale(0.7); }
+	.ord .f.now { position: relative; z-index: 1; width: 24px; height: 24px; margin: 0 2px; box-shadow: 0 0 0 2px #f4dfa8, 0 0 8px 2px rgba(244, 223, 168, 0.6); }
 	.gold { border-color: rgba(216, 179, 106, 0.5); }
 	.gc { width: 16px; height: 16px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff2c0, #e8bd58 55%, #a8792a); box-shadow: inset 0 0 0 1.5px rgba(122, 86, 24, 0.55); }
 	.pm { position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); display: flex; gap: 6px; padding: 5px; border-radius: 999px; background: #0a1a2c; border: 1px solid rgba(216, 179, 106, 0.5); box-shadow: 0 6px 14px rgba(0, 0, 0, 0.6); }

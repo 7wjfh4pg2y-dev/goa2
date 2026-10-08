@@ -202,7 +202,8 @@
 
 	// ── the control centre: one button → a wheel over the board (view controls inside, the board's switches outside)
 	let wheelOpen = false;
-	let deckCovered = false; // the deck / a level-up choice is open: the sea, rims and wisps rest under it
+	let deckCovered = false;
+	let phoneStatus: { planning: boolean; countdown: boolean; dots: { color: string; ok: boolean }[]; order: { portrait: string; color: string; team: string }[]; acting: number } | null = null; // the phone top bar's middle: planning dots / the acting order // the deck / a level-up choice is open: the sea, rims and wisps rest under it
 	const ICON = {
 		recenter: '<circle cx="12" cy="12" r="7" /><path d="M12 2v4M12 18v4M2 12h4M18 12h4" /><circle cx="12" cy="12" r="1.4" />',
 		rotl: '<path d="M4 10a8 8 0 1 1 2 6" /><path d="M4 4v6h6" />',
@@ -769,18 +770,21 @@
 		<div class="placehint defeat"><span>Defeated — play a card on your next turn to respawn</span></div>
 	{/if}
 	{#if incoming}
-		<!-- under attack: a war band — their face, crossed blades, yours; the choice itself is on the action button -->
+		<!-- under attack: an emblem in the middle of the screen — the attacker's face, a blood-red seal with crossed
+		     blades, yours; a slow red starburst turns behind (transform / opacity only). The choice is on the action button. -->
 		<div class="atkask" role="alertdialog" aria-label="You are being attacked" style="--ec:{TEAM_HEX[myTeam === 'blue' ? 'orange' : 'blue']}; --mc:{TEAM_HEX[myTeam ?? 'blue'] ?? '#2f7fe6'}">
-			<span class="akglow" aria-hidden="true"></span>
-			<span class="akband">
-				<span class="akface" style={portraitCss(heroIdOf(incoming.by))}></span>
-				<span class="akmid">
-					<span class="aktitle"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3l9 9M3 4l1-1M11 14l-2 2-3-3 2-2M20 3l-9 9M21 4l-1-1M13 14l2 2 3-3-2-2M7 17l-3 3M17 17l3 3" /></svg>Under attack</span>
-					<span class="akwho"><b>{heroOf(incoming.by)}</b><em>{playerName(incoming.by)}</em></span>
-					<span class="akhint">{incoming.discarded ? 'Defended or defeated?' : 'Discard to defend'}</span>
-				</span>
-				<span class="akface me" style={portraitCss(heroIdOf(clientId))}></span>
-			</span>
+			<div class="akwrap">
+				<span class="akburst" aria-hidden="true"></span>
+				<span class="akglow" aria-hidden="true"></span>
+				<div class="akrow">
+					<span class="akface foe" style={portraitCss(heroIdOf(incoming.by))}></span>
+					<span class="akseal"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3l9 9M3 4l1-1M11 14l-2 2-3-3 2-2M20 3l-9 9M21 4l-1-1M13 14l2 2 3-3-2-2M7 17l-3 3M17 17l3 3" /></svg></span>
+					<span class="akface me" style={portraitCss(heroIdOf(clientId))}></span>
+				</div>
+				<div class="aktitle"><i></i>Under attack<i></i></div>
+				<div class="akwho"><b>{heroOf(incoming.by)}</b><em>{playerName(incoming.by)}</em></div>
+				<div class="akhint">{incoming.discarded ? 'Defended or defeated?' : 'Discard to defend'}</div>
+			</div>
 		</div>
 	{/if}
 	{#if myStray && !pendingToken && !pendingRespawn && !pendingSpawn}
@@ -828,7 +832,7 @@
 	<BoardCanvas bind:this={board} map={$ms.map ?? {}} inset={boardInset} look={boardLook} {glowZone} activeZone={$ms.wonBy ? null : battleZone($ms)} effects={!deckCovered} sea={$boardPrefs.sea} rims={$boardPrefs.rims} rotation={orientation} interactive={true} {placing} {placeGhost} holdColor={myHoldColor} onCancelPlace={cancelPlace} {areas} marks={boardMarks} wisps={$boardPrefs.wisps} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} pings={boardPings} onPing={doPing} {pingArmed} />
 	</div>
 
-	<CardLayer bind:this={cardLayer} {mobile} {hud2} {phone2} compact={$boardPrefs.compact} {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} bind:covered={deckCovered} onRespawn={placeMyHero} onEnter={placeMyHero} onArmToken={armToken} holdingToken={!!pendingToken} {pingArmed} onPing={pingButton} bind:previewId />
+	<CardLayer bind:this={cardLayer} {mobile} {hud2} {phone2} compact={$boardPrefs.compact} {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} bind:covered={deckCovered} bind:phoneStatus onRespawn={placeMyHero} onEnter={placeMyHero} onArmToken={armToken} holdingToken={!!pendingToken} {pingArmed} onPing={pingButton} bind:previewId />
 
 	<!-- selected minion/token: offer delete (heroes aren't deletable) -->
 	{#if hud2}
@@ -1052,9 +1056,9 @@
 	{/if}
 
 	{#if phone2}
-		<PhoneTop round={$ms.round} turn={$ms.turn} tieBreaker={$ms.tieBreaker} {tieArt} {tieFlip} waves={$ms.waves} {waveIcon} life={$ms.life} {lifeSplit}
+		<PhoneTop round={$ms.round} turn={$ms.turn} tieBreaker={$ms.tieBreaker} {tieArt} {tieFlip} waves={$ms.waves} life={$ms.life} {lifeSplit}
 			left={viewTeam === 'orange' ? 'blue' : 'orange'} coins={myCoins} conn={$status} badge={iAmHost ? seatRequests.length : 0}
-			zone={$ms.lane ?? 1} zones={LANE.length} counts={zoneCount} starts={waveStarts} won={beamWon} fx={$boardPrefs.beam}
+			zone={$ms.lane ?? 1} zones={LANE.length} counts={zoneCount} starts={waveStarts} won={beamWon} fx={$boardPrefs.beam} status={phoneStatus}
 			onMenu={() => (lobbyOpen = true)} onWheel={() => (wheelOpen = true)} onTie={flipTie} onSheet={() => (lwOpen = true)} onCoins={coins} />
 		{#if lobbyOpen}
 			<GameLobby phone {room} conn={connLabel($status)} connClass={$status} seats={seatRows} watchers={spectators} requests={seatRequests} host={iAmHost} {clientId} {mySeat} myRequest={myRequestSeat}
@@ -1336,26 +1340,36 @@
 	.spcancel.red { border-color: rgba(239, 68, 68, 0.7); color: #ffb4b4; }
 	.spcancel:disabled { opacity: .45; cursor: default; }
 	.placehint.clr { border-color: rgba(255, 90, 77, 0.6); }
-	/* under attack: a slanted war band in blood red, the attacker's face (their team's ring) left, yours right; a red
-	   glow breathes behind it (opacity only — the glow itself is still) */
-	.atkask { position: absolute; top: 64px; left: 50%; transform: translateX(-50%); z-index: 12; pointer-events: none; animation: akin .35s cubic-bezier(.2, 1.3, .3, 1) both; }
-	.akglow { position: absolute; inset: -18px -40px; background: radial-gradient(50% 60% at 50% 50%, rgba(220, 40, 30, 0.55), transparent 70%); animation: akbreathe 1.4s ease-in-out infinite; }
-	.akband { position: relative; display: flex; align-items: center; gap: 14px; padding: 8px 30px; color: #ffe9e2;
-		clip-path: polygon(14px 0, 100% 0, calc(100% - 14px) 100%, 0 100%);
-		background: linear-gradient(90deg, color-mix(in srgb, var(--ec) 45%, #2a0605) 0%, #2a0605 24%, #3a0806 50%, #2a0605 76%, color-mix(in srgb, var(--mc) 40%, #2a0605) 100%);
-		box-shadow: inset 0 2px 0 rgba(255, 120, 90, 0.7), inset 0 -2px 0 rgba(255, 120, 90, 0.5); }
-	.akface { flex: none; width: 46px; height: 46px; border-radius: 50%; background-repeat: no-repeat; background-color: #0b101a; box-shadow: 0 0 0 2.5px var(--ec), 0 0 12px 2px rgba(255, 60, 40, 0.6); }
-	.akface.me { box-shadow: 0 0 0 2.5px var(--mc), 0 0 0 4px rgba(0, 0, 0, 0.6); filter: saturate(0.85); }
-	.akmid { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; }
-	.aktitle { display: inline-flex; align-items: center; gap: 8px; font-size: 11px; letter-spacing: 0.3em; text-transform: uppercase; color: #ff8f78; }
-	.aktitle svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-	.akwho { display: inline-flex; align-items: baseline; gap: 7px; white-space: nowrap; }
-	.akwho b { font-weight: normal; font-size: 20px; color: #fff; text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8); }
-	.akwho em { font-style: normal; font-size: 11px; color: #ffc2b4; }
-	.akhint { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #ffd8a8; }
-	@keyframes akin { from { opacity: 0; transform: translateX(-50%) scale(1.25); } to { opacity: 1; transform: translateX(-50%) scale(1); } }
+	/* under attack: a centred emblem (see the markup) */
+	.atkask { position: absolute; inset: 0; z-index: 12; display: grid; place-items: center; pointer-events: none; }
+	.akwrap { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 18px 34px 16px; color: #ffe9e2; animation: akin .4s cubic-bezier(.2, 1.3, .3, 1) both; }
+	.gamewrap:not(.mob) .akwrap { zoom: var(--uis, 1); }
+	.akburst { position: absolute; left: 50%; top: 52px; width: 300px; height: 300px; margin: -150px 0 0 -150px; border-radius: 50%; opacity: 0.5;
+		background: repeating-conic-gradient(from 0deg, rgba(255, 70, 40, 0.5) 0 4deg, transparent 4deg 15deg);
+		-webkit-mask-image: radial-gradient(closest-side, #000 30%, transparent 100%); mask-image: radial-gradient(closest-side, #000 30%, transparent 100%); animation: akspin 24s linear infinite; }
+	.akglow { position: absolute; left: 50%; top: 52px; width: 240px; height: 240px; margin: -120px 0 0 -120px; border-radius: 50%; background: radial-gradient(closest-side, rgba(200, 30, 20, 0.6), transparent); animation: akbreathe 1.4s ease-in-out infinite; }
+	.akrow { position: relative; display: flex; align-items: center; }
+	.akface { width: 74px; height: 74px; border-radius: 50%; background-repeat: no-repeat; background-color: #0b101a; }
+	.akface.foe { box-shadow: 0 0 0 3px var(--ec), 0 0 0 5px #1a0503, 0 0 22px 6px rgba(255, 50, 30, 0.6); animation: akfoe .45s cubic-bezier(.2, 1.2, .3, 1) both; }
+	.akface.me { box-shadow: 0 0 0 3px var(--mc), 0 0 0 5px #1a0503; filter: saturate(0.85) brightness(0.9); animation: akme .45s cubic-bezier(.2, 1.2, .3, 1) both; }
+	.akseal { position: relative; z-index: 1; width: 60px; height: 60px; margin: 0 -12px; border-radius: 50%; display: grid; place-items: center;
+		background: radial-gradient(circle at 50% 35%, #d23a26, #6a0d06 75%); box-shadow: 0 0 0 3px #d8b36a, 0 0 0 5px #2a0605, 0 6px 16px rgba(0, 0, 0, 0.7); animation: akslam .5s cubic-bezier(.2, 1.6, .3, 1) .12s both; }
+	.akseal svg { width: 34px; height: 34px; fill: none; stroke: #ffe9c8; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+	.aktitle { display: flex; align-items: center; gap: 10px; margin-top: 10px; font-size: 22px; line-height: 1; letter-spacing: 0.22em; text-transform: uppercase; white-space: nowrap;
+		color: #ffcf8a; text-shadow: 0 0 14px rgba(255, 60, 30, 0.9), 0 2px 0 #3a0703; }
+	.aktitle i { width: 40px; height: 2px; background: linear-gradient(90deg, transparent, #d8b36a); }
+	.aktitle i:last-child { transform: scaleX(-1); }
+	.akwho { display: inline-flex; align-items: baseline; gap: 8px; white-space: nowrap; text-shadow: 0 2px 8px #000; }
+	.akwho b { font-weight: normal; font-size: 18px; color: #fff; }
+	.akwho em { font-style: normal; font-size: 12px; color: #ffc2b4; }
+	.akhint { padding: 3px 12px; border-radius: 999px; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; white-space: nowrap; color: #ffe0b0; background: rgba(40, 6, 4, 0.85); border: 1px solid rgba(255, 120, 90, 0.6); }
+	@keyframes akin { from { opacity: 0; transform: scale(1.3); } to { opacity: 1; transform: none; } }
+	@keyframes akfoe { from { transform: translateX(-60px); opacity: 0; } }
+	@keyframes akme { from { transform: translateX(60px); opacity: 0; } }
+	@keyframes akslam { from { transform: scale(2.2); opacity: 0; } }
+	@keyframes akspin { to { transform: rotate(360deg); } }
 	@keyframes akbreathe { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
-	@media (prefers-reduced-motion: reduce) { .akglow { animation: none; } }
+	@media (prefers-reduced-motion: reduce) { .akglow, .akburst { animation: none; } }
 	.pieimm { font-size: 0.76rem; color: #2a2f38; padding: 4px 13px; border-radius: 999px; white-space: nowrap; letter-spacing: .04em; text-shadow: 0 1px 0 rgba(255,255,255,.6);
 		background: linear-gradient(180deg, #ffffff, #d4d9df 48%, #a3acb7); border: 2px solid #d9a845; box-shadow: 0 0 0 1px #6b4a10, 0 2px 6px rgba(0,0,0,.45), inset 0 1px 0 #fff; }
 	/* minion battle removal: a bigger panel at the top, in the losing team's colour */
@@ -1446,7 +1460,7 @@
 	/* zoomed as a whole; its insets are design px, so the real-px dash is divided back */
 	.gamewrap:not(.mob) .hud { zoom: var(--uis, 1); }
 	.gamewrap.dashfull .hud { bottom: calc(22px + var(--dh, 70px) / var(--uis, 1)); }
-	.gamewrap:not(.mob) :is(.modal, .managepanel, .pietool, .placehint, .atkask, .battlebox) { zoom: var(--uis, 1); }
+	.gamewrap:not(.mob) :is(.modal, .managepanel, .pietool, .placehint, .battlebox) { zoom: var(--uis, 1); }
 	.hud .mapname { font-family: 'Modesto Poster', serif; font-size: 1.02rem; letter-spacing: 0.03em; color: #f6ead2; text-align: center; }
 
 	.fxlist { gap: 3px; }
@@ -1581,20 +1595,16 @@
 	.h2conf .gain.loss { color: #ffb4a8; } .h2conf .gain img { width: 18px; height: 18px; }
 	/* the prompts sit under the 2.0 top bar and its order row */
 	.gamewrap.h2 .placehint, .gamewrap.h2 .battlebox { top: calc(176px * var(--uis, 1)); z-index: 10; }
-	.gamewrap.h2 .atkask { top: calc(226px * var(--uis, 1)); }
 	.boardarea { position: absolute; inset: 0; }
 	.boardarea.mob { top: 116px; bottom: 106px; }
 	.boardarea.mob.p2 { top: 124px; bottom: 100px; }
-	.gamewrap.mob.p2 .atkask { top: 132px; }
-	.gamewrap.mob.p2 .akband { gap: 8px; padding: 6px 20px; }
-	.gamewrap.mob.p2 .akface { width: 34px; height: 34px; }
-	.gamewrap.mob.p2 .akwho b { font-size: 16px; }
-	.gamewrap.mob.p2 .aktitle { letter-spacing: 0.2em; white-space: nowrap; }
-	.gamewrap.mob.p2 .akhint { font-size: 9px; letter-spacing: 0.06em; white-space: nowrap; }
+	/* phones: the attack emblem a size smaller */
+	.gamewrap.mob .akface { width: 56px; height: 56px; }
+	.gamewrap.mob .akseal { width: 48px; height: 48px; }
+	.gamewrap.mob .aktitle { font-size: 18px; }
 	.gamewrap.mob .pietool, .gamewrap.mob .placehint { top: 124px; max-width: 94vw; }
 	.gamewrap.mob .pietool { top: 172px; }
 	.gamewrap.mob .battlebox { top: 118px; min-width: 0; width: 94vw; padding: 8px 10px; } .gamewrap.mob .bbmain { font-size: 1rem; }
-	.gamewrap.mob .atkask { top: 220px; max-width: 94vw; font-size: 0.8rem; }
 	/* phone toolbar: everything stays inside the pill — the label gives way first */
 	.gamewrap.mob .pietool { gap: 6px; padding: 5px 6px 5px 10px; box-sizing: border-box; }
 	.gamewrap.mob .pietxt { min-width: 0; flex: 1 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.72rem; }

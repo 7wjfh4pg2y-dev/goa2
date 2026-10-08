@@ -29,6 +29,7 @@
 	import HudBoard from '$lib/hud2/HudBoard.svelte';
 	import HudOrder, { type OrderEntry } from '$lib/hud2/HudOrder.svelte';
 	import PhoneDash from '$lib/hud2/PhoneDash.svelte';
+	import StatBubbles from '$lib/hud2/StatBubbles.svelte';
 	import PhoneBoard from '$lib/hud2/PhoneBoard.svelte';
 	import HudDash, { type Order } from '$lib/hud2/HudDash.svelte';
 	import Chronicle, { type FxGroup } from '$lib/hud2/Chronicle.svelte';
@@ -185,6 +186,14 @@
 	$: actor = revealed ? actorOf($ms) : null;
 	$: actorName = actor ? heroName(cards[actor]?.hero ?? '') : '';
 	$: covered = deckOpen || !!lvConfirm;
+	// the strip's level ring (8 arcs round the portrait, the 8th purple) — like the desktop boards
+	const lvArc = (i: number, r = 22) => {
+		const a0 = ((i * 45 + 5) * Math.PI) / 180, a1 = ((i * 45 + 40) * Math.PI) / 180;
+		return `M ${(25 + r * Math.sin(a0)).toFixed(2)} ${(25 - r * Math.cos(a0)).toFixed(2)} A ${r} ${r} 0 0 1 ${(25 + r * Math.sin(a1)).toFixed(2)} ${(25 - r * Math.cos(a1)).toFixed(2)}`;
+	};
+	// the phone's top bar shows the turn's state in its free middle: planning dots, or the acting order
+	export let phoneStatus: { planning: boolean; countdown: boolean; dots: { color: string; ok: boolean }[]; order: { portrait: string; color: string; team: string }[]; acting: number } | null = null;
+	$: phoneStatus = phone2 ? { planning: !revealed, countdown: countdownActive, dots: h2dots, order: h2order.map((e) => ({ portrait: e.portrait, color: e.color, team: e.team })), acting: actAt } : null;
 	function endAct() { session.cardAction({ kind: 'endAct', pid: clientId }); }
 	function pointAct(k: number) { if (iAmHost) session.cardAction({ kind: 'setAct', pid: clientId, idx: k }); }
 	$: battlePhase = $ms.battlePhase ?? false;
@@ -842,11 +851,12 @@
 					{@const ini = initOf(cs, revealed)}
 					{@const cfx = fxFor(p.id, slotIdx(cs, turnIdx))}
 					<div class="mpc" class:fxon={effects.some((e) => e.pid === p.id)} style="{teamVars(pTeam(p))} --fxc:{colorOf(p.id)}" role="button" tabindex="0" on:click={() => (overlayId = p.id)} on:keydown={(e) => e.key === 'Enter' && (overlayId = p.id)}>
-						<span class="mpic"><PlayerIcon hero={cs.hero} team={pTeam(p)} color={colorHex(p.color)} size="28px" ring={2} ult={cs.ultimate} /></span>
+						<span class="mpic">{#if phone2}<svg class="lring" viewBox="0 0 50 50" aria-hidden="true">{#each Array(8) as _, i (i)}<path d={lvArc(i)} class:on={i < levelOf(cs) || (i === 7 && cs.ultimate)} class:ult={i === 7} />{/each}</svg>{/if}<PlayerIcon hero={cs.hero} team={pTeam(p)} color={colorHex(p.color)} size={phone2 ? '24px' : '28px'} ring={2} ult={cs.ultimate} /></span>
 						<span class="mpn"><b>{p.name}</b><small>{heroName(cs.hero)}</small></span>
-						<span class="mlv">{#if phone2}<span class="lpips" title="Level {levelOf(cs)}">{#each Array(8) as _, i (i)}<i class:on={i < levelOf(cs) || (i === 7 && cs.ultimate)} class:ult={i === 7}></i>{/each}</span>{:else}<em>Lv {levelOf(cs)}</em>{/if}<i class="mini" class:off={ini == null}>{@html CLOCK}<b>{ini ?? '–'}</b></i></span>
+						<span class="mlv">{#if !phone2}<em>Lv {levelOf(cs)}</em>{/if}<i class="mini" class:off={ini == null}>{@html CLOCK}<b>{ini ?? '–'}</b></i></span>
 						<span class="mcard fxwrap" class:fx={!!cfx} style="--fxc:{colorOf(p.id)}"><TurnSlot heroId={cs.hero} played={cs.turns[turnIdx]} pending={cs.pending} isCurrent {revealed} peekable={p.id === clientId} examinable on:click={(e) => peekSlot(e, cs, turnIdx)} /></span>
-						<span class="msx">{#each allStats(cs) as r}<span class:up={r.delta > 0}>{#if r.delta > 0}<span class="pp">{#each Array(r.delta) as _}<i></i>{/each}</span>{/if}<img src={statImg(r.key)} alt={r.label} /></span>{/each}</span>
+						{#if phone2}<span class="msb"><StatBubbles deltas={statDeltas(cs)} size={17} /></span>
+						{:else}<span class="msx">{#each allStats(cs) as r}<span class:up={r.delta > 0}>{#if r.delta > 0}<span class="pp">{#each Array(r.delta) as _}<i></i>{/each}</span>{/if}<img src={statImg(r.key)} alt={r.label} /></span>{/each}</span>{/if}
 					</div>
 				{/if}
 			{/each}
@@ -2232,10 +2242,13 @@
 	.mstrip.p2 .mpc { background: linear-gradient(180deg, rgb(var(--tcr) / .14), rgba(6, 21, 38, .6)); border: 1px solid rgba(216, 179, 106, .3); box-shadow: inset 0 2px 0 var(--tc); }
 	.mstrip.p2 .mpn b { color: #fff; }
 	.mstrip.p2 .mpn small { color: rgb(var(--tcl)); }
-	.lpips { display: grid; grid-template-columns: repeat(4, 6px); gap: 2px; }
-	.lpips i { height: 4px; border-radius: 1px; background: rgba(255, 255, 255, .16); transform: skewX(-18deg); }
-	.lpips i.on { background: #d8b36a; }
-	.lpips i.ult { background: rgba(138, 79, 209, .45); } .lpips i.ult.on { background: #a46be8; }
+	.mstrip.p2 .mpic { position: relative; width: 32px; height: 32px; place-items: center; }
+	.lring { position: absolute; inset: 0; width: 100%; height: 100%; }
+	.lring path { fill: none; stroke: rgba(255, 255, 255, .16); stroke-width: 4; stroke-linecap: round; }
+	.lring path.on { stroke: #d8b36a; }
+	.lring path.ult { stroke: rgba(138, 79, 209, .45); } .lring path.ult.on { stroke: #a46be8; }
+	.mstrip.p2 .mpc { grid-template-columns: 32px 1fr 32px 40px; }
+	.msb { grid-column: 1 / 4; grid-row: 2; align-self: end; }
 	.tray.mob.p2 { bottom: 100px; }
 	.bstack.p2 { bottom: 108px; }
 	.mpc { flex: none; width: 170px; height: 62px; display: grid; grid-template-columns: 30px 1fr 32px 40px; grid-template-rows: 32px 1fr; column-gap: 4px; row-gap: 2px;
