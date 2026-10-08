@@ -19,8 +19,8 @@ or friends) → tick it off. Fixes the live game needs go into 1.0 AND here.
 6. [ ] Speed pass — the parts that apply to what's here by then
 7. [x] The Tide look, before the game — landing (the island in its moving sea), choose / admin / GM tools, menu, Create, Join, lobby (the island as a still picture)
 7b. [x] The Tide look — hero select and the matchup slices (in: 2.0's screen with the user's changes — team-coloured pips / All / Lock in, no stat numbers, picked heroes ringed in the picker's colour, a lower bottom bar: full cards up to 3 a side, compact at 4–5; the slices loom the tie-breaker coins. Slices stay full width (the user's pick, A); no blade line on desktop; long names a touch smaller; bigger, outlined role icons)
-8. [ ] The in-game screen — **the user's direction (2026-10-04): MORE OPTIONS, each player's own.** Some players want the full classic look (board AND HUD), some want to mix, the user wants everything 2.0: the new HUD becomes a PERSONAL choice beside the classic one (like the map look and the effects in `boardPrefs`, never shared) — presets Classic / 2.0 / Custom (pick per part). Already personal: Island / Classic map, Rims, Zone outline, Waves (all effects off by default). — top bar, console and roster, player boards, the Ascension deck
-9. [ ] The phone in-game layout
+8. [x] The in-game screen — **the user's direction (2026-10-04): MORE OPTIONS, each player's own.** Some players want the full classic look (board AND HUD), some want to mix, the user wants everything 2.0: the new HUD becomes a PERSONAL choice beside the classic one (like the map look and the effects in `boardPrefs`, never shared) — presets Classic / 2.0 / Custom (pick per part). Already personal: Island / Classic map, Rims, Zone outline, Waves (all effects off by default). — top bar, console and roster, player boards, the Ascension deck
+9. [x] The phone in-game layout
 10. [ ] Final playtest with the group → switch `/goa2` to the release
 
 

@@ -10,6 +10,9 @@
 	import { heroCards, backgroundSlug } from '$lib/cards/deck';
 
 	export let planning = true;
+	/** the status row's word: Planning, or Levelling during the level-up step (dots = done levelling) */
+	export let title = 'Planning';
+	export let doneWord = 'ready';
 	export let countdown = '';
 	export let dots: { team: string; color?: string; ok: boolean }[] = [];
 	export let order: OrderEntry[] = [];
@@ -42,7 +45,7 @@
 	{#if planning}
 		<div class="status">
 			{#if countdown}<b>Revealing</b>
-			{:else}<b>Planning</b><span class="sdots">{#each dots as d, i (i)}<i class="t-{d.team}" class:ok={d.ok} style={d.color ? `--tc:${d.color}` : ''}></i>{/each}</span><em>{ready} of {dots.length} ready</em>{/if}
+			{:else}<b>{title}</b><span class="sdots">{#each dots as d, i (i)}<i class="t-{d.team}" class:ok={d.ok} style={d.color ? `--tc:${d.color}` : ''}></i>{/each}</span><em>{ready} of {dots.length} {doneWord}</em>{/if}
 		</div>
 	{:else}
 		{#each order as e, k (e.pid)}

@@ -14,6 +14,7 @@
 	import CardBack from '$lib/cards/CardBack.svelte';
 	import DeckView from '$lib/DeckView.svelte';
 	import PhoneDeck from '$lib/hud2/PhoneDeck.svelte';
+	import { radiusPrivate, privRadius } from '$lib/privateRadius';
 	import { uiLayout, layoutVars } from '$lib/layout';
 	import CardBanner from '$lib/CardBanner.svelte';
 	import TurnSlot from '$lib/cards/TurnSlot.svelte';
@@ -54,6 +55,8 @@
 	/** the 2.0 phone (segment 9): the restyled player strip with level pips, PhoneDash, PhoneBoard; arm-then-confirm like hud2 */
 	export let phone2 = false;
 	export let hud2 = false; // the 2.0 HUD (desktop / tablet): side boards, the Chronicle, the order row, the new dash
+	/** a board action waiting for its yes (GameView): the action ring confirms it, with Cancel beside it */
+	export let ringAsk: Order | null = null;
 	export let compact = false; // 2.0: the side boards shrink to nameplates
 
 	const ORANGE = '#ef7d22';
@@ -194,7 +197,7 @@
 	};
 	// the phone's top bar shows the turn's state in its free middle: planning dots, or the acting order
 	export let phoneStatus: { planning: boolean; countdown: boolean; dots: { color: string; ok: boolean }[]; order: { portrait: string; color: string; team: string }[]; acting: number } | null = null;
-	$: phoneStatus = phone2 ? { planning: !revealed, countdown: countdownActive, dots: h2dots, order: h2order.map((e) => ({ portrait: e.portrait, color: e.color, team: e.team })), acting: actAt } : null;
+	$: phoneStatus = phone2 ? { planning: !revealed || levelPhase, countdown: countdownActive, dots: h2dots, order: h2order.map((e) => ({ portrait: e.portrait, color: e.color, team: e.team })), acting: actAt } : null;
 	function endAct() { session.cardAction({ kind: 'endAct', pid: clientId }); }
 	function pointAct(k: number) { if (iAmHost) session.cardAction({ kind: 'setAct', pid: clientId, idx: k }); }
 	$: battlePhase = $ms.battlePhase ?? false;
@@ -544,9 +547,20 @@
 
 	// ── area radius: a temporary, translucent area around your hero (1–8 hexes),
 	// in your colour, seen by everyone; it clears when the turn advances
-	$: myRadius = $ms.radii?.[clientId] ?? 0;
+	// public (everyone sees it, logged) or private (only on your screen; privateRadius.ts)
+	$: turnKey = `${$ms.round}-${$ms.turn}`;
+	$: myRadius = $radiusPrivate ? ($privRadius && $privRadius.key === turnKey ? $privRadius.n : 0) : $ms.radii?.[clientId] ?? 0;
 	let radiusOpen = false;
+	function setPrivacy(priv: boolean) {
+		if (priv === $radiusPrivate) return;
+		const n = myRadius;
+		if (priv && $ms.radii?.[clientId]) { const next = { ...($ms.radii ?? {}) }; delete next[clientId]; session.act('cleared their radius', { radii: next }); }
+		if (!priv) privRadius.set(null);
+		radiusPrivate.set(priv);
+		if (priv && n) privRadius.set({ n, key: turnKey });
+	}
 	function setRadius(n: number) {
+		if ($radiusPrivate) { privRadius.set(n > 0 ? { n, key: turnKey } : null); radiusOpen = false; return; }
 		const next = { ...($ms.radii ?? {}) };
 		if (n > 0) next[clientId] = n; else delete next[clientId];
 		session.act(n > 0 ? `shows a radius ${n} area` : 'cleared their radius', { radii: next });
@@ -669,7 +683,7 @@
 	const teamOfPid = (pid: string) => { const p = $players.find((q: Player) => q.id === pid); return p ? pTeam(p) : ($ms.pieces?.[pid]?.team as 'orange' | 'blue' | undefined) ?? null; };
 	// the planning dots in each player's colour: the enemy on the left, your team on the right (you last)
 	$: h2dots = [...seatedWithCards.filter((p) => pTeam(p) !== viewTeam), ...seatedWithCards.filter((p) => pTeam(p) === viewTeam && p.id !== clientId), ...seatedWithCards.filter((p) => p.id === clientId)]
-		.map((p) => ({ team: pTeam(p), color: colorHex(p.color), ok: isReady(cards[p.id]) }));
+		.map((p) => ({ team: pTeam(p), color: colorHex(p.color), ok: levelPhase ? !mustLevel(cards[p.id]) : isReady(cards[p.id]) }));
 	// the card picked in your hand (armed to commit, or open to defend / discard): the action ring takes its colour
 	const CARD_HUE: Record<string, string> = { RED: '#b8322f', BLUE: '#2a64c4', GREEN: '#2b8a43', GOLD: '#c9982f', SILVER: '#8d99a8' };
 	$: ringCard = armed ?? (selected != null && previewSrc === 'hand' && mine?.hand.includes(selected) ? selected : null);
@@ -703,8 +717,9 @@
 	// the ONE action, in a word (the same steps as the classic dash's action slot)
 	$: order2 = ((): Order => {
 		if ($ms.wonBy) return { label: 'Game over', kind: 'off' };
+		if (ringAsk) return ringAsk;
 		// a card chosen in its preview to discard (any time — a defence, or an effect): the ring asks once more
-		if (armed != null && armedKind === 'discard' && mine) { const i = armed; return { label: 'Discard', sub: heroCards(mine.hero)[i]?.name, kind: 'bad', pulse: true, run: () => { defend(i); armed = null; } }; }
+		if (armed != null && armedKind === 'discard' && mine) { const i = armed; return { label: 'Discard', sub: heroCards(mine.hero)[i]?.name, kind: 'bad', pulse: true, run: () => { defend(i); armed = null; }, cancel: () => (armed = null) }; }
 		if (iCanRespawn) return { label: 'Respawn', kind: 'team', pulse: true, run: onRespawn };
 		if (iMustEnter) return { label: 'Spawn hero', kind: 'team', pulse: true, run: onEnter };
 		// attacked: Defeated until you discard a card (your defence); then the ring splits — Defended | Defeated
@@ -728,7 +743,7 @@
 			return isFinalTurn ? { label: 'Minion battle', kind: 'go', run: startBattle } : { label: 'Next turn', kind: 'go', run: onAdvanceTurn };
 		}
 		if (myReady) return { label: 'Take back', sub: `${readyCount} of ${seatedWithCards.length} in`, kind: 'quiet', run: takeBack };
-		if (armed != null && armedKind === 'commit' && canCommit && mine) return { label: 'Commit', sub: heroCards(mine.hero)[armed]?.name, kind: 'go', pulse: true, run: commitArmed };
+		if (armed != null && armedKind === 'commit' && canCommit && mine) return { label: 'Commit', sub: heroCards(mine.hero)[armed]?.name, kind: 'go', pulse: true, run: commitArmed, cancel: () => (armed = null) };
 		if (mine && !mine.hand.length) return { label: 'Waiting', kind: 'wait' };
 		return { label: 'Commit', kind: 'off' };
 	})();
@@ -748,6 +763,10 @@
 					{#if radiusOpen}
 						<div class="radpop">
 							<div class="toklbl">Area radius</div>
+							<div class="radvis" role="group" aria-label="Who sees it">
+								<button class:on={!$radiusPrivate} on:click={() => setPrivacy(false)} title="Everyone sees your radius">Public</button>
+								<button class:on={$radiusPrivate} on:click={() => setPrivacy(true)} title="Only you see it — nothing is shared or logged">Private</button>
+							</div>
 							<div class="radgrid">
 								{#each [1, 2, 3, 4, 5, 6, 7, 8] as n}
 									<button class="radn" class:on={myRadius === n} on:click={() => setRadius(n)}>{n}</button>
@@ -944,7 +963,7 @@
 	{#if hud2 && !mobile}
 		<div class="h2helm">
 			<div class="h2order">
-				<HudOrder planning={!revealed} countdown={countdownActive ? countdownLabel : ''} dots={h2dots} order={h2order} bonus={itemBonus} tieArt={icon(`tiebreaker_${$ms.tieBreaker}`)}
+				<HudOrder planning={!revealed || levelPhase} title={levelPhase ? 'Levelling' : 'Planning'} doneWord={levelPhase ? 'done' : 'ready'} countdown={countdownActive ? countdownLabel : ''} dots={h2dots} order={h2order} bonus={itemBonus} tieArt={icon(`tiebreaker_${$ms.tieBreaker}`)}
 					small={h2order.length > 4} acting={actAt} canPoint={iAmHost} onPoint={pointAct} onRead={(pid, hid, idx) => (examine = { hid, idx, pid })} />
 			</div>
 			<div class="h2col l" class:tight={h2tight}>
@@ -2106,6 +2125,9 @@
 	@keyframes pingarm { 0%, 100% { opacity: 1; } 50% { opacity: 0.72; } }
 	.radpop { position: absolute; left: 0; bottom: calc(100% + 10px); z-index: 14; width: 196px; padding: 9px; border-radius: 12px;
 		background: rgba(11,16,26,.96); border: 1px solid rgba(199,154,78,.5); box-shadow: 0 16px 40px rgba(0,0,0,.6); }
+	.radvis { display: flex; gap: 0; margin: 0 0 7px; border-radius: 999px; overflow: hidden; border: 1px solid rgba(216, 179, 106, 0.45); }
+	.radvis button { flex: 1; height: 26px; padding: 0; border: 0; font: inherit; font-size: 12px; cursor: pointer; color: #bccbd9; background: rgba(6, 21, 38, 0.9); }
+	.radvis button.on { color: #2a1c06; background: linear-gradient(180deg, #f6e2ad, #d8b36a); }
 	.radgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
 	.radn { padding: 5px 0; border-radius: 8px; cursor: pointer; font-size: .9rem; color: #f0dcae; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.14); }
 	.radn:hover { background: rgba(199,154,78,.2); border-color: rgba(199,154,78,.5); }

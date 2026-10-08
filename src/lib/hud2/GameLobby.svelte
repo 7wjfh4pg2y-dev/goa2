@@ -22,6 +22,13 @@
 	export let onSit: (seat: number) => void = () => {};
 	export let onResolve: (id: string, ok: boolean) => void = () => {};
 	export let onLeave: () => void = () => {};
+	/** the host: end the game for everyone (tap, then tap again to confirm) */
+	export let onEnd: () => void = () => {};
+	let endArm = false, endT: ReturnType<typeof setTimeout> | null = null;
+	function endTap() {
+		if (!endArm) { endArm = true; if (endT) clearTimeout(endT); endT = setTimeout(() => (endArm = false), 3000); return; }
+		endArm = false; onEnd();
+	}
 	export let onClose: () => void = () => {};
 	/** the phone's ☰: the whole screen, with the log (newest first) and the host's Undo */
 	export let phone = false;
@@ -74,7 +81,10 @@
 				<div class="gll">{#each [...log].reverse().slice(0, 40) as e (e.id)}<p><b>{e.by}</b> {e.text}</p>{:else}<p class="none">No moves yet</p>{/each}</div>
 			</div>
 		{/if}
-		<button class="gleave" on:click={onLeave}>Leave the game</button>
+		<div class="gfoot">
+			<button class="gleave" class:half={host} on:click={onLeave}>Leave</button>
+			{#if host}<button class="gend" class:arm={endArm} on:click={endTap}>{endArm ? 'Tap again to end' : 'End game'}</button>{/if}
+		</div>
 	</div>
 </div>
 
@@ -121,5 +131,9 @@
 	.gll p { margin: 0 0 6px; font-size: 13px; line-height: 1.3; color: #d6dee8; }
 	.gll p b { font-weight: 400; color: #f4dfa8; }
 	.gll .none { color: #8a9fb3; }
-	.gleave { align-self: stretch; height: 38px; border-radius: 12px; font-size: 14px; color: #fff; background: linear-gradient(180deg, #c2412f, #8f2a1c); border: 0; cursor: pointer; }
+	.gfoot { align-self: stretch; display: flex; gap: 8px; }
+	.gleave.half { flex: 0 0 calc(50% - 4px); }
+	.gend { flex: 1; height: 38px; border-radius: 12px; font: inherit; font-size: 14px; cursor: pointer; color: #2a1c06; border: 1px solid #f9ebc6; background: linear-gradient(180deg, #f6e2ad, #d8b36a 50%, #b98e42); }
+	.gend.arm { color: #fff; border-color: #ffb4a8; background: linear-gradient(180deg, #e5484d, #8f1d1d); }
+	.gleave { flex: 1; height: 38px; border-radius: 12px; font-size: 14px; color: #fff; background: linear-gradient(180deg, #c2412f, #8f2a1c); border: 0; cursor: pointer; }
 </style>

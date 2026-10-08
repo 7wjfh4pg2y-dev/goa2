@@ -100,6 +100,7 @@
 				<b>{order.label}</b>{#if order.sub}<small>{order.sub}</small>{/if}
 			</button>
 		{/if}
+		{#if order.cancel}<button class="px" on:click={order.cancel} aria-label="Cancel"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17" /></svg></button>{/if}
 	</div>
 </div>
 
@@ -168,6 +169,8 @@
 	.h.l { background: linear-gradient(180deg, color-mix(in srgb, var(--tc) 85%, #fff 10%), color-mix(in srgb, var(--tc) 65%, #000)); }
 	.h.r { background: linear-gradient(180deg, #e0533f, #8f1d12); border-left: 1px solid #f4dfa8; }
 	.act.joined { padding: 0; gap: 0; }
+	.px { flex: none; width: 30px; height: 30px; margin-left: -4px; padding: 0; border-radius: 50%; display: grid; place-items: center; color: #ffd9d3; background: linear-gradient(180deg, #5a1712, #2a0806); border: 1px solid rgba(229, 72, 77, 0.7); }
+	.px svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; }
 	.joined .m { flex: 2; min-width: 0; height: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 0 8px; border: 0; color: inherit; background: none; overflow: hidden; }
 	.joined .m b { flex: none; font-weight: 400; font-size: 14px; letter-spacing: 0.06em; text-transform: uppercase; }
 	.joined .m small { min-width: 0; font-size: 10px; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0.85; }

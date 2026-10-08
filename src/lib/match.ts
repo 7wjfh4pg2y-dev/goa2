@@ -890,6 +890,8 @@ export function joinMatch(
 	// calls it synchronously) never hits it in the temporal dead zone.
 	const recordHistory = (before: MatchState, after: MatchState) => {
 		if (undoing || !before || !after) return
+		// the game is over (a throne / final push, or Life out): no going back
+		if (after.wonBy) { if (undoStack.length) { undoStack = []; canUndo.set(false) }; return }
 		// a new turn — or the minion battle starting (it locks turn 4 in like a turn passing) — resets the stack
 		if (after.round !== before.round || after.turn !== before.turn || (after.battlePhase && !before.battlePhase)) {
 			if (undoStack.length) { undoStack = []; canUndo.set(false) }
@@ -1208,7 +1210,7 @@ export function joinMatch(
 	// host: revert the most recent logged action, snapping back one activity-log
 	// entry at a time (down to the first entry of the current turn).
 	const undo = () => {
-		if (local.host !== clientId) return
+		if (local.host !== clientId || local.wonBy) return
 		const snap = undoStack.pop()
 		canUndo.set(undoStack.length > 0)
 		if (!snap) return

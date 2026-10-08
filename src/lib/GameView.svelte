@@ -9,6 +9,8 @@
 	import VictorySplash from '$lib/VictorySplash.svelte';
 	import ControlWheel, { type WheelItem } from '$lib/ControlWheel.svelte';
 	import { boardPrefs } from '$lib/boardPrefs';
+	import type { Order } from '$lib/hud2/HudDash.svelte';
+	import { privRadius } from '$lib/privateRadius';
 	import HudTop from '$lib/hud2/HudTop.svelte';
 	import PhoneTop from '$lib/hud2/PhoneTop.svelte';
 	import AttackSplash from '$lib/hud2/AttackSplash.svelte';
@@ -184,19 +186,20 @@
 	$: boardInset = hud2 ? { t: 172 * lay.s, b: 112 * lay.s, l: 372 * lay.s, r: 372 * lay.s } : null;
 	// a piece's pills ring its token: [immune] then the actions, clockwise from 12 o'clock
 	const CLOCK = [0, 90, 180, 270, 45, 135, 225, 315];
-	type Pill = { label: string; run?: () => void; kind?: 'go' | 'bad' | 'imm'; coin?: number; off?: boolean; title?: string };
-	$: pills = !hud2 || !selPiece ? [] : ([
+	type Pill = { label: string; run?: () => void; kind?: 'go' | 'bad' | 'rem' | 'move' | 'imm'; coin?: number; off?: boolean; title?: string };
+	$: if (!selPieceId) carryingSel = false;
+	$: pills = !hud2 || !selPiece || ringAsk || carryingSel ? [] : ([
 		selImmune ? { label: 'Immune', kind: 'imm', title: 'Heavy minions can\'t be moved, defeated or removed while another minion of their team is in the battle zone' } : null,
-		selMovable ? { label: 'Move', run: moveSel, title: 'Pick it up — click a hex to put it down (or drag the piece)' } : null,
+		selMovable ? { label: 'Move', kind: 'move', run: moveSel, title: 'Pick it up — click a hex to put it down (or drag the piece)' } : null,
 		canFlip ? { label: selPiece.faceDown ? 'Flip — reveal' : 'Flip face down', run: flipMine } : null,
 		canDefeatSel && selPiece.kind === 'hero' ? { label: attacks[selPiece.id] ? 'Under attack…' : 'Attack', kind: 'go', off: !!attacks[selPiece.id], run: () => attackSel('attack') } : null,
 		canDefeatSel && selPiece.kind === 'hero' ? { label: 'Defeat', kind: 'bad', coin: heroDefeatSummary($ms, clientId, selPiece.id).coins, run: () => attackSel('defeat'), title: 'Not an attack (e.g. a discard-or-die effect): defeat them outright — same rewards' } : null,
 		canDefeatSel && selPiece.kind !== 'hero' && (!selImmune || iAmHost) ? { label: 'Defeat', kind: 'bad', coin: minionCoins(selPiece.role), run: defeatSel } : null,
 		ownHeroSel && ownAttack ? { label: `Clear${clearCount ? ` ${clearCount}` : ''}`, off: !clearCount, run: startClear } : null,
 		ownHeroSel ? { label: 'Defeated', kind: 'bad', run: selfDefeatAsk, title: 'You were defeated (not by an Attack): choose who gets the reward' } : null,
-		ownHeroSel ? { label: 'Remove', kind: 'bad', run: selfRemoveAsk, title: 'A card effect takes your hero off the board — back with your next card' } : null,
-		canBattleSel ? { label: 'Remove for the battle', kind: 'go', run: battleTakeSel } : null,
-		canRemoveSel && selPiece.kind !== 'hero' && (!selImmune || iAmHost) ? { label: 'Remove', kind: 'bad', run: openRemove } : null
+		ownHeroSel ? { label: 'Remove', kind: 'rem', run: selfRemoveAsk, title: 'A card effect takes your hero off the board — back with your next card' } : null,
+		canBattleSel ? { label: 'Remove for the battle', kind: 'rem', run: battleTakeSel } : null,
+		canRemoveSel && selPiece.kind !== 'hero' && (!selImmune || iAmHost) ? { label: 'Remove', kind: 'rem', run: openRemove } : null
 	].filter(Boolean) as Pill[]);
 	const touchOnly = typeof matchMedia !== 'undefined' && matchMedia('(hover: none)').matches;
 	$: glowZone = boardLook === 'island' && $boardPrefs.zone && !$ms.wonBy ? battleZone($ms) : null;
@@ -288,10 +291,11 @@
 	// every lingering card effect in play (switched on from a played card)
 	$: activeFx = $ms.effects ?? [];
 	// area radii (set from each player's dash): centred on that player's hero, in their colour
+	$: myPriv = $privRadius && $privRadius.key === `${$ms.round}-${$ms.turn}` && $ms.pieces?.[clientId] ? $privRadius.n : 0;
 	$: areas = [...Object.entries($ms.radii ?? {}).flatMap(([pid, r]) => {
 		const hero = $ms.pieces?.[pid];
-		return hero && r > 0 ? [{ hex: hero.hex, r, color: colorHex(hero.color ?? '') }] : [];
-	})];
+		return hero && r > 0 && !(pid === clientId && myPriv) ? [{ hex: hero.hex, r, color: colorHex(hero.color ?? '') }] : [];
+	}), ...(myPriv ? [{ hex: $ms.pieces[clientId].hex, r: myPriv, color: colorHex($ms.pieces[clientId].color ?? '') }] : [])];
 	// single hexes to act on: a spirit swirl round each (BoardCanvas `marks`)
 	$: boardMarks = [...battleMarks, ...spawnMarks, ...clearMarks, ...strayMarks];
 
@@ -320,8 +324,10 @@
 	function battleTakeSel() {
 		if (!selPiece) return;
 		const id = selPiece.id;
+		const go = () => session.cardAction({ kind: 'battleRemove', pid: clientId, piece: id });
+		if (useRing) { askRing(id, 'Remove', `${cap(selPiece.role ?? '')} minion · battle`, 'bad', go); return; }
 		board?.release();
-		session.cardAction({ kind: 'battleRemove', pid: clientId, piece: id });
+		go();
 	}
 	const battleAutoAll = () => session.cardAction({ kind: 'battleAuto', pid: clientId });
 	// host override (edge cases): push the lane by hand — tap once to arm, again to confirm
@@ -485,7 +491,20 @@
 	$: selPiece = selPieceId ? $ms.pieces[selPieceId] : null;
 	// Move: pick the selected piece up (a click only selects it; a drag still moves it straight away)
 	$: selMovable = !!selPiece && !(selImmune && !iAmHost);
-	function moveSel() { if (selPiece) board?.carry(selPiece.id); }
+	// Move picks it up: the pills step aside until it is put down
+	let carryingSel = false;
+	function moveSel() { if (selPiece) { board?.carry(selPiece.id); carryingSel = true; } }
+	// ── a board action waiting for its yes: the action ring (2.0 HUD, 2.0 phone) asks, with Cancel beside it ──
+	$: useRing = hud2 || phone2;
+	let ringAsk: Order | null = null;
+	let ringFor: string | null = null;
+	function askRing(id: string, label: string, sub: string, kind: 'go' | 'bad', run: () => void) {
+		actId = id; ringFor = id; board?.release();
+		ringAsk = { label, sub, kind, pulse: true, run: () => { run(); ringDone(); }, cancel: ringDone };
+	}
+	function ringDone() { ringAsk = null; ringFor = null; actId = null; selPieceId = null; }
+	// picking another piece, or the piece leaving the board, drops the question
+	$: if (ringAsk && ((selPieceId && selPieceId !== ringFor) || (ringFor && !$ms.pieces[ringFor]))) { ringAsk = null; ringFor = null; }
 	// the piece a Defeat/Remove dialog is about — remembered before the board puts it down
 	let actId: string | null = null;
 	$: actPiece = actId ? $ms.pieces[actId] ?? null : null;
@@ -501,12 +520,21 @@
 		if (!selPiece) return;
 		const p = selPiece;
 		board?.release();
-		if (p.kind === 'minion') { session.cardAction({ kind: 'defeatMinion', pid: clientId, piece: p.id }); selPieceId = null; }
+		if (p.kind !== 'minion') return;
+		const go = () => session.cardAction({ kind: 'defeatMinion', pid: clientId, piece: p.id });
+		if (useRing) askRing(p.id, 'Defeat', `${cap(p.role ?? '')} minion · +${minionCoins(p.role)}`, 'bad', go);
+		else { go(); selPieceId = null; }
 	}
 	// a hero can be attacked (they may defend) or simply defeated (a discard-or-die effect,
 	// anything that isn't an attack) — same rewards and splash either way
 	function attackSel(kind: 'attack' | 'defeat' = 'attack') {
 		if (!selPiece) return;
+		if (useRing) {
+			const id = selPiece.id, sum = heroDefeatSummary($ms, clientId, id);
+			askRing(id, kind === 'attack' ? 'Attack' : 'Defeat', `${heroOf(id)} · +${sum.coins}`, kind === 'attack' ? 'go' : 'bad',
+				() => session.cardAction(kind === 'attack' ? { kind: 'attack', pid: clientId, target: id } : { kind: 'defeatHero', pid: clientId, target: id }));
+			return;
+		}
 		actId = selPiece.id; confirmKind = kind;
 		board?.release();
 	}
@@ -539,7 +567,11 @@
 	function clearAll() { clearSel = clearCands.map((p) => p.id); }
 	let pickKiller = false;
 	$: killers = pickKiller ? Object.keys($ms.cards ?? {}).filter((id) => id !== clientId && teamOf($ms, id) && teamOf($ms, id) !== teamOf($ms, clientId)) : [];
-	function selfRemoveAsk() { if (!selPiece) return; actId = selPiece.id; confirmKind = 'selfremove'; board?.release(); }
+	function selfRemoveAsk() {
+		if (!selPiece) return;
+		if (useRing) { askRing(selPiece.id, 'Remove', 'Your hero', 'bad', () => session.cardAction({ kind: 'removeHero', pid: clientId })); return; }
+		actId = selPiece.id; confirmKind = 'selfremove'; board?.release();
+	}
 	function doSelfRemove() { session.cardAction({ kind: 'removeHero', pid: clientId }); closeConfirm(); }
 	function selfDefeatAsk() { board?.release(); pickKiller = true; }
 	function selfDefeat(killer: string) { session.cardAction({ kind: 'defeatHero', pid: killer, target: clientId }); pickKiller = false; selPieceId = null; }
@@ -566,8 +598,15 @@
 	$: enemyHeroes = actPiece ? Object.values($ms.pieces ?? {}).filter((p) => p.kind === 'hero' && p.team !== actPiece?.team) : [];
 	function openRemove() {
 		actId = selPiece?.id ?? null; board?.release(); pickHeroFor = null;
-		// a minion just needs a quick yes; tokens get the menu of reasons
-		if (actId && $ms.pieces[actId]?.kind === 'minion') confirmKind = 'remove'; else removing = true;
+		// a minion just needs a quick yes; tokens get the menu of reasons (one plain reason → just the yes)
+		const p = actId ? $ms.pieces[actId] : null;
+		if (!p) return;
+		if (useRing) {
+			const opts = removalOptions(p);
+			if (p.kind === 'minion') { const id = p.id; askRing(id, 'Remove', `${cap(p.role ?? '')} minion`, 'bad', () => session.cardAction({ kind: 'removeMinion', pid: clientId, piece: id })); return; }
+			if (opts.length === 1 && !opts[0].needsHero) { const o = opts[0], id = p.id; askRing(id, 'Remove', labelOf(p), 'bad', () => { const pc = $ms.pieces[id]; if (pc) session.act(removalLog(pc, o.id), { pieces: applyRemoval($ms.pieces, id, o.id) }); }); return; }
+		}
+		if (p.kind === 'minion') confirmKind = 'remove'; else removing = true;
 	}
 	function doRemoveMinion() {
 		if (actPiece) session.cardAction({ kind: 'removeMinion', pid: clientId, piece: actPiece.id });
@@ -638,6 +677,10 @@
 		s === 'connected' ? 'Connected' : s === 'reconnecting' ? 'Reconnecting…' : s === 'closed' ? 'Disconnected' : 'Connecting…';
 
 	let confirmLeave = false;
+	// once the game is over there is nothing to come back to: Leave just leaves
+	function askLeave() { if ($ms.wonBy) onLeave(); else confirmLeave = true; }
+	// the host ends the game for everyone (the room closes; everyone drops to the menu)
+	function endGame() { if (!iAmHost) return; session.update({ closed: true }); onLeave(); }
 
 	// ── phone layout (≤760px wide): top bar + ☰ menu instead of the left HUD ──
 	let gvw = 1440, gvh = 900;
@@ -727,7 +770,7 @@
 	</div>
 {/snippet}
 
-<svelte:window on:keydown={(e) => { if (e.key !== 'Escape') return; if (wheelOpen) wheelOpen = false; else if (lobbyOpen) lobbyOpen = false; else if (confirmLeave) confirmLeave = false; else { pendingSpawn = null; pendingToken = null; pingArmed = false; if (clearing) cancelClear(); } }} bind:innerWidth={gvw} bind:innerHeight={gvh} />
+<svelte:window on:keydown={(e) => { if (e.key !== 'Escape') return; if (wheelOpen) wheelOpen = false; else if (lobbyOpen) lobbyOpen = false; else if (confirmLeave) confirmLeave = false; else if (ringAsk) ringDone(); else { pendingSpawn = null; pendingToken = null; pingArmed = false; if (clearing) cancelClear(); } }} bind:innerWidth={gvw} bind:innerHeight={gvh} />
 
 <div class="gamewrap" class:sea={boardLook === 'island'} class:mob={mobile} class:p2={phone2} class:h2={hud2} class:dashfull={!mobile && !hud2 && lay.underHud} style={mobile ? '' : layoutVars(lay) + (hud2 ? `; --dh:${88 * lay.s}px` : '')}>
 	{#if $ms.wonBy}
@@ -809,20 +852,30 @@
 		<VictorySplash team={$ms.wonBy.team} reason={$ms.wonBy.reason} myTeam={mySeat >= 0 && mySeat < $ms.seats ? myTeam : null} {mobile} onClose={() => (victoryClosed = true)} round={$ms.round} stats={gameStats} />
 	{/if}
 	<ControlWheel open={wheelOpen} ring={wheelRing} hub={wheelHub} {mobile} {views} {viewLabel} onGo={goView} onSave={saveView} onClose={() => (wheelOpen = false)} />
-	{#if askLifeEnd && lifeOut}
-		<div class="modal-scrim" role="presentation">
-			<div class="modal" role="dialog" aria-modal="true" tabindex="-1">
-				<h3>The {teamName(lifeOut)} have no Life Tokens left</h3>
-				<p>End the game? <b style:color={lifeOut === 'orange' ? '#8cc0ff' : '#ffb27a'}>{teamName(lifeOut === 'orange' ? 'blue' : 'orange')}</b> win.</p>
-				<div class="mrow">
-					<button class="mcancel" on:click={() => (lifeDismissed = lifeOut ?? '')}>Not yet</button>
-					<button class="mleave" on:click={endOnLife}>🏆 End the game</button>
+	{#if lifeOut && lifeDismissed !== lifeOut}
+			{@const win = lifeOut === 'orange' ? 'blue' : 'orange'}
+			<!-- a team's Life ran out: the last token breaks, and the host decides whether the game ends here -->
+			<div class="lifeout is-{lifeOut}" role="dialog" aria-modal="true" aria-label="The last Life token">
+				<span class="lo-vig"></span>
+				<div class="lo-core">
+					<span class="lo-glow"></span>
+					<span class="lo-ring"></span>
+					<img class="lo-tok" src={lifeArt(lifeOut, 'back')} alt="" />
+					<span class="lo-crack"></span>
 				</div>
+				<div class="lo-title"><i></i><b>The last Life falls</b><i></i></div>
+				<p class="lo-sub">The <em class="t-{lifeOut}">{teamName(lifeOut)}</em> have no Life Tokens left</p>
+				<p class="lo-win">Victory to the <em class="t-{win}">{teamName(win)}</em>?</p>
+				{#if iAmHost}
+					<div class="lo-btns">
+						<button class="lo-no" on:click={() => (lifeDismissed = lifeOut ?? '')}>Not yet</button>
+						<button class="lo-yes t-{win}" on:click={endOnLife}>End the game</button>
+					</div>
+				{:else}
+					<div class="lo-btns"><span class="lo-wait">The host decides…</span><button class="lo-no" on:click={() => (lifeDismissed = lifeOut ?? '')}>Hide</button></div>
+				{/if}
 			</div>
-		</div>
-	{:else if lifeOut && !iAmHost}
-		<div class="placehint lifeout">The {teamName(lifeOut)} have no Life Tokens left — waiting for the host to end the game</div>
-	{/if}
+		{/if}
 	<BattleSplash news={battleNews} {mobile} myTeam={viewTeam} onDone={() => (battleDoneId = battleNews?.id ?? null)} />
 	<!-- a push (mid-turn, or from the battle) waits for the battle splash to finish -->
 	<PushSplash news={battleSplashing ? null : $ms.pushNews ?? null} {mobile} myTeam={viewTeam} />
@@ -833,7 +886,7 @@
 	<BoardCanvas bind:this={board} map={$ms.map ?? {}} inset={boardInset} look={boardLook} {glowZone} activeZone={$ms.wonBy ? null : battleZone($ms)} effects={!deckCovered} sea={$boardPrefs.sea} rims={$boardPrefs.rims} rotation={orientation} interactive={true} {placing} {placeGhost} holdColor={myHoldColor} onCancelPlace={cancelPlace} {areas} marks={boardMarks} wisps={$boardPrefs.wisps} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} pings={boardPings} onPing={doPing} {pingArmed} />
 	</div>
 
-	<CardLayer bind:this={cardLayer} {mobile} {hud2} {phone2} compact={$boardPrefs.compact} {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} bind:covered={deckCovered} bind:phoneStatus onRespawn={placeMyHero} onEnter={placeMyHero} onArmToken={armToken} holdingToken={!!pendingToken} {pingArmed} onPing={pingButton} bind:previewId />
+	<CardLayer bind:this={cardLayer} {mobile} {hud2} {phone2} {ringAsk} compact={$boardPrefs.compact} {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} bind:covered={deckCovered} bind:phoneStatus onRespawn={placeMyHero} onEnter={placeMyHero} onArmToken={armToken} holdingToken={!!pendingToken} {pingArmed} onPing={pingButton} bind:previewId />
 
 	<!-- selected minion/token: offer delete (heroes aren't deletable) -->
 	{#if hud2}
@@ -886,7 +939,7 @@
 		<div class="h2top">
 			<button class="h2corner menu" on:click={() => (lobbyOpen = true)} title="Game lobby — the room, the players, your HUD, leave" aria-label="Game lobby">
 				<svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
-				<i class="cdot {$status}"></i>{#if iAmHost && seatRequests.length}<b class="h2badge">{seatRequests.length}</b>{/if}
+				{#if $status !== 'connected'}<i class="cdot {$status}"></i>{/if}{#if iAmHost && seatRequests.length}<b class="h2badge">{seatRequests.length}</b>{/if}
 			</button>
 			<div class="h2bar">
 				<HudTop W={designW} round={$ms.round} turn={$ms.turn} lifeTok={$ms.lifeTok ?? { orange: [], blue: [] }} waveTok={$ms.waveTok ?? []} tieBreaker={$ms.tieBreaker} {flips} {tieFlip}
@@ -934,7 +987,7 @@
 		{#if lobbyOpen}
 			<GameLobby {room} conn={connLabel($status)} connClass={$status} seats={seatRows} watchers={spectators} requests={seatRequests} host={iAmHost} {clientId} {mySeat} myRequest={myRequestSeat}
 				colorOf={(id) => colorHex($players.find((p) => p.id === id)?.color ?? '')}
-				onKick={kickSeat} onSit={requestSeat} onResolve={resolveSeat} onLeave={() => { lobbyOpen = false; confirmLeave = true; }} onClose={() => (lobbyOpen = false)} />
+				onKick={kickSeat} onSit={requestSeat} onResolve={resolveSeat} onLeave={() => { lobbyOpen = false; askLeave(); }} onEnd={endGame} onClose={() => (lobbyOpen = false)} />
 		{/if}
 	{/if}
 
@@ -1064,7 +1117,7 @@
 		{#if lobbyOpen}
 			<GameLobby phone {room} conn={connLabel($status)} connClass={$status} seats={seatRows} watchers={spectators} requests={seatRequests} host={iAmHost} {clientId} {mySeat} myRequest={myRequestSeat}
 				colorOf={(id) => colorHex($players.find((p) => p.id === id)?.color ?? '')} {log} canUndo={$canUndo} onUndo={() => session.undo()}
-				onKick={kickSeat} onSit={requestSeat} onResolve={resolveSeat} onLeave={() => { lobbyOpen = false; confirmLeave = true; }} onClose={() => (lobbyOpen = false)} />
+				onKick={kickSeat} onSit={requestSeat} onResolve={resolveSeat} onLeave={() => { lobbyOpen = false; askLeave(); }} onEnd={endGame} onClose={() => (lobbyOpen = false)} />
 		{/if}
 	{/if}
 	{#if mobile}
@@ -1135,7 +1188,7 @@
 				</div>
 				<div class="mrow2">
 					<button class="mbtn lob" on:click={() => { menuOpen = false; manageOpen = true; }}>👥 Lobby{#if iAmHost && seatRequests.length}<span class="reqbadge">{seatRequests.length}</span>{/if}</button>
-					<button class="mbtn leave" on:click={() => { menuOpen = false; confirmLeave = true; }}>⎋ Leave</button>
+					<button class="mbtn leave" on:click={() => { menuOpen = false; askLeave(); }}>⎋ Leave</button>
 				</div>
 			</div>
 		{/if}
@@ -1159,7 +1212,7 @@
 	<!-- game HUD: right-side panel -->
 	<div class="hud">
 		<div class="mapline">
-			<button class="exitbtn" on:click={() => (confirmLeave = true)} title="Leave game" aria-label="Leave game">⎋</button>
+			<button class="exitbtn" on:click={askLeave} title="Leave game" aria-label="Leave game">⎋</button>
 			<div class="mapname" title={$ms.map?.name ?? 'Board'}>{$ms.map?.name ?? 'Board'}</div>
 		</div>
 		<!-- room code + connection, right under the map name -->
@@ -1567,6 +1620,37 @@
 	.logempty { font-size: 0.72rem; color: #64748b; }
 
 	/* ═══════════ phone layout (≤760px wide) ═══════════ */
+	/* ── the last Life token: a dramatic pause before the host ends the game ── */
+	.lifeout { position: fixed; inset: 0; z-index: 72; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: clamp(8px, 1.6vh, 16px); color: #f5f1e8; text-align: center;
+		background: radial-gradient(60% 55% at 50% 45%, rgba(60, 6, 4, 0.82), rgba(4, 2, 6, 0.94) 70%); animation: loin .5s ease-out both; }
+	@keyframes loin { from { opacity: 0; } }
+	.lo-vig { position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 160px 40px rgba(150, 10, 0, 0.55); animation: lobeat 1.6s ease-in-out infinite; }
+	@keyframes lobeat { 0%, 100% { opacity: .55; } 12% { opacity: 1; } 24% { opacity: .6; } 36% { opacity: .9; } }
+	.lo-core { position: relative; width: clamp(130px, 24vh, 230px); aspect-ratio: 1; display: grid; place-items: center; }
+	.lo-glow { position: absolute; inset: -30%; border-radius: 50%; background: radial-gradient(closest-side, rgba(255, 70, 40, 0.55), transparent); animation: lobeat 1.6s ease-in-out infinite; }
+	.lo-ring { position: absolute; inset: -6%; border-radius: 50%; border: 2px solid rgba(255, 120, 90, 0.6); animation: loring 1.6s ease-out infinite; }
+	@keyframes loring { from { transform: scale(.85); opacity: .9; } to { transform: scale(1.35); opacity: 0; } }
+	.lo-tok { position: relative; width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 10px 24px rgba(0, 0, 0, 0.8)); animation: loshake 2.4s ease-in-out .3s infinite; }
+	@keyframes loshake { 0%, 70%, 100% { transform: rotate(0) scale(1); } 74% { transform: rotate(-4deg) scale(1.04); } 78% { transform: rotate(3deg) scale(1.02); } 82% { transform: rotate(-2deg); } 86% { transform: rotate(1deg); } }
+	.lo-crack { position: absolute; inset: 18%; pointer-events: none; background: linear-gradient(115deg, transparent 47%, rgba(255, 210, 160, 0.95) 49%, rgba(255, 90, 40, 0.8) 50%, transparent 52%), linear-gradient(60deg, transparent 56%, rgba(255, 200, 150, 0.8) 57.5%, transparent 59%);
+		clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); transform-origin: 50% 50%; animation: locrack .6s ease-out .25s both; }
+	@keyframes locrack { from { transform: scale(.2); opacity: 0; } }
+	.lo-title { display: flex; align-items: center; gap: 16px; font-size: clamp(26px, 5.4vh, 54px); line-height: 1; letter-spacing: .12em; text-transform: uppercase; color: #ffd6c8; text-shadow: 0 0 18px rgba(255, 60, 30, 0.75), 0 3px 8px #000; animation: lotitle .8s cubic-bezier(.2, .9, .3, 1) .2s both; }
+	.lo-title b { font-weight: 400; }
+	.lo-title i { width: clamp(30px, 9vw, 120px); height: 2px; background: linear-gradient(90deg, transparent, #ff8a66); }
+	.lo-title i:last-child { transform: scaleX(-1); }
+	@keyframes lotitle { from { opacity: 0; transform: translateY(14px) scale(1.12); letter-spacing: .4em; } }
+	.lo-sub { margin: 0; font-size: clamp(15px, 2.4vh, 22px); color: #e9d9d2; animation: lofade .6s ease-out .55s both; }
+	.lo-win { margin: 0; font-size: clamp(13px, 2vh, 18px); letter-spacing: .08em; text-transform: uppercase; color: #bfa9a0; animation: lofade .6s ease-out .75s both; }
+	@keyframes lofade { from { opacity: 0; transform: translateY(8px); } }
+	.lifeout em { font-style: normal; } .lifeout .t-orange { color: #ffae6e; } .lifeout .t-blue { color: #8cc0ff; }
+	.lo-btns { position: relative; display: flex; align-items: center; gap: 12px; margin-top: clamp(4px, 1vh, 10px); animation: lofade .6s ease-out .95s both; }
+	.lo-btns button { height: 44px; padding: 0 22px; border-radius: 999px; font: inherit; font-size: 16px; letter-spacing: .06em; text-transform: uppercase; cursor: pointer; }
+	.lo-no { color: #d8c8c0; background: rgba(20, 8, 8, 0.8); border: 1px solid rgba(255, 255, 255, 0.25); }
+	.lo-yes { color: #fff; border: 1px solid rgba(255, 255, 255, 0.4); box-shadow: 0 0 24px rgba(255, 200, 120, 0.35); }
+	.lo-yes.t-blue { color: #fff; background: linear-gradient(180deg, #4f97f2, #1d4f9a); } .lo-yes.t-orange { color: #fff; background: linear-gradient(180deg, #f39a4f, #a5490f); }
+	.lo-wait { font-size: 14px; color: #bfa9a0; letter-spacing: .06em; }
+	@media (prefers-reduced-motion: reduce) { .lifeout *, .lifeout { animation: none !important; } }
 	/* ── the 2.0 HUD's top layer: design px, zoomed as one; only its children take clicks ── */
 	.h2top { position: absolute; inset: 0; z-index: 9; zoom: var(--uis, 1); pointer-events: none; --brass: #d8b36a; --brass-hi: #f4dfa8; --line: rgba(216, 179, 106, 0.4); }
 	.h2bar { position: absolute; top: 24px; left: 50%; transform: translateX(-50%); }
@@ -1585,6 +1669,9 @@
 	.pp:disabled { opacity: 0.5; cursor: default; }
 	.pp.go { color: #1b1204; border-color: #8a6a2c; background: linear-gradient(180deg, var(--brass-hi), var(--brass)); }
 	.pp.bad { color: #ffc9c2; border-color: rgba(229, 72, 77, 0.7); background: rgba(70, 16, 18, 0.95); }
+	/* Move = teal · Defeat = red · Remove = violet */
+	.pp.move { color: #c8fbf2; border-color: rgba(64, 214, 190, 0.75); background: rgba(10, 58, 56, 0.96); }
+	.pp.rem { color: #e6d6ff; border-color: rgba(166, 120, 236, 0.75); background: rgba(44, 24, 78, 0.96); }
 	.pp.x { width: 32px; padding: 0; justify-content: center; color: #bccbd9; }
 	.pp.imm { cursor: default; color: #2a2f38; letter-spacing: .04em; text-shadow: 0 1px 0 rgba(255,255,255,.6); background: linear-gradient(180deg, #ffffff, #d4d9df 48%, #a3acb7); border: 2px solid #d9a845; box-shadow: 0 0 0 1px #6b4a10, 0 2px 6px rgba(0,0,0,.45), inset 0 1px 0 #fff; }
 	.h2top .gc { display: inline-block; width: 15px; height: 15px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff2c0, #e2b54f 60%, #a8792a); box-shadow: 0 0 0 1px #6b4a14; }

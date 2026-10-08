@@ -838,7 +838,7 @@
 	/* holding something: the closed hand everywhere over the board, and the picked-up
 	   piece dims while its ghost rides the cursor */
 	.board-wrap.holding, .board-wrap.holding :global(*) { cursor: grabbing !important; }
-	.piece.lifted { opacity: .4; }
+	.piece.lifted { opacity: .7; }
 	.piece.selected circle { filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.6)); }
 	.board-wrap.pinging, .board-wrap.pinging :global(*) { cursor: crosshair !important; }
 	.ping .pring { fill: none; stroke: var(--pc); transform-box: fill-box; transform-origin: center; animation: pring 1.1s ease-out 3; opacity: 0; }
@@ -850,7 +850,7 @@
 	/* minion rims (see `rimPieces`): drawn three times too big and scaled down, so they stay sharp when the board is zoomed in */
 	.rims { position: absolute; inset: 0; transform-origin: 0 0; pointer-events: none; }
 	.rim { position: absolute; }
-	.rim.lifted { opacity: .4; }
+	.rim.lifted { opacity: .7; }
 	.rim .sh { position: absolute; inset: 1.4%; border-radius: 50%; background: rgba(0, 0, 0, .34); }
 	/* the turn is a `transform` animation on an HTML element — that is what the browser hands to the GPU. Measured
 	   dead ends: animating the `rotate` property (ran on the main thread: 720 ms of work per second, idle), and

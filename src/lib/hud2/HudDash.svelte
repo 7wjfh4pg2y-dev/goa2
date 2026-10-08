@@ -1,6 +1,8 @@
 <script lang="ts" module>
 	// kind 'bad' = red (Defeated, Discard); split = the ring in two halves, each its own choice (Defended | Defeated)
 	export type Order = { label: string; sub?: string; kind: 'go' | 'quiet' | 'wait' | 'off' | 'team' | 'bad'; pulse?: boolean; run?: () => void; alt?: { label: string; run: () => void };
+		/** something is loaded on the ring (an armed card, a board action): the small × unloads it */
+		cancel?: () => void;
 		split?: { left: { label: string; run: () => void }; right: { label: string; run: () => void } } };
 </script>
 
@@ -42,6 +44,8 @@
 	export let spread = false;
 	export let docked = false;
 	export let hand: number[] = [];
+	// the dock is as long as the hand: each card played takes its ribbon out, and the ring slides back left (transform)
+	$: dockW = Math.max(56, 32 + 27 * hand.length);
 	export let armed: number | null = null;
 	export let ringColor = ''; // the card picked in your hand (to commit, defend or discard): the ring's middle takes its colour
 	export let rowMax = 1400; // the widest the kept-up banner row may be (design px; it wraps to fit)
@@ -90,7 +94,7 @@
 	onDestroy(() => { if (slideT) clearTimeout(slideT); });
 </script>
 
-<div class="mydash is-{team}" class:docked>
+<div class="mydash is-{team}" class:docked style="--dw:{dockW}px">
 	<div class="dbody">
 		<button class="cap medal" on:click={onMe} title="Your board">
 			<span class="capin">
@@ -189,6 +193,7 @@
 			</button>
 			{/if}
 			{#if order.alt && !order.split}<button class="galt" on:click={order.alt.run}>{order.alt.label}</button>{/if}
+			{#if order.cancel}<button class="gx" on:click={order.cancel} title="Cancel" aria-label="Cancel"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17" /></svg></button>{/if}
 		</div>
 	</div>
 </div>
@@ -317,6 +322,10 @@
 	.gob.quiet { filter: saturate(0.4) brightness(0.85); }
 	.gob.wait .gin, .gob.off .gin { color: #8a9fb3; }
 	.gob.off { filter: saturate(0.5) brightness(0.8); }
+	.gx { position: absolute; right: 0; bottom: 0; z-index: 3; width: 28px; height: 28px; padding: 0; border-radius: 50%; display: grid; place-items: center; cursor: pointer;
+		color: #ffd9d3; background: linear-gradient(180deg, #5a1712, #2a0806); border: 2px solid #0a1a2c; box-shadow: 0 0 0 1px rgba(229, 72, 77, 0.7), 0 3px 8px rgba(0, 0, 0, 0.6); }
+	.gx svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; }
+	.gx:hover { color: #fff; }
 	.galt { position: absolute; left: 50%; bottom: -12px; transform: translateX(-50%); padding: 3px 10px; border-radius: 999px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #fff; background: #b42318; border: 2px solid #0a1a2c; cursor: pointer; }
 	@media (prefers-reduced-motion: reduce) { .gob.pulse::after { animation: none; opacity: 0.7; } }
 </style>
