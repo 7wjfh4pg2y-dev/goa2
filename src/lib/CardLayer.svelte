@@ -131,6 +131,10 @@
 	$: iMustEnter = !!$ms.toSpawn?.[clientId];
 	$: spawnWaiting = seated.filter((p) => $ms.toSpawn?.[p.id]);
 	$: myAttack = $ms.attacks?.[clientId] ?? null;
+	// forced discards: the one on you, and the one you made (you wait; × calls it off)
+	$: myForced = $ms.forced?.[clientId] ?? null;
+	$: myForcing = Object.entries($ms.forced ?? {}).find(([, f]) => f.by === clientId) ?? null;
+	const forceAnswer = (target: string, result: 'defeated' | 'none' | 'cancel') => session.cardAction({ kind: 'forceResolve', pid: clientId, target, result });
 	const answerAttack = (result: 'defended' | 'defeated') => session.cardAction({ kind: 'attackResolve', pid: clientId, target: clientId, result });
 	$: seatedWithCards = seated.filter((p) => cards[p.id]);
 	// reveal layout: 1–2 players share one row; more split by team — your team on
@@ -729,6 +733,11 @@
 		if (myAttack) return myAttack.discarded
 			? { label: 'Defended', kind: 'team', split: { left: { label: 'Defended', run: () => answerAttack('defended') }, right: { label: 'Defeated', run: () => answerAttack('defeated') } } }
 			: { label: 'Defeated', kind: 'bad', run: () => answerAttack('defeated') };
+		// forced to discard: pick a card (it arms Discard, above); "…or die" can also take the defeat
+		if (myForced) return myForced.die
+			? { label: 'Defeated', sub: 'or discard', kind: 'bad', run: () => forceAnswer(clientId, 'defeated') }
+			: mine && mine.hand.length ? { label: 'Discard', sub: 'Pick a card', kind: 'wait' } : { label: 'No card', kind: 'go', run: () => forceAnswer(clientId, 'none') };
+		if (myForcing) { const t = myForcing[0]; return { label: 'Waiting', sub: heroName(cards[t]?.hero ?? ''), kind: 'wait', cancel: () => forceAnswer(t, 'cancel') }; }
 		if (spawnWaiting.length) return { label: 'Waiting', sub: waitFor(spawnWaiting), kind: 'wait' };
 		if (battlePhase) {
 			if ($ms.battle?.remove) return { label: 'Waiting', sub: teamName($ms.battle.loser), kind: 'wait' };
@@ -817,6 +826,13 @@
 		{:else if myAttack}
 			{#if myAttack.discarded}<button class="act tohand" style={teamVars(myTeam)} on:click={() => answerAttack('defended')}>🛡 Defended</button>{/if}
 			<button class="act takeback" on:click={() => answerAttack('defeated')}>Defeated</button>
+		{:else if myForced}
+			<span class="waithost">{myForced.die ? 'Discard a card — or:' : 'Discard a card'}</span>
+			{#if myForced.die}<button class="act takeback" on:click={() => forceAnswer(clientId, 'defeated')}>Defeated</button>
+			{:else if mine && !mine.hand.length}<button class="act" on:click={() => forceAnswer(clientId, 'none')}>No card</button>{/if}
+		{:else if myForcing}
+			<span class="waithost">Waiting for {heroName(cards[myForcing[0]]?.hero ?? '')} to discard…</span>
+			<button class="act takeback" on:click={() => myForcing && forceAnswer(myForcing[0], 'cancel')}>Call off</button>
 		{:else if spawnWaiting.length}
 			<span class="waithost">Waiting for {spawnWaiting.map((p) => p.name).join(', ')} to spawn…</span>
 		{:else}

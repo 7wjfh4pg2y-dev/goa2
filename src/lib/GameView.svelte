@@ -31,7 +31,7 @@
 	import {
 		colorHex, movePiece, teamForSeat, throneHex, minionCoins, heroDefeatSummary, canRespawn, freeSpawns, teamOf, clearable, 
 		type MatchState, type Player, type MatchSession, type Team, type ConnStatus
-	} from '$lib/match';
+	, minionDefense } from '$lib/match';
 
 	export let session: MatchSession;
 	export let ms: Readable<MatchState>;
@@ -186,14 +186,19 @@
 	$: boardInset = hud2 ? { t: 172 * lay.s, b: 112 * lay.s, l: 372 * lay.s, r: 372 * lay.s } : null;
 	// a piece's pills ring its token: [immune] then the actions, clockwise from 12 o'clock
 	const CLOCK = [0, 90, 180, 270, 45, 135, 225, 315];
-	type Pill = { label: string; run?: () => void; kind?: 'go' | 'bad' | 'rem' | 'move' | 'imm'; coin?: number; off?: boolean; title?: string };
+	type Pill = { label: string; run?: () => void; kind?: 'go' | 'bad' | 'rem' | 'move' | 'imm' | 'force'; coin?: number; off?: boolean; title?: string };
 	$: if (!selPieceId) carryingSel = false;
-	$: pills = !hud2 || !selPiece || ringAsk || carryingSel ? [] : ([
+	$: pills = !hud2 || !selPiece || ringAsk || carryingSel ? [] : forceMenu ? ([
+		{ label: 'Discard', kind: 'force', run: () => forceSel(false), title: 'They discard a card' },
+		{ label: 'Discard or die', kind: 'bad', coin: heroDefeatSummary($ms, clientId, selPiece.id).coins, run: () => forceSel(true), title: 'They discard a card — or are defeated (you take the rewards)' },
+		{ label: 'Back', run: () => (forceMenu = false) }
+	] as Pill[]) : ([
 		selImmune ? { label: 'Immune', kind: 'imm', title: 'Heavy minions can\'t be moved, defeated or removed while another minion of their team is in the battle zone' } : null,
 		selMovable ? { label: 'Move', kind: 'move', run: moveSel, title: 'Pick it up — click a hex to put it down (or drag the piece)' } : null,
 		canFlip ? { label: selPiece.faceDown ? 'Flip — reveal' : 'Flip face down', run: flipMine } : null,
 		canDefeatSel && selPiece.kind === 'hero' ? { label: attacks[selPiece.id] ? 'Under attack…' : 'Attack', kind: 'go', off: !!attacks[selPiece.id], run: () => attackSel('attack') } : null,
-		canDefeatSel && selPiece.kind === 'hero' ? { label: 'Defeat', kind: 'bad', coin: heroDefeatSummary($ms, clientId, selPiece.id).coins, run: () => attackSel('defeat'), title: 'Not an attack (e.g. a discard-or-die effect): defeat them outright — same rewards' } : null,
+		canDefeatSel && selPiece.kind === 'hero' ? { label: 'Defeat', kind: 'bad', coin: heroDefeatSummary($ms, clientId, selPiece.id).coins, run: () => attackSel('defeat'), title: 'Not an attack: defeat them outright — same rewards' } : null,
+		canDefeatSel && selPiece.kind === 'hero' ? { label: $ms.forced?.[selPiece.id] ? 'Discarding…' : 'Forced discard', kind: 'force', off: !!$ms.forced?.[selPiece.id], run: () => (forceMenu = true), title: 'A card makes them discard (or be defeated)' } : null,
 		canDefeatSel && selPiece.kind !== 'hero' && (!selImmune || iAmHost) ? { label: 'Defeat', kind: 'bad', coin: minionCoins(selPiece.role), run: defeatSel } : null,
 		ownHeroSel && ownAttack ? { label: `Clear${clearCount ? ` ${clearCount}` : ''}`, off: !clearCount, run: startClear } : null,
 		ownHeroSel ? { label: 'Defeated', kind: 'bad', run: selfDefeatAsk, title: 'You were defeated (not by an Attack): choose who gets the reward' } : null,
@@ -580,6 +585,28 @@
 	$: attacks = $ms.attacks ?? {};
 	// you're under attack until it's answered (Defeated, or Defended once you've discarded — the action button)
 	$: incoming = attacks[clientId] ?? null;
+	// forced discards: the demand on you, and the one you made
+	$: forcedMe = $ms.forced?.[clientId] ?? null;
+	let forceMenu = false; // the Forced discard pill opens its two options
+	$: if (!selPieceId) forceMenu = false;
+	function forceSel(die: boolean) {
+		if (!selPiece) return;
+		const id = selPiece.id;
+		forceMenu = false;
+		const go = () => session.cardAction({ kind: 'force', pid: clientId, target: id, die });
+		if (useRing) { const sum = heroDefeatSummary($ms, clientId, id); askRing(id, 'Force', die ? `Discard or die · +${sum.coins}` : 'Discard', die ? 'bad' : 'go', go); return; }
+		board?.release(); selPieceId = null; go();
+	}
+	// while an attack is on: the minion modifiers on the defence, as shields over the board (everyone sees them)
+	$: defBadges = Object.keys(attacks).flatMap((t) => {
+		const r = minionDefense($ms, t);
+		if (!$ms.pieces?.[t]) return [];
+		return [
+			...r.mods.map((m) => ({ id: m.id, text: m.d > 0 ? '+1' : '−1', tone: (m.d > 0 ? 'up' : 'down') as 'up' | 'down' })),
+			{ id: t, text: r.total > 0 ? `+${r.total}` : r.total < 0 ? `−${-r.total}` : '±0', tone: (r.total > 0 ? 'up' : r.total < 0 ? 'down' : 'even') as 'up' | 'down' | 'even', total: true }
+		];
+	});
+	$: myDefMods = incoming ? minionDefense($ms, clientId).total : 0;
 	const heroIdOf = (pid: string) => $ms.pieces?.[pid]?.hero ?? $ms.cards?.[pid]?.hero ?? '';
 	const TEAM_HEX: Record<string, string> = { orange: '#ef7d22', blue: '#2f7fe6' };
 	$: outgoing = Object.entries(attacks).filter(([, a]) => a.by === clientId);
@@ -827,7 +854,23 @@
 				</div>
 				<div class="aktitle"><i></i>Under attack<i></i></div>
 				<div class="akwho"><b>{heroOf(incoming.by)}</b><em>{playerName(incoming.by)}</em></div>
-				<div class="akhint">{incoming.discarded ? 'Defended or defeated?' : 'Discard to defend'}</div>
+				<div class="akhint">{incoming.discarded ? 'Defended or defeated?' : 'Discard to defend'}{#if myDefMods} · <span class:up={myDefMods > 0} class="akmods">Minions {myDefMods > 0 ? `+${myDefMods}` : `−${-myDefMods}`}</span>{/if}</div>
+			</div>
+		</div>
+	{/if}
+	{#if forcedMe && !incoming}
+		<!-- a card makes you discard: the forcer's face, a discard seal, yours — the choice is on the action button -->
+		<div class="atkask fd" class:die={forcedMe.die} role="alertdialog" aria-label="You must discard" style="--ec:{TEAM_HEX[myTeam === 'blue' ? 'orange' : 'blue']}; --mc:{TEAM_HEX[myTeam ?? 'blue'] ?? '#2f7fe6'}">
+			<div class="akwrap">
+				<span class="akglow" aria-hidden="true"></span>
+				<div class="akrow">
+					<span class="akface foe" style={portraitCss(heroIdOf(forcedMe.by))}></span>
+					<span class="akseal"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4.5h6V7M6 7l1 13h10l1-13M10 11v6M14 11v6" /></svg></span>
+					<span class="akface me" style={portraitCss(heroIdOf(clientId))}></span>
+				</div>
+				<div class="aktitle"><i></i>{forcedMe.die ? 'Discard or die' : 'Forced discard'}<i></i></div>
+				<div class="akwho"><b>{heroOf(forcedMe.by)}</b><em>{playerName(forcedMe.by)}</em></div>
+				<div class="akhint">{forcedMe.die ? 'Discard a card — or be defeated' : 'Discard a card'}</div>
 			</div>
 		</div>
 	{/if}
@@ -882,7 +925,7 @@
 	<div class="ocean"></div>
 	<!-- on a phone the board sits between the top bar + player strip and the dash -->
 	<div class="boardarea" class:mob={mobile} class:p2={phone2}>
-	<BoardCanvas bind:this={board} map={$ms.map ?? {}} inset={boardInset} look={boardLook} {glowZone} activeZone={$ms.wonBy ? null : battleZone($ms)} effects={!deckCovered} sea={$boardPrefs.sea} rims={$boardPrefs.rims} rotation={orientation} interactive={true} {placing} {placeGhost} holdColor={myHoldColor} onCancelPlace={cancelPlace} {areas} marks={boardMarks} wisps={$boardPrefs.wisps} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} pings={boardPings} onPing={doPing} {pingArmed} />
+	<BoardCanvas bind:this={board} map={$ms.map ?? {}} inset={boardInset} look={boardLook} {glowZone} activeZone={$ms.wonBy ? null : battleZone($ms)} effects={!deckCovered} sea={$boardPrefs.sea} rims={$boardPrefs.rims} rotation={orientation} interactive={true} {placing} {placeGhost} holdColor={myHoldColor} onCancelPlace={cancelPlace} {areas} marks={boardMarks} badges={defBadges} wisps={$boardPrefs.wisps} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} pings={boardPings} onPing={doPing} {pingArmed} />
 	</div>
 
 	<CardLayer bind:this={cardLayer} {mobile} {hud2} {phone2} {ringAsk} onResults={() => (victoryClosed = false)} compact={$boardPrefs.compact} {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} bind:covered={deckCovered} bind:phoneStatus onRespawn={placeMyHero} onEnter={placeMyHero} onArmToken={armToken} holdingToken={!!pendingToken} {pingArmed} onPing={pingButton} bind:previewId />
@@ -919,7 +962,9 @@
 			{#if selImmune}<span class="pieimm" title="Heavy minions can't be moved, defeated or removed while another minion of their team is in the battle zone{iAmHost ? ' — as host you can still override for card exceptions' : ''}">Immune</span>{/if}
 			{#if canDefeatSel && selPiece.kind === 'hero'}
 				<button class="piedefeat" on:click={() => attackSel('attack')} disabled={!!attacks[selPiece.id]}>{attacks[selPiece.id] ? 'Under attack…' : '⚔ Attack'}</button>
-				<button class="piedel" on:click={() => attackSel('defeat')} title="Not an attack (e.g. a discard-or-die effect): defeat them outright — same rewards">☠ Defeat</button>
+				<button class="piedel" on:click={() => attackSel('defeat')} title="Not an attack: defeat them outright — same rewards">☠ Defeat</button>
+				<button class="pieflip" on:click={() => forceSel(false)} disabled={!!$ms.forced?.[selPiece.id]} title="A card makes them discard">Discard</button>
+				<button class="piedel" on:click={() => forceSel(true)} disabled={!!$ms.forced?.[selPiece.id]} title="They discard a card — or are defeated (you take the rewards)">Discard or die</button>
 			{:else if canDefeatSel && (!selImmune || iAmHost)}
 				<button class="piedefeat" on:click={defeatSel}>Defeat <span class="gc sm"></span>{minionCoins(selPiece.role)}</button>
 			{/if}
@@ -1394,6 +1439,13 @@
 	.spcancel:disabled { opacity: .45; cursor: default; }
 	.placehint.clr { border-color: rgba(255, 90, 77, 0.6); }
 	/* under attack: a centred emblem (see the markup) */
+	.akmods { color: #ffb4a8; } .akmods.up { color: #9ff0b8; }
+	/* the forced-discard notice: the same emblem, smaller and amber (red for "or die"), no burst */
+	.atkask.fd .akwrap { transform: scale(.82); }
+	.atkask.fd .akseal { background: radial-gradient(circle at 50% 35%, #e0902f, #6a3a06 75%); }
+	.atkask.fd.die .akseal { background: radial-gradient(circle at 50% 35%, #d23a26, #6a0d06 75%); }
+	.atkask.fd .akseal svg { width: 30px; height: 30px; fill: none; stroke: #fff3d6; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+	.atkask.fd .aktitle { color: #ffd9a8; }
 	.atkask { position: absolute; inset: 0; z-index: 12; display: grid; place-items: center; pointer-events: none; }
 	.akwrap { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 18px 34px 16px; color: #ffe9e2; animation: akin .4s cubic-bezier(.2, 1.3, .3, 1) both; }
 	.gamewrap:not(.mob) .akwrap { zoom: var(--uis, 1); }
@@ -1667,6 +1719,7 @@
 	.pp.bad { color: #ffc9c2; border-color: rgba(229, 72, 77, 0.7); background: rgba(70, 16, 18, 0.95); }
 	/* Move = teal · Defeat = red · Remove = violet */
 	.pp.move { color: #c8fbf2; border-color: rgba(64, 214, 190, 0.75); background: rgba(10, 58, 56, 0.96); }
+	.pp.force { color: #ffe2b8; border-color: rgba(240, 160, 70, 0.75); background: rgba(70, 36, 8, 0.96); }
 	.pp.rem { color: #e6d6ff; border-color: rgba(166, 120, 236, 0.75); background: rgba(44, 24, 78, 0.96); }
 	.pp.x { width: 32px; padding: 0; justify-content: center; color: #bccbd9; }
 	.pp.imm { cursor: default; color: #2a2f38; letter-spacing: .04em; text-shadow: 0 1px 0 rgba(255,255,255,.6); background: linear-gradient(180deg, #ffffff, #d4d9df 48%, #a3acb7); border: 2px solid #d9a845; box-shadow: 0 0 0 1px #6b4a10, 0 2px 6px rgba(0,0,0,.45), inset 0 1px 0 #fff; }

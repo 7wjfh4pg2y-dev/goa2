@@ -64,6 +64,8 @@ export type CardReq =
 	| { kind: 'clearAround'; pid: string; ids: string[] } // Clear (instead of an attack): the chosen tokens next to pid's hero leave the board
 	| { kind: 'defeatHero'; pid: string; target: string; keepCard?: boolean } // pid defeated target's hero (coins, assists, life); keepCard = their card this turn had already resolved (default: worked out from initiative)
 	| { kind: 'attack'; pid: string; target: string } // pid attacks target's hero → the defender is asked "Defend?"
+	| { kind: 'force'; pid: string; target: string; die: boolean } // a card effect: target discards a card (die = "…or is defeated", rewards to pid)
+	| { kind: 'forceResolve'; pid: string; target: string; result: 'defeated' | 'none' | 'cancel' } // die → defeated · no card to discard · the forcer calls it off
 	| { kind: 'attackResolve'; pid: string; target: string; result: 'defend' | 'defended' | 'defeated' | 'cancel' } // the defender's answer (or the host's); the attacker may cancel
 	| { kind: 'spawn'; pid: string; hex: string } // game start: place your hero on one of your base's spawn points
 	| { kind: 'respawn'; pid: string; hex: string } // a defeated hero comes back on a hex
@@ -145,12 +147,12 @@ export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 			// the level-up phase closes with the round: picks lock in, no level-up = pity coin
 			let next = endRoundAll(migrated)
 			next = Object.fromEntries(Object.entries(next).map(([pid, c]) => [pid, s.battlePhase || s.levelPhase ? closeLevelPhase(c) : lockPicks(c)]))
-			return { cards: next, round: s.round + 1, turn: 1, battlePhase: false, levelPhase: false, levelBase: null, battle: null, attacks: {}, pieces, status: {}, radii: {}, effects: expireEffects(s.effects, s.round, s.turn) }
+			return { cards: next, round: s.round + 1, turn: 1, battlePhase: false, levelPhase: false, levelBase: null, battle: null, attacks: {}, forced: {}, pieces, status: {}, radii: {}, effects: expireEffects(s.effects, s.round, s.turn) }
 		}
 		// end of turn: Glitch / Grenade tokens leave play (tokens.ts), then a team with
 		// no minions left in the battle zone gets pushed (battle.ts)
 		const pieces = sweepTokens(s.pieces ?? {}, 'turn')
-		return { cards: migrated, turn: s.turn + 1, radii: {}, attacks: {}, pieces, effects: expireEffects(s.effects, s.round, s.turn), ...pushCheck({ ...s, pieces }) }
+		return { cards: migrated, turn: s.turn + 1, radii: {}, attacks: {}, forced: {}, pieces, effects: expireEffects(s.effects, s.round, s.turn), ...pushCheck({ ...s, pieces }) }
 	}
 
 	if (req.kind === 'defeatMinion' || req.kind === 'removeMinion') {
@@ -167,6 +169,8 @@ export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 	if (req.kind === 'spawn') return spawnHero(s, req.pid, req.hex)
 	if (req.kind === 'attack') return startAttack(s, req.pid, req.target)
 	if (req.kind === 'attackResolve') return resolveAttack(s, req.pid, req.target, req.result)
+	if (req.kind === 'force') return startForce(s, req.pid, req.target, req.die)
+	if (req.kind === 'forceResolve') return resolveForce(s, req.pid, req.target, req.result)
 	if (req.kind === 'battleRemove' || req.kind === 'battleAuto') {
 		// the losing team's players (or the host) choose
 		if (!s.battle?.loser || (req.pid !== s.host && teamOf(s, req.pid) !== s.battle.loser)) return {}
@@ -187,6 +191,9 @@ export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 	else if (req.kind === 'ult') next = { ...cs, ultimate: req.on }
 	else if (req.kind === 'take') { if (!s.levelPhase) return {}; next = levelUp(cs, req.idx) }
 	else if (req.kind === 'swap') { if (!s.levelPhase) return {}; next = swapPick(cs, req.idx) }
+	// a discard while forced to discard answers the demand (any card will do)
+	const fd = s.forced?.[req.pid]
+	if (req.kind === 'defend' && fd && next !== cs) { const forced = { ...s.forced }; delete forced[req.pid]; return { cards: { ...cards, [req.pid]: next }, forced } }
 	// a discard while being attacked is the defence: the defender may now answer Defended
 	const atk = s.attacks?.[req.pid]
 	if (req.kind === 'defend' && atk && next !== cs) return { cards: { ...cards, [req.pid]: next }, attacks: { ...s.attacks, [req.pid]: { ...atk, defending: true, discarded: true } } }
@@ -317,6 +324,8 @@ export interface MatchState {
 	/** heroes under attack, keyed by the defender: who attacks, and whether they chose to defend */
 	/** discarded: the defender has discarded a card since the attack began — only then can they answer Defended */
 	attacks?: Record<string, { by: string; defending: boolean; at: number; discarded?: boolean }>
+	/** forced discards, keyed by the hero who must discard: who forces it, and whether it's "…or die" */
+	forced?: Record<string, { by: string; die: boolean; at: number }>
 	/** the latest lane push — every client plays the "wave advances" splash when `id` changes */
 	pushNews?: PushNews | null
 	/** the latest minion battle — every client plays the battle splash when `id` changes */
@@ -1293,6 +1302,13 @@ export function joinMatch(
 		if (req.kind === 'clearAround' && patch.pieces) { const n = Object.keys(local.pieces ?? {}).length - Object.keys(patch.pieces).length; note(req.pid, `cleared ${n} token${n === 1 ? '' : 's'} next to them`) }
 		if (req.kind === 'spawn' && patch.pieces) note(req.pid, 'entered the battlefield')
 		if (req.kind === 'attack' && patch.attacks) note(req.pid, `attacks ${nameOf(req.target)}!`)
+		if (req.kind === 'force' && patch.forced) note(req.pid, req.die ? `forces ${nameOf(req.target)} to discard — or be defeated!` : `forces ${nameOf(req.target)} to discard a card`)
+		if (req.kind === 'forceResolve' && patch.forced && !patch.lastDefeat) {
+			const by = local.forced?.[req.target]?.by ?? ''
+			if (req.result === 'cancel') note(req.pid, `called off the forced discard on ${nameOf(req.target)}`)
+			else if (req.result === 'none') note(req.target, `has no card to discard (${nameOf(by)})`)
+		}
+		if (req.kind === 'defend' && local.forced?.[req.pid] && patch.forced && !patch.forced[req.pid]) note(req.pid, `discarded a card (forced by ${nameOf(local.forced[req.pid].by)})`)
 		if (req.kind === 'attackResolve' && (patch.attacks || patch.lastDefeat)) {
 			const by = local.attacks?.[req.target]?.by ?? ''
 			if (req.result === 'defend') note(req.target, `defends against ${nameOf(by)}…`)
@@ -1527,11 +1543,13 @@ export function defeatHero(s: MatchState, pid: string, target: string, keepCard?
 	const lifeTok = sum.team && s.lifeTok ? { ...s.lifeTok, [sum.team]: spendTokens(s.lifeTok[sum.team] ?? [], sum.lives) } : s.lifeTok
 	const attacks = { ...(s.attacks ?? {}) }
 	delete attacks[target]
+	const forced = { ...(s.forced ?? {}) }
+	delete forced[target]
 	const lastDefeat: DefeatNews = {
 		id: `d_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
 		victim: target, by: pid, coins: sum.coins, assist: sum.assist, assists: sum.assists, lives: sum.lives, team: sum.team, at: Date.now()
 	}
-	return { pieces, cards, life, lifeTok, attacks, lastDefeat, defeated: { ...(s.defeated ?? {}), [target]: { round: s.round, turn: s.turn, piece: hero } } }
+	return { pieces, cards, life, lifeTok, attacks, forced, lastDefeat, defeated: { ...(s.defeated ?? {}), [target]: { round: s.round, turn: s.turn, piece: hero } } }
 }
 
 /** Flip the last `n` full tokens to spent (the HUD draws the token row). */
@@ -1561,7 +1579,9 @@ export function removeHero(s: MatchState, pid: string): Partial<MatchState> {
 	for (const id in s.pieces) if (id !== pid && s.pieces[id].attachedTo !== pid) pieces[id] = s.pieces[id]
 	const attacks = { ...(s.attacks ?? {}) }
 	delete attacks[pid]
-	return { pieces, attacks, defeated: { ...(s.defeated ?? {}), [pid]: { round: s.round, turn: s.turn, piece: hero } } }
+	const forced = { ...(s.forced ?? {}) }
+	delete forced[pid]
+	return { pieces, attacks, forced, defeated: { ...(s.defeated ?? {}), [pid]: { round: s.round, turn: s.turn, piece: hero } } }
 }
 
 /** The tokens a Clear action could take: every token standing next to pid's hero — friend
@@ -1646,6 +1666,44 @@ export function resolveAttack(s: MatchState, pid: string, target: string, result
 	if (result === 'defended' && !isHost && !at.discarded) return {}
 	delete attacks[target]
 	return { attacks }
+}
+
+// ── forced discards (card effects): "target discards a card" / "…or is defeated" ──────────
+export function startForce(s: MatchState, pid: string, target: string, die: boolean): Partial<MatchState> {
+	const hero = s.pieces?.[target]
+	if (!hero || hero.kind !== 'hero' || pid === target || s.forced?.[target]) return {}
+	const a = teamOf(s, pid)
+	if (!a || a === teamOf(s, target)) return {}
+	return { forced: { ...(s.forced ?? {}), [target]: { by: pid, die, at: Date.now() } } }
+}
+export function resolveForce(s: MatchState, pid: string, target: string, result: 'defeated' | 'none' | 'cancel'): Partial<MatchState> {
+	const f = s.forced?.[target]
+	if (!f) return {}
+	const isHost = pid === s.host
+	if (result === 'cancel' ? pid !== f.by && !isHost : pid !== target && !isHost) return {}
+	// "…or die": not discarding = defeated, the forcer takes the rewards (like an attack)
+	if (result === 'defeated') return f.die ? defeatHero(s, f.by, target) : {}
+	const forced = { ...s.forced }
+	delete forced[target]
+	return { forced }
+}
+
+/** The minion modifiers on a hero's defence (shown while they're attacked): enemy melee / heavy
+ *  next to them −1 each, enemy ranged within range 2 −1 each, friendly melee / heavy next to them
+ *  +1 each (friendly ranged: nothing). */
+export function minionDefense(s: MatchState, target: string): { mods: { id: string; d: number }[]; total: number } {
+	const hero = s.pieces?.[target]
+	if (!hero || hero.kind !== 'hero') return { mods: [], total: 0 }
+	const at = hexCube(hero.hex)
+	const mods: { id: string; d: number }[] = []
+	for (const p of Object.values(s.pieces ?? {})) {
+		if (p.kind !== 'minion') continue
+		const dist = cubeDist(hexCube(p.hex), at)
+		const close = p.role === 'ranged' ? false : dist === 1
+		if (p.team !== hero.team) { if (close || (p.role === 'ranged' && dist <= 2)) mods.push({ id: p.id, d: -1 }) }
+		else if (close) mods.push({ id: p.id, d: 1 })
+	}
+	return { mods, total: mods.reduce((n, m) => n + m.d, 0) }
 }
 
 export function respawnHero(s: MatchState, pid: string, hex: string): Partial<MatchState> {

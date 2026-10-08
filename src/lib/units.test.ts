@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { applyCardReq, canRespawn, turnOrder, turnKey, actorOf, lifeTier, cardInitiative, cardResolved, clearable, boardLookOf, zoneGlowOf, boardFxOf, type MatchState, type Piece } from './match'
+import { applyCardReq, canRespawn, turnOrder, turnKey, actorOf, lifeTier, cardInitiative, cardResolved, clearable, minionDefense, boardLookOf, zoneGlowOf, boardFxOf, type MatchState, type Piece } from './match'
 import { newPlayerCardState } from './cards/cardstate'
 
 // A (orange) + C (orange, A's teammate) vs B (blue, level 3) and D (blue)
@@ -178,6 +178,45 @@ describe('attacking heroes', () => {
 		const lower = [0, 1, 2, 3, 5, 6, 7, 8].find((i) => (cardInitiative(cards(i), 'A') ?? 99) < initB)
 		if (lower != null) expect(cardResolved(cards(lower), 'A', 'B')).toBe(true)
 		expect(cardResolved(s, 'A', 'B')).toBe(false) // attacker has no card out
+	})
+})
+
+describe('forced discards', () => {
+	const g = () => ({ ...game(), host: 'H' }) as MatchState
+	it('discard: any card answers it; the forcer can call it off; only an enemy can force', () => {
+		expect(applyCardReq(g(), { kind: 'force', pid: 'A', target: 'C', die: false })).toEqual({})
+		let s = { ...g(), ...applyCardReq(g(), { kind: 'force', pid: 'A', target: 'B', die: false }) } as MatchState
+		expect(s.forced!.B).toMatchObject({ by: 'A', die: false })
+		expect(applyCardReq(s, { kind: 'forceResolve', pid: 'B', target: 'B', result: 'defeated' })).toEqual({}) // plain discard: no defeat
+		const d = applyCardReq(s, { kind: 'defend', pid: 'B', idx: s.cards!.B.hand.find((i) => i !== s.cards!.B.pending)! })
+		expect(d.forced).toEqual({})
+		expect(d.cards!.B.discard.length).toBe(1)
+		expect(applyCardReq(s, { kind: 'forceResolve', pid: 'A', target: 'B', result: 'cancel' }).forced).toEqual({})
+		expect(applyCardReq(s, { kind: 'forceResolve', pid: 'D', target: 'B', result: 'cancel' })).toEqual({})
+	})
+	it('discard or die: not discarding defeats them, the rewards go to the forcer', () => {
+		const s = { ...g(), ...applyCardReq(g(), { kind: 'force', pid: 'A', target: 'B', die: true }) } as MatchState
+		const d = applyCardReq(s, { kind: 'forceResolve', pid: 'B', target: 'B', result: 'defeated' })
+		expect(d.pieces!.B).toBeUndefined()
+		expect(d.forced).toEqual({})
+		expect(d.lastDefeat).toMatchObject({ victim: 'B', by: 'A', coins: 3 })
+	})
+})
+
+describe('minion modifiers on a defence', () => {
+	it('enemy melee / heavy next to the hero −1, enemy ranged within 2 −1, friendly melee +1, friendly ranged nothing', () => {
+		const s = game()
+		// B (blue) at 5_5: put minions round it
+		const pieces = { ...s.pieces,
+			e1: { id: 'e1', hex: '5_4', team: 'orange', kind: 'minion', role: 'melee' },
+			e2: { id: 'e2', hex: '5_3', team: 'orange', kind: 'minion', role: 'ranged' },
+			e3: { id: 'e3', hex: '5_2', team: 'orange', kind: 'minion', role: 'heavy' }, // too far
+			f1: { id: 'f1', hex: '5_6', team: 'blue', kind: 'minion', role: 'heavy' },
+			f2: { id: 'f2', hex: '6_5', team: 'blue', kind: 'minion', role: 'ranged' }
+		} as Record<string, Piece>
+		const r = minionDefense({ ...s, pieces: Object.fromEntries(Object.entries(pieces).filter(([id]) => !['m1', 'm2'].includes(id))) } as MatchState, 'B')
+		expect(Object.fromEntries(r.mods.map((m) => [m.id, m.d]))).toEqual({ e1: -1, e2: -1, f1: 1 })
+		expect(r.total).toBe(-1)
 	})
 })
 

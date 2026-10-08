@@ -69,6 +69,9 @@
 	export let rims = true;
 	/** Screen space the HUD covers (css px from each edge). The island's resting view — the one `reset()` returns
 	 *  to — is fitted into what is left, while the sea still fills the whole box. null = fit the whole box. */
+	/** small floating shields over pieces (the minion modifiers on a defence while an attack is on): ±1 over each
+	 *  minion that counts, the total over the defender; upright whatever the board's turn, above the pieces */
+	export let badges: Array<{ id: string; text: string; tone: 'up' | 'down' | 'even'; total?: boolean }> = [];
 	export let inset: { t: number; b: number; l?: number; r?: number } | null = null;
 
 	const SQRT3 = Math.sqrt(3);
@@ -818,6 +821,22 @@
 			{/each}
 		</div>
 	{/if}
+	{#if fit && viewM && badges.length}
+		<div class="badges" class:bob={effects} style:transform={landTf} aria-hidden="true">
+			{#each badges as b (b.id)}
+				{@const p = pieces.find((q) => q.id === b.id)}
+				{#if p}
+					{@const base = centerOf(p.hex)}
+					{@const off = pieceOffset[p.id] ?? { x: 0, y: 0 }}
+					{@const k = fit.s}
+					{@const w = size * k * (b.total ? 1.1 : 0.8)}
+					<span class="bbox" style="left:{((base.x + off.x) * k + fit.ox).toFixed(2)}px; top:{((base.y + off.y) * k + fit.oy).toFixed(2)}px; transform:rotate({-rotEff}deg)">
+						<span class="bdg {b.tone}" class:tot={b.total} style="width:{w.toFixed(1)}px; height:{(w * 1.12).toFixed(1)}px; top:{(-size * k * (b.total ? 1.8 : 1.4)).toFixed(1)}px; font-size:{(w * (b.total ? 0.36 : 0.46)).toFixed(1)}px"><b>{b.text}</b></span>
+					</span>
+				{/if}
+			{/each}
+		</div>
+	{/if}
 	{#if hoverName}<div class="pname" style="left:{hoverName.x}px; top:{hoverName.y}px; color:{hoverName.color}">{hoverName.text}</div>{/if}
 </div>
 
@@ -879,6 +898,21 @@
 	/* the shine on an immune heavy's shield: a glint sweeps across it now and then, clipped to the shield's outline */
 	.shines { position: absolute; inset: 0; transform-origin: 0 0; pointer-events: none; }
 	.shbox { position: absolute; }
+	/* the minion modifiers: a small shield over each minion that counts, the total over the defender */
+	.badges { position: absolute; inset: 0; transform-origin: 0 0; pointer-events: none; z-index: 2; }
+	.bbox { position: absolute; width: 0; height: 0; }
+	.bdg { position: absolute; left: 0; transform: translateX(-50%); display: grid; place-items: center; animation: bdgin .35s cubic-bezier(.2, 1.5, .4, 1) both; }
+	.bdg::before { content: ''; position: absolute; inset: 0; clip-path: polygon(50% 0, 100% 13.5%, 100% 45%, 96% 63%, 83% 83%, 50% 100%, 17% 83%, 4% 63%, 0 45%, 0 13.5%); background: #555; }
+	.bdg::after { content: ''; position: absolute; inset: 9%; clip-path: polygon(50% 0, 100% 13.5%, 100% 45%, 96% 63%, 83% 83%, 50% 100%, 17% 83%, 4% 63%, 0 45%, 0 13.5%); background: var(--fill); }
+	.bdg b { position: relative; z-index: 1; margin-top: -8%; font-weight: 400; line-height: 1; color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, .8); }
+	.bdg.up { --fill: linear-gradient(180deg, #47c46e, #17703a); } .bdg.up::before { background: #c9ffd9; }
+	.bdg.down { --fill: linear-gradient(180deg, #ef5a4a, #8f1d12); } .bdg.down::before { background: #ffd0c8; }
+	.bdg.even { --fill: linear-gradient(180deg, #8a96a6, #47505c); } .bdg.even::before { background: #e5e9ee; }
+	.bdg.tot::before { background: linear-gradient(180deg, #fff3cf, #d8b36a); }
+	.badges.bob .bdg { animation: bdgin .35s cubic-bezier(.2, 1.5, .4, 1) both, bdgbob 2.2s ease-in-out .35s infinite; }
+	@keyframes bdgin { from { transform: translateX(-50%) translateY(6px) scale(.3); opacity: 0; } }
+	@keyframes bdgbob { 0%, 100% { transform: translateX(-50%) translateY(0); } 50% { transform: translateX(-50%) translateY(-3px); } }
+	@media (prefers-reduced-motion: reduce) { .bdg { animation: none !important; } }
 	.shine { position: absolute; overflow: hidden; clip-path: polygon(50% 0, 100% 13.5%, 100% 45%, 96% 63%, 83% 83%, 50% 100%, 17% 83%, 4% 63%, 0 45%, 0 13.5%); }
 	.shine i { position: absolute; top: -20%; bottom: -20%; left: 0; width: 45%; background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.85) 50%, transparent); transform: translateX(-120%) skewX(-12deg);
 		animation: shieldglint 3.4s ease-in-out infinite; }
