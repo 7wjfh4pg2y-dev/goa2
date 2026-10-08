@@ -72,7 +72,7 @@
 		</span>
 		{#if coins != null}
 			<span class="purse">
-				<button class="pill gold" on:click={() => (purse = !purse)} aria-label="Coins"><i class="gc"></i><b>{coins}</b></button>
+				<button class="gold" on:click={() => (purse = !purse)} aria-label="Coins"><i class="gc"><b>{coins}</b></i></button>
 				{#if purse}<span class="pm"><button on:click={() => onCoins(-1)} aria-label="Remove a coin">−</button><button on:click={() => onCoins(1)} aria-label="Add a coin">+</button></span>{/if}
 			</span>
 		{/if}
@@ -120,7 +120,9 @@
 	.ord .f:first-child { margin-left: 0; }
 	.ord .f.done { opacity: 0.4; filter: grayscale(0.7); }
 	.ord .f.now { position: relative; z-index: 1; width: 24px; height: 24px; margin: 0 2px; box-shadow: 0 0 0 2px #f4dfa8, 0 0 8px 2px rgba(244, 223, 168, 0.6); }
-	.gold { border-color: rgba(216, 179, 106, 0.5); }
+	.gold { border: 0; background: none; padding: 0; }
+	.gold .gc { width: 28px; height: 28px; display: grid; place-items: center; }
+	.gc b { font-weight: 400; font-size: 14px; line-height: 1; color: #3a2606; text-shadow: 0 1px 0 rgba(255, 244, 200, 0.6); font-variant-numeric: tabular-nums; }
 	.gc { width: 16px; height: 16px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff2c0, #e8bd58 55%, #a8792a); box-shadow: inset 0 0 0 1.5px rgba(122, 86, 24, 0.55); }
 	.pm { position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); display: flex; gap: 6px; padding: 5px; border-radius: 999px; background: #0a1a2c; border: 1px solid rgba(216, 179, 106, 0.5); box-shadow: 0 6px 14px rgba(0, 0, 0, 0.6); }
 	.pm button { width: 30px; height: 30px; border-radius: 50%; font-size: 18px; line-height: 1; color: #f4dfa8; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(216, 179, 106, 0.4); }

@@ -63,6 +63,7 @@
 	const art = import.meta.glob('./cards/images/{life_counter,tiebreaker}_*.png', { eager: true, import: 'default' }) as Record<string, string>;
 	const lifeArt = (t: Team, side: 'front' | 'back') => art[`./cards/images/life_counter_${t}_${side}.png`];
 	const tieArt = (t: Team) => art[`./cards/images/tiebreaker_${t}.png`];
+	const atkIcon = (import.meta.glob('./cards/images/attack.png', { eager: true, import: 'default' }) as Record<string, string>)['./cards/images/attack.png'];
 	// waves = the shared minion waves; no dedicated counter art in the lib, so we
 	// use the minion sprite as the wave token.
 	const minionArt = import.meta.glob('./images/minions/*.png', { eager: true, import: 'default' }) as Record<string, string>;
@@ -778,7 +779,7 @@
 				<span class="akglow" aria-hidden="true"></span>
 				<div class="akrow">
 					<span class="akface foe" style={portraitCss(heroIdOf(incoming.by))}></span>
-					<span class="akseal"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3l9 9M3 4l1-1M11 14l-2 2-3-3 2-2M20 3l-9 9M21 4l-1-1M13 14l2 2 3-3-2-2M7 17l-3 3M17 17l3 3" /></svg></span>
+					<span class="akseal"><img src={atkIcon} alt="" /></span>
 					<span class="akface me" style={portraitCss(heroIdOf(clientId))}></span>
 				</div>
 				<div class="aktitle"><i></i>Under attack<i></i></div>
@@ -1354,7 +1355,7 @@
 	.akface.me { box-shadow: 0 0 0 3px var(--mc), 0 0 0 5px #1a0503; filter: saturate(0.85) brightness(0.9); animation: akme .45s cubic-bezier(.2, 1.2, .3, 1) both; }
 	.akseal { position: relative; z-index: 1; width: 60px; height: 60px; margin: 0 -12px; border-radius: 50%; display: grid; place-items: center;
 		background: radial-gradient(circle at 50% 35%, #d23a26, #6a0d06 75%); box-shadow: 0 0 0 3px #d8b36a, 0 0 0 5px #2a0605, 0 6px 16px rgba(0, 0, 0, 0.7); animation: akslam .5s cubic-bezier(.2, 1.6, .3, 1) .12s both; }
-	.akseal svg { width: 34px; height: 34px; fill: none; stroke: #ffe9c8; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+	.akseal img { width: 40px; height: 40px; object-fit: contain; filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.6)); }
 	.aktitle { display: flex; align-items: center; gap: 10px; margin-top: 10px; font-size: 22px; line-height: 1; letter-spacing: 0.22em; text-transform: uppercase; white-space: nowrap;
 		color: #ffcf8a; text-shadow: 0 0 14px rgba(255, 60, 30, 0.9), 0 2px 0 #3a0703; }
 	.aktitle i { width: 40px; height: 2px; background: linear-gradient(90deg, transparent, #d8b36a); }
