@@ -58,7 +58,7 @@
 			<span class="face" style="--pc:{color}; {portraitCss(cs.hero)}"></span>
 			<span class="ini" class:off={ini == null}>{ini ?? '–'}</span>
 		</button>
-		<StatBubbles deltas={statDeltas(cs)} size={21} cols={3} />
+		<StatBubbles {cs} size={21} cols={3} />
 		<span class="wells">
 			{#each [0, 1, 2, 3] as t (t)}
 				<span class="w" class:now={t === turnIdx} class:glow={fxAt(t)}><TurnSlot heroId={cs.hero} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} label={ROMAN[t]} peekable examinable on:click={(e) => onSlot(e, t)} /></span>

@@ -856,7 +856,7 @@
 						<span class="mpn"><b>{p.name}</b><small>{heroName(cs.hero)}</small></span>
 						<span class="mlv">{#if !phone2}<em>Lv {levelOf(cs)}</em>{/if}<i class="mini" class:off={ini == null}>{@html CLOCK}<b>{ini ?? '–'}</b></i></span>
 						<span class="mcard fxwrap" class:fx={!!cfx} style="--fxc:{colorOf(p.id)}"><TurnSlot heroId={cs.hero} played={cs.turns[turnIdx]} pending={cs.pending} isCurrent {revealed} peekable={p.id === clientId} examinable on:click={(e) => peekSlot(e, cs, turnIdx)} /></span>
-						{#if phone2}<span class="msb"><StatBubbles deltas={statDeltas(cs)} size={17} /></span>
+						{#if phone2}<span class="msb"><StatBubbles {cs} size={17} /></span>
 						{:else}<span class="msx">{#each allStats(cs) as r}<span class:up={r.delta > 0}>{#if r.delta > 0}<span class="pp">{#each Array(r.delta) as _}<i></i>{/each}</span>{/if}<img src={statImg(r.key)} alt={r.label} /></span>{/each}</span>{/if}
 					</div>
 				{/if}

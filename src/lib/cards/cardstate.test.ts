@@ -27,6 +27,7 @@ import {
 	levelCost,
 	takeUpgrade,
 	levelOf,
+	statColors,
 	TURNS_PER_ROUND
 } from './cardstate'
 import { heroCards } from './deck'
@@ -423,5 +424,17 @@ describe('manual moves', () => {
 		const s = newPlayerCardState(H)
 		expect(allowedMoves(s, cards.findIndex((c) => c.color === 'GOLD'))).toEqual([])
 		expect(allowedMoves(s, ultimateIndex(H))).toEqual([]) // not reachable yet
+	})
+})
+
+describe('statColors', () => {
+	it('colours each item by the card behind it, Tier II picks first, then hand-made bumps', () => {
+		const cards = heroCards('arien')
+		const at = (color: string, level: number, item: string) => cards.findIndex((c) => c.color === color && c.level === level && c.item === item)
+		const t3 = at('RED', 3, 'INITIATIVE'), t2 = at('BLUE', 2, 'INITIATIVE')
+		expect(t3).toBeGreaterThan(-1)
+		expect(t2).toBeGreaterThan(-1)
+		const s = { ...newPlayerCardState('arien'), upgrade: [t3, t2], items: { init: 1 } }
+		expect(statColors(s).init).toEqual(['BLUE', 'RED', 'BRASS'])
 	})
 })

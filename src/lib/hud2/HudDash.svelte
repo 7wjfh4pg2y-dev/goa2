@@ -114,7 +114,7 @@
 				<button on:click={() => onCoins(1)} aria-label="Add a coin">+</button>
 			</span>
 		</div>
-		<StatBubbles deltas={statDeltas(cs)} size={27} cols={3} />
+		<StatBubbles {cs} size={27} cols={3} />
 
 		<div class="dwells">
 			{#each [0, 1, 2, 3] as t (t)}

@@ -19,12 +19,13 @@
 	import Card from '$lib/cards/Card.svelte';
 	import CardBack from '$lib/cards/CardBack.svelte';
 	import LevelConfirm from '$lib/LevelConfirm.svelte';
+	import StatBubbles from '$lib/hud2/StatBubbles.svelte';
 	import { heroCards } from '$lib/cards/deck';
 	import { heroSplash, HERO_BY_ID } from '$lib/heroes';
 	import ultGear from '$lib/images/ult_gear.png';
 	import {
-		levelOf, levelCost, statDeltas, ultimateIndex, tierIn, canPick, canAfford, mustLevel, swapSource, twinOf, allowedMoves, pickedThisRound,
-		type PlayerCardState, type CardZone, type StatKey
+		levelOf, levelCost, ultimateIndex, tierIn, canPick, canAfford, mustLevel, swapSource, twinOf, allowedMoves, pickedThisRound,
+		type PlayerCardState, type CardZone
 	} from '$lib/cards/cardstate';
 
 	export let cs: PlayerCardState;
@@ -39,9 +40,7 @@
 	export let onPreview: (idx: number) => void;
 
 	const icons = import.meta.glob('./cards/images/*.png', { eager: true, import: 'default' }) as Record<string, string>;
-	const statArt = import.meta.glob('./images/stats/*.png', { eager: true, import: 'default' }) as Record<string, string>;
 	const ic = (n: string) => icons[`./cards/images/${n}.png`] ?? '';
-	const sa = (n: string) => statArt[`./images/stats/${n}.png`] ?? '';
 
 	const COLS = ['RED', 'BLUE', 'GREEN'] as const;
 	const COL: Record<string, string> = { RED: '#e0524a', BLUE: '#3f7fe0', GREEN: '#41ae59', GOLD: '#e8b64a', SILVER: '#c6d0db', PURPLE: '#b482f0' };
@@ -76,17 +75,6 @@
 	$: t3done = tiers.filter((t) => t >= 3).length;
 	$: canTakeNow = (i: number) => levelPhase && afford && canPick(cs, i);
 	$: canSwapNow = (i: number) => levelPhase && swapSource(cs, i) != null;
-
-	const STATS: Array<{ k: string; key: StatKey; n: string; a: string }> = [
-		{ k: 'ATTACK', key: 'atk', n: 'Attack', a: 'attack' },
-		{ k: 'DEFENSE', key: 'def', n: 'Defense', a: 'defense' },
-		{ k: 'INITIATIVE', key: 'init', n: 'Initiative', a: 'initiative' },
-		{ k: 'MOVEMENT', key: 'move', n: 'Movement', a: 'movement' },
-		{ k: 'RANGE', key: 'range', n: 'Range', a: 'range' },
-		{ k: 'AREA', key: 'radius', n: 'Area', a: 'area' }
-	];
-	$: deltas = statDeltas(cs);
-	$: possible = (k: string) => cards.filter((c) => !c.handicapped && c.item === k).length;
 
 	$: twin = (i: number) => twinOf(H, i);
 	$: itemOf = (i: number) => cards[i]?.item ?? '';
@@ -140,25 +128,25 @@
 		const t = c.level ?? 1;
 		if (t === 3 && !allII) return 'All three colours to Tier II first';
 		if (tierIn(cs, c.color) !== t - 1) return `${NAME[c.color]} Tier ${ROM[t - 2]} first`;
-		if (cs.coins < need) return `Needs ${need} coins (you have ${cs.coins})`;
-		if (!levelPhase) return `Level ${LV} → ${LV + 1} · ${need} coins · after the minion battle`;
-		return `Level ${LV} → ${LV + 1} · ${need} coins`;
+		if (cs.coins < need) return `Needs ${need} coins`;
+		if (!levelPhase) return 'After the minion battle';
+		return `${need} coins`;
 	};
 	// the info box: a pill for where the card stands and one short line about it
 	$: info = (i: number): { pill: string; cls: string; note: string } => {
 		const c = cards[i];
 		if (!c) return { pill: '', cls: '', note: '' };
-		if (c.color === 'GOLD' || c.color === 'SILVER') return { pill: 'Basic', cls: 'cur', note: 'Always in your hand' };
+		if (c.color === 'GOLD' || c.color === 'SILVER') return { pill: 'Basic', cls: 'i-basic', note: 'Always in your hand' };
 		if (i === ult) {
-			if (cs.ultimate) return { pill: 'Active', cls: 'ult', note: picksHas(ult) ? 'Unlocked this round — you can still undo it' : 'A passive ability — locked in' };
-			if (ultReady) return { pill: 'Ready', cls: 'ult', note: `Unlock it for ${need} coins` };
-			return t3done < 3 ? { pill: 'Locked', cls: 'far', note: `Every colour to Tier III first (${t3done}/3)` } : { pill: 'Locked', cls: 'far', note: `Needs ${need} coins (you have ${cs.coins})` };
+			if (cs.ultimate) return { pill: 'Active', cls: 'i-ult', note: picksHas(ult) ? 'Unlocked this round — you can still undo it' : 'A passive ability — locked in' };
+			if (ultReady) return { pill: 'Ready', cls: 'i-ult', note: `Unlock it for ${need} coins` };
+			return t3done < 3 ? { pill: 'Locked', cls: 'i-far', note: `Every colour to Tier III first (${t3done}/3)` } : { pill: 'Locked', cls: 'i-far', note: `Needs ${need} coins` };
 		}
 		const s = state(i);
-		if (s === 'cur') return { pill: 'In hand', cls: 'cur', note: (c.level ?? 1) === 1 ? 'Your starting card' : pickedThisRound(cs, i) ? 'Taken this round — you can still change it' : 'Taken in an earlier round — locked in' };
-		if (s === 'item') return { pill: 'Item', cls: 'item', note: canSwapNow(i) ? 'Swap to take this path instead' : `Your item: +1 ${ITEM_NAME[itemOf(i)] ?? ''}` };
-		if (s === 'past') return { pill: 'Removed', cls: 'past', note: allowedMoves(cs, i).includes('hand') ? 'Back to your hand undoes that level-up' : 'Replaced — locked in' };
-		return { pill: canTakeNow(i) ? 'Take it' : 'Option', cls: canTakeNow(i) ? 'can' : 'far', note: why(i) };
+		if (s === 'cur') return { pill: 'In hand', cls: 'i-hand', note: (c.level ?? 1) === 1 ? 'Your starting card' : pickedThisRound(cs, i) ? 'Taken this round — you can still change it' : 'Taken in an earlier round — locked in' };
+		if (s === 'item') return { pill: 'Item', cls: 'i-item', note: canSwapNow(i) ? 'Swap to take this path instead' : `Your item: +1 ${ITEM_NAME[itemOf(i)] ?? ''}` };
+		if (s === 'past') return { pill: 'Removed', cls: 'i-rem', note: allowedMoves(cs, i).includes('hand') ? 'Back to your hand undoes that level-up' : 'Replaced — locked in' };
+		return { pill: canTakeNow(i) ? 'Take it' : 'Option', cls: canTakeNow(i) ? 'i-can' : 'i-far', note: why(i) };
 	};
 	const picksHas = (i: number) => (cs.roundPicks ?? []).includes(i);
 
@@ -261,7 +249,7 @@
 	let still = false;
 	onMount(() => { still = matchMedia('(prefers-reduced-motion: reduce)').matches; });
 	// every pulse (and every box-side flash) shares one start time, so the three trees move in step
-	function glide(node: HTMLElement, frames: Keyframe[] | null) {
+	function glide(node: Element, frames: Keyframe[] | null) {
 		let a: Animation | null = null;
 		const run = (f: Keyframe[] | null) => {
 			a?.cancel(); a = null;
@@ -272,6 +260,9 @@
 		run(frames);
 		return { update: run, destroy: () => a?.cancel() };
 	}
+	// level 8: every beam, pulse and curve turns ult purple
+	const ULT = '#b482f0';
+	$: beam = (c: string) => (cs.ultimate ? ULT : COL[c]);
 	const FLASH: Keyframe[] = [{ opacity: 0, offset: 0 }, { opacity: 0, offset: 0.86 }, { opacity: 1, offset: 0.91 }, { opacity: 0, offset: 1 }];
 
 	// the gear's ring: one arc per colour, lit once that colour is on Tier III (red left, blue under, green right)
@@ -327,12 +318,12 @@
 				{#each COLS as c, k}
 					{@const p = pipe(k)}
 					<path d={p} class="p0" /><path d={p} class="p1" /><path d={p} class="p2" />
-					<path d={lit(k)} class="lg" stroke={COL[c]} /><path d={lit(k)} class="lc" stroke={COL[c]} /><path d={lit(k)} class="lh" />
+					<path d={lit(k)} class="lg" stroke={beam(c)} /><path d={lit(k)} class="lc" stroke={beam(c)} /><path d={lit(k)} class="lh" />
 				{/each}
 			</svg>
 			{#each COLS as c, k}
 				{@const t = tr[c]}
-				<span class="bead" style="--c:{COL[c]}" use:glide={beadFrames(k)}></span>
+				<span class="bead" style="--c:{beam(c)}" use:glide={beadFrames(k)}></span>
 				{#each [t.II, t.III] as pair, n}
 					{#if pair.length && canTakeNow(pair[0])}<span class="halo" style="left:{cx(k) - MID / 2 - CW - 14}px; top:{rowY[n + 1] - 12}px; width:{2 * CW + MID + 28}px; height:{CH + 24}px"></span>{/if}
 					<span class="valve" class:lit={tiers[k] >= n + 2} class:nx={pair.length > 0 && canPick(cs, pair[0])} style="--c:{COL[c]}; left:{cx(k)}px; top:{n ? V3 : V2}px"><img src={ic(n ? 'level_iii' : 'level_ii')} alt="" /></span>
@@ -347,16 +338,19 @@
 			{#if ult >= 0}
 				<div class="ubox" class:on={cs.ultimate} class:rdy={ultReady} class:chg={ultCharging} class:sel={sel === ult} style="left:{BX}px; top:{BY}px; width:{BW}px; height:{BH}px">
 					<span class="ug"></span>
-					{#each COLS as c, k}
-						<span class="bs s{k}" class:lit={tiers[k] >= 3} style="--c:{COL[c]}"></span>
-						{#if tiers[k] >= 3}<span class="bs s{k} fl" style="--c:{COL[c]}" use:glide={FLASH}></span>{/if}
-					{/each}
 					<button class="uhit" on:click={() => pick(ult)} on:dblclick={() => onPreview(ult)} on:pointerenter={() => over(ult)} on:pointerleave={out} aria-label={cards[ult]?.name}></button>
 					<span class="gear">
 						<svg viewBox="-50 -50 100 100" aria-hidden="true">
 							<circle r="44" class="gtrack" />
-							{#each COLS as c, k}<path d={ARCS[k]} stroke={cs.ultimate ? '#b482f0' : tiers[k] >= 3 ? COL[c] : 'rgba(255,255,255,.14)'} class:lit={tiers[k] >= 3 || cs.ultimate} />{/each}
+							{#each COLS as c, k}<path d={ARCS[k]} class="dim" />{/each}
 						</svg>
+						<!-- a colour on Tier III lights its curve; each pulse that lands makes it flare (all three at level 7, purple at 8) -->
+						{#each COLS as c, k}
+							{#if tiers[k] >= 3 || cs.ultimate}
+								<svg class="arcl" viewBox="-50 -50 100 100" style="--c:{beam(c)}" aria-hidden="true"><path d={ARCS[k]} class="glow" /><path d={ARCS[k]} /></svg>
+								<svg class="arcl fl" viewBox="-50 -50 100 100" style="--c:{beam(c)}" use:glide={FLASH} aria-hidden="true"><path d={ARCS[k]} class="glow" /><path d={ARCS[k]} class="hot" /></svg>
+							{/if}
+						{/each}
 						<img src={ultGear} alt="" />
 					</span>
 					<span class="utx">
@@ -427,16 +421,7 @@
 				{/if}
 			</div>
 
-			<div class="gau" aria-label="Your items">
-				{#each STATS as s}
-					{@const o = deltas[s.key] ?? 0}
-					{@const p = possible(s.k)}
-					<div class="ga" class:up={o > 0} class:none={p === 0 && o === 0} title="{s.n}: {o} of {p}">
-						<span class="gw"><img src={sa(s.a)} alt={s.n} /></span>
-						{#if o > 0}<span class="gv">+{o}</span>{/if}
-					</div>
-				{/each}
-			</div>
+			<div class="gau" aria-label="Your items"><StatBubbles {cs} size={44} /></div>
 
 			<div class="iact">
 				{#if sel != null && moves(sel).length}
@@ -520,7 +505,7 @@
 	/* the card you didn't pick flips over into its item */
 	.nd.fresh .face { animation: flipin .9s cubic-bezier(.4, 0, .2, 1) both; }
 	.nd.fresh .ib { animation: ibin .5s cubic-bezier(.2, 1.5, .4, 1) .55s both; }
-	@keyframes flipin { 0% { transform: rotate(0deg) scaleX(1); } 45% { transform: rotate(0deg) scaleX(0); } 55% { transform: rotate(180deg) scaleX(0); } 100% { transform: rotate(180deg) scaleX(1); } }
+	@keyframes flipin { from { transform: rotate(0deg); } to { transform: rotate(180deg); } }
 	@keyframes ibin { from { transform: scale(0); opacity: 0; } }
 	.nd.past .face :global(.cardface) { filter: grayscale(1) brightness(.42); }
 	.nd.far .face :global(.cardface) { filter: brightness(.5) saturate(.7); }
@@ -537,9 +522,14 @@
 	.pill.item { color: #fff; background: color-mix(in srgb, var(--c) 45%, transparent); border-color: color-mix(in srgb, var(--c) 80%, #fff); }
 	.pill.chip { color: #fff; background: color-mix(in srgb, var(--c) 30%, rgba(3, 11, 21, .8)); border-color: color-mix(in srgb, var(--c) 70%, transparent); }
 	.pill.chip.dim { opacity: .6; }
-	.pill.far { color: var(--ink-3); background: rgba(255, 255, 255, .06); border-color: rgba(255, 255, 255, .14); }
-	.pill.can { color: #2a1c06; background: linear-gradient(180deg, #fff3cf, var(--brass)); }
-	.pill.ult { color: #fff; background: linear-gradient(180deg, #a56ee6, #5b2aa0); }
+	/* the info box's pills: one colour per state */
+	.pill.i-hand { color: #fff; background: #1f8a45; border-color: #4fd884; }
+	.pill.i-item { color: #fff; background: color-mix(in srgb, var(--c) 55%, #04101e); border-color: var(--c); }
+	.pill.i-rem { color: #fff; background: #8e2a2a; border-color: #e5484d; }
+	.pill.i-can { color: #2a1c06; background: linear-gradient(180deg, #fff3cf, var(--brass)); }
+	.pill.i-far { color: var(--ink-2); background: rgba(255, 255, 255, .08); border-color: rgba(255, 255, 255, .2); }
+	.pill.i-basic { color: #2a1c06; background: linear-gradient(180deg, #f6e2ad, #c9a050); }
+	.pill.i-ult { color: #fff; background: linear-gradient(180deg, #a56ee6, #5b2aa0); }
 	button.pill { cursor: pointer; transition: transform .12s; }
 	button.pill:hover { transform: translateY(-1px); }
 	.pill.take { height: 28px; padding: 0 14px; font-size: 15px; color: var(--ink-dark); background: linear-gradient(180deg, #f6e2ad 0%, var(--brass) 48%, #b98e42 100%); border-color: #f9ebc6 #c9a355 #8a6a2c;
@@ -553,13 +543,6 @@
 		background: linear-gradient(180deg, rgba(58, 30, 100, .92), rgba(22, 10, 44, .95)); border: 1.5px solid rgba(165, 110, 230, .45); box-shadow: 0 10px 26px rgba(0, 0, 0, .55), inset 0 1px 0 rgba(255, 255, 255, .08); }
 	.uhit { position: absolute; inset: 0; z-index: 0; padding: 0; border: 0; background: none; border-radius: inherit; cursor: pointer; }
 	.ubox.sel { border-color: #fff3cf; }
-	/* the sides the beams light: red left, blue bottom, green right */
-	.bs { position: absolute; pointer-events: none; opacity: 0; border-radius: 3px; background: var(--c); box-shadow: 0 0 12px 2px var(--c); }
-	.bs.lit { opacity: .9; }
-	.bs.fl { box-shadow: 0 0 22px 6px var(--c); background: #fff; }
-	.bs.s0 { left: -2px; top: 16px; bottom: 16px; width: 3px; }
-	.bs.s2 { right: -2px; top: 16px; bottom: 16px; width: 3px; }
-	.bs.s1 { bottom: -2px; left: 18px; right: 18px; height: 3px; }
 	/* the rim: glows once the trees are done, pulses when it can be bought, turns ult purple once it's on */
 	.ug { position: absolute; inset: -3px; border-radius: 18px; pointer-events: none; opacity: 0; border: 2px solid #c79bff; box-shadow: 0 0 22px 4px rgba(170, 110, 240, .7), inset 0 0 14px rgba(170, 110, 240, .45); }
 	.ubox.chg .ug { animation: chg 2.8s ease-in-out infinite; }
@@ -572,7 +555,12 @@
 	.gear svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 	.gtrack { fill: rgba(3, 8, 16, .7); stroke: rgba(255, 255, 255, .08); stroke-width: 9; }
 	.gear path { fill: none; stroke-width: 8; stroke-linecap: round; }
-	.gear path.lit { filter: drop-shadow(0 0 4px currentColor); }
+	.gear path.dim { stroke: rgba(255, 255, 255, .14); }
+	.arcl { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+	.arcl path { stroke: var(--c); }
+	.arcl path.glow { stroke-width: 16; opacity: .35; }
+	.arcl path.hot { stroke: #fff; stroke-width: 6; }
+	.arcl.fl { opacity: 0; }
 	.gear img { position: relative; width: 66px; height: 66px; border-radius: 50%; }
 	.ubox:not(.on):not(.rdy) .gear img { filter: brightness(.75); }
 	.utx { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
@@ -629,7 +617,7 @@
 	.icw :global(.cardface) { display: block; width: 100%; border-radius: 9px; box-shadow: 0 0 0 2px var(--c), 0 0 26px color-mix(in srgb, var(--c) 40%, transparent), 0 10px 26px rgba(0, 0, 0, .6); }
 	.icw.back { cursor: default; overflow: hidden; border-radius: 9px; box-shadow: 0 10px 26px rgba(0, 0, 0, .6); }
 	/* the info box under the card */
-	.iinfo { flex: none; height: 116px; box-sizing: border-box; overflow: hidden; display: flex; flex-direction: column; gap: 7px; padding: 10px 12px; border-radius: 10px;
+	.iinfo { flex: none; height: 94px; box-sizing: border-box; overflow: hidden; display: flex; flex-direction: column; gap: 6px; padding: 9px 12px; border-radius: 10px;
 		background: rgba(3, 11, 21, .5); border: 1px solid rgba(255, 255, 255, .1); box-shadow: inset 3px 0 0 var(--c); }
 	.in1 { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
 	.in1 b { font-weight: normal; font-size: 20px; line-height: 1; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -645,15 +633,7 @@
 	.k.it { background: color-mix(in srgb, var(--c) 55%, transparent); }
 	.k.rm { background: rgba(150, 160, 175, .25); color: #c6cfdb; }
 	/* your items */
-	.gau { flex: none; display: flex; justify-content: space-between; height: 50px; }
-	.ga { position: relative; width: 42px; }
-	.gw { display: grid; place-items: center; width: 42px; height: 42px; box-sizing: border-box; border-radius: 50%; background: radial-gradient(circle at 50% 30%, #12304d, #040e1a 75%); border: 1px solid rgba(255, 255, 255, .14); box-shadow: inset 0 2px 5px rgba(0, 0, 0, .6); }
-	.gw img { width: 26px; height: 26px; object-fit: contain; opacity: .5; }
-	.ga.none { opacity: .4; }
-	.ga.up .gw { border-color: var(--brass); box-shadow: inset 0 2px 5px rgba(0, 0, 0, .6), 0 0 10px rgba(216, 179, 106, .35); }
-	.ga.up img { opacity: 1; }
-	.gv { position: absolute; left: 50%; bottom: -2px; transform: translateX(-50%); min-width: 26px; height: 18px; box-sizing: border-box; padding: 0 5px; border-radius: 9px; font-size: 14px; line-height: 17px; text-align: center;
-		color: var(--ink-dark); background: linear-gradient(180deg, #f6e2ad, var(--brass)); border: 1px solid #030b15; }
+	.gau { flex: none; }
 	/* the selected card's moves */
 	.iact { flex: none; height: 34px; display: flex; align-items: center; justify-content: center; gap: 6px; }
 	.a { flex: 1; height: 34px; padding: 0 6px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, .22); background: rgba(255, 255, 255, .03); color: var(--ink-2); font-size: 16px; line-height: 1; display: flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; cursor: pointer; transition: transform .12s; }

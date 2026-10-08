@@ -69,6 +69,23 @@ export function statDeltas(s: PlayerCardState): Partial<Record<StatKey, number>>
 	return out
 }
 
+/**
+ * The colour of the card behind each item, in the order they were taken (Tier II picks before Tier III,
+ * then the order they joined the upgrade pile). Stat bumps made by hand (`items`) come last as 'BRASS'.
+ */
+export function statColors(s: PlayerCardState): Partial<Record<StatKey, string[]>> {
+	const cards = heroCards(s.hero)
+	const out: Partial<Record<StatKey, string[]>> = {}
+	const order = s.upgrade.map((idx, n) => ({ idx, n, lv: cards[idx]?.level ?? 1 })).sort((a, b) => a.lv - b.lv || a.n - b.n)
+	for (const { idx } of order) {
+		const item = cards[idx]?.item
+		const k = item ? ITEM_STAT[item] : undefined
+		if (k) (out[k] ??= []).push(cards[idx]?.color ?? 'BRASS')
+	}
+	for (const [k, n] of Object.entries(s.items ?? {}) as Array<[StatKey, number]>) for (let i = 0; i < (n ?? 0); i++) (out[k] ??= []).push('BRASS')
+	return out
+}
+
 /** Level = base 1, +1 per upgrade card fed in, +1 once the ultimate is unlocked. */
 export function levelOf(s: PlayerCardState): number {
 	return 1 + s.upgrade.length + (s.ultimate ? 1 : 0)

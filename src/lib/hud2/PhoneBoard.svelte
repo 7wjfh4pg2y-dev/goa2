@@ -55,7 +55,7 @@
 			{/each}
 		</span>
 	</div>
-	<StatBubbles deltas={statDeltas(cs)} size={30} />
+	<StatBubbles {cs} size={30} />
 	<div class="turns">
 		{#each [0, 1, 2, 3] as t (t)}
 			<span class="tw" class:now={t === turnIdx} class:glow={fxAt(t)}><TurnSlot heroId={cs.hero} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} label={ROMAN[t]} examinable on:click={(e) => onSlot(e, t)} /></span>

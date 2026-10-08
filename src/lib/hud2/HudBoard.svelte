@@ -69,7 +69,7 @@
 				{:else}<svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4.5h6V7M6 7l1 13h10l1-13" /></svg>{/if}
 			</span>
 		</span>
-		<StatBubbles deltas={statDeltas(cs)} size={small ? 32 : 38} />
+		<StatBubbles {cs} size={small ? 32 : 38} />
 	{/if}
 </div>
 

@@ -159,8 +159,14 @@
 					<span class="gear">
 						<svg viewBox="-50 -50 100 100" aria-hidden="true">
 							<circle r="44" class="gtrack" />
-							{#each COLS as c, k}<path d={ARCS[k]} stroke={cs.ultimate ? '#b482f0' : tiers[k] >= 3 ? COL[c] : 'rgba(255,255,255,.14)'} />{/each}
+							{#each COLS as c, k}<path d={ARCS[k]} stroke="rgba(255,255,255,.14)" />{/each}
 						</svg>
+						{#each COLS as c, k}
+							{#if tiers[k] >= 3 || cs.ultimate}
+								<svg class="arcl" viewBox="-50 -50 100 100" style="--c:{cs.ultimate ? '#b482f0' : COL[c]}" aria-hidden="true"><path d={ARCS[k]} class="glow" /><path d={ARCS[k]} /></svg>
+								<svg class="arcl fl" viewBox="-50 -50 100 100" aria-hidden="true"><path d={ARCS[k]} /></svg>
+							{/if}
+						{/each}
 						<img src={ultGear} alt="" />
 					</span>
 					<span class="utx"><em>Ultimate · Level 8</em><b>{cards[ult]?.name}</b></span>
@@ -174,7 +180,7 @@
 		{:else}
 			{@const k = COLS.indexOf(tab)}
 			{@const ch = Math.round(TCW / R)}
-			<div class="tree" style="--c:{COL[tab]}">
+			<div class="tree" style="--c:{COL[tab]}; --f:{cs.ultimate ? '#b482f0' : COL[tab]}">
 				<span class="pipe"></span>
 				<span class="fill" style="height:{tiers[k] >= 3 ? 100 : tiers[k] === 2 ? 50 : 0}%"></span>
 				{#each [3, 2, 1] as t (t)}
@@ -253,7 +259,7 @@
 	.ib b { position: absolute; left: 50%; bottom: -9px; transform: translateX(-50%); height: 16px; padding: 0 6px; border-radius: 8px; font-weight: normal; font-size: 12px; line-height: 16px; color: #fff; background: color-mix(in srgb, var(--c) 75%, #000); }
 	.cd.fresh .fc { animation: flipin .9s cubic-bezier(.4, 0, .2, 1) both; }
 	.cd.fresh .ib { animation: ibin .5s cubic-bezier(.2, 1.5, .4, 1) .55s both; }
-	@keyframes flipin { 0% { transform: rotate(0deg) scaleX(1); } 45% { transform: rotate(0deg) scaleX(0); } 55% { transform: rotate(180deg) scaleX(0); } 100% { transform: rotate(180deg) scaleX(1); } }
+	@keyframes flipin { from { transform: rotate(0deg); } to { transform: rotate(180deg); } }
 	@keyframes ibin { from { transform: scale(0); opacity: 0; } }
 	.ft { height: 26px; display: flex; align-items: center; }
 	.pill { display: inline-flex; align-items: center; gap: 3px; height: 21px; padding: 0 9px; border-radius: 999px; font-size: 12px; line-height: 1; white-space: nowrap; border: 1px solid transparent; box-sizing: border-box; }
@@ -282,6 +288,12 @@
 	.gear svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 	.gtrack { fill: rgba(3, 8, 16, .7); stroke: rgba(255, 255, 255, .08); stroke-width: 9; }
 	.gear path { fill: none; stroke-width: 9; stroke-linecap: round; }
+	.arcl { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+	.arcl path { stroke: var(--c); }
+	.arcl path.glow { stroke-width: 16; opacity: .35; }
+	.arcl.fl path { stroke: #fff; stroke-width: 6; }
+	.arcl.fl { opacity: 0; animation: arcfl 3.6s linear infinite; }
+	@keyframes arcfl { 0%, 86% { opacity: 0; } 91% { opacity: 1; } 100% { opacity: 0; } }
 	.gear img { position: relative; width: 42px; height: 42px; border-radius: 50%; }
 	.utx { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; pointer-events: none; }
 	.utx em { font-style: normal; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: #d4a8ff; }
@@ -291,7 +303,7 @@
 	.tree { position: relative; display: flex; flex-direction: column; gap: 8px; padding-left: 26px; }
 	.pipe, .fill { position: absolute; left: calc(50% + 13px); width: 8px; margin-left: -4px; bottom: 30px; border-radius: 4px; pointer-events: none; }
 	.pipe { top: 30px; background: #071726; box-shadow: 0 0 0 2.5px #c9a255, 0 0 0 4px #030b15; }
-	.fill { max-height: calc(100% - 60px); background: var(--c); box-shadow: 0 0 10px var(--c); }
+	.fill { max-height: calc(100% - 60px); background: var(--f); box-shadow: 0 0 10px var(--f); }
 	.tier { position: relative; display: flex; align-items: flex-start; justify-content: center; gap: 22px; }
 	.tn { position: absolute; left: -26px; top: 30%; font-size: 22px; color: var(--ink-3); }
 	.valve { position: absolute; left: 50%; top: calc(50% - 13px); z-index: 2; width: 30px; height: 30px; margin: -15px 0 0 -15px; border-radius: 50%; display: grid; place-items: center;
@@ -309,5 +321,5 @@
 	.hb.hand { color: var(--ink-dark); background: linear-gradient(180deg, #f6e2ad, var(--brass) 50%, #b98e42); border-color: #f9ebc6; }
 	.hb.upg { background: rgba(26, 68, 104, .9); border-color: var(--brass-line); }
 	.hb.rem { color: var(--danger-hi); border-color: rgba(229, 72, 77, .6); background: rgba(229, 72, 77, .1); }
-	@media (prefers-reduced-motion: reduce) { .pd, .ug, .cd.fresh .fc, .cd.fresh .ib { animation: none !important; } }
+	@media (prefers-reduced-motion: reduce) { .pd, .ug, .arcl.fl, .cd.fresh .fc, .cd.fresh .ib { animation: none !important; } }
 </style>
