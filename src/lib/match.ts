@@ -124,11 +124,10 @@ export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 		return { cards: next }
 	}
 	// the acting player ends their turn (the host may, for someone away): the next card acts; after the last
-	// one the turn moves on by itself — except turn 4, where the host's Minion battle comes next
+	// one nobody is acting and the HOST moves on (Next turn — or, on turn 4, the Minion battle)
 	if (req.kind === 'endAct') {
 		const order = turnOrder(s), at = actingIdx(s)
 		if (at >= order.length || (req.pid !== order[at] && req.pid !== s.host)) return {}
-		if (at + 1 >= order.length && s.turn < TURNS_PER_ROUND) return { ...applyCardReq(s, { kind: 'advance', pid: req.pid }), acting: null }
 		return { acting: { key: turnKey(s), idx: at + 1 } }
 	}
 	if (req.kind === 'setAct') {

@@ -693,7 +693,9 @@
 	// the card picked in your hand (armed to commit, or open to defend / discard): the action ring takes its colour
 	const CARD_HUE: Record<string, string> = { RED: '#b8322f', BLUE: '#2a64c4', GREEN: '#2b8a43', GOLD: '#c9982f', SILVER: '#8d99a8' };
 	$: ringCard = armed ?? (selected != null && previewSrc === 'hand' && mine?.hand.includes(selected) ? selected : null);
-	$: ringColor = mine && ringCard != null ? CARD_HUE[heroCards(mine.hero)[ringCard]?.color ?? ''] ?? '' : '';
+	// …otherwise, on your acting turn, every action that comes from the card you played takes THAT card's colour
+	$: playedHue = mine && revealed && myTurnCard != null && (!!ringAsk || actor === clientId) ? CARD_HUE[heroCards(mine.hero)[myTurnCard]?.color ?? ''] ?? '' : '';
+	$: ringColor = mine && ringCard != null ? CARD_HUE[heroCards(mine.hero)[ringCard]?.color ?? ''] ?? '' : playedHue;
 	const itemBonus = (pid: string, act: string) => { const d = cards[pid] ? statDeltas(cards[pid]) : {}; return (act === 'attack' ? d.atk : act === 'defense' ? d.def : act === 'movement' ? d.move : 0) ?? 0; };
 	// arm, then commit: a click on a hand card arms it, the action ring commits it; a click on the armed card reads it
 	let armed: number | null = null;
@@ -724,7 +726,7 @@
 	$: order2 = ((): Order => {
 		// game over: the ring brings the results (the victory card + battle report) back
 		if ($ms.wonBy) return { label: 'Results', sub: 'Game over', kind: 'go', run: onResults };
-		if (ringAsk) return ringAsk;
+		if (ringAsk) return playedHue ? { ...ringAsk, tint: true } : ringAsk;
 		// a card chosen in its preview to discard (any time — a defence, or an effect): the ring asks once more
 		if (armed != null && armedKind === 'discard' && mine) { const i = armed; return { label: 'Discard', sub: heroCards(mine.hero)[i]?.name, kind: 'bad', pulse: true, run: () => { defend(i); armed = null; }, cancel: () => (armed = null) }; }
 		if (iCanRespawn) return { label: 'Respawn', kind: 'team', pulse: true, run: onRespawn };
@@ -747,8 +749,9 @@
 			return iAmHost ? { label: 'Next round', kind: 'go', run: onAdvanceTurn } : { label: 'Waiting', sub: 'Host', kind: 'wait' };
 		}
 		if (revealed) {
-			if (fxAsking && mine && myTurnCard != null) { const c = myTurnCard; const hero = mine.hero; return { label: 'Effect?', sub: heroCards(hero)[c]?.name, kind: 'go', run: () => (examine = { hid: hero, idx: c, pid: clientId }), alt: { label: 'No', run: fxNo } }; }
-			if (actor === clientId) return { label: 'End turn', kind: 'go', pulse: true, run: endAct };
+			// your card names a lingering effect: on your turn the ring asks first (× = no effect), then End turn
+			if (fxAsking && actor === clientId && mine && myTurnCard != null) { const c = myTurnCard; const hero = mine.hero; return { label: 'Effect?', sub: heroCards(hero)[c]?.name, kind: 'go', tint: true, run: () => (examine = { hid: hero, idx: c, pid: clientId }), cancel: fxNo }; }
+			if (actor === clientId) return { label: 'End turn', kind: 'go', tint: true, pulse: true, run: endAct };
 			if (actor) return { label: 'Waiting', sub: actorName, kind: 'wait', alt: iAmHost ? { label: 'Skip', run: endAct } : undefined };
 			// everyone has acted (turn 4: the minion battle comes next)
 			if (!iAmHost) return { label: 'Waiting', sub: 'Host', kind: 'wait' };
@@ -792,10 +795,18 @@
 					{/if}
 				</span>
 {/snippet}
+<!-- a companion on the shelf looks like the piece on the board: a hex in your colour with its crest (Pyro / Turret) -->
+{#snippet compIcon(letter: string)}
+	<svg class="compico" viewBox="-50 -50 100 100" aria-hidden="true">
+		<polygon points="0,-48 41.6,-24 41.6,24 0,48 -41.6,24 -41.6,-24" fill={colorHex(myColor)} stroke="#0b1220" stroke-width="3" stroke-linejoin="round" />
+		<polygon points="0,-40 34.6,-20 34.6,20 0,40 -34.6,20 -34.6,-20" fill="#0d1118" />
+		{#if letter === 'T'}<use href="#crest-gun" x="-29" y="-29" width="58" height="58" />{:else if letter === 'P'}<use href="#crest-dragon" x="-29" y="-29" width="58" height="58" />{:else}<text x="0" y="0" text-anchor="middle" dominant-baseline="central" font-size="40" fill="#f6ead2">{letter}</text>{/if}
+	</svg>
+{/snippet}
 {#snippet tokenCtl()}
 	<div class="tokwrap">
 		<button class="tokbtn" class:on={tokenDrawer} disabled={!shelf.length} on:click={() => (tokenDrawer = !tokenDrawer)} title={shelf.length ? 'Tokens and Markers' : 'Your hero has no tokens or markers'}>
-			{#if !shelf.length}<span class="tokglyph">◈</span>{:else if shelf[0].letter}<span class="ltrdisc" style="--pc:{colorHex(myColor)}">{shelf[0].letter}</span>{:else}<img src={shelf[0].img} alt="" />{/if}
+			{#if !shelf.length}<span class="tokglyph">◈</span>{:else if shelf[0].letter}{@render compIcon(shelf[0].letter)}{:else}<img src={shelf[0].img} alt="" />{/if}
 			{#if myTokenCount}<span class="tokct">{myTokenCount}</span>{/if}
 		</button>
 		{#if tokenDrawer}
@@ -805,7 +816,7 @@
 					{#each shelf as it (it.key)}
 						{@const left = leftOf(it.key)}
 						<button class="tok {it.cls}" class:out={left === 0} disabled={left === 0} on:click={() => armToken(it)} title={left === 0 ? `${it.title} — all in play` : it.title}>
-							{#if it.letter}<span class="ltrdisc" style="--pc:{colorHex(myColor)}">{it.letter}</span>{:else}<img src={it.img} alt="" />{/if}{#if it.label}<span class="toktag">{it.label}</span>{/if}
+							{#if it.letter}{@render compIcon(it.letter)}{:else}<img src={it.img} alt="" />{/if}{#if it.label}<span class="toktag">{it.label}</span>{/if}
 							{#if left !== Infinity}<span class="tokleft">{left}</span>{/if}
 						</button>
 					{/each}
@@ -2223,9 +2234,9 @@
 	.tokbtn img { width: 1.4rem; height: 1.4rem; object-fit: contain; }
 	.tokct { position: absolute; top: -6px; right: -6px; min-width: .95rem; height: .95rem; padding: 0 3px; border-radius: 999px; display: grid; place-items: center;
 		background: #0b101a; border: 1px solid rgba(199,154,78,.7); color: #f0dcae; font-size: .55rem; font-weight: 900; }
-	/* companion (Turret / Pyro): your colour, its letter, team ring — like the board piece */
-	.ltrdisc { width: 1.4rem; height: 1.4rem; border-radius: 50%; display: grid; place-items: center; background: var(--pc); border: 2px solid var(--tc, #ef7d22);
-		color: #0b1220; font-size: .78rem; font-weight: 900; line-height: 1; }
+	/* companion (Turret / Pyro): a hex in your colour with its crest — like the board piece */
+	.compico { width: 1.6rem; height: 1.6rem; display: block; }
+	.mbtns .tokbtn .compico { width: 15px; height: 15px; }
 	.tokdrawer { position: absolute; left: 0; bottom: calc(100% + 8px); z-index: 14; width: 232px; padding: 9px; border-radius: 12px;
 		background: rgba(11,16,26,.96); border: 1px solid rgba(199,154,78,.5); box-shadow: 0 16px 40px rgba(0,0,0,.6); }
 	.toklbl { font-size: .56rem; letter-spacing: .1em; text-transform: uppercase; font-weight: 800; color: #b8a06a; margin: 2px 2px 5px; }
@@ -2240,7 +2251,7 @@
 	.tok img { width: 100%; aspect-ratio: 1; object-fit: contain; }
 	.tok.emblem { background: rgba(199,154,78,.16); border-color: rgba(199,154,78,.45); }
 	.tok.comp { position: relative; grid-column: span 2; display: flex; align-items: center; gap: 6px; padding: 5px 8px; }
-	.tok.comp img, .tok.comp .ltrdisc { width: 1.5rem; height: 1.5rem; aspect-ratio: auto; }
+	.tok.comp img { width: 1.5rem; height: 1.5rem; aspect-ratio: auto; }
 	.tok.comp .toktag { font-size: .64rem; font-weight: 800; letter-spacing: .02em; color: #f0dcae; }
 	.tok.marker img { border-radius: 50%; }
 	.tokfoot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
@@ -2356,7 +2367,7 @@
 	.mb b, .mbtns .radbtn b { font-weight: normal; min-width: 1.35em; font-size: 9.5px; text-align: center; font-variant-numeric: tabular-nums; }
 	.mb :global(svg), .mbtns .radbtn svg { width: 12px; height: 12px; flex: none; }
 	.mb .inicon { width: 9px; height: 9px; }
-	.mbtns .tokbtn img, .mbtns .tokbtn .ltrdisc, .mbtns .tokbtn .tokglyph { width: 13px; height: 13px; font-size: 10px; }
+	.mbtns .tokbtn img, .mbtns .tokbtn .tokglyph { width: 13px; height: 13px; font-size: 10px; }
 	.mbtns .tokwrap, .mbtns .radwrap { position: relative; display: flex; align-self: auto; }
 	.mb.on { background: rgba(199,154,78,.32); border-color: rgba(230,190,110,.85); color: #fff3d6; }
 	.mb.off { opacity: .5; }

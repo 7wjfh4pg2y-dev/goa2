@@ -594,7 +594,7 @@
 		const id = selPiece.id;
 		forceMenu = false;
 		const go = () => session.cardAction({ kind: 'force', pid: clientId, target: id, die });
-		if (useRing) { const sum = heroDefeatSummary($ms, clientId, id); askRing(id, 'Force', die ? `Discard or die · +${sum.coins}` : 'Discard', die ? 'bad' : 'go', go); return; }
+		if (useRing) { const sum = heroDefeatSummary($ms, clientId, id); askRing(id, die ? 'Discard or die' : 'Discard', `${heroOf(id)}${die ? ` · +${sum.coins}` : ''}`, die ? 'bad' : 'go', go); return; }
 		board?.release(); selPieceId = null; go();
 	}
 	// while an attack is on: the minion modifiers on the defence, as shields over the board (everyone sees them)
@@ -1446,7 +1446,9 @@
 	.atkask.fd.die .akseal { background: radial-gradient(circle at 50% 35%, #d23a26, #6a0d06 75%); }
 	.atkask.fd .akseal svg { width: 30px; height: 30px; fill: none; stroke: #fff3d6; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
 	.atkask.fd .aktitle { color: #ffd9a8; }
-	.atkask { position: absolute; inset: 0; z-index: 12; display: grid; place-items: center; pointer-events: none; }
+	.atkask { position: absolute; inset: 0; z-index: 12; display: grid; place-items: center; pointer-events: none; animation: akout .7s ease 5s forwards; }
+	/* the notice says its piece, then gets out of the way (the choice stays on the action button) */
+	@keyframes akout { to { opacity: 0; visibility: hidden; } }
 	.akwrap { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 18px 34px 16px; color: #ffe9e2; animation: akin .4s cubic-bezier(.2, 1.3, .3, 1) both; }
 	.gamewrap:not(.mob) .akwrap { zoom: var(--uis, 1); }
 	.akburst { position: absolute; left: 50%; top: 52px; width: 300px; height: 300px; margin: -150px 0 0 -150px; border-radius: 50%; opacity: 0.5;

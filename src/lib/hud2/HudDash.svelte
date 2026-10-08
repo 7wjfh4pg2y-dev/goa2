@@ -1,6 +1,6 @@
 <script lang="ts" module>
 	// kind 'bad' = red (Defeated, Discard); split = the ring in two halves, each its own choice (Defended | Defeated)
-	export type Order = { label: string; sub?: string; kind: 'go' | 'quiet' | 'wait' | 'off' | 'team' | 'bad' | 'lvl'; pulse?: boolean; run?: () => void; alt?: { label: string; run: () => void };
+	export type Order = { label: string; sub?: string; kind: 'go' | 'quiet' | 'wait' | 'off' | 'team' | 'bad' | 'lvl'; pulse?: boolean; run?: () => void; alt?: { label: string; run: () => void }; tint?: boolean;
 		/** something is loaded on the ring (an armed card, a board action): the small × unloads it */
 		cancel?: () => void;
 		split?: { left: { label: string; run: () => void }; right: { label: string; run: () => void } } };
@@ -73,9 +73,26 @@
 		return `M ${(70 + r * Math.sin(a0)).toFixed(2)} ${(70 - r * Math.cos(a0)).toFixed(2)} A ${r} ${r} 0 0 1 ${(70 + r * Math.sin(a1)).toFixed(2)} ${(70 - r * Math.cos(a1)).toFixed(2)}`;
 	};
 	$: top = cs.discard.length ? cs.discard[cs.discard.length - 1] : null;
-	// the ring's word(s): one line per word, sized so the longest fits across the ring
-	$: words = order.label.split(' ');
-	$: labelFs = Math.min(16, 70 / (Math.max(...words.map((w) => w.length)) * 0.62));
+	// the ring's word(s): packed into 1–3 lines (whichever gives the biggest type), sized so the widest line fits across
+	// the ring and every line (plus the sub line) fits down it — nothing ever spills out of the circle
+	function packLabel(label: string, hasSub: boolean): { lines: string[]; fs: number } {
+		const ws = label.split(' ').filter(Boolean);
+		const H = hasSub ? 40 : 56;
+		let best = { lines: [label], fs: 0 };
+		const tryLines = (lines: string[]) => {
+			const fs = Math.min(16, 70 / (Math.max(...lines.map((l) => l.length)) * 0.62), H / (lines.length * 1.05));
+			if (fs > best.fs) best = { lines, fs };
+		};
+		tryLines([ws.join(' ')]);
+		for (let i = 1; i < ws.length; i++) {
+			tryLines([ws.slice(0, i).join(' '), ws.slice(i).join(' ')]);
+			for (let j = i + 1; j < ws.length; j++) tryLines([ws.slice(0, i).join(' '), ws.slice(i, j).join(' '), ws.slice(j).join(' ')]);
+		}
+		return best;
+	}
+	$: packed = packLabel(order.label, !!order.sub);
+	$: words = packed.lines;
+	$: labelFs = packed.fs;
 	$: subLong = (order.sub ?? '').length > 16;
 	// the kept-up banner row: as many a line as fit at a readable width (220+), centred, wrapping upward
 	$: fit = Math.max(1, Math.min(hand.length, Math.floor((rowMax + 8) / 228))); // the most a line can hold
@@ -92,6 +109,11 @@
 		slideT = setTimeout(() => (sliding = false), 460);
 	}
 	onDestroy(() => { if (slideT) clearTimeout(slideT); });
+	// a ring that just changed ignores clicks for a moment: the second tap of a double-tap must not land on the NEXT
+	// action (saying No to an effect used to end the turn that way)
+	let ringKey = '', ringAt = 0;
+	$: { const k = `${order.label}|${order.sub ?? ''}|${order.kind}`; if (k !== ringKey) { ringKey = k; ringAt = Date.now(); } }
+	const fire = (fn?: () => void) => { if (Date.now() - ringAt < 450) return; fn?.(); };
 </script>
 
 <div class="mydash is-{team}" class:docked style="--dw:{dockW}px">
@@ -179,12 +201,12 @@
 			{#if order.split}
 				<div class="cap gob split">
 					<span class="gin">
-						<button class="half l" on:click={order.split.left.run} title={order.split.left.label}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9.5C8 18.5 5 15.5 5 11V6z" /></svg><b>{order.split.left.label}</b></button>
-						<button class="half r" on:click={order.split.right.run} title={order.split.right.label}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5a7 7 0 0 0-7 7c0 2.3 1.1 4 2.8 5v3.2h8.4v-3.2c1.7-1 2.8-2.7 2.8-5a7 7 0 0 0-7-7z" /><circle cx="9.3" cy="11" r="1.5" class="f" /><circle cx="14.7" cy="11" r="1.5" class="f" /></svg><b>{order.split.right.label}</b></button>
+						<button class="half l" on:click={() => fire(order.split?.left.run)} title={order.split.left.label}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9.5C8 18.5 5 15.5 5 11V6z" /></svg><b>{order.split.left.label}</b></button>
+						<button class="half r" on:click={() => fire(order.split?.right.run)} title={order.split.right.label}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5a7 7 0 0 0-7 7c0 2.3 1.1 4 2.8 5v3.2h8.4v-3.2c1.7-1 2.8-2.7 2.8-5a7 7 0 0 0-7-7z" /><circle cx="9.3" cy="11" r="1.5" class="f" /><circle cx="14.7" cy="11" r="1.5" class="f" /></svg><b>{order.split.right.label}</b></button>
 					</span>
 				</div>
 			{:else}
-			<button class="cap gob {order.kind}" class:tinted={!!ringColor && order.kind !== 'bad'} style={ringColor ? `--rc:${ringColor}` : ''} class:pulse={order.pulse} disabled={!order.run} on:click={() => order.run?.()}>
+			<button class="cap gob {order.kind}" class:tinted={!!ringColor && (order.kind !== 'bad' || !!order.tint)} style={ringColor ? `--rc:${ringColor}` : ''} class:pulse={order.pulse} disabled={!order.run} on:click={() => fire(order.run)}>
 				<span class="gin">
 					<i></i>
 					<b style="font-size:{labelFs.toFixed(1)}px">{#each words as w, i (i)}{#if i}<br />{/if}{w}{/each}</b>
@@ -192,7 +214,7 @@
 				</span>
 			</button>
 			{/if}
-			{#if order.alt && !order.split}<button class="galt" on:click={order.alt.run}>{order.alt.label}</button>{/if}
+			{#if order.alt && !order.split}<button class="galt" on:click={() => fire(order.alt?.run)}>{order.alt.label}</button>{/if}
 			{#if order.cancel}<button class="gx" on:click={order.cancel} title="Cancel" aria-label="Cancel"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17" /></svg></button>{/if}
 		</div>
 	</div>
@@ -303,6 +325,7 @@
 	.gob.team .gin { background: radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--tc) 70%, #fff 10%), color-mix(in srgb, var(--tc) 55%, #000) 70%); color: #fff; }
 	.gob.tinted .gin { background: radial-gradient(circle at 50% 38%, color-mix(in srgb, var(--rc) 80%, #fff 12%), color-mix(in srgb, var(--rc) 62%, #000) 72%); color: #fff; }
 	.gob.tinted .gin small { color: rgba(255, 255, 255, 0.82); }
+	.gob.bad.tinted .gin { background: radial-gradient(circle at 50% 38%, color-mix(in srgb, var(--rc) 80%, #fff 12%), color-mix(in srgb, var(--rc) 62%, #000) 72%); }
 	.gob.pulse::after { content: ''; position: absolute; inset: -10px; border-radius: 50%; box-shadow: 0 0 22px 7px rgba(244, 223, 168, 0.5); opacity: 0.35; animation: gopulse 1.6s ease-in-out infinite; pointer-events: none; }
 	@keyframes gopulse { 50% { opacity: 1; } }
 	/* Level up: the three colours of the trees, turning slowly (transform only) under a dark centre */

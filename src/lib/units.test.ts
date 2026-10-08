@@ -265,9 +265,13 @@ describe('active turns (after the reveal the cards act one at a time)', () => {
 		// a new turn starts from the first card again
 		expect(actorOf({ ...s, turn: 3 } as MatchState)).toBe(turnOrder({ ...s, turn: 3 } as MatchState)[0])
 	})
-	it('the last card ending its turn moves the game to the next turn; on turn 4 the host\'s minion battle is next', () => {
+	it('after the last card ends its turn nobody acts and the turn waits for the host (Next turn / minion battle)', () => {
 		let s = play()
 		for (const p of turnOrder(play())) s = { ...s, ...applyCardReq(s, { kind: 'endAct', pid: p }) } as MatchState
+		expect(s.turn).toBe(2)
+		expect(actorOf(s)).toBeNull()
+		expect(applyCardReq(s, { kind: 'endAct', pid: 'H' })).toEqual({})
+		s = { ...s, ...applyCardReq(s, { kind: 'advance', pid: 'H' }) } as MatchState
 		expect(s.turn).toBe(3)
 		expect(s.cards!.A.turns[1]).toBe(0) // the card locked into its slot
 		let t = { ...play(), turn: 4 } as MatchState

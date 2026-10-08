@@ -151,7 +151,12 @@
 		}
 		const s = state(i);
 		if (s === 'cur') return { pill: 'In hand', cls: 'i-hand', note: (c.level ?? 1) === 1 ? 'Your starting card' : pickedThisRound(cs, i) ? 'Taken this round — you can still change it' : 'Taken in an earlier round — locked in' };
-		if (s === 'item') return { pill: 'Item', cls: 'i-item', note: canSwapNow(i) ? 'Swap to take this path instead' : `Your item: +1 ${ITEM_NAME[itemOf(i)] ?? ''}` };
+		if (s === 'item') {
+			// a swap happens at once — this is where it is explained (hover the Swap pill)
+			const src = canSwapNow(i) ? swapSource(cs, i) : null;
+			if (src != null) return { pill: 'Swap', cls: 'i-can', note: `Swap: this card to your hand — ${cards[src]?.name ?? 'yours'} becomes the item (+1 ${ITEM_NAME[itemOf(src)] ?? ''})` };
+			return { pill: 'Item', cls: 'i-item', note: `Your item: +1 ${ITEM_NAME[itemOf(i)] ?? ''}` };
+		}
 		if (s === 'past') return { pill: 'Removed', cls: 'i-rem', note: allowedMoves(cs, i).includes('hand') ? 'Back to your hand undoes that level-up' : 'Replaced — locked in' };
 		return { pill: canTakeNow(i) ? 'Take it' : 'Option', cls: canTakeNow(i) ? 'i-can' : 'i-far', note: why(i) };
 	};
@@ -305,7 +310,7 @@
 			{#if s === 'cur'}<span class="pill cur">In hand</span>
 			{:else if s === 'past'}<span class="pill past">Removed</span>
 			{:else if s === 'item' && canSwapNow(i) && src != null}
-				<button class="pill swap" on:click={() => ask('swap', i)} on:pointerenter={() => over(i)} on:pointerleave={out}>Swap</button>
+				<button class="pill swap" on:click={() => act(() => { onSwap(i); hov = null; })} on:pointerenter={() => over(i)} on:pointerleave={out}>Swap</button>
 			{:else if s === 'item'}<span class="pill item">Item</span>
 			{:else if can}
 				<button class="pill take" on:click={() => ask('take', i)} on:pointerenter={() => over(i)} on:pointerleave={out}>Take{#if tw >= 0 && itemOf(tw)}<span class="tsep"></span>+1 {@render itemIcon(tw)}{/if}</button>

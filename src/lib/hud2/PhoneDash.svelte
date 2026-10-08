@@ -49,6 +49,11 @@
 	$: top = cs.discard.length ? cs.discard[cs.discard.length - 1] : null;
 	let discOpen = false;
 	$: if (!cs.discard.length) discOpen = false;
+	// a ring that just changed ignores clicks for a moment: the second tap of a double-tap must not land on the NEXT
+	// action (saying No to an effect used to end the turn that way)
+	let ringKey = '', ringAt = 0;
+	$: { const k = `${order.label}|${order.sub ?? ''}|${order.kind}`; if (k !== ringKey) { ringKey = k; ringAt = Date.now(); } }
+	const fire = (fn?: () => void) => { if (Date.now() - ringAt < 450) return; fn?.(); };
 </script>
 
 <div class="pdash is-{team}">
@@ -88,15 +93,15 @@
 			</button>
 		</span>
 		{#if order.split}
-			<span class="act split"><button class="h l" on:click={order.split.left.run}>{order.split.left.label}</button><button class="h r" on:click={order.split.right.run}>{order.split.right.label}</button></span>
+			<span class="act split"><button class="h l" on:click={() => fire(order.split?.left.run)}>{order.split.left.label}</button><button class="h r" on:click={() => fire(order.split?.right.run)}>{order.split.right.label}</button></span>
 		{:else if order.alt}
 			<!-- a second choice rides on the same pill: two thirds the main one (e.g. Waiting · hero), a third the other (Skip) -->
 			<span class="act joined {order.kind}">
-				<button class="m" disabled={!order.run} on:click={() => order.run?.()}><b>{order.label}</b>{#if order.sub}<small>{order.sub}</small>{/if}</button>
-				<button class="o" on:click={order.alt.run}>{order.alt.label}</button>
+				<button class="m" disabled={!order.run} on:click={() => fire(order.run)}><b>{order.label}</b>{#if order.sub}<small>{order.sub}</small>{/if}</button>
+				<button class="o" on:click={() => fire(order.alt?.run)}>{order.alt.label}</button>
 			</span>
 		{:else}
-			<button class="act {order.kind}" class:tinted={!!ringColor && order.kind !== 'bad'} style={ringColor ? `--rc:${ringColor}` : ''} class:pulse={order.pulse} disabled={!order.run} on:click={() => order.run?.()}>
+			<button class="act {order.kind}" class:tinted={!!ringColor && (order.kind !== 'bad' || !!order.tint)} style={ringColor ? `--rc:${ringColor}` : ''} class:pulse={order.pulse} disabled={!order.run} on:click={() => fire(order.run)}>
 				<b>{order.label}</b>{#if order.sub}<small>{order.sub}</small>{/if}
 			</button>
 		{/if}
@@ -154,13 +159,14 @@
 	/* the ONE action: brass when it's yours to press */
 	.act { position: relative; flex: 1; min-width: 0; height: 34px; border-radius: 999px; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 0 12px; overflow: hidden;
 		color: #8a9fb3; background: rgba(0, 0, 0, 0.35); border: 1px solid var(--line); }
-	.act b { flex: none; font-weight: 400; font-size: 15px; letter-spacing: 0.06em; text-transform: uppercase; }
+	.act b { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 400; font-size: 15px; letter-spacing: 0.06em; text-transform: uppercase; }
 	.act small { min-width: 0; font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0.85; }
 	.act.lvl { color: #fff; border-color: rgba(255, 255, 255, 0.5); text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7); background: linear-gradient(100deg, #c2412f, #8a3fb8 30%, #2f6fd0 55%, #2f9e72 80%, #b8902f); }
 	.act.go, .act.team { color: #1b1204; background: linear-gradient(180deg, var(--brass-hi), var(--brass)); border-color: #fff1c8; }
 	.act.team { color: #fff; background: linear-gradient(180deg, color-mix(in srgb, var(--tc) 85%, #fff 10%), color-mix(in srgb, var(--tc) 70%, #000)); }
 	.act.tinted { color: #fff; background: linear-gradient(180deg, color-mix(in srgb, var(--rc) 85%, #fff 12%), color-mix(in srgb, var(--rc) 70%, #000)); }
 	.act.bad { color: #fff; background: linear-gradient(180deg, #e0533f, #8f1d12); border-color: rgba(255, 170, 160, 0.7); }
+	.act.bad.tinted { background: linear-gradient(180deg, color-mix(in srgb, var(--rc) 85%, #fff 12%), color-mix(in srgb, var(--rc) 70%, #000)); }
 	.act.quiet { color: #e9dcc0; }
 	.act:disabled { cursor: default; }
 	.act.pulse::after { content: ''; position: absolute; inset: 0; border-radius: inherit; background: rgba(255, 255, 255, 0.35); opacity: 0; animation: gp 1.6s ease-in-out infinite; pointer-events: none; }
