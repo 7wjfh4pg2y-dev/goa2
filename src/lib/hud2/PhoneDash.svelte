@@ -156,6 +156,7 @@
 		color: #8a9fb3; background: rgba(0, 0, 0, 0.35); border: 1px solid var(--line); }
 	.act b { flex: none; font-weight: 400; font-size: 15px; letter-spacing: 0.06em; text-transform: uppercase; }
 	.act small { min-width: 0; font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0.85; }
+	.act.lvl { color: #fff; border-color: rgba(255, 255, 255, 0.5); text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7); background: linear-gradient(100deg, #c2412f, #8a3fb8 30%, #2f6fd0 55%, #2f9e72 80%, #b8902f); }
 	.act.go, .act.team { color: #1b1204; background: linear-gradient(180deg, var(--brass-hi), var(--brass)); border-color: #fff1c8; }
 	.act.team { color: #fff; background: linear-gradient(180deg, color-mix(in srgb, var(--tc) 85%, #fff 10%), color-mix(in srgb, var(--tc) 70%, #000)); }
 	.act.tinted { color: #fff; background: linear-gradient(180deg, color-mix(in srgb, var(--rc) 85%, #fff 12%), color-mix(in srgb, var(--rc) 70%, #000)); }

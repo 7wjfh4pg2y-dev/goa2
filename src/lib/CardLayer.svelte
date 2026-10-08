@@ -57,6 +57,8 @@
 	export let hud2 = false; // the 2.0 HUD (desktop / tablet): side boards, the Chronicle, the order row, the new dash
 	/** a board action waiting for its yes (GameView): the action ring confirms it, with Cancel beside it */
 	export let ringAsk: Order | null = null;
+	/** game over: reopen the victory card / battle report */
+	export let onResults: () => void = () => {};
 	export let compact = false; // 2.0: the side boards shrink to nameplates
 
 	const ORANGE = '#ef7d22';
@@ -716,7 +718,8 @@
 	const waitFor = (ps: Player[]) => (ps.length === 1 ? ps[0].name : `${ps.length} players`);
 	// the ONE action, in a word (the same steps as the classic dash's action slot)
 	$: order2 = ((): Order => {
-		if ($ms.wonBy) return { label: 'Game over', kind: 'off' };
+		// game over: the ring brings the results (the victory card + battle report) back
+		if ($ms.wonBy) return { label: 'Results', sub: 'Game over', kind: 'go', run: onResults };
 		if (ringAsk) return ringAsk;
 		// a card chosen in its preview to discard (any time — a defence, or an effect): the ring asks once more
 		if (armed != null && armedKind === 'discard' && mine) { const i = armed; return { label: 'Discard', sub: heroCards(mine.hero)[i]?.name, kind: 'bad', pulse: true, run: () => { defend(i); armed = null; }, cancel: () => (armed = null) }; }
@@ -729,8 +732,8 @@
 		if (spawnWaiting.length) return { label: 'Waiting', sub: waitFor(spawnWaiting), kind: 'wait' };
 		if (battlePhase) {
 			if ($ms.battle?.remove) return { label: 'Waiting', sub: teamName($ms.battle.loser), kind: 'wait' };
-			if (!levelPhase) return iAmHost ? { label: 'Level up', kind: 'go', run: startLevelUp } : { label: 'Waiting', sub: 'Host', kind: 'wait' };
-			if (iMustLevel) return { label: 'Level up', kind: 'go', pulse: true, run: () => { deckOpen = true; deckTab = 'deck'; } };
+			if (!levelPhase) return iAmHost ? { label: 'Level up', kind: 'lvl', run: startLevelUp } : { label: 'Waiting', sub: 'Host', kind: 'wait' };
+			if (iMustLevel) return { label: 'Level up', kind: 'lvl', pulse: true, run: () => { deckOpen = true; deckTab = 'deck'; } };
 			if (levelWaiting.length) return { label: 'Waiting', sub: waitFor(levelWaiting), kind: 'wait' };
 			return iAmHost ? { label: 'Next round', kind: 'go', run: onAdvanceTurn } : { label: 'Waiting', sub: 'Host', kind: 'wait' };
 		}

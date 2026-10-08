@@ -58,12 +58,15 @@
 	// a card that has just become an item flips into place
 	let prevItems: Set<number> | null = null;
 	let fresh = new Set<number>();
+	let unfresh = new Set<number>();
 	$: watchItems(cs.upgrade);
 	function watchItems(up: number[]) {
 		const now = new Set(up);
 		if (prevItems) {
 			const nw = [...now].filter((i) => !prevItems!.has(i));
 			if (nw.length) { fresh = new Set([...fresh, ...nw]); setTimeout(() => (fresh = new Set([...fresh].filter((i) => !nw.includes(i)))), 1200); }
+			const gone = [...prevItems].filter((i) => !now.has(i));
+			if (gone.length) { unfresh = new Set([...unfresh, ...gone]); setTimeout(() => (unfresh = new Set([...unfresh].filter((i) => !gone.includes(i)))), 1200); }
 		}
 		prevItems = now;
 	}
@@ -105,14 +108,15 @@
 {#snippet face(i: number, w: number, foot: boolean)}
 	{@const s = state(i)}
 	{@const tw = twinOf(H, i)}
-	<div class="cd {s}" class:can={s === 'next' && canTake(i)} class:sel={sel === i} class:fresh={fresh.has(i)} style="--c:{COL[cards[i]?.color] ?? '#888'}; width:{w}px">
+	<div class="cd {s}" class:can={s === 'next' && canTake(i)} class:sel={sel === i} class:fresh={fresh.has(i)} class:unflip={unfresh.has(i)} style="--c:{COL[cards[i]?.color] ?? '#888'}; width:{w}px">
 		<button class="cb" on:click={() => tap(i)} aria-label={cards[i]?.name}>
 			<span class="fc"><Card heroId={H} card={cards[i]} /></span>
 			{#if s === 'item' && itemOf(i)}<span class="ib"><img src={ic(`item_${itemOf(i).toLowerCase()}`)} alt="" /><b>+1</b></span>{/if}
 		</button>
 		{#if foot}
 			<span class="ft">
-				{#if s === 'cur'}<span class="pill cur">In hand</span>
+				{#if basics.includes(i)}<span class="pill imm">In hand</span>
+				{:else if s === 'cur'}<span class="pill cur">In hand</span>
 				{:else if s === 'past'}<span class="pill past">Removed</span>
 				{:else if s === 'item' && canSwap(i)}<button class="pill swap" on:click={() => onAsk('swap', i)}>Swap</button>
 				{:else if s === 'item'}<span class="pill item">Item</span>
@@ -141,7 +145,7 @@
 	<div class="body" role="presentation" on:click|self={() => (sel = null)}>
 		{#if tab === 'hand'}
 			<div class="sh"><span>Basics</span></div>
-			<div class="row">{#each basics as i (i)}{@render face(i, Math.round(HCW * 0.8), false)}{/each}</div>
+			<div class="row">{#each basics as i (i)}{@render face(i, Math.round(HCW * 0.8), true)}{/each}</div>
 			<div class="sh"><span>Your colours</span></div>
 			<div class="row">
 				{#each COLS as c (c)}
@@ -260,12 +264,15 @@
 	.ib img { width: 26px; height: 22px; object-fit: contain; }
 	.ib b { position: absolute; left: 50%; bottom: -9px; transform: translateX(-50%); height: 16px; padding: 0 6px; border-radius: 8px; font-weight: normal; font-size: 12px; line-height: 16px; color: #fff; background: color-mix(in srgb, var(--c) 75%, #000); }
 	.cd.fresh .fc { animation: flipin .9s cubic-bezier(.4, 0, .2, 1) both; }
+	.cd.unflip .fc { animation: flipup .9s cubic-bezier(.4, 0, .2, 1) both; }
+	@keyframes flipup { from { transform: rotate(180deg); } to { transform: rotate(0deg); } }
 	.cd.fresh .ib { animation: ibin .5s cubic-bezier(.2, 1.5, .4, 1) .55s both; }
 	@keyframes flipin { from { transform: rotate(0deg); } to { transform: rotate(180deg); } }
 	@keyframes ibin { from { transform: scale(0); opacity: 0; } }
 	.ft { height: 26px; display: flex; align-items: center; }
 	.pill { display: inline-flex; align-items: center; gap: 3px; height: 21px; padding: 0 9px; border-radius: 999px; font-size: 12px; line-height: 1; white-space: nowrap; border: 1px solid transparent; box-sizing: border-box; }
 	.pill img { width: 16px; height: 12px; object-fit: contain; }
+	.pill.imm { cursor: default; color: #2a2f38; letter-spacing: .04em; text-shadow: 0 1px 0 rgba(255,255,255,.6); background: linear-gradient(180deg, #ffffff, #d4d9df 48%, #a3acb7); border: 2px solid #d9a845; box-shadow: 0 0 0 1px #6b4a10, 0 2px 6px rgba(0,0,0,.45), inset 0 1px 0 #fff; }
 	.pill.cur { color: #2a1c06; background: linear-gradient(180deg, #f6e2ad, var(--brass)); }
 	.pill.past { color: #b8c2cf; background: rgba(150, 160, 175, .2); border-color: rgba(150, 160, 175, .35); }
 	.pill.item, .pill.tag { color: #fff; background: color-mix(in srgb, var(--c) 45%, transparent); border-color: color-mix(in srgb, var(--c) 80%, #fff); }
@@ -326,5 +333,5 @@
 	.hb.hand { color: var(--ink-dark); background: linear-gradient(180deg, #f6e2ad, var(--brass) 50%, #b98e42); border-color: #f9ebc6; }
 	.hb.upg { background: rgba(26, 68, 104, .9); border-color: var(--brass-line); }
 	.hb.rem { color: var(--danger-hi); border-color: rgba(229, 72, 77, .6); background: rgba(229, 72, 77, .1); }
-	@media (prefers-reduced-motion: reduce) { .pd, .ug, .arcl.fl, .iv.glow, .cd.fresh .fc, .cd.fresh .ib { animation: none !important; } }
+	@media (prefers-reduced-motion: reduce) { .pd, .ug, .arcl.fl, .iv.glow, .cd.fresh .fc, .cd.unflip .fc, .cd.fresh .ib { animation: none !important; } }
 </style>

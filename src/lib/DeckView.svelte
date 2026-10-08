@@ -84,6 +84,7 @@
 	// a card that has just become an item flips over into place (the one you didn't pick)
 	let prevItems: Set<number> | null = null;
 	let fresh = new Set<number>();
+	let unfresh = new Set<number>();
 	$: watchItems(cs.upgrade);
 	function watchItems(up: number[]) {
 		const now = new Set(up);
@@ -92,6 +93,12 @@
 			if (nw.length) {
 				fresh = new Set([...fresh, ...nw]);
 				setTimeout(() => (fresh = new Set([...fresh].filter((i) => !nw.includes(i)))), 1200);
+			}
+			// …and one that stops being an item (a swap, an undo) turns back upright
+			const gone = [...prevItems].filter((i) => !now.has(i));
+			if (gone.length) {
+				unfresh = new Set([...unfresh, ...gone]);
+				setTimeout(() => (unfresh = new Set([...unfresh].filter((i) => !gone.includes(i)))), 1200);
 			}
 		}
 		prevItems = now;
@@ -136,7 +143,7 @@
 	$: info = (i: number): { pill: string; cls: string; note: string } => {
 		const c = cards[i];
 		if (!c) return { pill: '', cls: '', note: '' };
-		if (c.color === 'GOLD' || c.color === 'SILVER') return { pill: 'Basic', cls: 'i-basic', note: 'Always in your hand' };
+		if (c.color === 'GOLD' || c.color === 'SILVER') return { pill: 'In hand', cls: 'imm', note: 'Always in your hand' };
 		if (i === ult) {
 			if (cs.ultimate) return { pill: 'Active', cls: 'i-ult', note: picksHas(ult) ? 'Unlocked this round — you can still undo it' : 'A passive ability — locked in' };
 			if (ultReady) return { pill: 'Ready', cls: 'i-ult', note: `Unlock it for ${need} coins` };
@@ -289,7 +296,7 @@
 	{@const tw = twin(i)}
 	{@const src = swapSource(cs, i)}
 	{@const can = s === 'next' && canTakeNow(i)}
-	<div class="nd {s}" class:can class:fresh={fresh.has(i)} class:sel={i === sel} class:foc={i === hov} style="--c:{COL[cards[i]?.color]}; left:{xOf(k, r, a)}px; top:{rowY[r]}px; width:{CW}px">
+	<div class="nd {s}" class:can class:fresh={fresh.has(i)} class:unflip={unfresh.has(i)} class:sel={i === sel} class:foc={i === hov} style="--c:{COL[cards[i]?.color]}; left:{xOf(k, r, a)}px; top:{rowY[r]}px; width:{CW}px">
 		<button class="nd-card" on:click={() => pick(i)} on:dblclick={() => onPreview(i)} on:pointerenter={() => over(i)} on:pointerleave={out} title={cards[i]?.name}>
 			<span class="face"><Card heroId={H} card={cards[i]} /></span>
 			{#if s === 'item' && itemOf(i)}<span class="ib">{@render itemIcon(i)}<b>+1</b></span>{/if}
@@ -372,6 +379,8 @@
 			<!-- the basics, in the top corners -->
 			{#each basics as i, n (i)}
 				<button class="bth" class:sel={i === sel} class:foc={i === hov} style="--c:{COL[cards[i].color]}; left:{basX[n]}px; top:{basY}px; width:{BCW}px" on:click={() => pick(i)} on:dblclick={() => onPreview(i)} on:pointerenter={() => over(i)} on:pointerleave={out} title={cards[i].name}><Card heroId={H} card={cards[i]} /></button>
+				<!-- basics never leave the hand: the silver-and-gold 'untouchable' pill, like the immune heavy's -->
+				<span class="pill imm bpill" style="left:{basX[n] + BCW / 2}px; top:{Y1 + CH + 4}px">In hand</span>
 			{/each}
 		</div>
 
@@ -502,6 +511,8 @@
 		background: color-mix(in srgb, var(--c) 75%, #000); box-shadow: 0 0 0 1px rgba(255, 255, 255, .35); }
 	/* the card you didn't pick flips over into its item */
 	.nd.fresh .face { animation: flipin .9s cubic-bezier(.4, 0, .2, 1) both; }
+	.nd.unflip .face { animation: flipup .9s cubic-bezier(.4, 0, .2, 1) both; }
+	@keyframes flipup { from { transform: rotate(180deg); } to { transform: rotate(0deg); } }
 	.nd.fresh .ib { animation: ibin .5s cubic-bezier(.2, 1.5, .4, 1) .55s both; }
 	@keyframes flipin { from { transform: rotate(0deg); } to { transform: rotate(180deg); } }
 	@keyframes ibin { from { transform: scale(0); opacity: 0; } }
@@ -526,6 +537,8 @@
 	.pill.i-rem { color: #fff; background: #8e2a2a; border-color: #e5484d; }
 	.pill.i-can { color: #2a1c06; background: linear-gradient(180deg, #fff3cf, var(--brass)); }
 	.pill.i-far { color: var(--ink-2); background: rgba(255, 255, 255, .08); border-color: rgba(255, 255, 255, .2); }
+	.pill.imm { cursor: default; color: #2a2f38; letter-spacing: .04em; text-shadow: 0 1px 0 rgba(255,255,255,.6); background: linear-gradient(180deg, #ffffff, #d4d9df 48%, #a3acb7); border: 2px solid #d9a845; box-shadow: 0 0 0 1px #6b4a10, 0 2px 6px rgba(0,0,0,.45), inset 0 1px 0 #fff; }
+	.bpill { position: absolute; z-index: 2; transform: translateX(-50%); }
 	.pill.i-basic { color: #2a1c06; background: linear-gradient(180deg, #f6e2ad, #c9a050); }
 	.pill.i-ult { color: #fff; background: linear-gradient(180deg, #a56ee6, #5b2aa0); }
 	button.pill { cursor: pointer; transition: transform .12s; }
@@ -642,7 +655,7 @@
 	.a.hand kbd { color: var(--ink-dark); background: rgba(255, 255, 255, .25); border-color: rgba(0, 0, 0, .25); }
 
 	@media (prefers-reduced-motion: reduce) {
-		.dv, .halo, .lv-glow, .ug, .nd.fresh .face, .nd.fresh .ib { animation: none !important; }
+		.dv, .halo, .lv-glow, .ug, .nd.fresh .face, .nd.unflip .face, .nd.fresh .ib { animation: none !important; }
 		.bead { display: none; }
 		.nd, .pill, .a { transition: none; }
 	}

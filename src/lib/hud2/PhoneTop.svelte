@@ -37,7 +37,6 @@
 
 	$: right = (left === 'orange' ? 'blue' : 'orange') as Team;
 	const TC: Record<Team, string> = { orange: '#ef7d22', blue: '#2f7fe6' };
-	let purse = false;
 
 	// the beam, in px along its width
 	let L = 0;
@@ -72,8 +71,9 @@
 		</span>
 		{#if coins != null}
 			<span class="purse">
-				<button class="gold" on:click={() => (purse = !purse)} aria-label="Coins"><i class="gc"><b>{coins}</b></i></button>
-				{#if purse}<span class="pm"><button on:click={() => onCoins(-1)} aria-label="Remove a coin">−</button><button on:click={() => onCoins(1)} aria-label="Add a coin">+</button></span>{/if}
+				<button class="pmb" on:click={() => onCoins(-1)} aria-label="Remove a coin">−</button>
+				<span class="gold" aria-label="Coins"><i class="gc"><b>{coins}</b></i></span>
+				<button class="pmb" on:click={() => onCoins(1)} aria-label="Add a coin">+</button>
 			</span>
 		{/if}
 		<button class="ib wheel" on:click={onWheel} aria-label="Controls"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" /><circle cx="12" cy="12" r="3" /><path d="M12 1.5v4M12 18.5v4M1.5 12h4M18.5 12h4" /></svg></button>
@@ -108,11 +108,12 @@
 	.wv { width: 20px; height: 20px; }
 	.life img { width: 22px; height: 22px; object-fit: contain; }
 	.life img.mir { transform: scaleX(-1); }
-	.purse { position: relative; flex: none; }
+	.purse { position: relative; flex: none; display: flex; align-items: center; gap: 2px; }
+	.pmb { width: 20px; height: 24px; padding: 0; border-radius: 7px; font-size: 16px; line-height: 1; color: #f4dfa8; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(216, 179, 106, 0.35); }
 	/* the free middle: the turn's state */
 	.mid { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
-	.dots { display: flex; gap: 4px; }
-	.dots i { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--c); box-sizing: border-box; opacity: 0.55; }
+	.dots { display: flex; gap: 3px; flex-wrap: nowrap; }
+	.dots i { flex: none; width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid var(--c); box-sizing: border-box; opacity: 0.55; }
 	.dots i.ok { background: var(--c); opacity: 1; }
 	.rv { font-style: normal; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #f4dfa8; }
 	.ord { display: flex; align-items: center; }
@@ -124,8 +125,6 @@
 	.gold .gc { width: 28px; height: 28px; display: grid; place-items: center; }
 	.gc b { font-weight: 400; font-size: 14px; line-height: 1; color: #3a2606; text-shadow: 0 1px 0 rgba(255, 244, 200, 0.6); font-variant-numeric: tabular-nums; }
 	.gc { width: 16px; height: 16px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff2c0, #e8bd58 55%, #a8792a); box-shadow: inset 0 0 0 1.5px rgba(122, 86, 24, 0.55); }
-	.pm { position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); display: flex; gap: 6px; padding: 5px; border-radius: 999px; background: #0a1a2c; border: 1px solid rgba(216, 179, 106, 0.5); box-shadow: 0 6px 14px rgba(0, 0, 0, 0.6); }
-	.pm button { width: 30px; height: 30px; border-radius: 50%; font-size: 18px; line-height: 1; color: #f4dfa8; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(216, 179, 106, 0.4); }
 	.wheel { margin-left: 0; }
 	/* the beam: a thin line under the bar, each side in its team's colour up to the clash */
 	.beam { position: relative; height: 10px; }

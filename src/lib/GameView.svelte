@@ -861,7 +861,6 @@
 					<span class="lo-glow"></span>
 					<span class="lo-ring"></span>
 					<img class="lo-tok" src={lifeArt(lifeOut, 'back')} alt="" />
-					<span class="lo-crack"></span>
 				</div>
 				<div class="lo-title"><i></i><b>The last Life falls</b><i></i></div>
 				<p class="lo-sub">The <em class="t-{lifeOut}">{teamName(lifeOut)}</em> have no Life Tokens left</p>
@@ -886,7 +885,7 @@
 	<BoardCanvas bind:this={board} map={$ms.map ?? {}} inset={boardInset} look={boardLook} {glowZone} activeZone={$ms.wonBy ? null : battleZone($ms)} effects={!deckCovered} sea={$boardPrefs.sea} rims={$boardPrefs.rims} rotation={orientation} interactive={true} {placing} {placeGhost} holdColor={myHoldColor} onCancelPlace={cancelPlace} {areas} marks={boardMarks} wisps={$boardPrefs.wisps} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} pings={boardPings} onPing={doPing} {pingArmed} />
 	</div>
 
-	<CardLayer bind:this={cardLayer} {mobile} {hud2} {phone2} {ringAsk} compact={$boardPrefs.compact} {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} bind:covered={deckCovered} bind:phoneStatus onRespawn={placeMyHero} onEnter={placeMyHero} onArmToken={armToken} holdingToken={!!pendingToken} {pingArmed} onPing={pingButton} bind:previewId />
+	<CardLayer bind:this={cardLayer} {mobile} {hud2} {phone2} {ringAsk} onResults={() => (victoryClosed = false)} compact={$boardPrefs.compact} {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} bind:covered={deckCovered} bind:phoneStatus onRespawn={placeMyHero} onEnter={placeMyHero} onArmToken={armToken} holdingToken={!!pendingToken} {pingArmed} onPing={pingButton} bind:previewId />
 
 	<!-- selected minion/token: offer delete (heroes aren't deletable) -->
 	{#if hud2}
@@ -1632,9 +1631,6 @@
 	@keyframes loring { from { transform: scale(.85); opacity: .9; } to { transform: scale(1.35); opacity: 0; } }
 	.lo-tok { position: relative; width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 10px 24px rgba(0, 0, 0, 0.8)); animation: loshake 2.4s ease-in-out .3s infinite; }
 	@keyframes loshake { 0%, 70%, 100% { transform: rotate(0) scale(1); } 74% { transform: rotate(-4deg) scale(1.04); } 78% { transform: rotate(3deg) scale(1.02); } 82% { transform: rotate(-2deg); } 86% { transform: rotate(1deg); } }
-	.lo-crack { position: absolute; inset: 18%; pointer-events: none; background: linear-gradient(115deg, transparent 47%, rgba(255, 210, 160, 0.95) 49%, rgba(255, 90, 40, 0.8) 50%, transparent 52%), linear-gradient(60deg, transparent 56%, rgba(255, 200, 150, 0.8) 57.5%, transparent 59%);
-		clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); transform-origin: 50% 50%; animation: locrack .6s ease-out .25s both; }
-	@keyframes locrack { from { transform: scale(.2); opacity: 0; } }
 	.lo-title { display: flex; align-items: center; gap: 16px; font-size: clamp(26px, 5.4vh, 54px); line-height: 1; letter-spacing: .12em; text-transform: uppercase; color: #ffd6c8; text-shadow: 0 0 18px rgba(255, 60, 30, 0.75), 0 3px 8px #000; animation: lotitle .8s cubic-bezier(.2, .9, .3, 1) .2s both; }
 	.lo-title b { font-weight: 400; }
 	.lo-title i { width: clamp(30px, 9vw, 120px); height: 2px; background: linear-gradient(90deg, transparent, #ff8a66); }

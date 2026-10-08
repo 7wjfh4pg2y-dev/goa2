@@ -1,6 +1,6 @@
 <script lang="ts" module>
 	// kind 'bad' = red (Defeated, Discard); split = the ring in two halves, each its own choice (Defended | Defeated)
-	export type Order = { label: string; sub?: string; kind: 'go' | 'quiet' | 'wait' | 'off' | 'team' | 'bad'; pulse?: boolean; run?: () => void; alt?: { label: string; run: () => void };
+	export type Order = { label: string; sub?: string; kind: 'go' | 'quiet' | 'wait' | 'off' | 'team' | 'bad' | 'lvl'; pulse?: boolean; run?: () => void; alt?: { label: string; run: () => void };
 		/** something is loaded on the ring (an armed card, a board action): the small × unloads it */
 		cancel?: () => void;
 		split?: { left: { label: string; run: () => void }; right: { label: string; run: () => void } } };
@@ -305,6 +305,12 @@
 	.gob.tinted .gin small { color: rgba(255, 255, 255, 0.82); }
 	.gob.pulse::after { content: ''; position: absolute; inset: -10px; border-radius: 50%; box-shadow: 0 0 22px 7px rgba(244, 223, 168, 0.5); opacity: 0.35; animation: gopulse 1.6s ease-in-out infinite; pointer-events: none; }
 	@keyframes gopulse { 50% { opacity: 1; } }
+	/* Level up: the three colours of the trees, turning slowly (transform only) under a dark centre */
+	.gob.lvl .gin { position: relative; isolation: isolate; color: #fff; background: #120f22; }
+	.gob.lvl .gin::before { content: ''; position: absolute; inset: -25%; z-index: -2; background: conic-gradient(from 0deg, #e0524a, #b45cd6, #3f7fe0, #2fb3a0, #41ae59, #d8b36a, #e0524a); animation: irid 5s linear infinite; }
+	.gob.lvl .gin::after { content: ''; position: absolute; inset: 7px; z-index: -1; border-radius: 50%; background: radial-gradient(circle at 50% 40%, rgba(40, 30, 70, 0.72), rgba(10, 8, 24, 0.9) 75%); }
+	.gob.lvl .gin small { color: rgba(255, 255, 255, 0.85); }
+	@keyframes irid { to { transform: rotate(360deg); } }
 	.gob.bad .gin { background: radial-gradient(circle at 50% 38%, #e0533f, #8f1d12 72%); color: #fff; }
 	.gob.bad .gin small { color: rgba(255, 255, 255, 0.85); }
 	/* the split ring: the team's colour (Defended) on the left, red (Defeated) on the right, a gold seam between */
@@ -327,5 +333,5 @@
 	.gx svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; }
 	.gx:hover { color: #fff; }
 	.galt { position: absolute; left: 50%; bottom: -12px; transform: translateX(-50%); padding: 3px 10px; border-radius: 999px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #fff; background: #b42318; border: 2px solid #0a1a2c; cursor: pointer; }
-	@media (prefers-reduced-motion: reduce) { .gob.pulse::after { animation: none; opacity: 0.7; } }
+	@media (prefers-reduced-motion: reduce) { .gob.pulse::after { animation: none; opacity: 0.7; } .gob.lvl .gin::before { animation: none; } }
 </style>
