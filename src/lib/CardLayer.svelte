@@ -13,6 +13,7 @@
 	import Card from '$lib/cards/Card.svelte';
 	import CardBack from '$lib/cards/CardBack.svelte';
 	import DeckView from '$lib/DeckView.svelte';
+	import PhoneDeck from '$lib/hud2/PhoneDeck.svelte';
 	import { uiLayout, layoutVars } from '$lib/layout';
 	import CardBanner from '$lib/CardBanner.svelte';
 	import TurnSlot from '$lib/cards/TurnSlot.svelte';
@@ -1100,7 +1101,7 @@
 
 	<!-- ───────── desktop deck: upgrade tree + every card as a banner ───────── -->
 	{#if deckOpen && mine && !mobile}
-		<DeckView cs={mine} teamStyle={teamVars(myTeam)} onClose={() => { deckOpen = false; deckSel = null; }}
+		<DeckView cs={mine} teamStyle={teamVars(myTeam)} player={myName} onClose={() => { deckOpen = false; deckSel = null; }}
 			levelPhase={levelPhase} onMove={(i, to) => moveTo(i, to)}
 			onTake={(i) => session.cardAction({ kind: 'take', pid: clientId, idx: i })}
 			onSwap={(i) => session.cardAction({ kind: 'swap', pid: clientId, idx: i })}
@@ -1108,7 +1109,11 @@
 	{/if}
 
 	<!-- ───────── phone deck view: tabs across the four zones ───────── -->
-	{#if deckOpen && mine && mobile}
+	{#if deckOpen && mine && mobile && phone2}
+		<PhoneDeck cs={mine} {levelPhase} teamStyle={teamVars(myTeam)} onClose={() => { deckOpen = false; deckSel = null; }}
+			onMove={(i, to) => moveTo(i, to)} onAsk={(kind, idx) => (lvConfirm = { kind, idx })} onRead={(i) => mine && examineCard(mine.hero, i)} />
+	{/if}
+	{#if deckOpen && mine && mobile && !phone2}
 		{@const dh = mine.hero}
 		{@const split = handSplit(mine)}
 		{@const selZone = deckSel != null ? zoneOf(mine, deckSel) : null}
