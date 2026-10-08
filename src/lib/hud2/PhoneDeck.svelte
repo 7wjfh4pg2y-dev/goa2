@@ -168,6 +168,8 @@
 							{/if}
 						{/each}
 						<img src={ultGear} alt="" />
+						<b class="iv" class:on={cs.ultimate}>IV</b>
+						{#if cs.ultimate}<b class="iv glow">IV</b>{/if}
 					</span>
 					<span class="utx"><em>Ultimate · Level 8</em><b>{cards[ult]?.name}</b></span>
 					{#if ultReady}<button class="ubtn" on:click={() => onAsk('take', ult)}>Unlock<span class="money sm">{need}</span></button>{/if}
@@ -294,6 +296,9 @@
 	.arcl.fl path { stroke: #fff; stroke-width: 6; }
 	.arcl.fl { opacity: 0; animation: arcfl 3.6s linear infinite; }
 	@keyframes arcfl { 0%, 86% { opacity: 0; } 91% { opacity: 1; } 100% { opacity: 0; } }
+	.iv { position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%); text-align: center; font-weight: normal; font-size: 17px; line-height: 1; color: #e9dcc0; text-shadow: 0 0 3px #000, 0 1px 2px #000; }
+	.iv.on { color: #e9d4ff; text-shadow: 0 0 6px #a56ee6, 0 0 12px rgba(165, 110, 230, .8), 0 1px 2px #000; }
+	.iv.glow { opacity: 0; color: #fff; text-shadow: 0 0 8px #c79bff, 0 0 18px #a56ee6; animation: arcfl 3.6s linear infinite; }
 	.gear img { position: relative; width: 42px; height: 42px; border-radius: 50%; }
 	.utx { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; pointer-events: none; }
 	.utx em { font-style: normal; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: #d4a8ff; }
@@ -321,5 +326,5 @@
 	.hb.hand { color: var(--ink-dark); background: linear-gradient(180deg, #f6e2ad, var(--brass) 50%, #b98e42); border-color: #f9ebc6; }
 	.hb.upg { background: rgba(26, 68, 104, .9); border-color: var(--brass-line); }
 	.hb.rem { color: var(--danger-hi); border-color: rgba(229, 72, 77, .6); background: rgba(229, 72, 77, .1); }
-	@media (prefers-reduced-motion: reduce) { .pd, .ug, .arcl.fl, .cd.fresh .fc, .cd.fresh .ib { animation: none !important; } }
+	@media (prefers-reduced-motion: reduce) { .pd, .ug, .arcl.fl, .iv.glow, .cd.fresh .fc, .cd.fresh .ib { animation: none !important; } }
 </style>

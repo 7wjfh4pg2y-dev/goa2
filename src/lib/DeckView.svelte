@@ -180,7 +180,6 @@
 	const R = 1192 / 1664, TH = DH - 2 * PAD;
 	const LBL = 92; // the tier labels on the left
 	const BY = 46, BH = 104; // the ultimate box
-	const BAS = 72; // the basics strip at the bottom
 	const FOOT = 32, GY = 8, MID = 36, SP = 6;
 	$: TW = DW - 2 * PAD - INS - IGAP;
 	$: AW = TW - LBL;
@@ -189,7 +188,13 @@
 	$: BX = LBL + AW / 2 - BW / 2;
 	const BYm = BY + BH / 2;
 	const RT = BY + BH + 24;
-	$: RB = TH - BAS - 14;
+	$: RB = TH - 6;
+	// the basics sit in the top corners, beside the box: gold over the red tree, silver over the green
+	const BCH = RT - 22;
+	$: BCW = Math.round(BCH * R);
+	$: basX = [xOf(0, 2, 0) + 4, xOf(2, 2, 1) + CW - BCW - 4];
+	// faint rules between the tiers
+	$: seps = [(Y3 + CH + FOOT + Y2) / 2, (Y2 + CH + FOOT + Y1) / 2];
 	$: CW = Math.floor(Math.min((COLW - MID - 2 * SP) / 2, (R * (RB - RT - 3 * FOOT - 2 * GY)) / 3));
 	$: CH = Math.round(CW / R);
 	$: SLACK = Math.max(0, RB - RT - 3 * (CH + FOOT) - 2 * GY) / 3;
@@ -271,7 +276,7 @@
 		return `M${p(deg - 54)} A44 44 0 0 1 ${p(deg + 54)}`;
 	};
 	const ARCS = [arc(210), arc(90), arc(330)];
-	const LVS = ['the start', 'levels 2–4', 'levels 5–7'];
+	const LVS = ['Level 1', 'Levels 2–4', 'Levels 5–7'];
 </script>
 
 <svelte:window bind:innerWidth={vw} bind:innerHeight={vh} on:keydown={onKey} />
@@ -306,13 +311,14 @@
 <div class="dv-scrim" on:click={onClose} on:keydown={() => {}} role="presentation">
 	<div class="dv tide" style="{teamStyle}; width:{DW}px; height:{DH}px; transform: translate(-50%, -50%) scale({scale})" on:click|stopPropagation={bgClick} on:keydown={() => {}} role="dialog" aria-modal="true" aria-label="Deck" tabindex="-1">
 		<div class="tree" style="width:{TW}px; height:{TH}px">
-			<div class="ttl"><b>The Ascension</b><em>{hero?.name ?? H}{hero?.title ? ` ${hero.title}` : ''} · your deck</em></div>
+			<div class="ttl" style="left:{LBL}px; width:{AW}px"><b>{hero?.name ?? H}</b>{#if hero?.title}<em>{hero.title}</em>{/if}</div>
+			{#each seps as y, n (n)}<span class="sep" style="top:{y}px"></span>{/each}
 			<div class="rays">
 				{#each COLS as c, k}<span class="ray t{tiers[k]}" style="--c:{COL[c]}; left:{cx(k)}px; width:{COLW * 1.4}px"></span>{/each}
 			</div>
 			<!-- tier labels -->
 			{#each [2, 1, 0] as r (r)}
-				<div class="tl" style="top:{rowY[r] + CH / 2}px; width:{LBL}px"><b>{ROM[r]}</b><span>Tier {ROM[r]}</span><em>{LVS[r]}</em></div>
+				<div class="tl" style="top:{rowY[r] + CH / 2}px; width:{LBL}px"><span>Tier {ROM[r]}</span><em>{LVS[r]}</em></div>
 			{/each}
 			<svg class="pipes" width={TW} height={TH} aria-hidden="true">
 				{#each COLS as c, k}
@@ -352,6 +358,8 @@
 							{/if}
 						{/each}
 						<img src={ultGear} alt="" />
+						<b class="iv" class:on={cs.ultimate}>IV</b>
+						{#if cs.ultimate}<b class="iv glow" use:glide={FLASH}>IV</b>{/if}
 					</span>
 					<span class="utx">
 						<em>Ultimate · Level 8</em>
@@ -362,13 +370,10 @@
 				</div>
 			{/if}
 
-			<!-- the basics -->
-			<div class="bas" style="left:{LBL}px; width:{AW}px; top:{TH - BAS}px; height:{BAS}px">
-				{#each basics as i (i)}
-					<button class="bth" class:sel={i === sel} style="--c:{COL[cards[i].color]}" on:click={() => pick(i)} on:dblclick={() => onPreview(i)} on:pointerenter={() => over(i)} on:pointerleave={out} title={cards[i].name}><Card heroId={H} card={cards[i]} /></button>
-				{/each}
-				<span class="btx"><em>Basics</em><b>{basics.map((i) => cards[i]?.name).join(' · ')}</b><small>Always in your hand</small></span>
-			</div>
+			<!-- the basics, in the top corners -->
+			{#each basics as i, n (i)}
+				<button class="bth" class:sel={i === sel} class:foc={i === hov} style="--c:{COL[cards[i].color]}; left:{basX[n]}px; top:10px; width:{BCW}px" on:click={() => pick(i)} on:dblclick={() => onPreview(i)} on:pointerenter={() => over(i)} on:pointerleave={out} title={cards[i].name}><Card heroId={H} card={cards[i]} /></button>
+			{/each}
 		</div>
 
 		<!-- the inspector -->
@@ -450,7 +455,7 @@
 
 	/* ───────── the Ascension ───────── */
 	.tree { position: relative; flex: none; }
-	.ttl { position: absolute; left: 4px; top: 2px; display: flex; align-items: baseline; gap: 14px; white-space: nowrap; }
+	.ttl { position: absolute; top: 4px; display: flex; align-items: baseline; justify-content: center; gap: 12px; white-space: nowrap; pointer-events: none; }
 	.ttl b { font-weight: normal; font-size: 30px; line-height: 1; letter-spacing: .04em; color: var(--brass-hi); text-shadow: 0 2px 10px rgba(0, 0, 0, .6); }
 	.ttl em { font-style: normal; font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
 	.rays { position: absolute; inset: 0; overflow: hidden; pointer-events: none; -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 92%, transparent); mask-image: linear-gradient(90deg, transparent, #000 12%, #000 92%, transparent); }
@@ -458,10 +463,10 @@
 		background: radial-gradient(50% var(--h) at 50% 100%, color-mix(in srgb, var(--c) 70%, transparent), color-mix(in srgb, var(--c) 28%, transparent) 45%, transparent 100%); }
 	.ray.t2 { --h: 70%; opacity: .55; }
 	.ray.t3 { --h: 100%; opacity: .7; }
-	.tl { position: absolute; left: 0; transform: translateY(-50%); display: flex; flex-direction: column; gap: 3px; padding-left: 8px; box-sizing: border-box; }
-	.tl b { font-weight: normal; font-size: 34px; line-height: 1; color: var(--ink); }
-	.tl span { font-size: 15px; letter-spacing: .08em; text-transform: uppercase; color: var(--brass-hi); }
-	.tl em { font-style: normal; font-size: 12px; color: var(--ink-3); }
+	.tl { position: absolute; left: 0; transform: translateY(-50%); display: flex; flex-direction: column; gap: 4px; padding-left: 6px; box-sizing: border-box; white-space: nowrap; }
+	.tl span { font-size: 19px; line-height: 1; letter-spacing: .06em; text-transform: uppercase; color: var(--brass-hi); }
+	.tl em { font-style: normal; font-size: 12px; line-height: 1; color: var(--ink-3); }
+	.sep { position: absolute; left: 0; right: 0; height: 1px; pointer-events: none; background: linear-gradient(90deg, rgba(216, 179, 106, .35), rgba(216, 179, 106, .12) 40%, rgba(216, 179, 106, .12) 60%, transparent); }
 	.cl { position: absolute; transform: translateY(-50%); display: flex; flex-direction: column; gap: 4px; white-space: nowrap; }
 	.cl b { font-weight: normal; font-size: 22px; line-height: 1; letter-spacing: .12em; text-transform: uppercase; color: var(--c); text-shadow: 0 0 16px color-mix(in srgb, var(--c) 50%, transparent); }
 	.cl em { font-style: normal; font-size: 13px; color: var(--ink-3); }
@@ -561,6 +566,10 @@
 	.arcl path.glow { stroke-width: 16; opacity: .35; }
 	.arcl path.hot { stroke: #fff; stroke-width: 6; }
 	.arcl.fl { opacity: 0; }
+	.iv { position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%); text-align: center; font-weight: normal; font-size: 24px; line-height: 1; letter-spacing: .04em;
+		color: #e9dcc0; text-shadow: 0 0 3px #000, 0 1px 2px #000; }
+	.iv.on { color: #e9d4ff; text-shadow: 0 0 6px #a56ee6, 0 0 14px rgba(165, 110, 230, .8), 0 1px 2px #000; }
+	.iv.glow { opacity: 0; color: #fff; text-shadow: 0 0 8px #c79bff, 0 0 20px #a56ee6, 0 0 34px rgba(165, 110, 230, .9); }
 	.gear img { position: relative; width: 66px; height: 66px; border-radius: 50%; }
 	.ubox:not(.on):not(.rdy) .gear img { filter: brightness(.75); }
 	.utx { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
@@ -573,15 +582,10 @@
 	.ubox:not(.on):not(.rdy) .uc :global(.cardface) { filter: grayscale(.6) brightness(.55); }
 
 	/* the basics */
-	.bas { position: absolute; box-sizing: border-box; display: flex; align-items: center; gap: 10px; padding: 0 14px; border-radius: 12px; background: rgba(3, 11, 21, .55); border: 1px solid var(--brass-line); }
-	.bth { flex: none; width: 42px; padding: 0; border: 0; background: none; border-radius: 4px; cursor: pointer; position: relative; transition: transform .12s; }
-	.bth:hover { transform: translateY(-2px); }
-	.bth :global(.cardface) { display: block; width: 100%; border-radius: 4px; box-shadow: 0 0 0 1.5px var(--c), 0 3px 8px rgba(0, 0, 0, .6); }
-	.bth.sel::before { content: ''; position: absolute; inset: -4px; border-radius: 7px; border: 2px solid #fff3cf; pointer-events: none; }
-	.btx { display: flex; flex-direction: column; gap: 3px; margin-left: 8px; min-width: 0; }
-	.btx em { font-style: normal; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: var(--brass-hi); }
-	.btx b { font-weight: normal; font-size: 16px; color: var(--ink); white-space: nowrap; }
-	.btx small { font-size: 12px; color: var(--ink-3); }
+	.bth { position: absolute; z-index: 2; padding: 0; border: 0; background: none; border-radius: 6px; cursor: pointer; transition: transform .14s ease-out; }
+	.bth:hover, .bth.foc { transform: translateY(-3px); }
+	.bth :global(.cardface) { display: block; width: 100%; border-radius: 6px; box-shadow: 0 0 0 2px var(--c), 0 0 16px color-mix(in srgb, var(--c) 45%, transparent), 0 6px 14px rgba(0, 0, 0, .6); }
+	.bth.sel::before { content: ''; position: absolute; inset: -6px; border-radius: 10px; border: 2px solid #fff3cf; box-shadow: 0 0 16px rgba(244, 223, 168, .7); pointer-events: none; }
 
 	/* ───────── inspector ───────── */
 	.ins { flex: none; min-height: 0; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px; padding: 12px 13px;
