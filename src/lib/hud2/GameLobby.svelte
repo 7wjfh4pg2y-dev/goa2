@@ -23,12 +23,17 @@
 	export let onResolve: (id: string, ok: boolean) => void = () => {};
 	export let onLeave: () => void = () => {};
 	export let onClose: () => void = () => {};
+	/** the phone's ☰: the whole screen, with the log (newest first) and the host's Undo */
+	export let phone = false;
+	export let log: { id: string; by: string; text: string }[] = [];
+	export let canUndo = false;
+	export let onUndo: () => void = () => {};
 
 	$: teams = [['blue', 'Titans'], ['orange', 'Atlanteans']].map(([t, label]) => ({ t, label, rows: seats.filter((s) => s.team === t) }));
 </script>
 
 <svelte:window on:keydown={(e) => e.key === 'Escape' && onClose()} />
-<div class="scrim" role="presentation" on:pointerdown|self={onClose}>
+<div class="scrim" class:phone role="presentation" on:pointerdown|self={onClose}>
 	<div class="glob" role="dialog" aria-modal="true" aria-label="Game lobby">
 		<div class="ghead"><b>Game lobby</b><span class="groom">Room <em>{room}</em></span><span class="gconn {connClass}"><i></i>{conn}</span><button class="gx" on:click={onClose} aria-label="Close">✕</button></div>
 		<div class="gteams">
@@ -61,6 +66,12 @@
 						{:else if host && w.id !== clientId}<button class="gkick" on:click={() => onKick(w.id)}>Remove</button>{/if}
 					</span>
 				{/each}
+			</div>
+		{/if}
+		{#if phone}
+			<div class="glog">
+				<div class="glh"><small>Log</small>{#if host}<button class="gundo" disabled={!canUndo} on:click={onUndo}>↶ Undo</button>{/if}</div>
+				<div class="gll">{#each [...log].reverse().slice(0, 40) as e (e.id)}<p><b>{e.by}</b> {e.text}</p>{:else}<p class="none">No moves yet</p>{/each}</div>
 			</div>
 		{/if}
 		<button class="gleave" on:click={onLeave}>Leave the game</button>
@@ -97,5 +108,18 @@
 	.gok:disabled { opacity: 0.4; cursor: default; }
 	.greq { font-size: 11px; color: #8a9fb3; }
 	.gspec { display: flex; flex-direction: column; gap: 8px; }
+	/* phone: the whole screen */
+	.scrim.phone { place-items: stretch; }
+	.phone .glob { zoom: 1; width: auto; max-height: none; height: 100dvh; border-radius: 0; padding: 0 14px calc(14px + env(safe-area-inset-bottom)); box-sizing: border-box; }
+	.phone .ghead { flex-wrap: wrap; row-gap: 4px; }
+	.phone .gteams { grid-template-columns: 1fr; gap: 8px; }
+	.glog { flex: 1; min-height: 120px; display: flex; flex-direction: column; gap: 6px; }
+	.glh { display: flex; align-items: center; justify-content: space-between; }
+	.gundo { height: 28px; padding: 0 12px; border-radius: 999px; font-size: 12px; color: #1b1204; background: linear-gradient(180deg, var(--brass-hi), var(--brass)); border: 0; cursor: pointer; }
+	.gundo:disabled { opacity: 0.4; cursor: default; }
+	.gll { flex: 1; min-height: 0; overflow-y: auto; padding: 8px 10px; border-radius: 10px; background: rgba(0, 0, 0, 0.3); border: 1px solid var(--line); }
+	.gll p { margin: 0 0 6px; font-size: 13px; line-height: 1.3; color: #d6dee8; }
+	.gll p b { font-weight: 400; color: #f4dfa8; }
+	.gll .none { color: #8a9fb3; }
 	.gleave { align-self: stretch; height: 38px; border-radius: 12px; font-size: 14px; color: #fff; background: linear-gradient(180deg, #c2412f, #8f2a1c); border: 0; cursor: pointer; }
 </style>

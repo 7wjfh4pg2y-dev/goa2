@@ -10,6 +10,7 @@
 	import ControlWheel, { type WheelItem } from '$lib/ControlWheel.svelte';
 	import { boardPrefs } from '$lib/boardPrefs';
 	import HudTop from '$lib/hud2/HudTop.svelte';
+	import PhoneTop from '$lib/hud2/PhoneTop.svelte';
 	import AttackSplash from '$lib/hud2/AttackSplash.svelte';
 	import GameLobby from '$lib/hud2/GameLobby.svelte';
 	import { LANE } from '$lib/battle';
@@ -165,6 +166,8 @@
 	$: boardLook = $boardPrefs.look;
 	// the 2.0 HUD (each player's own choice; phones keep their own layout)
 	$: hud2 = !mobile && $boardPrefs.hud === '2.0';
+	// the 2.0 phone (segment 9): PhoneTop + beam, the restyled strip, PhoneDash, PhoneBoard, ☰ = the lobby with the log
+	$: phone2 = mobile && $boardPrefs.hud === '2.0';
 	let lobbyOpen = false;
 	$: zoneNow = battleZone($ms);
 	// how many minions each team's wave started with in the battle zone (its spawn points there)
@@ -252,7 +255,7 @@
 			{ id: 'sea', label: 'Waves', icon: ICON.waves, on: onIsland && $boardPrefs.sea, disabled: !onIsland,
 				title: onIsland ? `Moving sea: ${$boardPrefs.sea ? 'on' : 'off'}` : 'The sea is drawn on the island only', act: () => boardPrefs.set({ sea: !$boardPrefs.sea }) },
 			{ id: 'wisps', label: 'Wisps', icon: ICON.wisps, on: $boardPrefs.wisps, title: `The spirit swirl on spaces to act on: ${$boardPrefs.wisps ? 'on' : 'off'}`, act: () => boardPrefs.set({ wisps: !$boardPrefs.wisps }) },
-			...(hud2 ? [{ id: 'beam', label: 'Beam', icon: ICON.beam, on: $boardPrefs.beam, title: `The beam's spark and pulses: ${$boardPrefs.beam ? 'on' : 'off'}`, act: () => boardPrefs.set({ beam: !$boardPrefs.beam }) }] : [])
+			...(hud2 || phone2 ? [{ id: 'beam', label: 'Beam', icon: ICON.beam, on: $boardPrefs.beam, title: `The beam's spark and pulses: ${$boardPrefs.beam ? 'on' : 'off'}`, act: () => boardPrefs.set({ beam: !$boardPrefs.beam }) }] : [])
 		] },
 		{ id: 'zoom', label: 'Zoom', icon: ICON.zoom, title: 'Zoom in / out', act: () => {}, sub: [
 			{ id: 'zout', label: 'Out', icon: ICON.zout, act: () => board?.zoomBtn(1 / 1.2) },
@@ -268,7 +271,7 @@
 		{ id: 'version', label: 'Version', icon: ICON.version, title: 'Map and HUD — only on your screen', act: () => {}, sub: [
 			{ id: 'look', label: onIsland ? 'Island' : 'Classic', icon: onIsland ? ICON.island : ICON.classic, on: onIsland,
 				title: `Map: ${onIsland ? 'the island' : 'classic tiles'} (only on your screen)`, act: () => boardPrefs.set({ look: onIsland ? 'classic' : 'island' }) },
-			...(!mobile ? [{ id: 'hudv', label: hud2 ? 'HUD 2.0' : 'HUD 1.0', icon: ICON.hud, on: hud2, title: `HUD: ${hud2 ? '2.0' : 'classic'} (only on your screen)`, act: () => boardPrefs.set({ hud: hud2 ? 'classic' : '2.0' }) }] : [])
+			{ id: 'hudv', label: hud2 || phone2 ? 'HUD 2.0' : 'HUD 1.0', icon: ICON.hud, on: hud2 || phone2, title: `HUD: ${hud2 || phone2 ? '2.0' : 'classic'} (only on your screen)`, act: () => boardPrefs.set({ hud: hud2 || phone2 ? 'classic' : '2.0' }) }
 		] },
 		{ id: 'spawn', label: 'Spawn', icon: ICON.spawn, disabled: !iAmHost, title: iAmHost ? 'Spawn a minion — then tap a hex' : 'Spawn a minion (the host)', act: () => {},
 			sub: (['orange', 'blue'] as Team[]).flatMap((t) => MINION_ROLES.map((r) => ({ id: `sp-${t}-${r}`, label: ROLE_NAME[r] ?? r, labelColor: TEAM_LBL[t], raw: true, icon: minionIcon(t, r),
@@ -724,7 +727,7 @@
 
 <svelte:window on:keydown={(e) => { if (e.key !== 'Escape') return; if (wheelOpen) wheelOpen = false; else if (lobbyOpen) lobbyOpen = false; else if (confirmLeave) confirmLeave = false; else { pendingSpawn = null; pendingToken = null; pingArmed = false; if (clearing) cancelClear(); } }} bind:innerWidth={gvw} bind:innerHeight={gvh} />
 
-<div class="gamewrap" class:sea={boardLook === 'island'} class:mob={mobile} class:h2={hud2} class:dashfull={!mobile && !hud2 && lay.underHud} style={mobile ? '' : layoutVars(lay) + (hud2 ? `; --dh:${88 * lay.s}px` : '')}>
+<div class="gamewrap" class:sea={boardLook === 'island'} class:mob={mobile} class:p2={phone2} class:h2={hud2} class:dashfull={!mobile && !hud2 && lay.underHud} style={mobile ? '' : layoutVars(lay) + (hud2 ? `; --dh:${88 * lay.s}px` : '')}>
 	{#if $ms.wonBy}
 		<button class="placehint won" on:click={() => (victoryClosed = false)} title="Show the victory screen again">🏆 {teamName($ms.wonBy.team)} win — {$ms.wonBy.reason}</button>
 	{:else if clearing}
@@ -821,11 +824,11 @@
 	<DefeatSplash news={$ms.lastDefeat ?? null} pieces={$ms.pieces} cards={$ms.cards ?? {}} defeated={$ms.defeated ?? {}} names={(id) => playerName(id)} {lifeArt} {mobile} myTeam={viewTeam} />
 	<div class="ocean"></div>
 	<!-- on a phone the board sits between the top bar + player strip and the dash -->
-	<div class="boardarea" class:mob={mobile}>
+	<div class="boardarea" class:mob={mobile} class:p2={phone2}>
 	<BoardCanvas bind:this={board} map={$ms.map ?? {}} inset={boardInset} look={boardLook} {glowZone} activeZone={$ms.wonBy ? null : battleZone($ms)} effects={!deckCovered} sea={$boardPrefs.sea} rims={$boardPrefs.rims} rotation={orientation} interactive={true} {placing} {placeGhost} holdColor={myHoldColor} onCancelPlace={cancelPlace} {areas} marks={boardMarks} wisps={$boardPrefs.wisps} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} pings={boardPings} onPing={doPing} {pingArmed} />
 	</div>
 
-	<CardLayer bind:this={cardLayer} {mobile} {hud2} compact={$boardPrefs.compact} {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} bind:covered={deckCovered} onRespawn={placeMyHero} onEnter={placeMyHero} onArmToken={armToken} holdingToken={!!pendingToken} {pingArmed} onPing={pingButton} bind:previewId />
+	<CardLayer bind:this={cardLayer} {mobile} {hud2} {phone2} compact={$boardPrefs.compact} {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} bind:covered={deckCovered} onRespawn={placeMyHero} onEnter={placeMyHero} onArmToken={armToken} holdingToken={!!pendingToken} {pingArmed} onPing={pingButton} bind:previewId />
 
 	<!-- selected minion/token: offer delete (heroes aren't deletable) -->
 	{#if hud2}
@@ -1048,8 +1051,20 @@
 		</div>
 	{/if}
 
+	{#if phone2}
+		<PhoneTop round={$ms.round} turn={$ms.turn} tieBreaker={$ms.tieBreaker} {tieArt} {tieFlip} waves={$ms.waves} {waveIcon} life={$ms.life} {lifeSplit}
+			left={viewTeam === 'orange' ? 'blue' : 'orange'} coins={myCoins} conn={$status} badge={iAmHost ? seatRequests.length : 0}
+			zone={$ms.lane ?? 1} zones={LANE.length} counts={zoneCount} starts={waveStarts} won={beamWon} fx={$boardPrefs.beam}
+			onMenu={() => (lobbyOpen = true)} onWheel={() => (wheelOpen = true)} onTie={flipTie} onSheet={() => (lwOpen = true)} onCoins={coins} />
+		{#if lobbyOpen}
+			<GameLobby phone {room} conn={connLabel($status)} connClass={$status} seats={seatRows} watchers={spectators} requests={seatRequests} host={iAmHost} {clientId} {mySeat} myRequest={myRequestSeat}
+				colorOf={(id) => colorHex($players.find((p) => p.id === id)?.color ?? '')} {log} canUndo={$canUndo} onUndo={() => session.undo()}
+				onKick={kickSeat} onSit={requestSeat} onResolve={resolveSeat} onLeave={() => { lobbyOpen = false; confirmLeave = true; }} onClose={() => (lobbyOpen = false)} />
+		{/if}
+	{/if}
 	{#if mobile}
 		<!-- ───────── phone top bar: ☰ · round/turn · tie-breaker · waves · life · gold ───────── -->
+		{#if !phone2}
 		<div class="mtop">
 			<button class="mib" on:click={() => (menuOpen = true)} aria-label="Menu">☰</button>
 			<span class="mpill rt"><b>R{$ms.round}</b>·<b>T{$ms.turn}</b></span>
@@ -1071,6 +1086,7 @@
 				</span>
 			{/if}
 		</div>
+		{/if}
 
 		<!-- ☰ menu: spawn, effects, activity, view, lobby / leave -->
 		{#if menuOpen}
@@ -1568,6 +1584,13 @@
 	.gamewrap.h2 .atkask { top: calc(226px * var(--uis, 1)); }
 	.boardarea { position: absolute; inset: 0; }
 	.boardarea.mob { top: 116px; bottom: 106px; }
+	.boardarea.mob.p2 { top: 124px; bottom: 100px; }
+	.gamewrap.mob.p2 .atkask { top: 132px; }
+	.gamewrap.mob.p2 .akband { gap: 8px; padding: 6px 20px; }
+	.gamewrap.mob.p2 .akface { width: 34px; height: 34px; }
+	.gamewrap.mob.p2 .akwho b { font-size: 16px; }
+	.gamewrap.mob.p2 .aktitle { letter-spacing: 0.2em; white-space: nowrap; }
+	.gamewrap.mob.p2 .akhint { font-size: 9px; letter-spacing: 0.06em; white-space: nowrap; }
 	.gamewrap.mob .pietool, .gamewrap.mob .placehint { top: 124px; max-width: 94vw; }
 	.gamewrap.mob .pietool { top: 172px; }
 	.gamewrap.mob .battlebox { top: 118px; min-width: 0; width: 94vw; padding: 8px 10px; } .gamewrap.mob .bbmain { font-size: 1rem; }

@@ -28,6 +28,8 @@
 	import LevelSplash from '$lib/LevelSplash.svelte';
 	import HudBoard from '$lib/hud2/HudBoard.svelte';
 	import HudOrder, { type OrderEntry } from '$lib/hud2/HudOrder.svelte';
+	import PhoneDash from '$lib/hud2/PhoneDash.svelte';
+	import PhoneBoard from '$lib/hud2/PhoneBoard.svelte';
 	import HudDash, { type Order } from '$lib/hud2/HudDash.svelte';
 	import Chronicle, { type FxGroup } from '$lib/hud2/Chronicle.svelte';
 	import { portraitCss } from '$lib/heroes';
@@ -47,6 +49,8 @@
 	export let pingArmed = false; // the next board tap pings
 	export let onPing: () => void = () => {}; // arm a ping (pressed again: ping your own hero)
 	export let mobile = false; // phone layout (set by GameView at ≤760px wide): strip + compact dash
+	/** the 2.0 phone (segment 9): the restyled player strip with level pips, PhoneDash, PhoneBoard; arm-then-confirm like hud2 */
+	export let phone2 = false;
 	export let hud2 = false; // the 2.0 HUD (desktop / tablet): side boards, the Chronicle, the order row, the new dash
 	export let compact = false; // 2.0: the side boards shrink to nameplates
 
@@ -831,8 +835,8 @@
 {#if $ms.cards}
 	<!-- ───────── phone: the other players, a sideways-scrolling strip ───────── -->
 	{#if mobile}
-		<div class="mstrip">
-			{#each others as p (p.id)}
+		<div class="mstrip" class:p2={phone2}>
+			{#each phone2 ? [...h2enemies, ...h2allies] : others as p (p.id)}
 				{@const cs = viewCards[p.id]}
 				{#if cs}
 					{@const ini = initOf(cs, revealed)}
@@ -840,7 +844,7 @@
 					<div class="mpc" class:fxon={effects.some((e) => e.pid === p.id)} style="{teamVars(pTeam(p))} --fxc:{colorOf(p.id)}" role="button" tabindex="0" on:click={() => (overlayId = p.id)} on:keydown={(e) => e.key === 'Enter' && (overlayId = p.id)}>
 						<span class="mpic"><PlayerIcon hero={cs.hero} team={pTeam(p)} color={colorHex(p.color)} size="28px" ring={2} ult={cs.ultimate} /></span>
 						<span class="mpn"><b>{p.name}</b><small>{heroName(cs.hero)}</small></span>
-						<span class="mlv"><em>Lv {levelOf(cs)}</em><i class="mini" class:off={ini == null}>{@html CLOCK}<b>{ini ?? '–'}</b></i></span>
+						<span class="mlv">{#if phone2}<span class="lpips" title="Level {levelOf(cs)}">{#each Array(8) as _, i (i)}<i class:on={i < levelOf(cs) || (i === 7 && cs.ultimate)} class:ult={i === 7}></i>{/each}</span>{:else}<em>Lv {levelOf(cs)}</em>{/if}<i class="mini" class:off={ini == null}>{@html CLOCK}<b>{ini ?? '–'}</b></i></span>
 						<span class="mcard fxwrap" class:fx={!!cfx} style="--fxc:{colorOf(p.id)}"><TurnSlot heroId={cs.hero} played={cs.turns[turnIdx]} pending={cs.pending} isCurrent {revealed} peekable={p.id === clientId} examinable on:click={(e) => peekSlot(e, cs, turnIdx)} /></span>
 						<span class="msx">{#each allStats(cs) as r}<span class:up={r.delta > 0}>{#if r.delta > 0}<span class="pp">{#each Array(r.delta) as _}<i></i>{/each}</span>{/if}<img src={statImg(r.key)} alt={r.label} /></span>{/each}</span>
 					</div>
@@ -951,7 +955,13 @@
 	{/if}
 
 	<!-- ───────── overlay: a player's whole board ───────── -->
-	{#if overlayId && ovPlayer && viewCards[overlayId]}
+	{#if phone2 && overlayId && ovPlayer && viewCards[overlayId]}
+		{@const pcs = viewCards[overlayId]}
+		{@const pid = ovPlayer.id}
+		<PhoneBoard cs={pcs} name={ovPlayer.name} color={colorHex(ovPlayer.color)} team={pTeam(ovPlayer)} {turnIdx} {revealed} status={statusMap[pid] ?? EMPTY_STATUS} {markArt}
+			fxAt={(t) => !!fxFor(pid, slotIdx(pcs, t))} onStatus={(k) => toggleStatus(pid, k)} onSlot={(e, t) => peekSlot(e, pcs, t)}
+			onRead={(list, at) => (examine = { hid: pcs.hero, idx: list[at], pid, list: list.map((i) => ({ hid: pcs.hero, idx: i, pid })) })} onClose={() => (overlayId = null)} />
+	{:else if overlayId && ovPlayer && viewCards[overlayId]}
 		{@const cs = viewCards[overlayId]}
 		{@const oh = cs.hero}
 		{@const od = heroCards(oh)}
@@ -1290,9 +1300,9 @@
 				<button class="act tohand" style={teamVars(myTeam)} on:click={() => pullBack(selected!)}>Recover to hand</button>
 			{:else}
 				<!-- 2.0 HUD: the choice goes to the action ring, which asks to confirm; classic: straight away -->
-				{#if canCommit}<button class="act tohand" style={teamVars(myTeam)} on:click={() => (hud2 ? armFor('commit', selected!) : commit(selected!))}>Commit{hud2 ? '' : ` · Turn ${$ms.turn}`}</button>{/if}
+				{#if canCommit}<button class="act tohand" style={teamVars(myTeam)} on:click={() => (hud2 || phone2 ? armFor('commit', selected!) : commit(selected!))}>Commit{hud2 || phone2 ? '' : ` · Turn ${$ms.turn}`}</button>{/if}
 				<!-- discard any time, as often as effects demand -->
-				{#if mine?.hand.includes(selected!)}<button class="act discard" on:click={() => (hud2 ? armFor('discard', selected!) : defend(selected!))}>Discard</button>{/if}
+				{#if mine?.hand.includes(selected!)}<button class="act discard" on:click={() => (hud2 || phone2 ? armFor('discard', selected!) : defend(selected!))}>Discard</button>{/if}
 			{/if}
 			<button class="act" on:click={closePreview}>Close</button>
 		</div>
@@ -1303,7 +1313,7 @@
 		<!-- ───────── phone: hand tips above a compact dash ───────── -->
 		{#if bannerHand}
 			<!-- hand as banners (+ the ultimate and its level bar); hidden = tucked to the right edge, markers showing -->
-			<div class="bstack">
+			<div class="bstack" class:p2={phone2}>
 				{#each handOrdered as idx (idx)}
 					<div class="bwrap" class:tucked={autoRetract && bannerOpen !== idx}>
 						<CardBanner heroId={mine.hero} {idx} sel={selected === idx} on:click={() => bannerTap(idx, () => preview(idx))} />
@@ -1318,15 +1328,22 @@
 				{/if}
 			</div>
 		{:else}
-			<div class="tray mob" class:retracted class:spread={spreadHand}>
+			<div class="tray mob" class:p2={phone2} class:retracted class:spread={spreadHand}>
 				{#each handOrdered as idx, k (idx)}
 					{@const f = fan(k, handOrdered.length)}
-					<button class="hc" style="--rot:{spreadHand ? 0 : f.rot}deg; --y:{spreadHand ? 0 : f.y}px" on:click={() => handCardClick(idx)}>
+					<button class="hc" class:armed={phone2 && armed === idx} style="--rot:{spreadHand ? 0 : f.rot}deg; --y:{spreadHand ? 0 : f.y}px" on:click={() => (phone2 ? handCardClick2(idx) : handCardClick(idx))}>
 						<Card heroId={mine.hero} card={heroCards(mine.hero)[idx]} />
 					</button>
 				{/each}
 			</div>
 		{/if}
+		{#if phone2}
+			<PhoneDash cs={mine} color={colorHex(myColor)} team={myTeam === 'blue' ? 'blue' : 'orange'} {turnIdx} {revealed} ini={myInit} fxAt={(t) => !!fxFor(clientId, slotIdx(mine, t))}
+				deckCount={deckCards(mine).length} levelUp={iMustLevel} ultIdx={myUlt} {ultReady} order={order2} {ringColor} autoHide={autoRetract}
+				handStyle={bannerHand ? 'banners' : spreadHand ? 'spread' : 'fan'} {pingArmed} radius={radiusCtl} tokens={tokenCtl}
+				onMe={() => (overlayId = clientId)} onSlot={(e, t) => peekSlot(e, mine, t)} onDiscPick={(i) => openDiscard(mine.hero, i, true)}
+				onDeck={() => (deckOpen = true)} {onUlt} {onPing} onAutoHide={toggleRetract} onStyle={cycleHandStyle} />
+		{:else}
 		<div class="mdash" class:ultdash={mine.ultimate} style={teamVars(myTeam)}>
 			<div class="mdl">
 				<div class="mdtop">
@@ -1391,6 +1408,7 @@
 				<button class="mb undo" disabled={!iAmHost || !$canUndoS} on:click={() => session.undo()} title={iAmHost ? 'Undo the last move this turn' : 'Only the host can undo'} aria-label="Undo">↶</button>
 			</div>
 		</div>
+		{/if}
 	{:else if mine && hud2}
 		{#if !dockHand}
 			<div class="tray h2" class:retracted class:spread={spreadHand}>
@@ -2208,6 +2226,18 @@
 	.mstrip { position: absolute; top: 44px; left: 0; right: 0; height: 72px; z-index: 12; display: flex; gap: 6px; padding: 5px 8px;
 		overflow-x: auto; overflow-y: hidden; scrollbar-width: none; background: rgba(9,13,22,.9); border-bottom: 1px solid rgba(255,255,255,.08); }
 	.mstrip::-webkit-scrollbar { display: none; }
+	/* the 2.0 phone (segment 9): the strip sits under the top bar's beam (44 + 10), on the Tide's navy with brass lines;
+	   the hand rises from the 100 px bar */
+	.mstrip.p2 { top: 54px; height: 70px; background: linear-gradient(180deg, rgba(10, 30, 52, 0.96), rgba(6, 21, 38, 0.94)); border-bottom: 1px solid rgba(216, 179, 106, 0.35); }
+	.mstrip.p2 .mpc { background: linear-gradient(180deg, rgb(var(--tcr) / .14), rgba(6, 21, 38, .6)); border: 1px solid rgba(216, 179, 106, .3); box-shadow: inset 0 2px 0 var(--tc); }
+	.mstrip.p2 .mpn b { color: #fff; }
+	.mstrip.p2 .mpn small { color: rgb(var(--tcl)); }
+	.lpips { display: grid; grid-template-columns: repeat(4, 6px); gap: 2px; }
+	.lpips i { height: 4px; border-radius: 1px; background: rgba(255, 255, 255, .16); transform: skewX(-18deg); }
+	.lpips i.on { background: #d8b36a; }
+	.lpips i.ult { background: rgba(138, 79, 209, .45); } .lpips i.ult.on { background: #a46be8; }
+	.tray.mob.p2 { bottom: 100px; }
+	.bstack.p2 { bottom: 108px; }
 	.mpc { flex: none; width: 170px; height: 62px; display: grid; grid-template-columns: 30px 1fr 32px 40px; grid-template-rows: 32px 1fr; column-gap: 4px; row-gap: 2px;
 		padding: 3px 5px 3px 7px; border-radius: 10px; cursor: pointer; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.1); box-shadow: inset 3px 0 0 var(--tc); }
 	.mpic { grid-column: 1; grid-row: 1; align-self: center; display: grid; }
