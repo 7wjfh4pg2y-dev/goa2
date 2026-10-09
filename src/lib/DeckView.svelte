@@ -439,7 +439,7 @@
 				{/if}
 			</div>
 
-			<div class="gau" aria-label="Your items"><StatBubbles {cs} size={44} pill /></div>
+			<div class="gau" aria-label="Your items"><StatBubbles {cs} size={44} /></div>
 
 			<div class="iact">
 				{#if sel != null && moves(sel).length}

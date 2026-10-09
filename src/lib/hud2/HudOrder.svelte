@@ -57,9 +57,8 @@
 	{:else}
 		<b class="ct">Initiative</b>
 		{#each order as e, k (e.pid)}
-			{#if k}{#if e.tied}<span class="ctie" title="A tie — the coin's holders go first">{#if tieArt}<img src={tieArt} alt="" />{/if}Tie</span>{:else}<i class="cchev">›</i>{/if}{/if}
+			{#if k}{#if e.tied && tieArt}<img class="ctie" src={tieArt} alt="Tie" title="A tie — the coin's holders went first" />{:else}<i class="cchev">›</i>{/if}{/if}
 			<button class="ce is-{e.team}" class:done={k < acting} class:now={k === acting} on:click={() => click(k, e)} title={canPoint && k !== acting ? 'Make this card the one acting' : 'Read the card'}>
-				<span class="cn">{k < acting ? '✓' : k + 1}</span>
 				<span class="cfc" style="--pc:{e.color}; {e.portrait}"></span>
 				<span class="ch">{e.heroName}</span><b class="ci">{e.ini}</b>{#if e.pid === me}<em class="cyou">you</em>{/if}
 			</button>
@@ -141,16 +140,13 @@
 	.cf i { position: absolute; right: -5px; bottom: -4px; min-width: 11px; height: 11px; border-radius: 6px; display: grid; place-items: center; font-style: normal; font-size: 7px; line-height: 1; color: #fff; background: #3b4656; box-shadow: 0 0 0 1px #0a1a2c; }
 	.cf.ok i { background: #16a34a; }
 	.ccount { font-style: normal; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: #bccbd9; }
-	.ce { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px 0 3px; border-radius: 999px; border: 1px solid transparent; background: none; font: inherit; color: inherit; cursor: pointer; }
+	.ce { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px 0 4px; border-radius: 999px; border: 1px solid transparent; background: none; font: inherit; color: inherit; cursor: pointer; }
 	.ce.done { opacity: 0.55; }
 	.ce.now { border-color: var(--brass-hi); background: rgba(244, 223, 168, 0.12); box-shadow: 0 0 8px rgba(244, 223, 168, 0.35); }
-	.cn { width: 17px; height: 17px; border-radius: 50%; display: grid; place-items: center; font-size: 10px; line-height: 1; color: #1b1204; background: linear-gradient(180deg, var(--brass-hi), var(--brass)); }
-	.ce.done .cn { color: #fff; background: #16a34a; }
 	.cfc { width: 18px; height: 18px; border-radius: 50%; background-repeat: no-repeat; background-color: #0b101a; box-shadow: 0 0 0 1.5px var(--tc), 0 0 0 2.5px var(--pc); }
 	.ch { font-size: 12px; color: #fff; }
 	.ci { font-weight: 400; font-size: 13px; color: var(--th); }
 	.cyou { font-style: normal; font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--brass-hi); }
 	.cchev { font-style: normal; color: var(--brass); font-size: 15px; }
-	.ctie { display: inline-flex; align-items: center; gap: 3px; padding: 1px 6px 1px 2px; border-radius: 999px; font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: #1b1204; background: linear-gradient(180deg, var(--brass-hi), var(--brass)); }
-	.ctie img { width: 14px; height: 14px; border-radius: 50%; }
+	.ctie { width: 18px; height: 18px; border-radius: 50%; box-shadow: 0 0 0 1.5px var(--brass), 0 0 6px rgba(244, 223, 168, 0.5); }
 </style>

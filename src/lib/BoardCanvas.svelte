@@ -72,6 +72,8 @@
 	 *  to — is fitted into what is left, while the sea still fills the whole box. null = fit the whole box. */
 	/** small floating shields over pieces (the minion modifiers on a defence while an attack is on): ±1 over each
 	 *  minion that counts, the total over the defender; upright whatever the board's turn, above the pieces */
+	/** a two-finger pinch never zooms (the phone's zoom lock — the wheel's buttons still do) */
+	export let zoomLock = false;
 	export let badges: Array<{ id: string; text: string; tone: 'up' | 'down' | 'even'; total?: boolean }> = [];
 	export let inset: { t: number; b: number; l?: number; r?: number } | null = null;
 
@@ -470,7 +472,7 @@
 		// pinch: zoom around the midpoint of the two fingers
 		if (pinch && activePointers.size >= 2) {
 			const [a, b] = [...activePointers.values()];
-			zoomAt(pinch.scale0 * (twoDist(a, b) / pinch.dist), (a.x + b.x) / 2, (a.y + b.y) / 2);
+			if (!zoomLock) zoomAt(pinch.scale0 * (twoDist(a, b) / pinch.dist), (a.x + b.x) / 2, (a.y + b.y) / 2);
 			return;
 		}
 		if (dragId || carryId || placing) trackHover(e.clientX, e.clientY);

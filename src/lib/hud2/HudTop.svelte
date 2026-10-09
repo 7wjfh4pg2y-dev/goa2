@@ -40,16 +40,24 @@
 	const TEAMNAME: Record<Team, string> = { orange: 'Atlanteans', blue: 'Titans' };
 
 	// geometry (design px)
-	const SIDE = 150, BH = 56, COIN = 74, MID = COIN + 26;
-	$: BW = Math.max(1100, W - 176);
+	// compact: the same bar, smaller — Round left, the coin in the middle, the waves right, each team's Life as a
+	// number with − / + (no tokens), and the same beam under it
+	$: SIDE = compact ? 96 : 150;
+	$: BH = compact ? 40 : 56;
+	$: COIN = compact ? 50 : 74;
+	$: MID = COIN + (compact ? 18 : 26);
+	$: BW = compact ? cw : Math.max(1100, W - 176);
 	$: LIFEW = (BW - SIDE * 2 - MID) / 2;
 	$: CX = SIDE + LIFEW + MID / 2;
-	const CY = BH / 2, BR = COIN / 2 + 7, BY = BH + 5;
+	$: CY = BH / 2;
+	$: BR = COIN / 2 + (compact ? 5 : 7);
+	$: BY = BH + (compact ? 4 : 5);
 	$: BX0 = SIDE;
 	$: BX1 = SIDE + LIFEW * 2 + MID;
-	const th1 = Math.acos((BY - CY) / BR) * 0.62;
-	const ex = BR * Math.sin(th1), ey = CY + BR * Math.cos(th1);
-	const fc = ex + ((ey - BY) / Math.sin(th1)) * Math.cos(th1);
+	$: th1 = Math.acos((BY - CY) / BR) * 0.62;
+	$: ex = BR * Math.sin(th1);
+	$: ey = CY + BR * Math.cos(th1);
+	$: fc = ex + ((ey - BY) / Math.sin(th1)) * Math.cos(th1);
 	$: beamD = `M ${BX0} ${BY} L ${CX - fc - 14} ${BY} Q ${CX - fc} ${BY} ${CX - ex} ${ey} A ${BR} ${BR} 0 0 0 ${CX + ex} ${ey} Q ${CX + fc} ${BY} ${CX + fc + 14} ${BY} L ${BX1} ${BY}`;
 	// a token size that fits however many Life tokens the game started with
 	$: nLife = Math.max(lifeTok.orange.length, lifeTok.blue.length, 1);
@@ -88,16 +96,17 @@
 	$: cB = left === 'blue' ? '#ef7d22' : '#2f7fe6';
 	$: hA = left === 'blue' ? '#5aa8ff' : '#ff9a3c';
 	$: hB = left === 'blue' ? '#ff9a3c' : '#5aa8ff';
-	// the compact bar
-	$: laneOrder = left === 'orange' ? Array.from({ length: zones }, (_, i) => i) : Array.from({ length: zones }, (_, i) => zones - 1 - i);
-	$: zoneName = zones === 3 ? (zone === 1 ? 'Centre' : 'Beach') : `Zone ${zone + 1}`; // the hexes beside it say whose beach
-	$: laneTeam = (z: number) => (zones === 3 ? (z === 0 ? 'orange' : z === 2 ? 'blue' : 'mid') : 'mid');
-	$: cBlock = Math.max(100, (cw - 200 - 46) / 2);
-	$: cTk = Math.max(9, Math.min(15, (cBlock - 44) / Math.max(1, nLife) - 2));
-	const ROM = ['I', 'II', 'III', 'IV'];
+	// compact Life: − / + flip the last full token / the first spent one
+	const lifeMinus = (t: Team) => { const i = lifeTok[t].lastIndexOf(true); if (i >= 0) onLife(t, i); };
+	const lifePlus = (t: Team) => { const i = lifeTok[t].indexOf(false); if (i >= 0) onLife(t, i); };
 </script>
 
 {#snippet lifebox(t: Team)}
+	{#if compact}
+	<div class="hs life is-{t}" class:near={t === leftTeam} title="{TEAMNAME[t]} Life">
+		<span class="lc"><button class="lpm" on:click={() => lifeMinus(t)} aria-label="Remove a {TEAMNAME[t]} Life token">−</button><b class:flip={Object.keys(flips).some((k) => k.startsWith(`l${t}`) && flips[k])}>{lifeTok[t].filter(Boolean).length}</b><button class="lpm" on:click={() => lifePlus(t)} aria-label="Add a {TEAMNAME[t]} Life token">+</button></span>
+	</div>
+	{:else}
 	<div class="hs life is-{t}" title={TEAMNAME[t]}>
 		{#each lifeTok[t] as full, i (i)}
 			<button class="ltok" class:dep={!full} class:flip={flips[`l${t}${i}`]} on:click={() => onLife(t, i)} aria-label="{TEAMNAME[t]} Life token" style="--tk:{TK}px">
@@ -105,6 +114,7 @@
 			</button>
 		{/each}
 	</div>
+	{/if}
 {/snippet}
 
 <svg class="symdefs" width="0" height="0" aria-hidden="true"><defs>
@@ -117,32 +127,7 @@
 			</symbol>
 </defs></svg>
 
-{#snippet cteam(t: Team, r: boolean)}
-	<div class="cteam is-{t}" class:r>
-		<span class="ctn">{TEAMNAME[t]}</span>
-		<span class="ctrow">
-			<b class="ctc">{lifeTok[t].filter(Boolean).length}</b>
-			<span class="cltoks">{#each lifeTok[t] as full, i (i)}<button class="ltok" class:dep={!full} class:flip={flips[`l${t}${i}`]} on:click={() => onLife(t, i)} aria-label="{TEAMNAME[t]} Life token" style="--tk:{cTk.toFixed(1)}px"><img src={lifeArt(t, full ? 'front' : 'back')} alt="" /></button>{/each}</span>
-		</span>
-	</div>
-{/snippet}
-
-{#if compact}
-<div class="ctop" style="width:{cw}px">
-	<button class="ctie" class:flip={tieFlip} on:click={onTie} title="Tie-breaker — the {TEAMNAME[tieBreaker]} win ties (click to flip)"><img src={tieArt(tieBreaker)} alt="Tie-breaker" /><small>Ties</small></button>
-	{@render cteam(leftTeam, false)}
-	<div class="cmid">
-		<span class="cr1"><b>Round {round}</b><span class="cturns">{#each [1, 2, 3, 4] as t (t)}<i class:done={t < turn} class:on={t === turn}>{ROM[t - 1]}</i>{/each}</span></span>
-		<span class="cr2">
-			<span class="clane">{#each laneOrder as z (z)}<i class="lz-{laneTeam(z)}" class:on={z === zone && !won}></i>{/each}</span>
-			<b>{zoneName}</b>
-			<span class="cwav">{#each waveTok as f, i (i)}<button class="wtok" class:dep={!f} class:flip={flips[`w${i}`]} on:click={() => onWave(i)} aria-label="Wave token"><svg viewBox="0 0 24 24"><use href="#h2-wavetok" /></svg></button>{/each}</span>
-		</span>
-	</div>
-	{@render cteam(right, true)}
-</div>
-{:else}
-<div class="helm" style="width:{BW}px; --side:{SIDE}px; --bl:{LIFEW}px; --bm:{MID}px; --bh:{BH}px; --coin:{COIN}px">
+<div class="helm" class:compact style="width:{BW}px; --side:{SIDE}px; --bl:{LIFEW}px; --bm:{MID}px; --bh:{BH}px; --coin:{COIN}px">
 	<div class="hs round"><b>Round {round}</b><span class="dash">{#each [1, 2, 3, 4] as t (t)}<i class:done={t < turn} class:on={t === turn}></i>{/each}</span></div>
 	{@render lifebox(leftTeam)}
 	<div class="hs mid"></div>
@@ -173,40 +158,23 @@
 	{#if fx && BL}<span class="clash" style="left:{clash.x}px; top:{clash.y}px"><i class="fl"></i>{#each SPARKS as k (k)}<i class="sp" style="--a:{196 + ((k * 61) % 150)}deg; --d:{(k * 0.13) % 0.6}s; --t:{0.42 + (k % 3) * 0.09}s; --l:{9 + (k % 4) * 3}px"></i>{/each}</span>{/if}
 	<button class="tiecoin" class:flip={tieFlip} style="left:{CX}px; top:{CY}px" on:click={onTie} title="Tie-breaker — the {TEAMNAME[tieBreaker]} win ties (click to flip)"><img src={tieArt(tieBreaker)} alt="Tie-breaker" /></button>
 </div>
-{/if}
 
 <style>
 	.symdefs { position: absolute; width: 0; height: 0; overflow: hidden; }
-	/* the compact bar */
-	.ctop { --brass: #d8b36a; --brass-hi: #f4dfa8; --line: rgba(216, 179, 106, 0.4); position: relative; display: flex; align-items: stretch; height: 50px; box-sizing: border-box; border-radius: 14px; color: #f5f1e8; pointer-events: auto; overflow: hidden;
-		background: linear-gradient(180deg, rgba(16, 44, 72, 0.97), rgba(6, 21, 38, 0.97)); border: 1px solid var(--line); box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5); }
-	.ctie { flex: none; width: 46px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 0; border: 0; border-right: 1px solid var(--line); background: rgba(0, 0, 0, 0.2); cursor: pointer; }
-	.ctie img { width: 28px; height: 28px; border-radius: 50%; box-shadow: 0 0 0 1.5px var(--brass); }
-	.ctie small { font-size: 8px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--brass-hi); }
-	.cteam { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 3px; padding: 0 10px; }
-	.cteam.r { align-items: flex-end; }
-	.cteam.is-blue { background: linear-gradient(180deg, rgba(43, 111, 210, 0.55), rgba(23, 63, 136, 0.55)); }
-	.cteam.is-orange { background: linear-gradient(180deg, rgba(208, 112, 31, 0.55), rgba(138, 64, 15, 0.55)); }
-	.ctn { font-size: 11px; line-height: 1; letter-spacing: 0.16em; text-transform: uppercase; color: #fff; }
-	.ctrow { display: flex; align-items: center; gap: 6px; }
-	.cteam.r .ctrow { flex-direction: row-reverse; }
-	.ctc { font-weight: 400; font-size: 22px; line-height: 1; color: #fff; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6); }
-	.cltoks { display: flex; gap: 2px; }
-	.cteam.r .cltoks { flex-direction: row-reverse; }
-	.cmid { flex: none; width: 200px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
-	.cr1, .cr2 { display: flex; align-items: center; gap: 7px; white-space: nowrap; }
-	.cr1 b, .cr2 b { font-weight: 400; font-size: 12px; line-height: 1; letter-spacing: 0.08em; text-transform: uppercase; color: var(--brass-hi); }
-	.cr2 b { color: #fff; font-size: 11px; }
-	.cturns { display: flex; gap: 3px; }
-	.cturns i { min-width: 17px; height: 15px; padding: 0 3px; box-sizing: border-box; border-radius: 3px; display: grid; place-items: center; font-style: normal; font-size: 9px; line-height: 1; color: #8a9fb3; background: rgba(255, 255, 255, 0.08); }
-	.cturns i.done { color: #1b1204; background: rgba(216, 179, 106, 0.55); }
-	.cturns i.on { color: #1b1204; background: linear-gradient(180deg, var(--brass-hi), var(--brass)); box-shadow: 0 0 6px rgba(244, 223, 168, 0.55); }
-	.clane { display: flex; gap: 2px; }
-	.clane i { width: 11px; height: 12px; clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%); background: rgba(255, 255, 255, 0.18); }
-	.clane i.lz-orange { background: rgba(239, 125, 34, 0.45); } .clane i.lz-blue { background: rgba(47, 127, 230, 0.5); } .clane i.lz-mid { background: rgba(216, 179, 106, 0.4); }
-	.clane i.on { background: var(--brass-hi); }
-	.cwav { display: flex; gap: 2px; }
-	.cwav .wtok svg { width: 13px; height: 13px; }
+	/* compact: the same bar, smaller */
+	.helm.compact { border-radius: 13px; }
+	.compact .round, .compact .wavebox { gap: 4px; }
+	.compact .round b, .compact .wavebox b { font-size: 13px; }
+	.compact .dash { height: 12px; }
+	.compact .dash i { width: 10px; height: 3px; }
+	.compact .wtoks { height: 14px; gap: 3px; }
+	.compact .wtok svg { width: 14px; height: 14px; }
+	.compact .life { justify-content: flex-start; padding: 0 12px; }
+	.compact .life.near { justify-content: flex-end; }
+	.lc { display: inline-flex; align-items: center; gap: 6px; }
+	.lc b { min-width: 24px; text-align: center; font-weight: 400; font-size: 24px; line-height: 1; color: #fff; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6); }
+	.lpm { width: 20px; height: 20px; padding: 0; border-radius: 50%; display: grid; place-items: center; font-size: 14px; line-height: 1; color: #fff; cursor: pointer; background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(255, 255, 255, 0.35); }
+	.lpm:hover { background: rgba(0, 0, 0, 0.5); }
 	.helm { --brass: #d8b36a; --brass-hi: #f4dfa8; --line: rgba(216, 179, 106, 0.4); --ink: #f5f1e8; --ink2: #bccbd9; --ink3: #8a9fb3;
 		position: relative; display: grid; grid-template-columns: var(--side) var(--bl) var(--bm) var(--bl) var(--side); height: var(--bh); border-radius: 16px; color: var(--ink);
 		background: linear-gradient(180deg, rgba(16, 44, 72, 0.97), rgba(6, 21, 38, 0.97)); border: 1px solid var(--line); box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5); box-sizing: border-box; pointer-events: auto; }

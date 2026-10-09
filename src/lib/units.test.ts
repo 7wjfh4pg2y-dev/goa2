@@ -265,6 +265,22 @@ describe('active turns (after the reveal the cards act one at a time)', () => {
 		// a new turn starts from the first card again
 		expect(actorOf({ ...s, turn: 3 } as MatchState)).toBe(turnOrder({ ...s, turn: 3 } as MatchState)[0])
 	})
+	it('the tie-breaker coin flips by itself once the tie it settled is resolved — without reshuffling the order', () => {
+		let s = play('orange')
+		const order = turnOrder(s)
+		const lastTied = Math.max(...['A', 'C', 'D'].map((p) => order.indexOf(p)))
+		for (let k = 0; k <= lastTied; k++) {
+			const before = s.tieBreaker
+			s = { ...s, ...applyCardReq(s, { kind: 'endAct', pid: order[k] }) } as MatchState
+			expect(s.tieBreaker).toBe(k === lastTied ? 'blue' : before) // flips exactly when the tied cards are done
+			expect(turnOrder(s)).toEqual(order) // the turn's order never changes
+		}
+		// teammates alone tied: no coin, no flip
+		const t = { ...play('orange'), cards: { ...play().cards, D: { ...play().cards!.D, pending: -1 } } } as MatchState
+		let u = t
+		for (const p of turnOrder(t)) u = { ...u, ...applyCardReq(u, { kind: 'endAct', pid: p }) } as MatchState
+		expect(u.tieBreaker).toBe('orange')
+	})
 	it('after the last card ends its turn nobody acts and the turn waits for the host (Next turn / minion battle)', () => {
 		let s = play()
 		for (const p of turnOrder(play())) s = { ...s, ...applyCardReq(s, { kind: 'endAct', pid: p }) } as MatchState

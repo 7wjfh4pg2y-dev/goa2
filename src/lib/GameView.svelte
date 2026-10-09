@@ -188,7 +188,7 @@
 	$: platesTop = $boardPrefs.compact && $boardPrefs.cTop;
 	let topW = 640; // (from CardLayer) the compact top bar's width
 	$: boardInset = hud2 ? {
-		t: ($boardPrefs.cTop ? (platesTop ? 96 : 58) + ($boardPrefs.cOrder ? 30 : 60) + 6 : 172) * lay.s,
+		t: ($boardPrefs.cTop ? 62 + ($boardPrefs.cOrder ? 30 : 60) + 6 : 172) * lay.s,
 		b: 112 * lay.s,
 		l: (platesTop ? 40 : $boardPrefs.compact ? 372 : 372) * lay.s,
 		r: (platesTop && $boardPrefs.cLog ? 40 : 372) * lay.s
@@ -238,6 +238,7 @@
 		wisps: '<path d="M12 12a1.5 1.5 0 0 1 3 0a3 3 0 0 1-6 0a4.5 4.5 0 0 1 9 0a6 6 0 0 1-12 0a7.5 7.5 0 0 1 15 0" />',
 		beam: '<path d="M2 14h7M15 14h7" /><circle cx="12" cy="14" r="2.6" /><path d="M12 8.5v-3M8.6 9.8 7 8M15.4 9.8 17 8" />',
 		hud: '<rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 9h18M8 9v11M16 9v11" />',
+		lock: '<rect x="5" y="10.5" width="14" height="10" rx="2" /><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" />',
 		hudAll: '<rect x="3" y="4" width="18" height="16" rx="2" /><path d="M7 9h10M7 13h10M7 17h6" />',
 		hudTop: '<rect x="3" y="4" width="18" height="6" rx="1.5" /><path d="M3 14h18M3 18h18" stroke-opacity=".35" />',
 		hudBoards: '<rect x="3" y="5" width="8" height="5" rx="1.2" /><rect x="13" y="5" width="8" height="5" rx="1.2" /><path d="M5 12v3M8 12v5M15 12v2M18 12v4" />',
@@ -283,7 +284,10 @@
 		] },
 		{ id: 'zoom', label: 'Zoom', icon: ICON.zoom, title: 'Zoom in / out', act: () => {}, sub: [
 			{ id: 'zout', label: 'Out', icon: ICON.zout, act: () => board?.zoomBtn(1 / 1.2) },
-			{ id: 'zin', label: 'In', icon: ICON.zin, act: () => board?.zoomBtn(1.2) }
+			{ id: 'zin', label: 'In', icon: ICON.zin, act: () => board?.zoomBtn(1.2) },
+			// phones: a pinch that zooms by accident — the lock keeps the zoom where it is (the buttons still work)
+			...(mobile ? [{ id: 'zlock', label: $boardPrefs.zoomLock ? 'Locked' : 'Lock', icon: ICON.lock, on: $boardPrefs.zoomLock,
+				title: $boardPrefs.zoomLock ? 'Zoom lock on: pinching does not zoom' : 'Zoom lock: stop pinch-zoom', act: () => boardPrefs.set({ zoomLock: !$boardPrefs.zoomLock }) }] : [])
 		] },
 		{ id: 'turn', label: 'Turn', icon: ICON.turn, title: 'Turn the board', act: () => {}, sub: [
 			{ id: 'rotl', label: 'Left', icon: ICON.rotl, title: 'Turn anticlockwise (45°)', act: () => board?.rotateBy(-45) },
@@ -965,7 +969,7 @@
 	<div class="ocean"></div>
 	<!-- on a phone the board sits between the top bar + player strip and the dash -->
 	<div class="boardarea" class:mob={mobile} class:p2={phone2}>
-	<BoardCanvas bind:this={board} map={$ms.map ?? {}} inset={boardInset} look={boardLook} {glowZone} activeZone={$ms.wonBy ? null : battleZone($ms)} effects={!deckCovered} sea={$boardPrefs.sea} rims={$boardPrefs.rims} rotation={orientation} interactive={true} {placing} {placeGhost} holdColor={myHoldColor} onCancelPlace={cancelPlace} {areas} marks={boardMarks} badges={defBadges} wisps={$boardPrefs.wisps} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} pings={boardPings} onPing={doPing} {pingArmed} />
+	<BoardCanvas bind:this={board} map={$ms.map ?? {}} inset={boardInset} look={boardLook} {glowZone} activeZone={$ms.wonBy ? null : battleZone($ms)} effects={!deckCovered} sea={$boardPrefs.sea} rims={$boardPrefs.rims} rotation={orientation} interactive={true} {placing} {placeGhost} holdColor={myHoldColor} onCancelPlace={cancelPlace} {areas} marks={boardMarks} badges={defBadges} zoomLock={mobile && $boardPrefs.zoomLock} wisps={$boardPrefs.wisps} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} pings={boardPings} onPing={doPing} {pingArmed} />
 	</div>
 
 	<CardLayer bind:this={cardLayer} {mobile} {hud2} {phone2} {ringAsk} onResults={() => (victoryClosed = false)} compact={$boardPrefs.compact} cTop={$boardPrefs.cTop} cOrder={$boardPrefs.cOrder} cLog={$boardPrefs.cLog} bind:topW {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} bind:covered={deckCovered} bind:phoneStatus onRespawn={placeMyHero} onEnter={placeMyHero} onArmToken={armToken} holdingToken={!!pendingToken} {pingArmed} onPing={pingButton} bind:previewId />

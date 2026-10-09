@@ -10,8 +10,8 @@ import { writable } from 'svelte/store'
 // cTop = the narrow top bar, cOrder = the one-line initiative / planning bar, cLog = the Chronicle in the bottom-left
 // corner, as tall as the dash
 // wisps: the spirit swirl on hexes to act on (spawn points, minions to remove, …); off = a still glowing hex
-export type BoardPrefs = { rims: boolean; zone: boolean; sea: boolean; look: 'island' | 'classic'; hud: '2.0' | 'classic'; compact: boolean; cTop: boolean; cOrder: boolean; cLog: boolean; beam: boolean; wisps: boolean }
-export const DEFAULT_PREFS: BoardPrefs = { rims: true, zone: true, sea: true, look: 'island', hud: '2.0', compact: false, cTop: false, cOrder: false, cLog: false, beam: true, wisps: true }
+export type BoardPrefs = { rims: boolean; zone: boolean; sea: boolean; look: 'island' | 'classic'; hud: '2.0' | 'classic'; compact: boolean; cTop: boolean; cOrder: boolean; cLog: boolean; beam: boolean; wisps: boolean; zoomLock: boolean }
+export const DEFAULT_PREFS: BoardPrefs = { rims: true, zone: true, sea: true, look: 'island', hud: '2.0', compact: false, cTop: false, cOrder: false, cLog: false, beam: true, wisps: true, zoomLock: false }
 const VERSION = 2
 const KEY = 'goa2-board-prefs'
 
@@ -29,6 +29,7 @@ export function readPrefs(raw: string | null): BoardPrefs {
 			cTop: p.cTop === true,
 			cOrder: p.cOrder === true,
 			cLog: p.cLog === true,
+			zoomLock: p.zoomLock === true, // phones: a pinch never zooms the board
 			beam: fx.beam !== false,
 			wisps: fx.wisps !== false
 		}

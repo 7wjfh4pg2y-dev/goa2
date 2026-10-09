@@ -697,7 +697,7 @@
 		.map((pid) => ({ p: $players.find((q: Player) => q.id === pid), pid, cs: viewCards[pid] ?? cards[pid], ini: initOf(cards[pid], true) ?? 0 }))
 		.filter((x) => !!x.cs)
 		.map((x, k, all): OrderEntry => ({ pid: x.pid, hero: x.cs.hero, heroName: heroName(x.cs.hero), player: x.p?.name ?? '', team: (teamOfPid(x.pid) ?? 'orange'), idx: cards[x.pid].pending!, ini: x.ini,
-			tied: k > 0 && all[k - 1].ini === x.ini, portrait: portraitCss(x.cs.hero), color: colorHex(x.p?.color ?? '') }));
+			tied: k > 0 && all[k - 1].ini === x.ini && teamOfPid(all[k - 1].pid) !== teamOfPid(x.pid), portrait: portraitCss(x.cs.hero), color: colorHex(x.p?.color ?? '') }));
 	const teamOfPid = (pid: string) => { const p = $players.find((q: Player) => q.id === pid); return p ? pTeam(p) : ($ms.pieces?.[pid]?.team as 'orange' | 'blue' | undefined) ?? null; };
 	// the planning dots in each player's colour: the enemy on the left, your team on the right (you last)
 	$: h2dots = [...seatedWithCards.filter((p) => pTeam(p) !== viewTeam), ...seatedWithCards.filter((p) => pTeam(p) === viewTeam && p.id !== clientId), ...seatedWithCards.filter((p) => p.id === clientId)]
@@ -712,8 +712,8 @@
 	// the room beside the bar: the canvas less the two corner buttons (82 each) and the gaps; plates aim for 190 wide
 	$: topW = platesTop ? Math.round(Math.max(440, Math.min(560, canvasW - 200 - 2 * npN * 190))) : 640;
 	$: npW = Math.round(Math.max(118, Math.min(210, (canvasW - 200 - topW - 2 * (npN - 1) * 8) / (2 * npN))));
-	// the order bar under the top bar (lower when the stat plates hang from nameplates beside it); the columns under that
-	$: orderTop = cTop ? (platesTop ? 96 : 58) : 100;
+	// the order bar just under the top bar (and its beam); the columns under that
+	$: orderTop = cTop ? 62 : 100;
 	$: colTop = orderTop + (cOrder ? 30 : 60) + (cOrder ? 26 : 34);
 	// the Chronicle in the corner: beside the dash when there's room, else just above its left end
 	const DASH_W = 900; // the dash's width (design px) without the ultimate's compartment
@@ -1393,8 +1393,9 @@
 		</div>
 	{/if}
 
-	{#if lvConfirm && mine && mobile}
-		<div class="lvwrap"><LevelConfirm cs={mine} idx={lvConfirm.idx} kind={lvConfirm.kind} teamStyle={teamVars(myTeam)} onConfirm={confirmLevel} onCancel={() => (lvConfirm = null)} /></div>
+	<!-- the level-up / ultimate choice (the desktop deck has its own; this one serves the phone deck and the dash's Unlock) -->
+	{#if lvConfirm && mine && (mobile || !deckOpen)}
+		<div class="lvwrap" class:dk={!mobile}><LevelConfirm cs={mine} idx={lvConfirm.idx} kind={lvConfirm.kind} teamStyle={teamVars(myTeam)} onConfirm={confirmLevel} onCancel={() => (lvConfirm = null)} /></div>
 	{/if}
 
 	<!-- ───────── centered preview of a picked hand card ───────── -->
@@ -1758,7 +1759,7 @@
 	.h2order { position: absolute; top: 100px; left: 0; right: 0; }
 	.nprow { position: absolute; top: 8px; display: flex; gap: 8px; }
 	.nprow.l { flex-direction: row; }
-	.h2col.np { gap: 40px; }
+	.h2col.np { gap: 10px; }
 	.h2log { position: absolute; left: 20px; z-index: 2; }
 	.h2col { position: absolute; top: 194px; width: 344px; display: flex; flex-direction: column; gap: 24px; }
 	.h2col.tight { gap: 10px; }
@@ -2047,6 +2048,7 @@
 	.lvtake { flex: 2 1 auto; white-space: nowrap; }
 	.lvtake img { height: 1.1em; width: auto; max-width: 1.5em; flex: none; object-fit: contain; }
 	.lvwrap { position: fixed; inset: 0; z-index: 45; }
+	.lvwrap.dk { zoom: var(--uis, 1); } /* desktop: in design px, like the rest of the HUD */
 	/* upgrades lie upside down, like on the table (item symbol upright) */
 	.dkcard :global(.cardface) { transition: transform .5s cubic-bezier(.3,.7,.2,1); }
 	.dkcard.zupg :global(.cardface), .dkzone.upg .dkcard :global(.cardface) { transform: rotate(180deg); }

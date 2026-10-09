@@ -231,7 +231,7 @@
 				</span>
 			</button>
 			{/if}
-			{#if order.alt && !order.split}<button class="galt" on:click={() => fire(order.alt?.run)}>{order.alt.label}</button>{/if}
+			{#if order.alt && !order.split}<button class="galt" class:left={!!order.cancel} on:click={() => fire(order.alt?.run)} title={order.alt.label} aria-label={order.alt.label}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6l8 6-8 6z" class="f" /><path d="M17 6v12" /></svg></button>{/if}
 			{#if order.cancel}<button class="gx" on:click={order.cancel} title="Cancel" aria-label="Cancel"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17" /></svg></button>{/if}
 		</div>
 	</div>
@@ -260,7 +260,7 @@
 	.mini.off { color: #8a9fb3; box-shadow: 0 0 0 1px var(--line); }
 	.mmk { position: absolute; left: -8px; bottom: -2px; display: flex; flex-direction: column; gap: 2px; }
 	.mmk img { width: 22px; height: 22px; border-radius: 50%; box-shadow: 0 0 0 2px #0a1a2c; }
-	.dme { display: flex; flex-direction: column; gap: 4px; width: 112px; }
+	.dme { flex: none; display: flex; flex-direction: column; gap: 4px; width: 112px; }
 	.dmn { padding: 0; border: 0; background: none; text-align: left; font-size: 19px; line-height: 1; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
 	.dmh { font-size: 11px; line-height: 1; color: var(--th); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 	.purse { align-self: flex-start; margin-top: 4px; display: inline-flex; align-items: center; gap: 4px; }
@@ -290,6 +290,9 @@
 	.deckw.lvup .stack .top { box-shadow: 0 0 0 2px var(--brass-hi), 0 0 14px 3px rgba(244, 223, 168, 0.55); }
 	/* the ultimate's compartment: the level ring slides --uw to the left and this opens out from under it (transform only) */
 	.ulted .medal { transform: translate(calc(-1 * var(--uw)), -50%); }
+	/* …and the names keep clear of the open compartment */
+	.ulted .dbody { padding-left: calc(var(--cap) + 14px); }
+	.dbody { transition: padding-left 0.42s cubic-bezier(0.2, 0.8, 0.2, 1); }
 	.uexw { position: absolute; z-index: 1; top: -2px; bottom: -1px; right: calc(100% - var(--cap)); width: calc(var(--cap) + var(--uw)); visibility: hidden; pointer-events: none; }
 	.uexw.open, .uexw.sliding { visibility: visible; }
 	.uexw.open { pointer-events: auto; }
@@ -407,6 +410,12 @@
 		color: #ffd9d3; background: linear-gradient(180deg, #5a1712, #2a0806); border: 2px solid #0a1a2c; box-shadow: 0 0 0 1px rgba(229, 72, 77, 0.7), 0 3px 8px rgba(0, 0, 0, 0.6); }
 	.gx svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; }
 	.gx:hover { color: #fff; }
-	.galt { position: absolute; left: 50%; bottom: -12px; transform: translateX(-50%); padding: 3px 10px; border-radius: 999px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #fff; background: #b42318; border: 2px solid #0a1a2c; cursor: pointer; }
+	/* a second choice (the host's Skip): a small bubble on the ring's lower right, like the × (lower left if both show) */
+	.galt { position: absolute; right: 0; bottom: 0; z-index: 3; width: 28px; height: 28px; padding: 0; border-radius: 50%; display: grid; place-items: center; cursor: pointer;
+		color: #ffd9d3; background: linear-gradient(180deg, #5a1712, #2a0806); border: 2px solid #0a1a2c; box-shadow: 0 0 0 1px rgba(229, 72, 77, 0.7), 0 3px 8px rgba(0, 0, 0, 0.6); }
+	.galt.left { right: auto; left: 0; }
+	.galt svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+	.galt svg .f { fill: currentColor; stroke: none; }
+	.galt:hover { color: #fff; }
 	@media (prefers-reduced-motion: reduce) { .gob.pulse::after { animation: none; opacity: 0.7; } .gob.lvl .gin::before, .lava i, .ascended .medal::after { animation: none; } }
 </style>

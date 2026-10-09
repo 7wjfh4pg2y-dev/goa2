@@ -96,17 +96,34 @@ export const levelPatch = (s?: Pick<MatchState, 'cards'>): Partial<MatchState> =
 
 // ── Active turns: after the reveal the cards act one at a time, highest initiative first ──
 export const turnKey = (s: Pick<MatchState, 'round' | 'turn'>) => `${s.round}-${s.turn}`
-/** This turn's acting order: every card in play (not a pass), highest initiative (items included) first; a tie
- *  goes to the team holding the tie-breaker coin, then by id so every screen agrees. */
-export function turnOrder(s: MatchState): string[] {
+/** This turn's acting order: every card in play (not a pass), highest initiative (items included) first. A tie
+ *  between the two teams goes to the team showing on the tie-breaker coin — and the coin flips once that tie is
+ *  resolved, so a second tie later in the same turn goes the other way. The order is worked out from the coin as
+ *  the turn began (`tieTurn`), so the automatic flip never reshuffles it. Teammates tied: by id (every screen agrees). */
+function orderWithTies(s: MatchState): { order: string[]; tieEnds: number[] } {
 	const cards = s.cards ?? {}
-	const tie = (pid: string) => (teamOf(s, pid) === s.tieBreaker ? 0 : 1)
-	return Object.keys(cards)
+	const items = Object.keys(cards)
 		.filter((pid) => { const i = cards[pid].pending; return i != null && i >= 0 })
-		.map((pid) => ({ pid, ini: cardInitiative(s, pid) ?? 0 }))
-		.sort((a, b) => b.ini - a.ini || tie(a.pid) - tie(b.pid) || (a.pid < b.pid ? -1 : 1))
-		.map((x) => x.pid)
+		.map((pid) => ({ pid, ini: cardInitiative(s, pid) ?? 0, team: teamOf(s, pid) }))
+		.sort((a, b) => b.ini - a.ini || (a.pid < b.pid ? -1 : 1))
+	let coin: Team = s.tieTurn?.key === turnKey(s) ? s.tieTurn.coin : s.tieBreaker
+	const order: string[] = [], tieEnds: number[] = []
+	for (let i = 0; i < items.length;) {
+		let j = i
+		while (j < items.length && items[j].ini === items[i].ini) j++
+		const group = items.slice(i, j)
+		if (new Set(group.map((g) => g.team)).size > 1) {
+			const c = coin
+			group.sort((a, b) => (a.team === c ? 0 : 1) - (b.team === c ? 0 : 1) || (a.pid < b.pid ? -1 : 1))
+			coin = otherTeamOf(coin)
+			tieEnds.push(order.length + group.length - 1)
+		}
+		order.push(...group.map((g) => g.pid))
+		i = j
+	}
+	return { order, tieEnds }
 }
+export const turnOrder = (s: MatchState): string[] => orderWithTies(s).order
 /** How far this turn's acting has got (0 = the first card; the order's length = everyone has acted). */
 export const actingIdx = (s: MatchState) => (s.acting?.key === turnKey(s) ? s.acting.idx : 0)
 /** Whose card acts now (null once everyone has, or before anything is in play). */
@@ -128,6 +145,11 @@ export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 	if (req.kind === 'endAct') {
 		const order = turnOrder(s), at = actingIdx(s)
 		if (at >= order.length || (req.pid !== order[at] && req.pid !== s.host)) return {}
+		// the last card of a tie the coin settled: the coin flips (the order stays as the turn began)
+		if (orderWithTies(s).tieEnds.includes(at)) {
+			const key = turnKey(s)
+			return { acting: { key, idx: at + 1 }, tieBreaker: otherTeamOf(s.tieBreaker), tieTurn: s.tieTurn?.key === key ? s.tieTurn : { key, coin: s.tieBreaker } }
+		}
 		return { acting: { key: turnKey(s), idx: at + 1 } }
 	}
 	if (req.kind === 'setAct') {
@@ -339,6 +361,8 @@ export interface MatchState {
 	revealAt?: number | null
 	/** after the reveal, whose card is acting: `idx` into turnOrder(), for the turn `key` (round-turn); another turn = 0 */
 	acting?: { key: string; idx: number } | null
+	/** the tie-breaker coin as this turn's order was set (an automatic flip mid-turn must not reshuffle it) */
+	tieTurn?: { key: string; coin: Team } | null
 	// per-player status markers shown on the HUD (Tigerclaw poison, Bain bounty),
 	// keyed by playerId. Counts so poison can stack; 0 = clear.
 	status?: Record<string, { poison: number; bounty: number }>
@@ -1297,6 +1321,7 @@ export function joinMatch(
 		}
 		if (req.kind === 'respawn' && patch.pieces) note(req.pid, 'respawned ⤴')
 		if (req.kind === 'endAct' && (patch.acting !== undefined || patch.turn)) { const who = actorOf(local); if (who) note(who, req.pid === who ? 'ends their turn' : 'turn skipped by the host') }
+		if (req.kind === 'endAct' && patch.tieBreaker) note(req.pid, `the tie is settled — the tie-breaker coin flips to the ${teamName(patch.tieBreaker)}`)
 		if (req.kind === 'removeHero' && patch.defeated) note(req.pid, 'took their hero off the board — back with their next card')
 		if (req.kind === 'clearAround' && patch.pieces) { const n = Object.keys(local.pieces ?? {}).length - Object.keys(patch.pieces).length; note(req.pid, `cleared ${n} token${n === 1 ? '' : 's'} next to them`) }
 		if (req.kind === 'spawn' && patch.pieces) note(req.pid, 'entered the battlefield')
