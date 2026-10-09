@@ -58,18 +58,22 @@ export type GamePlayer = {
 	deaths: number | null
 	assists: number | null
 	minions: number | null
+	/** minions this player defeated, by role (games recorded with events) */
+	mRoles: { melee: number; ranged: number; heavy: number } | null
 	path: Path
 }
 export type LeagueGame = {
 	id: string
+	room: string
+	startedAt: number
 	at: number
 	minutes: number
 	rounds: number
 	winner: Team
 	type: WinType
 	players: GamePlayer[]
-	/** hero defeats, by player key */
-	defeats: { by: string; v: string; a: string[] }[]
+	/** hero defeats, by player key, with when (round / turn) */
+	defeats: { by: string; v: string; a: string[]; r: number; t: number }[]
 	events: boolean
 }
 
@@ -117,6 +121,12 @@ export function journalOfRow(row: GameRowIn): Journal {
 	}
 }
 
+const minionRoles = (ev: unknown, id: string) => {
+	const out = { melee: 0, ranged: 0, heavy: 0 }
+	for (const e of (Array.isArray(ev) ? ev : []) as GameEvent[]) if (e.k === 'minion' && e.by === id) { const r = e.role as keyof typeof out; if (r in out) out[r]++ }
+	return out
+}
+
 /** One game, ready to count — or null when the row can't say who won or who played. */
 export function gameOfRow(row: GameRowIn): LeagueGame | null {
 	const d = row.data ?? {}
@@ -141,17 +151,18 @@ export function gameOfRow(row: GameRowIn): LeagueGame | null {
 			key, name: p.name.trim(), id, hero: p.hero, team, won: team === winner, level,
 			coins: st?.coins ?? (end ? (end.coins ?? 0) + levelsPaid(level) : null),
 			kills: st?.kills ?? null, deaths: st?.deaths ?? null, assists: st?.assists ?? null, minions: st?.minions ?? null,
+			mRoles: exact ? minionRoles(d.ev, id) : null,
 			path: steps?.length ? pathOfSteps(p.hero, steps) : pathOfFinal(p.hero, end)
 		})
 	}
 	if (players.length < 2) return null
 	const defeats = exact
 		? ((d.ev ?? []) as GameEvent[]).filter((e): e is Extract<GameEvent, { k: 'hero' }> => e.k === 'hero' && keyOf.has(e.by) && keyOf.has(e.v))
-			.map((e) => ({ by: keyOf.get(e.by)!, v: keyOf.get(e.v)!, a: e.a.filter((x) => keyOf.has(x)).map((x) => keyOf.get(x)!) }))
+			.map((e) => ({ by: keyOf.get(e.by)!, v: keyOf.get(e.v)!, a: e.a.filter((x) => keyOf.has(x)).map((x) => keyOf.get(x)!), r: e.r ?? 0, t: e.t ?? 0 }))
 		: []
 	const at = Date.parse(row.ended_at) || Date.parse(row.started_at) || 0
 	const minutes = exact?.minutes ?? Math.max(1, Math.round((Date.parse(row.ended_at) - Date.parse(row.started_at)) / 60000) || 0)
-	return { id: row.id, at, minutes, rounds: row.rounds ?? d.final?.round ?? 0, winner, type: winType(row.reason ?? d.final?.wonBy?.reason), players, defeats, events: !!exact }
+	return { id: row.id, room: row.room ?? '', startedAt: Date.parse(row.started_at) || at, at, minutes, rounds: row.rounds ?? d.final?.round ?? 0, winner, type: winType(row.reason ?? d.final?.wonBy?.reason), players, defeats, events: !!exact }
 }
 
 // ── the league ────────────────────────────────────────────────────────────────────────────────
@@ -159,7 +170,15 @@ type Tally = { games: number; wins: number }
 export type Foe = { key: string; name: string; games: number; wins: number; killed: number; killedBy: number }
 export type Mate = { key: string; name: string; games: number; wins: number }
 export type PathTally = { hero: string; path: Path; games: number; wins: number; by: string[] }
-export type MatchLine = { id: string; at: number; hero: string; won: boolean; type: WinType; rounds: number; level: number; k: number | null; d: number | null; a: number | null; mates: { name: string; hero: string }[]; foes: { name: string; hero: string }[]; rating: number; delta: number }
+/** Someone else at the table in one game, as the player's log shows them. */
+export type TableMate = { key: string; name: string; hero: string; level: number; k: number | null; d: number | null; a: number | null }
+/** One game from one player's side — everything the player log shows for it. */
+export type MatchLine = { id: string; at: number; startedAt: number; room: string; minutes: number; hero: string; team: Team; won: boolean; type: WinType; rounds: number; level: number
+	k: number | null; d: number | null; a: number | null; minions: number | null; mRoles: GamePlayer['mRoles']; coins: number | null; path: Path
+	mates: TableMate[]; foes: TableMate[]
+	/** who they defeated / who defeated them / whose defeats they assisted — round and turn */
+	kills: { name: string; r: number; t: number }[]; deaths: { name: string; r: number; t: number }[]; assisted: { name: string; r: number; t: number }[]
+	rating: number; delta: number }
 export type PlayerAgg = {
 	key: string
 	name: string
@@ -190,7 +209,14 @@ export type PlayerAgg = {
 	foes: Foe[]
 	paths: PathTally[]
 	history: MatchLine[]
+	firstAt: number
 	lastAt: number
+	peak: number
+	minutes: number
+	rounds: number
+	ults: number
+	maxLevel: number
+	mRoles: { melee: number; ranged: number; heavy: number }
 }
 export type HeroAgg = { hero: string; games: number; wins: number; players: Record<string, number>; paths: PathTally[] }
 export type Record_ = { id: string; title: string; blurb: string; who: string; value: string; at?: number }
@@ -210,7 +236,7 @@ export function buildLeague(rows: GameRowIn[]): League {
 			p = { key: gp.key, name: gp.name, games: 0, wins: 0, losses: 0, rating: START_RATING, ratingHist: [START_RATING], streak: 0, bestStreak: 0, worstStreak: 0,
 				byType: { throne: { games: 0, wins: 0 }, final: { games: 0, wins: 0 }, life: { games: 0, wins: 0 }, other: { games: 0, wins: 0 } },
 				kills: 0, deaths: 0, assists: 0, kdaGames: 0, teamKills: 0, minions: 0, coins: 0, coinGames: 0, levels: 0, heroes: {}, roles: {},
-				mates: [], foes: [], paths: [], history: [], lastAt: 0, _mates: new Map(), _foes: new Map(), _paths: new Map() }
+				mates: [], foes: [], paths: [], history: [], firstAt: 0, lastAt: 0, peak: START_RATING, minutes: 0, rounds: 0, ults: 0, maxLevel: 0, mRoles: { melee: 0, ranged: 0, heavy: 0 }, _mates: new Map(), _foes: new Map(), _paths: new Map() }
 			P.set(gp.key, p)
 		}
 		p.name = gp.name // the latest spelling
@@ -249,6 +275,13 @@ export function buildLeague(rows: GameRowIn[]): League {
 			p.heroes[gp.hero] = { games: (p.heroes[gp.hero]?.games ?? 0) + 1, wins: (p.heroes[gp.hero]?.wins ?? 0) + (gp.won ? 1 : 0) }
 			for (const t of heroTraits(gp.hero)) p.roles[t] = (p.roles[t] ?? 0) + 1
 			p.lastAt = Math.max(p.lastAt, g.at)
+			p.firstAt = p.firstAt ? Math.min(p.firstAt, g.at) : g.at
+			p.peak = Math.max(p.peak, p.rating)
+			p.minutes += g.minutes
+			p.rounds += g.rounds
+			if (gp.path.ult) p.ults++
+			p.maxLevel = Math.max(p.maxLevel, gp.level)
+			if (gp.mRoles) { p.mRoles.melee += gp.mRoles.melee; p.mRoles.ranged += gp.mRoles.ranged; p.mRoles.heavy += gp.mRoles.heavy }
 			for (const o of g.players) {
 				if (o.key === gp.key) continue
 				if (o.team === gp.team) {
@@ -263,9 +296,17 @@ export function buildLeague(rows: GameRowIn[]): League {
 				}
 			}
 			addPath(p._paths, gp)
-			p.history.push({ id: g.id, at: g.at, hero: gp.hero, won: gp.won, type: g.type, rounds: g.rounds, level: gp.level, k: gp.kills, d: gp.deaths, a: gp.assists,
-				mates: g.players.filter((o) => o.team === gp.team && o.key !== gp.key).map((o) => ({ name: o.name, hero: o.hero })),
-				foes: g.players.filter((o) => o.team !== gp.team).map((o) => ({ name: o.name, hero: o.hero })), rating: p.rating, delta })
+			const nameOf = (k: string) => g.players.find((o) => o.key === k)?.name ?? k
+			const at = (x: { r: number; t: number }) => ({ r: x.r, t: x.t })
+			const mate = (o: GamePlayer): TableMate => ({ key: o.key, name: o.name, hero: o.hero, level: o.level, k: o.kills, d: o.deaths, a: o.assists })
+			p.history.push({ id: g.id, at: g.at, startedAt: g.startedAt, room: g.room, minutes: g.minutes, hero: gp.hero, team: gp.team, won: gp.won, type: g.type, rounds: g.rounds, level: gp.level,
+				k: gp.kills, d: gp.deaths, a: gp.assists, minions: gp.minions, mRoles: gp.mRoles, coins: gp.coins, path: gp.path,
+				mates: g.players.filter((o) => o.team === gp.team && o.key !== gp.key).map(mate),
+				foes: g.players.filter((o) => o.team !== gp.team).map(mate),
+				kills: g.defeats.filter((x) => x.by === gp.key).map((x) => ({ name: nameOf(x.v), ...at(x) })),
+				deaths: g.defeats.filter((x) => x.v === gp.key).map((x) => ({ name: nameOf(x.by), ...at(x) })),
+				assisted: g.defeats.filter((x) => x.a.includes(gp.key)).map((x) => ({ name: nameOf(x.v), ...at(x) })),
+				rating: p.rating, delta })
 			// heroes
 			const h = H.get(gp.hero) ?? { hero: gp.hero, games: 0, wins: 0, players: {} as Record<string, number>, paths: [], _paths: new Map<string, PathTally>() }
 			h.games++; if (gp.won) h.wins++

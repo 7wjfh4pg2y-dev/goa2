@@ -1,28 +1,26 @@
 <script lang="ts">
 	// THE HALL OF RECORDS — every finished game in `goa2_games`, added up (league.ts): the table of players
 	// (rating, record, streaks, K/D/A, favourite heroes), each player's page (friends and foes, builds,
-	// match history), the heroes and their level-up paths, and the silly records. `?sample=1` shows made-up
-	// games, so the page can be seen before any are on record.
+	// match history), the heroes and their level-up paths, the silly records, and the PLAYER LOG (everyone who has
+	// played a recorded game, A–Z, each with their whole record and every match in full).
 	import { onMount } from 'svelte';
 	import { base } from '$app/paths';
 	import { supabase } from '$lib/supabase';
 	import {
 		buildLeague, titlesOf, nemesisOf, victimOf, rivalOf, bestMateOf, worstMateOf, rowOfSelect,
 		LEAGUE_SELECT, WIN_TYPES, WIN_LABEL, START_RATING,
-		type League, type PlayerAgg, type HeroAgg, type PathTally, type GameRowIn, type LeagueGame, type Path, type Foe, type Mate
+		type League, type PlayerAgg, type HeroAgg, type MatchLine, type PathTally, type GameRowIn, type LeagueGame, type Path, type Foe, type Mate
 	} from '$lib/league';
-	import { sampleRows } from '$lib/league.sample';
 	import { heroById, portraitCss, traitIcon, TRAIT_LABELS, type Trait } from '$lib/heroes';
 	import { heroCards } from '$lib/cards/deck';
 	import { teamName } from '$lib/teams';
 	import Icon from '$lib/ui/Icon.svelte';
 	import { role } from '$lib/role';
 
-	type Tab = 'players' | 'heroes' | 'records' | 'games';
+	type Tab = 'players' | 'log' | 'heroes' | 'records' | 'games';
 	// GMs only for now (the soft admin gate in role.ts; the link is in the GM tools)
 	let phase: 'loading' | 'ready' | 'empty' | 'error' | 'locked' = 'loading';
 	let errMsg = '';
-	let sample = false;
 	let league: League | null = null;
 	let titles: Record<string, { title: string; blurb: string }[]> = {};
 	let tab: Tab = 'players';
@@ -37,8 +35,6 @@
 	}
 	async function load() {
 		if ($role !== 'admin') { phase = 'locked'; return; }
-		sample = new URLSearchParams(location.search).has('sample');
-		if (sample) return use(sampleRows(24, 7));
 		try {
 			const rows: GameRowIn[] = [];
 			for (let from = 0; ; from += 1000) {
@@ -131,12 +127,92 @@
 			riv && { k: 'Rival', who: riv.name, line: `met ${riv.games}× · you're ${wl(riv)}`, good: null }
 		].filter(Boolean) as { k: string; who: string; line: string; good: boolean | null }[];
 	};
+	// ── the player log: everyone A–Z, one player's whole record ──
+	let logSel: string | null = null;
+	let openMatch: Record<string, boolean> = {};
+	$: logList = league ? [...league.players].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })) : [];
+	$: logP = logList.find((p) => p.key === logSel) ?? logList[0] ?? null;
+	const openLog = (key: string) => { logSel = key; tab = 'log'; openMatch = {}; body?.scrollTo(0, 0); };
+	const when = (t: number) => (t ? new Date(t).toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : '–');
+	const hm = (m: number) => (m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`);
+	const rt = (x: { r: number; t: number }) => (x.r ? `R${x.r}·T${x.t}` : '');
+	const kda = (x: { k: number | null; d: number | null; a: number | null }) => (x.k != null ? `${x.k}/${x.d}/${x.a}` : '–');
+	// per hero, from the match lines (totals + averages)
+	function heroRows(p: PlayerAgg) {
+		const m = new Map<string, { hero: string; games: number; wins: number; k: number; d: number; a: number; ev: number; lv: number; coins: number; cg: number; minions: number }>();
+		for (const x of p.history) {
+			const r = m.get(x.hero) ?? { hero: x.hero, games: 0, wins: 0, k: 0, d: 0, a: 0, ev: 0, lv: 0, coins: 0, cg: 0, minions: 0 };
+			r.games++; if (x.won) r.wins++; r.lv += x.level;
+			if (x.k != null) { r.ev++; r.k += x.k; r.d += x.d ?? 0; r.a += x.a ?? 0; r.minions += x.minions ?? 0; }
+			if (x.coins != null) { r.coins += x.coins; r.cg++; }
+			m.set(x.hero, r);
+		}
+		return [...m.values()].sort((a, b) => b.games - a.games || b.wins - a.wins);
+	}
+	// the whole log as a spreadsheet (one row per game)
+	function downloadCsv(p: PlayerAgg) {
+		const q = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+		const head = ['Date', 'Room', 'Result', 'Win type', 'Team', 'Hero', 'Level', 'Kills', 'Deaths', 'Assists', 'Minions', 'Coins earned', 'Rounds', 'Minutes', 'Rating', 'Change', 'Teammates', 'Opponents', 'Build'];
+		const rows = [...p.history].reverse().map((m) => [new Date(m.at).toISOString(), m.room, m.won ? 'Win' : 'Loss', WIN_LABEL[m.type], teamName(m.team), heroName(m.hero), m.level, m.k ?? '', m.d ?? '', m.a ?? '', m.minions ?? '', m.coins ?? '', m.rounds, m.minutes, m.rating, m.delta,
+			m.mates.map((x) => `${x.name} (${heroName(x.hero)})`).join('; '), m.foes.map((x) => `${x.name} (${heroName(x.hero)})`).join('; '), chips(m.hero, m.path).map((c) => `${c.tier} ${c.name}`).join(' > ')]);
+		const csv = [head, ...rows].map((r) => r.map(q).join(',')).join('\n');
+		const a = document.createElement('a');
+		a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+		a.download = `goa2-${p.name.replace(/[^\w-]+/g, '_')}.csv`;
+		a.click();
+		setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+	}
 	const SIDES = ['orange', 'blue'] as const;
 	const teamOf = (g: LeagueGame, t: 'orange' | 'blue') => g.players.filter((p) => p.team === t);
 </script>
 
 <svelte:head><title>GoA2 · Hall of Records</title></svelte:head>
 <svelte:window on:keydown={(e) => { if (e.key === 'Escape') { if (heroSel) heroSel = null; else if (sel) sel = null; } }} />
+
+{#snippet lwho(x: { key: string; name: string })}
+	<button class="who" on:click={() => openLog(x.key)}>{x.name}</button>
+{/snippet}
+{#snippet seat(x: { key: string; name: string; hero: string; level: number; k: number | null; d: number | null; a: number | null })}
+	<span class="lseat">{@render face(x.hero, 24)}<span class="lsn">{@render lwho(x)}<small>{heroName(x.hero)} · Lv {x.level}</small></span><b>{kda(x)}</b></span>
+{/snippet}
+{#snippet matchCard(m: MatchLine)}
+	<article class="panel lm is-{m.team}" class:won={m.won}>
+		<button class="lmh" on:click={() => (openMatch = { ...openMatch, [m.id]: !openMatch[m.id] })} aria-expanded={!!openMatch[m.id]}>
+			<span class="res" class:w={m.won}>{m.won ? 'W' : 'L'}</span>
+			{@render face(m.hero, 34)}
+			<span class="lmt"><b>{heroName(m.hero)}</b><small>{when(m.at)}{m.room ? ` · room ${m.room}` : ''}</small></span>
+			<span class="lmk"><small>K/D/A</small><b>{kda(m)}</b></span>
+			<span class="lmk"><small>Level</small><b>{m.level}</b></span>
+			<span class="lmk hidem"><small>Coins</small><b>{m.coins ?? '–'}</b></span>
+			<span class="dl" class:up={m.delta > 0} class:down={m.delta < 0}>{m.delta > 0 ? '+' : ''}{m.delta}</span>
+			<span class="chev" aria-hidden="true">{openMatch[m.id] ? '▴' : '▾'}</span>
+		</button>
+		{#if openMatch[m.id]}
+			<div class="lmb">
+				<div class="lfacts">
+					<span><small>Result</small>{m.won ? 'Victory' : 'Defeat'} · {WIN_LABEL[m.type]}</span>
+					<span><small>Side</small><em class="t-{m.team}">{teamName(m.team)}</em></span>
+					<span><small>Length</small>{m.rounds} round{m.rounds === 1 ? '' : 's'} · {hm(m.minutes)}</span>
+					<span><small>Rating</small>{m.rating - m.delta} → {m.rating}</span>
+					<span><small>Coins earned</small>{m.coins ?? '–'}</span>
+					<span><small>Minions</small>{#if m.mRoles}{m.minions ?? 0} <i class="mr">{m.mRoles.melee} melee · {m.mRoles.ranged} ranged · {m.mRoles.heavy} heavy</i>{:else}–{/if}</span>
+				</div>
+				{#if m.k != null}
+					<div class="lev">
+						<div><h4 class="sub">Defeated</h4>{#each m.kills as x, i (i)}<span class="evc k">{x.name}<small>{rt(x)}</small></span>{:else}<span class="none">—</span>{/each}</div>
+						<div><h4 class="sub">Fell to</h4>{#each m.deaths as x, i (i)}<span class="evc d">{x.name}<small>{rt(x)}</small></span>{:else}<span class="none">—</span>{/each}</div>
+						<div><h4 class="sub">Assisted on</h4>{#each m.assisted as x, i (i)}<span class="evc a">{x.name}<small>{rt(x)}</small></span>{:else}<span class="none">—</span>{/each}</div>
+					</div>
+				{/if}
+				{#if m.path.cards.length || m.path.ult}<div class="lbuild"><h4 class="sub">Build</h4>{@render pathRow(m.hero, m.path)}</div>{/if}
+				<div class="cols tight">
+					<div><h4 class="sub">With</h4><div class="lseats">{#each m.mates as x (x.key)}{@render seat(x)}{:else}<span class="none">alone</span>{/each}</div></div>
+					<div><h4 class="sub">Against</h4><div class="lseats">{#each m.foes as x (x.key)}{@render seat(x)}{/each}</div></div>
+				</div>
+			</div>
+		{/if}
+	</article>
+{/snippet}
 
 {#snippet face(hero: string, size = 34)}
 	<span class="face" style="--fs:{size}px; {portraitCss(hero)}" title={heroName(hero)}></span>
@@ -158,9 +234,8 @@
 	<header class="top">
 		<a class="btn btn-ghost btn-sm back" href={base + '/'}><Icon name="back" /> <span class="hidem">Home</span></a>
 		<h1 class="ttl">Hall of Records</h1>
-		{#if sample}<span class="samp" title="Made-up games, to show the page">Sample</span>{/if}
 		<nav class="tabs" aria-label="Sections">
-			{#each [['players', 'Players'], ['heroes', 'Heroes'], ['records', 'Records'], ['games', 'Games']] as [k, l] (k)}
+			{#each [['players', 'Players'], ['log', 'Player log'], ['heroes', 'Heroes'], ['records', 'Records'], ['games', 'Games']] as [k, l] (k)}
 				<button class="tab" class:on={tab === k && !(k === 'players' && sel)} class:crumb={tab === k && k === 'players' && !!sel} on:click={() => go(k as Tab)}>{l}</button>
 			{/each}
 		</nav>
@@ -179,13 +254,11 @@
 			<section class="panel msg">
 				<h2 class="t-h2">The records are locked</h2>
 				<p class="t-body c-muted">Couldn't read the games table ({errMsg}).</p>
-				<a class="btn btn-ghost" href="?sample=1">See it with sample games</a>
 			</section>
 		{:else if phase === 'empty' || !league}
 			<section class="panel msg">
 				<h2 class="t-h2">No games on record yet</h2>
 				<p class="t-body c-muted">A game lands here when it is won, was played from the first turn, and had at least two people at the table.</p>
-				<a class="btn btn-ghost" href="?sample=1">See it with sample games</a>
 			</section>
 		{:else if tab === 'players' && player}
 			{@const p = player}
@@ -361,6 +434,76 @@
 				{/each}
 			</div>
 			{#if league.withEvents < league.games.length}<p class="fine c">K/D/A and nemeses count the {league.withEvents} game{league.withEvents === 1 ? '' : 's'} recorded with kill events; the rest count for everything else.</p>{/if}
+		{:else if tab === 'log'}
+			<!-- ── the player log: everyone A–Z · one player's whole record, every match in full ── -->
+			<div class="plog">
+				<nav class="panel lgl" aria-label="Players">
+					<span class="t-label">{logList.length} player{logList.length === 1 ? '' : 's'}</span>
+					{#each logList as p (p.key)}
+						<button class="lgi" class:on={logP?.key === p.key} on:click={() => openLog(p.key)}>
+							<span class="lgn">{p.name}</span><small>{p.games} game{p.games === 1 ? '' : 's'} · {wl(p)} · {day(p.lastAt)}</small>
+						</button>
+					{/each}
+				</nav>
+				{#if logP}
+					{@const p = logP}
+					{@const roles = p.mRoles}
+					<div class="lgr">
+						<section class="panel lhead">
+							<div class="lht">
+								<h2 class="pn">{p.name}</h2>
+								<span class="lsince">First game {when(p.firstAt)} · last {when(p.lastAt)}</span>
+								<button class="btn btn-ghost btn-sm csv" on:click={() => downloadCsv(p)} title="Every game as a spreadsheet">Download CSV</button>
+							</div>
+							<div class="lgrid">
+								<div class="st"><span>Games</span><b>{p.games}</b></div>
+								<div class="st"><span>Wins – losses</span><b>{p.wins} – {p.losses}</b></div>
+								<div class="st"><span>Win rate</span><b>{pct(p.wins, p.games)}%</b></div>
+								<div class="st"><span>Rating · peak</span><b>{p.rating} <small>· {p.peak}</small></b></div>
+								<div class="st"><span>Streak · best · worst</span><b>{streakTxt(p.streak)} <small>· {p.bestStreak ? `W${p.bestStreak}` : '–'} · {p.worstStreak ? `L${-p.worstStreak}` : '–'}</small></b></div>
+								<div class="st"><span>Time played</span><b>{hm(p.minutes)} <small>· {p.rounds} rounds</small></b></div>
+								<div class="st"><span>Heroes defeated</span><b>{p.kdaGames ? p.kills : '–'}</b></div>
+								<div class="st"><span>Times defeated</span><b>{p.kdaGames ? p.deaths : '–'}</b></div>
+								<div class="st"><span>Assists</span><b>{p.kdaGames ? p.assists : '–'}</b></div>
+								<div class="st"><span>K/D · kill share</span><b>{kd(p)} <small>· {kp(p)}</small></b></div>
+								<div class="st"><span>Minions defeated</span><b>{p.kdaGames ? p.minions : '–'}</b>{#if p.kdaGames}<i class="mr">{roles.melee} melee · {roles.ranged} ranged · {roles.heavy} heavy</i>{/if}</div>
+								<div class="st"><span>Coins earned · per game</span><b>{p.coinGames ? p.coins : '–'} <small>· {avg(p.coins, p.coinGames)}</small></b></div>
+								<div class="st"><span>Level · avg · best</span><b>{avg(p.levels, p.games)} <small>· {p.maxLevel}</small></b></div>
+								<div class="st"><span>Ultimates unlocked</span><b>{p.ults}</b></div>
+								{#each WIN_TYPES as t (t)}<div class="st"><span>{WIN_LABEL[t]} games · won</span><b>{p.byType[t].games} <small>· {p.byType[t].wins}</small></b></div>{/each}
+							</div>
+							{#if p.kdaGames < p.games}<p class="fine">Kills, defeats, assists and minions count the {p.kdaGames} of {p.games} games recorded with those events.</p>{/if}
+						</section>
+
+						<section class="panel">
+							<h3 class="t-label">By hero</h3>
+							<div class="lhero">
+								<div class="lhr th"><span></span><span class="hn">Hero</span><span>Games</span><span>W–L</span><span>K/D/A</span><span>Minions</span><span>Avg level</span><span>Avg coins</span></div>
+								{#each heroRows(p) as h (h.hero)}
+									<div class="lhr">{@render face(h.hero, 26)}<span class="hn">{heroName(h.hero)}</span><span>{h.games}</span><span>{wl(h)}</span><span>{h.ev ? `${h.k}/${h.d}/${h.a}` : '–'}</span><span>{h.ev ? h.minions : '–'}</span><span>{avg(h.lv, h.games)}</span><span>{avg(h.coins, h.cg)}</span></div>
+								{/each}
+							</div>
+						</section>
+
+						<section class="panel">
+							<h3 class="t-label">With &amp; against</h3>
+							<div class="cols tight">
+								<div class="tbl">
+									<div class="tr th"><span>Teammate</span><span class="n">Games</span><span class="n">W–L</span><span></span></div>
+									{#each p.mates as m (m.key)}<div class="tr">{@render lwho(m)}<span class="n">{m.games}</span><span class="n">{wl(m)}</span><span class="bar"><i style="transform:scaleX({m.wins / m.games})"></i></span></div>{/each}
+								</div>
+								<div class="tbl">
+									<div class="tr th"><span>Opponent</span><span class="n">W–L</span><span class="n k">Beat</span><span class="n d">Fell</span></div>
+									{#each [...p.foes].sort((a, b) => b.games - a.games) as f (f.key)}<div class="tr">{@render lwho(f)}<span class="n">{wl(f)}</span><span class="n k">{f.killed}</span><span class="n d">{f.killedBy}</span></div>{/each}
+								</div>
+							</div>
+						</section>
+
+						<h3 class="t-label lmh3">Every game <small>· newest first · tap one for the full record</small></h3>
+						{#each p.history as m (m.id)}{@render matchCard(m)}{/each}
+					</div>
+				{/if}
+			</div>
 		{:else if tab === 'heroes'}
 			<!-- ── heroes and their builds ── -->
 			<div class="heroes">
@@ -467,12 +610,77 @@
 </div>
 
 <style>
+	/* ── the player log ── */
+	.plog { display: grid; grid-template-columns: 240px 1fr; gap: 14px; align-items: start; }
+	.lgl { position: sticky; top: 0; display: flex; flex-direction: column; gap: 4px; padding: 12px; max-height: calc(100dvh - 120px); overflow-y: auto; }
+	.lgl .t-label { margin-bottom: 4px; }
+	.lgi { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 7px 10px; border-radius: 8px; border: 1px solid transparent; background: none; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+	.lgi:hover { background: var(--raise); }
+	.lgi.on { border-color: var(--brass-line); background: var(--well); }
+	.lgi.on .lgn { color: var(--brass-hi); }
+	.lgn { font-size: 16px; }
+	.lgi small { font-size: 11.5px; color: var(--ink-3); }
+	.lgr { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+	.lhead { display: flex; flex-direction: column; gap: 12px; }
+	.lht { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 14px; }
+	.lsince { font-size: 13px; color: var(--ink-3); }
+	.csv { margin-left: auto; }
+	.lgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; }
+	.lgrid .st b small { font-size: 13px; color: var(--ink-3); }
+	.mr { display: block; font-style: normal; font-size: 11.5px; color: var(--ink-3); }
+	.st .mr { position: static; }
+	.lhero { display: flex; flex-direction: column; gap: 4px; overflow-x: auto; }
+	.lhr { display: grid; grid-template-columns: 26px minmax(110px, 1fr) repeat(6, minmax(58px, 80px)); align-items: center; gap: 8px; padding: 4px 8px; border-radius: 6px; background: var(--raise); font-size: 14px; min-width: 620px; }
+	.lhr > span:not(.hn):not(.face) { text-align: right; color: var(--ink-2); }
+	.lhr.th { background: none; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; }
+	.lhr.th span { color: var(--ink-3) !important; }
+	.lmh3 { margin: 6px 0 0; }
+	.lmh3 small { text-transform: none; letter-spacing: 0; color: var(--ink-3); }
+	.lm { padding: 0; overflow: hidden; border-left: 3px solid var(--tc, var(--brass-line)); }
+	.lm.is-orange { --tc: #ef7d22; } .lm.is-blue { --tc: #2f7fe6; }
+	.lmh { width: 100%; display: flex; align-items: center; gap: 12px; padding: 10px 14px; border: 0; background: none; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+	.lmh:hover { background: var(--raise); }
+	.lmt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+	.lmt b { font-weight: 400; font-size: 16px; }
+	.lmt small { font-size: 12px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.lmk { flex: none; display: flex; flex-direction: column; align-items: center; min-width: 56px; }
+	.lmk small { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); }
+	.lmk b { font-weight: 400; font-size: 16px; }
+	.chev { flex: none; color: var(--ink-3); }
+	.lmb { display: flex; flex-direction: column; gap: 4px; padding: 4px 16px 16px; border-top: 1px solid var(--hair); }
+	.lfacts { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px 16px; padding-top: 10px; font-size: 14px; }
+	.lfacts small { display: block; font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); }
+	.lfacts em { font-style: normal; } .t-orange { color: #ffae6e; } .t-blue { color: #8cc0ff; }
+	.lev { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+	.evc { display: inline-flex; align-items: baseline; gap: 5px; margin: 0 6px 6px 0; padding: 3px 9px; border-radius: 999px; font-size: 13px; background: var(--well); border: 1px solid var(--hair); }
+	.evc small { font-size: 11px; color: var(--ink-3); }
+	.evc.k { border-color: rgba(74, 222, 128, 0.4); } .evc.d { border-color: rgba(248, 113, 113, 0.45); } .evc.a { border-color: var(--brass-line); }
+	.none { color: var(--ink-3); font-size: 13px; }
+	.lseats { display: flex; flex-direction: column; gap: 4px; }
+	.lseat { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 6px; background: var(--raise); }
+	.lsn { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+	.lsn small { font-size: 11.5px; color: var(--ink-3); }
+	.lsn :global(.who) { align-self: flex-start; text-align: left; font-size: 15px; }
+	.lseat b { font-weight: 400; font-size: 14px; color: var(--ink-2); }
+	@media (max-width: 760px) {
+		.plog { grid-template-columns: 1fr; }
+		.lgl { position: static; flex-direction: row; max-height: none; overflow-x: auto; padding: 8px; }
+		.lgl .t-label { display: none; }
+		.lgi { flex: none; }
+		.lev { grid-template-columns: 1fr; }
+		.lmh { gap: 8px; padding: 8px 10px; }
+		.lmk { min-width: 42px; }
+		.csv { margin-left: 0; }
+		.lgrid { grid-template-columns: 1fr 1fr; }
+		.lgrid .st b { font-size: 17px; }
+		.tabs { max-width: 100%; overflow-x: auto; }
+		.tab { padding: 6px 10px; font-size: 13.5px; }
+	}
 	.stats { position: fixed; inset: 0; display: flex; flex-direction: column; color: var(--ink); }
 	.top { flex: none; display: flex; align-items: center; gap: 14px; padding: 12px 20px; border-bottom: 1px solid var(--brass-line); background: rgba(3, 11, 21, 0.72); }
 	.ttl { margin: 0; font-size: 28px; font-weight: 400; letter-spacing: 0.04em; color: var(--brass-hi); white-space: nowrap; }
-	.samp { padding: 2px 10px; border-radius: 999px; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-dark); background: var(--brass); }
 	.tabs { margin-left: auto; display: flex; gap: 4px; padding: 3px; border-radius: 999px; background: var(--well); border: 1px solid var(--hair); }
-	.tab { padding: 6px 16px; border-radius: 999px; font-size: 15px; color: var(--ink-2); background: none; border: 0; cursor: pointer; }
+	.tab { white-space: nowrap; padding: 6px 16px; border-radius: 999px; font-size: 15px; color: var(--ink-2); background: none; border: 0; cursor: pointer; }
 	.tab:hover { color: var(--ink); }
 	.tab.on { color: var(--ink-dark); background: linear-gradient(180deg, var(--brass-hi), var(--brass)); }
 	.tab.crumb { color: var(--brass-hi); box-shadow: inset 0 0 0 1px var(--brass-line); }

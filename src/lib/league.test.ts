@@ -99,6 +99,25 @@ describe('the league', () => {
 		expect(L.heroes.some((h) => h.paths.length > 0)).toBe(true)
 		expect(L.records.length).toBeGreaterThan(5)
 	})
+
+	it("each player's log matches their totals: every defeat, fall and assist listed with its round and turn", () => {
+		const L = buildLeague(sampleRows(20, 3))
+		for (const p of L.players) {
+			expect(p.history).toHaveLength(p.games)
+			const ev = p.history.filter((m) => m.k != null)
+			expect(ev.reduce((n, m) => n + m.kills.length, 0)).toBe(p.kills)
+			expect(ev.reduce((n, m) => n + m.deaths.length, 0)).toBe(p.deaths)
+			expect(ev.reduce((n, m) => n + m.assisted.length, 0)).toBe(p.assists)
+			for (const m of ev) {
+				expect(m.kills.length).toBe(m.k)
+				expect([...m.kills, ...m.deaths].every((x) => x.r >= 1 && x.t >= 1 && x.t <= 4)).toBe(true)
+			}
+			expect(p.minutes).toBe(p.history.reduce((n, m) => n + m.minutes, 0))
+			expect(p.firstAt).toBeLessThanOrEqual(p.lastAt)
+			expect(p.peak).toBeGreaterThanOrEqual(p.rating)
+			expect(p.mRoles.melee + p.mRoles.ranged + p.mRoles.heavy).toBeGreaterThan(0)
+		}
+	})
 })
 
 describe('reading the table', () => {
