@@ -22,8 +22,12 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      # The site = the RELEASE (branch `release`) at /goa2/. Launched 2026-10-09; before that 1.0 sat here,
+      # 2.0 at /goa2/v2/ and the release at /goa2/v1/ — those two addresses now only send people home.
+      - name: Checkout the release
         uses: actions/checkout@v4
+        with:
+          ref: release
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -37,52 +41,22 @@ jobs:
       - name: Unit tests
         run: npx vitest run
 
-      # Two versions side by side; the GM's site version switch (src/lib/siteVersion.ts)
-      # sends everyone to whichever one is live:
-      #   1.0 (branch `1.0`)          → /goa2/
-      #   2.0 (this branch)           → /goa2/v2/
-      #   the release (branch `release`: 1.0 + 2.0's features brought in one by one,
-      #   not live until finished)    → /goa2/v1/
-      - name: Build version 2.0
-        env:
-          BASE_PATH: /goa2/v2
-        run: npm run build
-
-      - name: Checkout version 1.0
-        uses: actions/checkout@v4
-        with:
-          ref: '1.0'
-          path: v1src
-
-      - name: Build version 1.0
-        working-directory: v1src
+      - name: Build
         env:
           BASE_PATH: /goa2
-        run: |
-          npm ci
-          npm run build
-
-      - name: Checkout the release
-        uses: actions/checkout@v4
-        with:
-          ref: release
-          path: relsrc
-
-      - name: Build the release
-        working-directory: relsrc
-        env:
-          BASE_PATH: /goa2/v1
-        run: |
-          npm ci
-          npx vitest run
-          npm run build
+        run: npm run build
 
       - name: Assemble the site
         run: |
-          mkdir -p site/v2 site/v1
-          cp -r v1src/build/. site/
-          cp -r build/. site/v2/
-          cp -r relsrc/build/. site/v1/
+          mkdir -p site
+          cp -r build/. site/
+          # old addresses (/goa2/v1/…, /goa2/v2/…) and any other missing page → home, keeping ?room links
+          cat > site/404.html <<'HTML'
+          <!doctype html>
+          <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>GoA2</title>
+          <script>location.replace('/goa2/' + location.search + location.hash)</script></head>
+          <body style="background:#0c1220;color:#f5f1e8;font-family:sans-serif"><p><a href="/goa2/" style="color:#d8b36a">GoA2</a></p></body></html>
+          HTML
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
