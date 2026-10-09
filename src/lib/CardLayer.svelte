@@ -8,7 +8,7 @@
 	import { teamName } from '$lib/teams';
 	import type { Readable } from 'svelte/store';
 	import type { MatchSession, MatchState, Player } from '$lib/match';
-	import { teamForSeat, colorHex, battlePatch, levelPatch, canRespawn, turnOrder, actingIdx, actorOf } from '$lib/match';
+	import { teamForSeat, colorHex, battlePatch, levelPatch, canRespawn, turnPlan, claimable, actingIdx, actorOf } from '$lib/match';
 	import { battleResult, battleText, laneNotes } from '$lib/battle';
 	import Card from '$lib/cards/Card.svelte';
 	import CardBack from '$lib/cards/CardBack.svelte';
@@ -196,7 +196,13 @@
 	$: isFinalTurn = $ms.turn >= 4;
 	// active turns (match.ts): after the reveal the cards act one at a time; the acting player ends their turn,
 	// the host can skip someone away; after the last card the turn moves on (turn 4: the host's minion battle)
-	$: actOrder = revealed ? turnOrder($ms) : [];
+	$: plan = revealed ? turnPlan($ms) : { order: [], flips: [], choice: [] };
+	$: actOrder = plan.order;
+	// the coin flips after each card it settled (a tie across teams): drawn between that card and the next
+	$: flipAfter = new Set(plan.flips.map((k) => plan.order[k]));
+	// tied teammates choose who goes first: one of them claims the card acting now
+	$: canClaim = revealed && claimable($ms).includes(clientId);
+	const claimTie = () => session.cardAction({ kind: 'claim', pid: clientId });
 	$: actAt = actingIdx($ms);
 	$: actor = revealed ? actorOf($ms) : null;
 	$: actorName = actor ? heroName(cards[actor]?.hero ?? '') : '';
@@ -697,7 +703,7 @@
 		.map((pid) => ({ p: $players.find((q: Player) => q.id === pid), pid, cs: viewCards[pid] ?? cards[pid], ini: initOf(cards[pid], true) ?? 0 }))
 		.filter((x) => !!x.cs)
 		.map((x, k, all): OrderEntry => ({ pid: x.pid, hero: x.cs.hero, heroName: heroName(x.cs.hero), player: x.p?.name ?? '', team: (teamOfPid(x.pid) ?? 'orange'), idx: cards[x.pid].pending!, ini: x.ini,
-			tied: k > 0 && all[k - 1].ini === x.ini && teamOfPid(all[k - 1].pid) !== teamOfPid(x.pid), portrait: portraitCss(x.cs.hero), color: colorHex(x.p?.color ?? '') }));
+			tied: k > 0 && flipAfter.has(all[k - 1].pid), tieImg: k > 0 ? icon(`tiebreaker_${teamOfPid(all[k - 1].pid) ?? 'orange'}`) : undefined, portrait: portraitCss(x.cs.hero), color: colorHex(x.p?.color ?? '') }));
 	const teamOfPid = (pid: string) => { const p = $players.find((q: Player) => q.id === pid); return p ? pTeam(p) : ($ms.pieces?.[pid]?.team as 'orange' | 'blue' | undefined) ?? null; };
 	// the planning dots in each player's colour: the enemy on the left, your team on the right (you last)
 	$: h2dots = [...seatedWithCards.filter((p) => pTeam(p) !== viewTeam), ...seatedWithCards.filter((p) => pTeam(p) === viewTeam && p.id !== clientId), ...seatedWithCards.filter((p) => p.id === clientId)]
@@ -783,6 +789,7 @@
 			// your card names a lingering effect: on your turn the ring asks first (× = no effect), then End turn
 			if (fxAsking && actor === clientId && mine && myTurnCard != null) { const c = myTurnCard; const hero = mine.hero; return { label: 'Effect?', sub: heroCards(hero)[c]?.name, kind: 'go', tint: true, run: () => (examine = { hid: hero, idx: c, pid: clientId }), cancel: fxNo }; }
 			if (actor === clientId) return { label: 'End turn', kind: 'go', tint: true, pulse: true, run: endAct };
+			if (canClaim) return { label: 'Go first', sub: `Tied with ${actorName}`, kind: 'team', run: claimTie, alt: iAmHost ? { label: 'Skip', run: endAct } : undefined };
 			if (actor) return { label: 'Waiting', sub: actorName, kind: 'wait', alt: iAmHost ? { label: 'Skip', run: endAct } : undefined };
 			// everyone has acted (turn 4: the minion battle comes next)
 			if (!iAmHost) return { label: 'Waiting', sub: 'Host', kind: 'wait' };
@@ -911,6 +918,7 @@
 			<button class="act primary" on:click={endAct}>End turn →</button>
 		{:else if revealed && actor}
 			<span class="waithost">{actorName} is acting…</span>
+			{#if canClaim}<button class="act primary" on:click={claimTie} title="You tied with {actorName}: your team chooses who goes first">Go first</button>{/if}
 			{#if iAmHost}<button class="act takeback" on:click={endAct} title="Skip their turn (they're away)">Skip</button>{/if}
 		{:else if revealed && iAmHost}
 			{#if !isFinalTurn}

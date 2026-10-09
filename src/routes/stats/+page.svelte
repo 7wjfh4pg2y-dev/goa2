@@ -16,9 +16,11 @@
 	import { heroCards } from '$lib/cards/deck';
 	import { teamName } from '$lib/teams';
 	import Icon from '$lib/ui/Icon.svelte';
+	import { role } from '$lib/role';
 
 	type Tab = 'players' | 'heroes' | 'records' | 'games';
-	let phase: 'loading' | 'ready' | 'empty' | 'error' = 'loading';
+	// GMs only for now (the soft admin gate in role.ts; the link is in the GM tools)
+	let phase: 'loading' | 'ready' | 'empty' | 'error' | 'locked' = 'loading';
 	let errMsg = '';
 	let sample = false;
 	let league: League | null = null;
@@ -34,6 +36,7 @@
 		phase = league.games.length ? 'ready' : 'empty';
 	}
 	async function load() {
+		if ($role !== 'admin') { phase = 'locked'; return; }
 		sample = new URLSearchParams(location.search).has('sample');
 		if (sample) return use(sampleRows(24, 7));
 		try {
@@ -166,6 +169,12 @@
 	<main class="body" bind:this={body}>
 		{#if phase === 'loading'}
 			<p class="note">Opening the records…</p>
+		{:else if phase === 'locked'}
+			<section class="panel msg">
+				<h2 class="t-h2">GMs only</h2>
+				<p class="t-body c-muted">Sign in as Admin to open the Hall of Records.</p>
+				<a class="btn btn-ghost" href={base + '/'}>Home</a>
+			</section>
 		{:else if phase === 'error'}
 			<section class="panel msg">
 				<h2 class="t-h2">The records are locked</h2>

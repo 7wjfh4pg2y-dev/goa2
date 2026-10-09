@@ -1,5 +1,5 @@
 <script lang="ts" module>
-	export type OrderEntry = { pid: string; hero: string; heroName: string; player: string; team: 'orange' | 'blue'; idx: number; ini: number; tied: boolean; portrait: string; color: string };
+	export type OrderEntry = { pid: string; hero: string; heroName: string; player: string; team: 'orange' | 'blue'; idx: number; ini: number; tied: boolean; tieImg?: string; portrait: string; color: string };
 </script>
 
 <script lang="ts">
@@ -57,7 +57,7 @@
 	{:else}
 		<b class="ct">Initiative</b>
 		{#each order as e, k (e.pid)}
-			{#if k}{#if e.tied && tieArt}<img class="ctie" src={tieArt} alt="Tie" title="A tie — the coin's holders went first" />{:else}<i class="cchev">›</i>{/if}{/if}
+			{#if k}{#if e.tied && (e.tieImg || tieArt)}<img class="ctie" src={e.tieImg ?? tieArt} alt="Tie" title="A tie: the coin's holders went first, then it flipped" />{:else}<i class="cchev">›</i>{/if}{/if}
 			<button class="ce is-{e.team}" class:done={k < acting} class:now={k === acting} on:click={() => click(k, e)} title={canPoint && k !== acting ? 'Make this card the one acting' : 'Read the card'}>
 				<span class="cfc" style="--pc:{e.color}; {e.portrait}"></span>
 				<span class="ch">{e.heroName}</span><b class="ci">{e.ini}</b>{#if e.pid === me}<em class="cyou">you</em>{/if}
@@ -76,7 +76,7 @@
 		{#each order as e, k (e.pid)}
 			{@const c = heroCards(e.hero)[e.idx]}
 			{@const a = act(e)}
-			{#if k}{#if e.tied}<img class="tiemark" src={tieArt} alt="Tie" title="A tie — the coin's holders go first" />{:else}<i class="chev">›</i>{/if}{/if}
+			{#if k}{#if e.tied}<img class="tiemark" src={e.tieImg ?? tieArt} alt="Tie" title="A tie: the coin's holders went first, then it flipped" />{:else}<i class="chev">›</i>{/if}{/if}
 			<button class="ban is-{e.team}" class:done={k < acting} class:now={k === acting} style="--c:{COL[c?.color ?? ''] ?? '#666'}; --art:url({artOf(e.hero, e.idx)})" on:click={() => click(k, e)} title={canPoint && k !== acting ? 'Make this card the one acting' : 'Read the card'}>
 				<span class="bini">{e.ini}</span>
 				<span class="bbody">

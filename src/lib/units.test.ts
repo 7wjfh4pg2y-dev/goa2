@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { applyCardReq, canRespawn, turnOrder, turnKey, actorOf, lifeTier, cardInitiative, cardResolved, clearable, minionDefense, boardLookOf, zoneGlowOf, boardFxOf, type MatchState, type Piece } from './match'
+import { applyCardReq, canRespawn, turnOrder, turnPlan, claimable, turnKey, actorOf, lifeTier, cardInitiative, cardResolved, clearable, minionDefense, boardLookOf, zoneGlowOf, boardFxOf, type MatchState, type Piece } from './match'
 import { newPlayerCardState } from './cards/cardstate'
 
 // A (orange) + C (orange, A's teammate) vs B (blue, level 3) and D (blue)
@@ -237,16 +237,25 @@ describe('active turns (after the reveal the cards act one at a time)', () => {
 		const c = s.cards!
 		return { ...s, host: 'H', tieBreaker: coin, cards: { ...c, A: { ...c.A, pending: 0 }, C: { ...c.C, pending: 0 }, D: { ...c.D, pending: 0 } } } as MatchState
 	}
-	it('orders the cards by initiative, a tie going to the team holding the coin', () => {
+	it('orders the cards by initiative; a tie across teams goes card by card, the coin flipping after each contested pick', () => {
 		for (const coin of ['orange', 'blue'] as const) {
 			const s = play(coin)
 			const order = turnOrder(s)
-			expect(order.sort()).toEqual(['A', 'B', 'C', 'D'])
-			const ord = turnOrder(s), ini = ord.map((p) => cardInitiative(s, p)!)
+			expect([...order].sort()).toEqual(['A', 'B', 'C', 'D'])
+			const ini = order.map((p) => cardInitiative(s, p)!)
 			for (let i = 1; i < ini.length; i++) expect(ini[i]).toBeLessThanOrEqual(ini[i - 1])
-			// A, C (orange) and D (blue) tie: the coin's team first
-			const tied = ord.filter((p) => p !== 'B')
-			expect(tied[coin === 'orange' ? 2 : 0]).toBe('D')
+			// A, C (orange) and D (blue) tie
+			const tied = order.filter((p) => p !== 'B')
+			const { flips } = turnPlan(s)
+			if (coin === 'orange') {
+				// an Atlantean (A, their pick) → flip → D → flip → C (alone: no flip)
+				expect(tied).toEqual(['A', 'D', 'C'])
+				expect(flips.map((k) => order[k])).toEqual(['A', 'D'])
+			} else {
+				// D → flip → the Atlanteans in the order they choose, no more flips (teammates only)
+				expect(tied).toEqual(['D', 'A', 'C'])
+				expect(flips.map((k) => order[k])).toEqual(['D'])
+			}
 		}
 		expect(turnOrder({ ...play(), cards: { ...play().cards, D: { ...play().cards!.D, pending: -1 } } } as MatchState)).not.toContain('D') // a pass doesn't act
 	})
@@ -265,21 +274,39 @@ describe('active turns (after the reveal the cards act one at a time)', () => {
 		// a new turn starts from the first card again
 		expect(actorOf({ ...s, turn: 3 } as MatchState)).toBe(turnOrder({ ...s, turn: 3 } as MatchState)[0])
 	})
-	it('the tie-breaker coin flips by itself once the tie it settled is resolved — without reshuffling the order', () => {
+	it('the coin flips by itself after each contested pick — without reshuffling the order', () => {
 		let s = play('orange')
-		const order = turnOrder(s)
-		const lastTied = Math.max(...['A', 'C', 'D'].map((p) => order.indexOf(p)))
-		for (let k = 0; k <= lastTied; k++) {
+		const order = turnOrder(s), { flips } = turnPlan(s)
+		for (let k = 0; k < order.length; k++) {
 			const before = s.tieBreaker
 			s = { ...s, ...applyCardReq(s, { kind: 'endAct', pid: order[k] }) } as MatchState
-			expect(s.tieBreaker).toBe(k === lastTied ? 'blue' : before) // flips exactly when the tied cards are done
+			expect(s.tieBreaker).toBe(flips.includes(k) ? (before === 'orange' ? 'blue' : 'orange') : before)
 			expect(turnOrder(s)).toEqual(order) // the turn's order never changes
 		}
+		expect(s.tieBreaker).toBe('orange') // flipped twice
 		// teammates alone tied: no coin, no flip
 		const t = { ...play('orange'), cards: { ...play().cards, D: { ...play().cards!.D, pending: -1 } } } as MatchState
 		let u = t
 		for (const p of turnOrder(t)) u = { ...u, ...applyCardReq(u, { kind: 'endAct', pid: p }) } as MatchState
 		expect(u.tieBreaker).toBe('orange')
+	})
+	it('tied teammates choose who goes first: one of them claims it', () => {
+		let s = play('blue')
+		const order = turnOrder(s)
+		while (actorOf(s) !== 'D') s = { ...s, ...applyCardReq(s, { kind: 'endAct', pid: actorOf(s)! }) } as MatchState
+		s = { ...s, ...applyCardReq(s, { kind: 'endAct', pid: 'D' }) } as MatchState
+		expect(actorOf(s)).toBe('A')
+		expect(claimable(s)).toEqual(['C'])
+		expect(applyCardReq(s, { kind: 'claim', pid: 'B' })).toEqual({}) // not in the tie
+		s = { ...s, ...applyCardReq(s, { kind: 'claim', pid: 'C' }) } as MatchState
+		expect(actorOf(s)).toBe('C')
+		expect(turnOrder(s).filter((p) => p !== 'B')).toEqual(['D', 'C', 'A'])
+		expect(claimable(s)).toEqual(['A']) // A can take it back while C hasn't finished
+		s = { ...s, ...applyCardReq(s, { kind: 'endAct', pid: 'C' }) } as MatchState
+		expect(actorOf(s)).toBe('A')
+		expect(claimable(s)).toEqual([])
+		expect(s.tieBreaker).toBe('orange') // one flip only (after D)
+		expect(order.length).toBe(4)
 	})
 	it('after the last card ends its turn nobody acts and the turn waits for the host (Next turn / minion battle)', () => {
 		let s = play()
