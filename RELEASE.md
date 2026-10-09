@@ -1,4 +1,4 @@
-# The release (`/goa2/v1/`, branch `release`)
+# The release (now LIVE at `/goa2/`, branch `release`)
 
 The final, real version of the game, assembled from 1.0 plus 2.0's features —
 one segment at a time, each tested here before the next. Not live: friends keep
@@ -21,7 +21,7 @@ or friends) → tick it off. Fixes the live game needs go into 1.0 AND here.
 7b. [x] The Tide look — hero select and the matchup slices (in: 2.0's screen with the user's changes — team-coloured pips / All / Lock in, no stat numbers, picked heroes ringed in the picker's colour, a lower bottom bar: full cards up to 3 a side, compact at 4–5; the slices loom the tie-breaker coins. Slices stay full width (the user's pick, A); no blade line on desktop; long names a touch smaller; bigger, outlined role icons)
 8. [x] The in-game screen — **the user's direction (2026-10-04): MORE OPTIONS, each player's own.** Some players want the full classic look (board AND HUD), some want to mix, the user wants everything 2.0: the new HUD becomes a PERSONAL choice beside the classic one (like the map look and the effects in `boardPrefs`, never shared) — presets Classic / 2.0 / Custom (pick per part). Already personal: Island / Classic map, Rims, Zone outline, Waves (all effects off by default). — top bar, console and roster, player boards, the Ascension deck
 9. [x] The phone in-game layout
-10. [ ] Final playtest with the group → switch `/goa2` to the release
+10. [x] LAUNCHED (2026-10-09): `/goa2/` now serves this branch; `/goa2/v1/` and `/goa2/v2/` only redirect home; the 1.0 / 2.0 version switch (siteVersion.ts) is gone. Branches `1.0` and the old 2.0 branch stay in git as archives
 
 Still on the Create form as "soon" (not part of any segment yet): 8 / 10 seats, and the Single Draft / Pick & Ban / All Random draft systems (all four are built and tested in the engine; 8+ seats has its extra spawn points in the rules).
 

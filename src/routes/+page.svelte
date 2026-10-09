@@ -10,7 +10,6 @@
 	import coinBlue from '$lib/images/tiebreaker_blue.png';
 	import { reveal } from '$lib/transitions';
 	import { role, tryAdmin, enterAsPlayer, signOut } from '$lib/role';
-	import { THIS_VERSION, SITE_VERSIONS, fetchSiteVersion, setSiteVersion, goToVersion, type SiteVersion } from '$lib/siteVersion';
 	import { availableMaps, type MapChoice, type GameMap } from '$lib/maps';
 	import { announceRoom, browseRooms, type RoomInfo } from '$lib/lobby';
 	import { claimIdentity, tabClientId, writeTicket, clearTicket, type ResumeTicket } from '$lib/identity';
@@ -438,21 +437,6 @@
 	}
 	function onKey(e: KeyboardEvent) { if (e.key === 'Enter') submitAdmin(); }
 
-	// --- GM: which version of the site is live (1.0 / 2.0) for everyone ---
-	let siteVer: SiteVersion | null = null;
-	let verBusy = false, verErr = '';
-	$: if (mode === 'adminhub') loadSiteVersion();
-	async function loadSiteVersion() { siteVer = (await fetchSiteVersion()) ?? null; }
-	async function switchVersion(v: SiteVersion) {
-		if (v === siteVer && v === THIS_VERSION) return;
-		if (!confirm(`Switch the whole site to version ${v}? Everyone is sent there the next time they open or refresh it.`)) return;
-		verBusy = true; verErr = '';
-		const err = await setSiteVersion(v);
-		verBusy = false;
-		if (err) { verErr = err; return; }
-		siteVer = v;
-		goToVersion(v);
-	}
 
 	// --- match ---
 	function persistName() {
@@ -811,19 +795,7 @@
 								</a>
 							</div>
 							<section class="panel verpanel">
-								<span class="t-label">Site version</span>
-								<div class="vers">
-									{#each SITE_VERSIONS as v (v)}
-										<button class="btn" class:btn-primary={siteVer === v} class:btn-ghost={siteVer !== v} disabled={verBusy} on:click={() => switchVersion(v)}>
-											{v}{v === THIS_VERSION ? ' · this one' : ''}
-										</button>
-									{/each}
-								</div>
-								<p class="t-small c-muted">{siteVer ? `${siteVer} is live for everyone.` : 'Live version unknown (no setting yet).'} Switching sends every player to that version the next time they open or refresh the site.</p>
-								<p class="msg-error slot" title={verErr}>{verErr}</p>
-								{#if THIS_VERSION === 'release'}<p class="t-small c-muted">You're on the release build (/goa2/v1) — 1.0 plus 2.0's features as they come in. Not live yet.</p>{/if}
-								<a class="btn btn-ghost" href={base + '/preview'}>2.0 preview — pick features</a>
-								<a class="btn btn-ghost" href={base + '/stats'}>Hall of Records</a>
+								<a class="btn btn-ghost" href={base + '/stats'}><Icon name="crown" /> Hall of Records</a>
 							</section>
 							<div class="row"><button class="btn btn-ghost on-art" on:click={goHome}>Sign out</button></div>
 						</div>
@@ -1151,8 +1123,6 @@
 	.field--code::placeholder { letter-spacing: 0.12em; }
 	.step .openpanel { display: flex; flex-direction: column; gap: 10px; padding: 18px 26px 22px; }
 	.step .verpanel { display: flex; flex-direction: column; gap: 10px; padding: 16px 22px 18px; margin-top: 14px; }
-	.verpanel .vers { display: flex; gap: 10px; }
-	.verpanel .vers .btn { flex: 1; }
 	/* a fixed-size list (it never grows the window): as tall as the screen allows, up to three rows */
 	/* exactly three rows tall; a fourth game scrolls */
 	.glist { --gr: 64px; --gg: 8px; display: flex; flex-direction: column; gap: var(--gg); height: calc(var(--gr) * 3 + var(--gg) * 2); overflow-y: auto; flex: none; }
