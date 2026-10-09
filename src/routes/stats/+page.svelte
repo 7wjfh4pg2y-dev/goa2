@@ -9,7 +9,7 @@
 	import {
 		buildLeague, titlesOf, nemesisOf, victimOf, rivalOf, bestMateOf, worstMateOf, rowOfSelect,
 		LEAGUE_SELECT, WIN_TYPES, WIN_LABEL, START_RATING,
-		type League, type PlayerAgg, type HeroAgg, type MatchLine, type Award, type PathTally, type GameRowIn, type LeagueGame, type Path, type Foe, type Mate
+		type League, type PlayerAgg, type HeroAgg, type MatchLine, type PathTally, type GameRowIn, type LeagueGame, type Path, type Foe, type Mate
 	} from '$lib/league';
 	import { heroById, portraitCss, traitIcon, TRAIT_LABELS, type Trait } from '$lib/heroes';
 	import { heroCards } from '$lib/cards/deck';
@@ -21,6 +21,7 @@
 	import OverTime from '$lib/hall/OverTime.svelte';
 	import Rivalries from '$lib/hall/Rivalries.svelte';
 	import Glyph from '$lib/hall/Glyph.svelte';
+	import AwardsHall from '$lib/hall/AwardsHall.svelte';
 	import { role } from '$lib/role';
 
 	type Tab = 'players' | 'log' | 'awards' | 'heroes' | 'games';
@@ -228,12 +229,6 @@
 		if (m.ultRound != null) b.push(`Ultimate R${m.ultRound}`);
 		return b;
 	}
-	// the awards, grouped
-	$: awardGroups = league ? [
-		{ k: 'Single game', list: league.awards.filter((a) => !a.hidden && !a.extra && a.scope === 'game') },
-		{ k: 'Career', list: league.awards.filter((a) => !a.hidden && !a.extra && a.scope === 'career') },
-		{ k: 'More awards', list: league.awards.filter((a) => !a.hidden && a.extra) }
-	] : [];
 	const SIDES = ['orange', 'blue'] as const;
 	const teamOf = (g: LeagueGame, t: 'orange' | 'blue') => g.players.filter((p) => p.team === t);
 </script>
@@ -258,18 +253,6 @@
 		{#each featRows(p) as f (f.k)}<div class="st" title={f.tip}><span>{f.k}</span><b>{f.v}</b></div>{/each}
 	</div>
 	{#if p.clashGames < p.games}<p class="fine">Defences and aces count the {p.clashGames} of {p.games} games recorded with them{p.clashGames ? '' : ' — they start with the next game'}.</p>{/if}
-{/snippet}
-{#snippet awardCard(a: Award)}
-	<div class="panel award" class:open={!a.holders.length}>
-		<span class="at">{a.title}</span>
-		<span class="ab">{a.blurb}</span>
-		{#if a.holders.length}
-			<span class="av">{a.value}</span>
-			<span class="aw">{#each a.holders as h, i (h.key)}{#if i}<i>&amp;</i>{/if}<button class="who" on:click={() => openLog(h.key)}>{h.name}</button>{/each}{#if a.at}<small>&nbsp;· {day(a.at)}</small>{/if}</span>
-		{:else}
-			<span class="av none2">Up for grabs</span>
-		{/if}
-	</div>
 {/snippet}
 {#snippet matchCard(m: MatchLine)}
 	<article class="panel lm is-{m.team}" class:won={m.won}>
@@ -649,12 +632,8 @@
 				{/if}
 			{/if}
 		{:else if tab === 'awards'}
-			<!-- ── the awards: who holds each one now ── -->
-			{#each awardGroups as grp (grp.k)}
-				<h3 class="t-label sp c">{grp.k}</h3>
-				<div class="recs">{#each grp.list as a (a.id)}{@render awardCard(a)}{/each}</div>
-			{/each}
-			{#if league.withClashes < league.games.length}<p class="fine c">Defences and aces count the {league.withClashes} game{league.withClashes === 1 ? '' : 's'} recorded with them{league.withClashes ? '' : ' — they start with the next game'}.</p>{/if}
+			<!-- ── the awards: the trophy hall ── -->
+			<AwardsHall {league} onOpen={openLog} />
 		{:else}
 			<!-- ── every game, newest first ── -->
 			{@render toolbar(gq, (v) => (gq = v), 'Search by player or hero…', [], '', () => {})}
@@ -902,15 +881,6 @@
 
 	/* records */
 	.recs { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
-	.award { display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; padding: 14px 12px; }
-	.award .at { font-size: 21px; color: var(--brass-hi); }
-	.award .ab { font-size: 12.5px; color: var(--ink-3); min-height: 2.4em; }
-	.award .av { font-size: 24px; margin-top: 2px; }
-	.award .aw { display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline; gap: 2px 6px; font-size: 15px; color: var(--ink-2); }
-	.award .aw i { font-style: normal; color: var(--ink-3); }
-	.award .aw small { font-size: 12px; color: var(--ink-3); }
-	.award.open { opacity: 0.55; }
-	.award .none2 { font-size: 15px; color: var(--ink-3); letter-spacing: 0.06em; text-transform: uppercase; }
 	.mbadges { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 10px; }
 	.mbadge { padding: 2px 10px; border-radius: 999px; font-size: 12.5px; color: var(--ink-dark); background: linear-gradient(180deg, var(--brass-hi), var(--brass)); }
 
