@@ -2368,8 +2368,8 @@
 	.lring path.ult { stroke: rgba(138, 79, 209, .45); } .lring path.ult.on { stroke: #a46be8; }
 	.mstrip.p2 .mpc { grid-template-columns: 32px 1fr 32px 40px; }
 	.msb { grid-column: 1 / 4; grid-row: 2; align-self: end; }
-	.tray.mob.p2 { bottom: 100px; }
-	.bstack.p2 { bottom: 108px; }
+	.tray.mob.p2 { bottom: calc(100px + env(safe-area-inset-bottom, 0px)); }
+	.bstack.p2 { bottom: calc(108px + env(safe-area-inset-bottom, 0px)); }
 	.mpc { flex: none; width: 170px; height: 62px; display: grid; grid-template-columns: 30px 1fr 32px 40px; grid-template-rows: 32px 1fr; column-gap: 4px; row-gap: 2px;
 		padding: 3px 5px 3px 7px; border-radius: 10px; cursor: pointer; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.1); box-shadow: inset 3px 0 0 var(--tc); }
 	.mpic { grid-column: 1; grid-row: 1; align-self: center; display: grid; }
@@ -2396,7 +2396,7 @@
 	.msx .pp { position: absolute; top: 2px; left: 0; right: 0; display: flex; justify-content: center; gap: 1.5px; }
 	.msx .pp i { flex: none; width: 4px; height: 3px; border-radius: 1px; transform: skewX(-24deg); background: rgb(var(--tcl)); box-shadow: 0 0 3px rgb(var(--tcl)); }
 	/* the compact dash */
-	.mdash { position: absolute; left: 0; right: 0; bottom: 0; height: 72px; z-index: 11; display: flex; align-items: center; gap: 4px; padding: 4px 5px; color: #e5e7eb;
+	.mdash { position: absolute; left: 0; right: 0; bottom: 0; height: calc(72px + env(safe-area-inset-bottom, 0px)); box-sizing: border-box; z-index: 11; display: flex; align-items: center; gap: 4px; padding: 4px 5px calc(4px + env(safe-area-inset-bottom, 0px)); color: #e5e7eb;
 		background: linear-gradient(90deg, rgb(var(--tcr) / .22), rgba(9,13,22,.96) 30%); border-top: 1px solid rgb(var(--tcr) / .55); }
 	.mdash.ultdash { border-top-color: rgba(165,110,230,.7); }
 	.mdl { flex: none; width: 116px; display: flex; flex-direction: column; gap: 3px; }
@@ -2447,7 +2447,7 @@
 	.mact .waithost { max-width: none; white-space: nowrap; font-size: .68rem; }
 	/* hand tips: fixed card size; hidden = just the tops peek above the dash */
 	/* phone banner hand: a stack on the right above the dash; tucked = slid right, only the markers peek out */
-	.bstack { --bw: clamp(230px, 72vw, 320px); position: absolute; right: 6px; bottom: 80px; z-index: 10; width: var(--bw); display: flex; flex-direction: column; gap: 3px;
+	.bstack { --bw: clamp(230px, 72vw, 320px); position: absolute; right: 6px; bottom: calc(80px + env(safe-area-inset-bottom, 0px)); z-index: 10; width: var(--bw); display: flex; flex-direction: column; gap: 3px;
 		transition: transform .28s cubic-bezier(.2,.8,.2,1); filter: drop-shadow(0 6px 14px rgba(0,0,0,.6)); }
 	.bstack :global(.bn) { --bh: clamp(34px, 5.2vh, 44px); }
 	/* only the banners themselves take touches — the stack's box would otherwise swallow board pans/pinches */
@@ -2455,7 +2455,7 @@
 	.bwrap { pointer-events: auto; transition: transform .26s cubic-bezier(.2,.8,.2,1); }
 	.bwrap.tucked { transform: translateX(calc(var(--bw) - clamp(34px, 5.2vh, 44px) * 1.4 + 4px)); }
 	.bsgap { height: 4px; }
-	.tray.mob { --cw: 62px; left: 0; right: 0; bottom: 72px; justify-content: center; }
+	.tray.mob { --cw: 62px; left: 0; right: 0; bottom: calc(72px + env(safe-area-inset-bottom, 0px)); justify-content: center; }
 	.tray.mob.retracted { transform: translateY(calc(var(--cw) * 1.396 - 30px)); clip-path: inset(-800px -800px calc(var(--cw) * 1.396 - 30px) -800px); }
 
 	/* phone-size overlays: preview, boards, deck, reveal */

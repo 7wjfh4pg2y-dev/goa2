@@ -1431,7 +1431,7 @@
 	.gamewrap.sea { background: #0b4f80; } /* island look: deep water behind everything (the phone bars sit outside the board) */
 	.managepanel .act:disabled { cursor: default; opacity: .75; }
 	.managepanel .act:disabled:not(.primary) { opacity: .4; }
-	.gamewrap { position: fixed; inset: 0; color: #f1f5f9; overflow: hidden; overflow: clip; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+	.gamewrap { position: fixed; inset: 0 env(safe-area-inset-right, 0px) 0 env(safe-area-inset-left, 0px); color: #f1f5f9; overflow: hidden; overflow: clip; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 	/* ocean backdrop — deep water with layered swells + moving caustics so the hex island reads as floating on sea */
 	.ocean { position: absolute; inset: 0;
 		background:
@@ -1781,8 +1781,8 @@
 	/* the prompts sit under the 2.0 top bar and its order row */
 	.gamewrap.h2 .placehint, .gamewrap.h2 .battlebox { top: calc(176px * var(--uis, 1)); z-index: 10; }
 	.boardarea { position: absolute; inset: 0; }
-	.boardarea.mob { top: 116px; bottom: 106px; }
-	.boardarea.mob.p2 { top: 124px; bottom: 100px; }
+	.boardarea.mob { top: 116px; bottom: calc(106px + env(safe-area-inset-bottom, 0px)); }
+	.boardarea.mob.p2 { top: 124px; bottom: calc(100px + env(safe-area-inset-bottom, 0px)); }
 	/* phones: the attack emblem a size smaller */
 	.gamewrap.mob .akface { width: 56px; height: 56px; }
 	.gamewrap.mob .akseal { width: 48px; height: 48px; }
@@ -1854,7 +1854,7 @@
 	.mbtn { position: relative; flex: 1; height: 32px; border-radius: 9px; cursor: pointer; font-size: 12px; color: #e5e7eb; background: rgba(255, 255, 255, 0.05); }
 	.mbtn.lob { border: 1px solid rgba(199, 154, 78, 0.5); }
 	.mbtn.leave { color: #fca5a5; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.4); }
-	.msheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 31; max-height: 80vh; overflow-y: auto; padding: 18px 14px 20px; border-radius: 18px 18px 0 0;
+	.msheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 31; max-height: 80vh; overflow-y: auto; padding: 18px 14px calc(20px + env(safe-area-inset-bottom, 0px)); border-radius: 18px 18px 0 0;
 		background: rgba(10, 15, 25, 0.98); border-top: 1px solid rgba(199, 154, 78, 0.5); box-shadow: 0 -20px 50px rgba(0, 0, 0, 0.6);
 		touch-action: none; transition: transform 0.22s ease; }
 	.msheet.drag { transition: none; }

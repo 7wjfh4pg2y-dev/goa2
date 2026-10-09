@@ -110,7 +110,7 @@
 </div>
 
 <style>
-	.pdash { --brass: #d8b36a; --brass-hi: #f4dfa8; --line: rgba(216, 179, 106, 0.4); position: absolute; left: 0; right: 0; bottom: 0; z-index: 11; height: 100px; box-sizing: border-box;
+	.pdash { --brass: #d8b36a; --brass-hi: #f4dfa8; --line: rgba(216, 179, 106, 0.4); position: absolute; left: 0; right: 0; bottom: 0; z-index: 11; height: calc(100px + env(safe-area-inset-bottom, 0px)); box-sizing: border-box;
 		display: flex; flex-direction: column; gap: 4px; padding: 5px 6px calc(5px + env(safe-area-inset-bottom)); color: #f5f1e8; pointer-events: auto;
 		background: linear-gradient(180deg, var(--tg), transparent 60%), linear-gradient(180deg, rgba(16, 44, 72, 0.98), rgba(6, 21, 38, 0.99)); border-top: 2px solid var(--tc); }
 	.is-orange { --tc: #ef7d22; --tg: rgba(239, 125, 34, 0.16); } .is-blue { --tc: #2f7fe6; --tg: rgba(47, 127, 230, 0.18); }
