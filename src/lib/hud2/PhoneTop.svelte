@@ -30,6 +30,7 @@
 	export let onMenu: () => void = () => {};
 	export let onWheel: () => void = () => {};
 	export let onTie: () => void = () => {};
+	export let onOrder: () => void = () => {}; // a tap on the turn order: every card in play, in order
 	export let onSheet: () => void = () => {}; // waves / Life: the sheet where tokens flip
 	export let onCoins: (d: number) => void = () => {};
 	/** the turn's state for the free middle: planning dots (player colours, filled = in) or the acting order (lit = acting) */
@@ -66,7 +67,7 @@
 				{#if status.countdown}<em class="rv">Revealing</em>
 				{:else}<span class="dots">{#each status.dots as d, i (i)}<i class:ok={d.ok} style="--c:{d.color}"></i>{/each}</span>{/if}
 			{:else if status}
-				<span class="ord">{#each status.order as o, k (k)}<i class="f" class:now={k === status.acting} class:done={k < status.acting} style="--pc:{o.color}; {o.portrait}"></i>{/each}</span>
+				<button class="ord" on:click={onOrder} aria-label="This turn's cards">{#each status.order as o, k (k)}<i class="f" class:now={k === status.acting} class:done={k < status.acting} style="--pc:{o.color}; {o.portrait}"></i>{/each}</button>
 			{/if}
 		</span>
 		{#if coins != null}
@@ -111,12 +112,12 @@
 	.purse { position: relative; flex: none; display: flex; align-items: center; gap: 2px; }
 	.pmb { width: 20px; height: 24px; padding: 0; border-radius: 7px; font-size: 16px; line-height: 1; color: #f4dfa8; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(216, 179, 106, 0.35); }
 	/* the free middle: the turn's state */
-	.mid { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+	.mid { flex: 1; min-width: 0; align-self: stretch; display: flex; align-items: center; justify-content: center; overflow: hidden; } /* full bar height: the faces' rings and glow are not cut */
 	.dots { display: flex; gap: 3px; flex-wrap: nowrap; }
 	.dots i { flex: none; width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid var(--c); box-sizing: border-box; opacity: 0.55; }
 	.dots i.ok { background: var(--c); opacity: 1; }
 	.rv { font-style: normal; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #f4dfa8; }
-	.ord { display: flex; align-items: center; }
+	.ord { display: flex; align-items: center; padding: 0 6px; border: 0; background: none; cursor: pointer; }
 	.ord .f { width: 18px; height: 18px; margin-left: -3px; border-radius: 50%; background-repeat: no-repeat; background-color: #0b101a; box-shadow: 0 0 0 1.5px var(--pc), 0 0 0 2.5px #0a1a2c; }
 	.ord .f:first-child { margin-left: 0; }
 	.ord .f.done { opacity: 0.4; filter: grayscale(0.7); }

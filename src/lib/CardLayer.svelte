@@ -378,6 +378,13 @@
 	function endFx(e: Effect) { session.act(`${e.name} — effect ended`, { effects: effects.filter((x) => x.id !== e.id) }); }
 	// the left HUD's effects list opens a card through here
 	export function showCard(hid: string, idx: number, pid?: string, list?: ExCard[]) { examine = { hid, idx, pid, list }; }
+	// the phone's turn order (top bar): every card in play this turn, in order, opened at the one acting
+	export function showOrder() {
+		if (!h2order.length) return;
+		const list = h2order.map((e) => ({ hid: e.hero, idx: e.idx, pid: e.pid }));
+		const at = list[Math.min(Math.max(0, actAt), list.length - 1)];
+		examine = { hid: at.hid, idx: at.idx, pid: at.pid, list };
+	}
 	// phone top bar: the Ultimate button opens the unlock confirmation once it's affordable
 	export function askUnlockUlt() { if (mine && myUlt >= 0) lvConfirm = { kind: 'take', idx: myUlt }; }
 
@@ -1376,20 +1383,13 @@
 	{#if mine && mobile}
 		<!-- ───────── phone: hand tips above a compact dash ───────── -->
 		{#if bannerHand}
-			<!-- hand as banners (+ the ultimate and its level bar); hidden = tucked to the right edge, markers showing -->
+			<!-- hand as banners (the ultimate lives in the dash); hidden = tucked to the right edge, markers showing -->
 			<div class="bstack" class:p2={phone2}>
 				{#each handOrdered as idx (idx)}
 					<div class="bwrap" class:tucked={autoRetract && bannerOpen !== idx}>
 						<CardBanner heroId={mine.hero} {idx} sel={selected === idx} on:click={() => bannerTap(idx, () => preview(idx))} />
 					</div>
 				{/each}
-				{#if myUlt >= 0}
-					<span class="bsgap"></span>
-					<div class="bwrap" class:tucked={autoRetract && bannerOpen !== myUlt}>
-						<CardBanner heroId={mine.hero} idx={myUlt} level={levelOf(mine)} unlocked={mine.ultimate} dim={!mine.ultimate}
-							on:click={() => bannerTap(myUlt, () => mine && examineCard(mine.hero, myUlt))} />
-					</div>
-				{/if}
 			</div>
 		{:else}
 			<div class="tray mob" class:p2={phone2} class:retracted class:spread={spreadHand}>

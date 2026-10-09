@@ -791,6 +791,16 @@
 </script>
 
 <!-- battle zone + host push override (desktop HUD and the phone waves sheet) -->
+<!-- the wave token (the same drawing as the top bars'): half Atlantean copper, half Titan ice, the wave across it -->
+{#snippet waveTok()}
+	<svg viewBox="0 0 24 24" aria-hidden="true">
+		<defs><linearGradient id="gv-wt-split" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f08a34" /><stop offset="0.5" stop-color="#d0681a" /><stop offset="0.5" stop-color="#2a74d6" /><stop offset="1" stop-color="#1a4f9e" /></linearGradient></defs>
+		<circle cx="12" cy="12" r="11" fill="url(#gv-wt-split)" stroke="#0a1a2c" stroke-width="1.2" />
+		<circle cx="12" cy="12" r="9.6" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="0.8" />
+		<path d="M4.6 15.2c2.2 0 3.2-1.6 4.4-3.8 1.2-2.3 2.8-4.2 5.6-4.2 2.4 0 4.2 1.5 4.2 3.6 0 1.6-1.1 2.7-2.6 2.7-1.1 0-1.9-.7-1.9-1.6" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" />
+		<path d="M4.6 18.4c1.4 0 2-.9 3.3-.9s1.9.9 3.3.9 2-.9 3.3-.9 1.9.9 3.3.9" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" />
+	</svg>
+{/snippet}
 {#snippet laneCtl()}
 	<div class="lane">
 		<span class="bz" title="Battle zone — the minion battle is fought here; a push moves it one zone towards the loser's throne">⚔ {placeName(battleZone($ms))}</span>
@@ -960,7 +970,7 @@
 			{/if}
 			<button class="piex" on:click={closeConfirm} aria-label="Cancel">✕</button>
 		</div>
-	{:else if selPiece}
+	{:else if selPiece && !carryingSel}
 		<div class="pietool" class:anchored={!!tipPos} style={tipPos ? `left:${tipPos.x / lay.s}px; top:${tipPos.y / lay.s}px` : ''}>
 			<span class="pietxt" style:color={teamText(selPiece)}>{selLabel}</span>
 			{#if selMovable}<button class="pieflip" on:click={moveSel} title="Pick it up — tap a hex to put it down">Move</button>{/if}
@@ -1165,7 +1175,7 @@
 		<PhoneTop round={$ms.round} turn={$ms.turn} tieBreaker={$ms.tieBreaker} {tieArt} {tieFlip} waves={$ms.waves} life={$ms.life} {lifeSplit}
 			left={viewTeam === 'orange' ? 'blue' : 'orange'} coins={myCoins} conn={$status} badge={iAmHost ? seatRequests.length : 0}
 			zone={$ms.lane ?? 1} zones={LANE.length} counts={zoneCount} starts={waveStarts} won={beamWon} fx={$boardPrefs.beam} status={phoneStatus}
-			onMenu={() => (lobbyOpen = true)} onWheel={() => (wheelOpen = true)} onTie={flipTie} onSheet={() => (lwOpen = true)} onCoins={coins} />
+			onMenu={() => (lobbyOpen = true)} onWheel={() => (wheelOpen = true)} onTie={flipTie} onSheet={() => (lwOpen = true)} onOrder={() => cardLayer?.showOrder()} onCoins={coins} />
 		{#if lobbyOpen}
 			<GameLobby phone {room} conn={connLabel($status)} connClass={$status} seats={seatRows} watchers={spectators} requests={seatRequests} host={iAmHost} {clientId} {mySeat} myRequest={myRequestSeat}
 				colorOf={(id) => colorHex($players.find((p) => p.id === id)?.color ?? '')} {log} canUndo={$canUndo} onUndo={() => session.undo()}
@@ -1252,7 +1262,7 @@
 				on:pointerdown={sheetDown} on:pointermove={sheetMove} on:pointerup={sheetUp} on:pointercancel={sheetUp} on:click|capture={sheetClick} role="presentation">
 				<span class="grab"></span>
 				<div class="lsec"><div class="lh"><span>Waves</span><b>{$ms.waves} / {($ms.waveTok ?? []).length}</b></div>
-					<div class="lg w">{#each $ms.waveTok ?? [] as full, i}<button class="wtok" class:dep={!full} class:flip={flips[`w${i}`]} style="background-image:url({waveIcon})" on:click={() => toggleWave(i)} aria-label="Wave token"></button>{/each}</div>
+					<div class="lg w">{#each $ms.waveTok ?? [] as full, i}<button class="wtok svgt" class:dep={!full} class:flip={flips[`w${i}`]} on:click={() => toggleWave(i)} aria-label="Wave token">{@render waveTok()}</button>{/each}</div>
 					{@render laneCtl()}</div>
 				{#each ['orange', 'blue'] as t}
 					<div class="lsec"><div class="lh {t}"><span>{teamAdj(t)} Life</span><b>{$ms.life[t as Team]} / {lifeMax}</b></div>
@@ -1829,4 +1839,6 @@
 	.lg.w { grid-template-columns: repeat(7, 1fr); }
 	.msheet .ltok { width: 44px; height: 42px; }
 	.msheet .wtok { width: 34px; height: 34px; }
+	.wtok.svgt { background: none; box-shadow: none; display: grid; place-items: center; }
+	.wtok.svgt svg { width: 100%; height: 100%; display: block; }
 </style>
