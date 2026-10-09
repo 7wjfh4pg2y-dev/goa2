@@ -10,6 +10,10 @@
 	import { clashAt, restAt } from './beam';
 
 	export let W = 1440; // the design canvas width
+	/** the compact bar (narrow, one height with the nameplates either side): team · Life count + small tokens ·
+	 *  Round + the turn pips · the lane (three hexes) + the battle zone's name + the wave tokens · the other team */
+	export let compact = false;
+	export let cw = 600; // its width (design px)
 	export let round = 1;
 	export let turn = 1;
 	export let lifeTok: Record<Team, boolean[]> = { orange: [], blue: [] };
@@ -84,6 +88,13 @@
 	$: cB = left === 'blue' ? '#ef7d22' : '#2f7fe6';
 	$: hA = left === 'blue' ? '#5aa8ff' : '#ff9a3c';
 	$: hB = left === 'blue' ? '#ff9a3c' : '#5aa8ff';
+	// the compact bar
+	$: laneOrder = left === 'orange' ? Array.from({ length: zones }, (_, i) => i) : Array.from({ length: zones }, (_, i) => zones - 1 - i);
+	$: zoneName = zones === 3 ? (zone === 1 ? 'Centre' : 'Beach') : `Zone ${zone + 1}`; // the hexes beside it say whose beach
+	$: laneTeam = (z: number) => (zones === 3 ? (z === 0 ? 'orange' : z === 2 ? 'blue' : 'mid') : 'mid');
+	$: cBlock = Math.max(100, (cw - 200 - 46) / 2);
+	$: cTk = Math.max(9, Math.min(15, (cBlock - 44) / Math.max(1, nLife) - 2));
+	const ROM = ['I', 'II', 'III', 'IV'];
 </script>
 
 {#snippet lifebox(t: Team)}
@@ -96,6 +107,41 @@
 	</div>
 {/snippet}
 
+<svg class="symdefs" width="0" height="0" aria-hidden="true"><defs>
+			<symbol id="h2-wavetok" viewBox="0 0 24 24">
+				<linearGradient id="h2-wt-split" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f08a34" /><stop offset="0.5" stop-color="#d0681a" /><stop offset="0.5" stop-color="#2a74d6" /><stop offset="1" stop-color="#1a4f9e" /></linearGradient>
+				<circle cx="12" cy="12" r="11" fill="url(#h2-wt-split)" stroke="#0a1a2c" stroke-width="1.2" />
+				<circle cx="12" cy="12" r="9.6" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="0.8" />
+				<path d="M4.6 15.2c2.2 0 3.2-1.6 4.4-3.8 1.2-2.3 2.8-4.2 5.6-4.2 2.4 0 4.2 1.5 4.2 3.6 0 1.6-1.1 2.7-2.6 2.7-1.1 0-1.9-.7-1.9-1.6" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" />
+				<path d="M4.6 18.4c1.4 0 2-.9 3.3-.9s1.9.9 3.3.9 2-.9 3.3-.9 1.9.9 3.3.9" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" />
+			</symbol>
+</defs></svg>
+
+{#snippet cteam(t: Team, r: boolean)}
+	<div class="cteam is-{t}" class:r>
+		<span class="ctn">{TEAMNAME[t]}</span>
+		<span class="ctrow">
+			<b class="ctc">{lifeTok[t].filter(Boolean).length}</b>
+			<span class="cltoks">{#each lifeTok[t] as full, i (i)}<button class="ltok" class:dep={!full} class:flip={flips[`l${t}${i}`]} on:click={() => onLife(t, i)} aria-label="{TEAMNAME[t]} Life token" style="--tk:{cTk.toFixed(1)}px"><img src={lifeArt(t, full ? 'front' : 'back')} alt="" /></button>{/each}</span>
+		</span>
+	</div>
+{/snippet}
+
+{#if compact}
+<div class="ctop" style="width:{cw}px">
+	<button class="ctie" class:flip={tieFlip} on:click={onTie} title="Tie-breaker — the {TEAMNAME[tieBreaker]} win ties (click to flip)"><img src={tieArt(tieBreaker)} alt="Tie-breaker" /><small>Ties</small></button>
+	{@render cteam(leftTeam, false)}
+	<div class="cmid">
+		<span class="cr1"><b>Round {round}</b><span class="cturns">{#each [1, 2, 3, 4] as t (t)}<i class:done={t < turn} class:on={t === turn}>{ROM[t - 1]}</i>{/each}</span></span>
+		<span class="cr2">
+			<span class="clane">{#each laneOrder as z (z)}<i class="lz-{laneTeam(z)}" class:on={z === zone && !won}></i>{/each}</span>
+			<b>{zoneName}</b>
+			<span class="cwav">{#each waveTok as f, i (i)}<button class="wtok" class:dep={!f} class:flip={flips[`w${i}`]} on:click={() => onWave(i)} aria-label="Wave token"><svg viewBox="0 0 24 24"><use href="#h2-wavetok" /></svg></button>{/each}</span>
+		</span>
+	</div>
+	{@render cteam(right, true)}
+</div>
+{:else}
 <div class="helm" style="width:{BW}px; --side:{SIDE}px; --bl:{LIFEW}px; --bm:{MID}px; --bh:{BH}px; --coin:{COIN}px">
 	<div class="hs round"><b>Round {round}</b><span class="dash">{#each [1, 2, 3, 4] as t (t)}<i class:done={t < turn} class:on={t === turn}></i>{/each}</span></div>
 	{@render lifebox(leftTeam)}
@@ -109,13 +155,6 @@
 		<defs>
 			<linearGradient id="h2-bm-l" gradientUnits="userSpaceOnUse" x1={BX0} x2={BX1} y1="0" y2="0"><stop offset="0" stop-color={left === 'blue' ? '#1d5fc0' : '#c85a0e'} /><stop offset="1" stop-color={left === 'blue' ? '#8fd0ff' : '#ffd08a'} /></linearGradient>
 			<linearGradient id="h2-bm-r" gradientUnits="userSpaceOnUse" x1={BX0} x2={BX1} y1="0" y2="0"><stop offset="0" stop-color={right === 'orange' ? '#ffd08a' : '#8fd0ff'} /><stop offset="1" stop-color={right === 'orange' ? '#c85a0e' : '#1d5fc0'} /></linearGradient>
-			<symbol id="h2-wavetok" viewBox="0 0 24 24">
-				<linearGradient id="h2-wt-split" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f08a34" /><stop offset="0.5" stop-color="#d0681a" /><stop offset="0.5" stop-color="#2a74d6" /><stop offset="1" stop-color="#1a4f9e" /></linearGradient>
-				<circle cx="12" cy="12" r="11" fill="url(#h2-wt-split)" stroke="#0a1a2c" stroke-width="1.2" />
-				<circle cx="12" cy="12" r="9.6" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="0.8" />
-				<path d="M4.6 15.2c2.2 0 3.2-1.6 4.4-3.8 1.2-2.3 2.8-4.2 5.6-4.2 2.4 0 4.2 1.5 4.2 3.6 0 1.6-1.1 2.7-2.6 2.7-1.1 0-1.9-.7-1.9-1.6" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" />
-				<path d="M4.6 18.4c1.4 0 2-.9 3.3-.9s1.9.9 3.3.9 2-.9 3.3-.9 1.9.9 3.3.9" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" />
-			</symbol>
 		</defs>
 		<path bind:this={beamEl} d={beamD} class="track" />
 		<path d={beamD} class="bglow" stroke={cA} stroke-dasharray="{$cl} {BL * 2 + 1}" />
@@ -134,8 +173,40 @@
 	{#if fx && BL}<span class="clash" style="left:{clash.x}px; top:{clash.y}px"><i class="fl"></i>{#each SPARKS as k (k)}<i class="sp" style="--a:{196 + ((k * 61) % 150)}deg; --d:{(k * 0.13) % 0.6}s; --t:{0.42 + (k % 3) * 0.09}s; --l:{9 + (k % 4) * 3}px"></i>{/each}</span>{/if}
 	<button class="tiecoin" class:flip={tieFlip} style="left:{CX}px; top:{CY}px" on:click={onTie} title="Tie-breaker — the {TEAMNAME[tieBreaker]} win ties (click to flip)"><img src={tieArt(tieBreaker)} alt="Tie-breaker" /></button>
 </div>
+{/if}
 
 <style>
+	.symdefs { position: absolute; width: 0; height: 0; overflow: hidden; }
+	/* the compact bar */
+	.ctop { --brass: #d8b36a; --brass-hi: #f4dfa8; --line: rgba(216, 179, 106, 0.4); position: relative; display: flex; align-items: stretch; height: 50px; box-sizing: border-box; border-radius: 14px; color: #f5f1e8; pointer-events: auto; overflow: hidden;
+		background: linear-gradient(180deg, rgba(16, 44, 72, 0.97), rgba(6, 21, 38, 0.97)); border: 1px solid var(--line); box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5); }
+	.ctie { flex: none; width: 46px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 0; border: 0; border-right: 1px solid var(--line); background: rgba(0, 0, 0, 0.2); cursor: pointer; }
+	.ctie img { width: 28px; height: 28px; border-radius: 50%; box-shadow: 0 0 0 1.5px var(--brass); }
+	.ctie small { font-size: 8px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--brass-hi); }
+	.cteam { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 3px; padding: 0 10px; }
+	.cteam.r { align-items: flex-end; }
+	.cteam.is-blue { background: linear-gradient(180deg, rgba(43, 111, 210, 0.55), rgba(23, 63, 136, 0.55)); }
+	.cteam.is-orange { background: linear-gradient(180deg, rgba(208, 112, 31, 0.55), rgba(138, 64, 15, 0.55)); }
+	.ctn { font-size: 11px; line-height: 1; letter-spacing: 0.16em; text-transform: uppercase; color: #fff; }
+	.ctrow { display: flex; align-items: center; gap: 6px; }
+	.cteam.r .ctrow { flex-direction: row-reverse; }
+	.ctc { font-weight: 400; font-size: 22px; line-height: 1; color: #fff; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6); }
+	.cltoks { display: flex; gap: 2px; }
+	.cteam.r .cltoks { flex-direction: row-reverse; }
+	.cmid { flex: none; width: 200px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
+	.cr1, .cr2 { display: flex; align-items: center; gap: 7px; white-space: nowrap; }
+	.cr1 b, .cr2 b { font-weight: 400; font-size: 12px; line-height: 1; letter-spacing: 0.08em; text-transform: uppercase; color: var(--brass-hi); }
+	.cr2 b { color: #fff; font-size: 11px; }
+	.cturns { display: flex; gap: 3px; }
+	.cturns i { min-width: 17px; height: 15px; padding: 0 3px; box-sizing: border-box; border-radius: 3px; display: grid; place-items: center; font-style: normal; font-size: 9px; line-height: 1; color: #8a9fb3; background: rgba(255, 255, 255, 0.08); }
+	.cturns i.done { color: #1b1204; background: rgba(216, 179, 106, 0.55); }
+	.cturns i.on { color: #1b1204; background: linear-gradient(180deg, var(--brass-hi), var(--brass)); box-shadow: 0 0 6px rgba(244, 223, 168, 0.55); }
+	.clane { display: flex; gap: 2px; }
+	.clane i { width: 11px; height: 12px; clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%); background: rgba(255, 255, 255, 0.18); }
+	.clane i.lz-orange { background: rgba(239, 125, 34, 0.45); } .clane i.lz-blue { background: rgba(47, 127, 230, 0.5); } .clane i.lz-mid { background: rgba(216, 179, 106, 0.4); }
+	.clane i.on { background: var(--brass-hi); }
+	.cwav { display: flex; gap: 2px; }
+	.cwav .wtok svg { width: 13px; height: 13px; }
 	.helm { --brass: #d8b36a; --brass-hi: #f4dfa8; --line: rgba(216, 179, 106, 0.4); --ink: #f5f1e8; --ink2: #bccbd9; --ink3: #8a9fb3;
 		position: relative; display: grid; grid-template-columns: var(--side) var(--bl) var(--bm) var(--bl) var(--side); height: var(--bh); border-radius: 16px; color: var(--ink);
 		background: linear-gradient(180deg, rgba(16, 44, 72, 0.97), rgba(6, 21, 38, 0.97)); border: 1px solid var(--line); box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5); box-sizing: border-box; pointer-events: auto; }

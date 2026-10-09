@@ -14,11 +14,15 @@
 	export let title = 'Planning';
 	export let doneWord = 'ready';
 	export let countdown = '';
-	export let dots: { team: string; color?: string; ok: boolean }[] = [];
+	export let dots: { team: string; color?: string; ok: boolean; portrait?: string; hero?: string }[] = [];
 	export let order: OrderEntry[] = [];
 	export let bonus: (pid: string, act: string) => number = () => 0;
 	export let tieArt = '';
 	export let small = false;
+	/** one narrow line (the compact HUD): planning = a face per player with a tick once they're in; after the reveal =
+	 *  the order as step · face · hero · initiative, a TIE tag between tied cards, "you" on yours */
+	export let compact = false;
+	export let me = '';
 	export let acting = 0; // whose card acts (shared: match.ts actingIdx)
 	export let canPoint = false; // the host may say who is acting
 	export let onPoint: (k: number) => void = () => {};
@@ -41,6 +45,28 @@
 	}
 </script>
 
+{#if compact}
+<div class="crow">
+	{#if planning}
+		{#if countdown}<b class="ct">Revealing</b>
+		{:else}
+			<b class="ct">{title}</b><span class="csub">{title === 'Planning' ? 'Choose a card' : 'Take your cards'}</span>
+			<span class="cfaces">{#each dots as d, i (i)}<span class="cf t-{d.team}" class:ok={d.ok} style="--pc:{d.color ?? '#888'}; {d.portrait ?? ''}" title={d.hero ?? ''}><i>{d.ok ? '✓' : '…'}</i></span>{/each}</span>
+			<em class="ccount">{ready} of {dots.length} {doneWord === 'ready' ? 'in' : doneWord}</em>
+		{/if}
+	{:else}
+		<b class="ct">Initiative</b>
+		{#each order as e, k (e.pid)}
+			{#if k}{#if e.tied}<span class="ctie" title="A tie — the coin's holders go first">{#if tieArt}<img src={tieArt} alt="" />{/if}Tie</span>{:else}<i class="cchev">›</i>{/if}{/if}
+			<button class="ce is-{e.team}" class:done={k < acting} class:now={k === acting} on:click={() => click(k, e)} title={canPoint && k !== acting ? 'Make this card the one acting' : 'Read the card'}>
+				<span class="cn">{k < acting ? '✓' : k + 1}</span>
+				<span class="cfc" style="--pc:{e.color}; {e.portrait}"></span>
+				<span class="ch">{e.heroName}</span><b class="ci">{e.ini}</b>{#if e.pid === me}<em class="cyou">you</em>{/if}
+			</button>
+		{/each}
+	{/if}
+</div>
+{:else}
 <div class="orow" class:small>
 	{#if planning}
 		<div class="status">
@@ -67,6 +93,7 @@
 		{/each}
 	{/if}
 </div>
+{/if}
 
 <style>
 	.orow { --brass: #d8b36a; --brass-hi: #f4dfa8; --line: rgba(216, 179, 106, 0.4); display: flex; align-items: center; justify-content: center; gap: 12px; height: 60px; color: #f5f1e8; }
@@ -103,4 +130,27 @@
 	.bdone { position: absolute; right: -6px; top: -7px; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; color: #fff; background: #16a34a; }
 	.chev { font-style: normal; color: var(--brass-hi); font-size: 20px; }
 	.tiemark { width: 30px; height: 30px; border-radius: 50%; box-shadow: 0 0 0 2px #0a1a2c, 0 0 0 3px var(--brass); }
+	/* the compact line */
+	.crow { --brass: #d8b36a; --brass-hi: #f4dfa8; --line: rgba(216, 179, 106, 0.4); width: max-content; max-width: 100%; margin: 0 auto; display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 14px; box-sizing: border-box;
+		border-radius: 0 0 14px 14px; color: #f5f1e8; pointer-events: auto; background: linear-gradient(180deg, rgba(16, 44, 72, 0.97), rgba(6, 21, 38, 0.97)); border: 1px solid var(--line); border-top: 0; box-shadow: 0 6px 14px rgba(0, 0, 0, 0.45); white-space: nowrap; }
+	.ct { font-weight: 400; font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--brass-hi); }
+	.csub { font-size: 11px; color: #bccbd9; }
+	.cfaces { display: flex; gap: 6px; }
+	.cf { position: relative; width: 20px; height: 20px; border-radius: 50%; background-repeat: no-repeat; background-color: #0b101a; box-shadow: 0 0 0 1.5px var(--tc), 0 0 0 2.5px var(--pc); opacity: 0.6; }
+	.cf.ok { opacity: 1; }
+	.cf i { position: absolute; right: -5px; bottom: -4px; min-width: 11px; height: 11px; border-radius: 6px; display: grid; place-items: center; font-style: normal; font-size: 7px; line-height: 1; color: #fff; background: #3b4656; box-shadow: 0 0 0 1px #0a1a2c; }
+	.cf.ok i { background: #16a34a; }
+	.ccount { font-style: normal; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: #bccbd9; }
+	.ce { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px 0 3px; border-radius: 999px; border: 1px solid transparent; background: none; font: inherit; color: inherit; cursor: pointer; }
+	.ce.done { opacity: 0.55; }
+	.ce.now { border-color: var(--brass-hi); background: rgba(244, 223, 168, 0.12); box-shadow: 0 0 8px rgba(244, 223, 168, 0.35); }
+	.cn { width: 17px; height: 17px; border-radius: 50%; display: grid; place-items: center; font-size: 10px; line-height: 1; color: #1b1204; background: linear-gradient(180deg, var(--brass-hi), var(--brass)); }
+	.ce.done .cn { color: #fff; background: #16a34a; }
+	.cfc { width: 18px; height: 18px; border-radius: 50%; background-repeat: no-repeat; background-color: #0b101a; box-shadow: 0 0 0 1.5px var(--tc), 0 0 0 2.5px var(--pc); }
+	.ch { font-size: 12px; color: #fff; }
+	.ci { font-weight: 400; font-size: 13px; color: var(--th); }
+	.cyou { font-style: normal; font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--brass-hi); }
+	.cchev { font-style: normal; color: var(--brass); font-size: 15px; }
+	.ctie { display: inline-flex; align-items: center; gap: 3px; padding: 1px 6px 1px 2px; border-radius: 999px; font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: #1b1204; background: linear-gradient(180deg, var(--brass-hi), var(--brass)); }
+	.ctie img { width: 14px; height: 14px; border-radius: 50%; }
 </style>

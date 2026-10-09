@@ -20,6 +20,7 @@
 	export let canUndo = false;
 	export let team: 'orange' | 'blue' = 'orange';
 	export let small = false;
+	export let compact = false; // the bottom-left corner, as tall as the dash (its effects list opens upward)
 	export let onUndo: () => void = () => {};
 	export let onRead: (pid: string, hero: string, idx: number) => void = () => {};
 
@@ -37,7 +38,7 @@
 	const tint = (t: string) => (t === 'blue' ? '#a8d0ff' : t === 'orange' ? '#ffc28a' : '#fff');
 </script>
 
-<div class="chron" class:small>
+<div class="chron" class:small class:compact>
 	<span class="head">
 		{#if host}
 			<button class="bub undo" on:click={onUndo} disabled={!canUndo} title={canUndo ? `Undo: ${log[log.length - 1]?.text ?? ''}` : 'Nothing to undo this turn'} aria-label="Undo"><svg viewBox="0 0 24 24"><path d="M9 4.5 4.5 9 9 13.5" /><path d="M5 9h9.5a5.25 5.25 0 0 1 0 10.5H11" /></svg></button>
@@ -78,6 +79,17 @@
 	.chron { position: relative; height: 200px; box-sizing: border-box; display: flex; flex-direction: column; gap: 8px; padding: 0 14px 12px; border-radius: 16px; color: #f5f1e8; pointer-events: auto;
 		background: linear-gradient(180deg, rgba(46, 51, 60, 0.98), rgba(22, 25, 31, 0.98)); border: 1px solid rgba(214, 222, 232, 0.3); border-top: 3px solid #f4dfa8; box-shadow: 0 10px 24px rgba(0, 0, 0, 0.5); }
 	.chron.small { height: 180px; }
+	.chron.compact { height: 88px; gap: 4px; padding: 0 10px 6px; border-radius: 14px; border-top-width: 2px; }
+	.compact .head { gap: 7px; margin: 0 -10px; padding: 4px 10px; border-radius: 12px 12px 0 0; }
+	.compact .bub { width: 24px; height: 24px; }
+	.compact .bub svg { width: 14px; height: 14px; }
+	.compact .crest svg { width: 17px; height: 17px; }
+	.compact .ttl { font-size: 13px; letter-spacing: 0.04em; }
+	.compact .face { width: 20px; height: 20px; }
+	.compact .face::before { inset: -3px; -webkit-mask: radial-gradient(circle, transparent 11px, #000 11.5px); mask: radial-gradient(circle, transparent 11px, #000 11.5px); }
+	.compact .ll { font-size: 11px; line-height: 1.2; }
+	.compact .lines { gap: 2px; -webkit-mask-image: linear-gradient(180deg, transparent, #000 10px); mask-image: linear-gradient(180deg, transparent, #000 10px); }
+	.compact .fxpop { right: auto; left: 0; bottom: calc(100% + 8px); }
 	.head { flex: none; display: flex; align-items: center; gap: 10px; margin: 0 -14px; padding: 8px 14px; border-radius: 13px 13px 0 0; border-bottom: 1px solid rgba(244, 223, 168, 0.4);
 		background: linear-gradient(180deg, rgba(120, 92, 40, 0.55), rgba(64, 48, 20, 0.55)); }
 	.small .head { padding: 6px 14px; }

@@ -1,6 +1,8 @@
 <script lang="ts" module>
-	// kind 'bad' = red (Defeated, Discard); split = the ring in two halves, each its own choice (Defended | Defeated)
-	export type Order = { label: string; sub?: string; kind: 'go' | 'quiet' | 'wait' | 'off' | 'team' | 'bad' | 'lvl'; pulse?: boolean; run?: () => void; alt?: { label: string; run: () => void }; tint?: boolean;
+	// kind 'bad' = red (Defeated, Discard); 'next' = the lava lamp (blue and orange: the host moves the game on — Next
+	// turn, Minion battle, Next round); 'lvl' = the trees' colours; everything else is silver unless a card tints it.
+	// split = the ring in two halves, each its own choice (Defended | Defeated)
+	export type Order = { label: string; sub?: string; kind: 'go' | 'quiet' | 'wait' | 'off' | 'team' | 'bad' | 'lvl' | 'next'; pulse?: boolean; run?: () => void; alt?: { label: string; run: () => void }; tint?: boolean;
 		/** something is loaded on the ring (an armed card, a board action): the small × unloads it */
 		cancel?: () => void;
 		split?: { left: { label: string; run: () => void }; right: { label: string; run: () => void } } };
@@ -22,7 +24,7 @@
 	import StatBubbles from './StatBubbles.svelte';
 	import { heroCards, heroName } from '$lib/cards/deck';
 	import { portraitCss, heroLogo } from '$lib/heroes';
-	import { levelOf, statDeltas, type PlayerCardState } from '$lib/cards/cardstate';
+	import { levelOf, levelCost, type PlayerCardState } from '$lib/cards/cardstate';
 
 	export let cs: PlayerCardState;
 	export let name = '';
@@ -68,6 +70,13 @@
 
 	const ROMAN = ['I', 'II', 'III', 'IV'];
 	$: lv = levelOf(cs);
+	// the ultimate's compartment: shut until the ultimate can be unlocked; then the level ring slides left (transform
+	// only) and the compartment opens out from under it — the card (read it) or Unlock [coin]
+	$: ultOpen = ultIdx >= 0 && (cs.ultimate || ultReady);
+	let uslide = false;
+	let uslideT: ReturnType<typeof setTimeout> | null = null;
+	let wasUlt = ultOpen;
+	$: if (ultOpen !== wasUlt) { wasUlt = ultOpen; uslide = true; if (uslideT) clearTimeout(uslideT); uslideT = setTimeout(() => (uslide = false), 460); }
 	const arc = (i: number, r = 62) => {
 		const a0 = ((i * 45 + 4) * Math.PI) / 180, a1 = ((i * 45 + 41) * Math.PI) / 180;
 		return `M ${(70 + r * Math.sin(a0)).toFixed(2)} ${(70 - r * Math.cos(a0)).toFixed(2)} A ${r} ${r} 0 0 1 ${(70 + r * Math.sin(a1)).toFixed(2)} ${(70 - r * Math.cos(a1)).toFixed(2)}`;
@@ -108,7 +117,7 @@
 		if (slideT) clearTimeout(slideT);
 		slideT = setTimeout(() => (sliding = false), 460);
 	}
-	onDestroy(() => { if (slideT) clearTimeout(slideT); });
+	onDestroy(() => { if (slideT) clearTimeout(slideT); if (uslideT) clearTimeout(uslideT); });
 	// a ring that just changed ignores clicks for a moment: the second tap of a double-tap must not land on the NEXT
 	// action (saying No to an effect used to end the turn that way)
 	let ringKey = '', ringAt = 0;
@@ -116,8 +125,19 @@
 	const fire = (fn?: () => void) => { if (Date.now() - ringAt < 450) return; fn?.(); };
 </script>
 
-<div class="mydash is-{team}" class:docked style="--dw:{dockW}px">
+<div class="mydash is-{team}" class:docked class:ulted={ultOpen} class:ascended={cs.ultimate} style="--dw:{dockW}px">
 	<div class="dbody">
+		<!-- the ultimate's compartment (opens out from under the level ring, which slides left) -->
+		<div class="uexw" class:open={ultOpen} class:sliding={uslide} aria-hidden={!ultOpen}>
+			<div class="uext">
+				{#if (ultOpen || uslide) && ultIdx >= 0}
+					<button class="ucard" class:on={cs.ultimate} on:click={onUlt} title={cs.ultimate ? 'Your ultimate — read it' : 'Unlock your ultimate'}>
+						<span class="ucw"><Card heroId={cs.hero} card={heroCards(cs.hero)[ultIdx]} /></span>
+						{#if cs.ultimate}<small>Ultimate</small>{:else}<small class="unl">Unlock <i class="ucoin">{levelCost(lv)}</i></small>{/if}
+					</button>
+				{/if}
+			</div>
+		</div>
 		<button class="cap medal" on:click={onMe} title="Your board">
 			<span class="capin">
 				<svg class="mring" viewBox="0 0 140 140" aria-hidden="true">
@@ -164,10 +184,6 @@
 				<span class="dwc stack"><i><CardBack hero={cs.hero} blank /></i><i><CardBack hero={cs.hero} blank /></i><span class="top"><CardBack hero={cs.hero} /></span><em>{deckCount}</em></span>
 				<small>Deck</small>
 			</button>
-			<button class="dw ultw" class:on={cs.ultimate} class:ready={ultReady} on:click={onUlt} title={cs.ultimate ? 'Your ultimate' : ultReady ? 'Unlock your ultimate' : 'Ultimate — unlocks at level 8'} disabled={ultIdx < 0}>
-				<span class="dwc">{#if cs.ultimate && ultIdx >= 0}<Card heroId={cs.hero} card={heroCards(cs.hero)[ultIdx]} />{:else}<b>IV</b>{/if}</span>
-				<small>Ult</small>
-			</button>
 		</div>
 
 		<div class="dtools">
@@ -208,6 +224,7 @@
 			{:else}
 			<button class="cap gob {order.kind}" class:tinted={!!ringColor && (order.kind !== 'bad' || !!order.tint)} style={ringColor ? `--rc:${ringColor}` : ''} class:pulse={order.pulse} disabled={!order.run} on:click={() => fire(order.run)}>
 				<span class="gin">
+					{#if order.kind === 'next' && !ringColor}<span class="lava" aria-hidden="true"><i class="lb"></i><i class="lo"></i><i class="lb2"></i><i class="lo2"></i></span>{/if}
 					<i></i>
 					<b style="font-size:{labelFs.toFixed(1)}px">{#each words as w, i (i)}{#if i}<br />{/if}{w}{/each}</b>
 					<span class="gsub">{#if order.sub}<small class:long={subLong}>{order.sub}</small>{/if}</span>
@@ -221,14 +238,14 @@
 </div>
 
 <style>
-	.mydash { --brass: #d8b36a; --brass-hi: #f4dfa8; --line: rgba(216, 179, 106, 0.4); --cap: 104px; --dw: 170px; height: 88px; color: #f5f1e8; pointer-events: auto; }
+	.mydash { --brass: #d8b36a; --brass-hi: #f4dfa8; --line: rgba(216, 179, 106, 0.4); --cap: 104px; --dw: 170px; --uw: 96px; height: 88px; color: #f5f1e8; pointer-events: auto; }
 	.is-orange { --tc: #ef7d22; --tg: rgba(239, 125, 34, 0.18); --th: #ffb878; } .is-blue { --tc: #2f7fe6; --tg: rgba(47, 127, 230, 0.2); --th: #9ccbff; }
-	.dbody { position: relative; height: 100%; display: flex; align-items: center; gap: 16px; padding: 0 calc(var(--cap) - 2px); box-sizing: border-box; border-radius: 44px;
+	.dbody { position: relative; height: 100%; display: flex; align-items: center; gap: 20px; padding: 0 calc(var(--cap) - 2px); box-sizing: border-box; border-radius: 44px;
 		background: linear-gradient(180deg, var(--tg), transparent 50%), linear-gradient(180deg, rgba(16, 44, 72, 0.97), rgba(6, 21, 38, 0.97)); border: 1px solid var(--line); border-top: 2px solid var(--tc); box-shadow: 0 12px 30px rgba(0, 0, 0, 0.6); }
 	button { font: inherit; color: inherit; }
 	/* the caps: the same size at both ends, each half over the bar's end */
 	.cap { position: absolute; top: 50%; width: var(--cap); height: var(--cap); border-radius: 50%; padding: 7px; border: 0; cursor: pointer; box-sizing: border-box; transform: translateY(-50%); }
-	.medal { left: -14px; padding: 0; background: radial-gradient(circle at 50% 35%, #1d3d60, #0b1d33 70%, #06111f); box-shadow: 0 0 0 2px #0a1a2c, 0 12px 26px rgba(0, 0, 0, 0.65); }
+	.medal { z-index: 2; left: -14px; padding: 0; transition: transform 0.42s cubic-bezier(0.2, 0.8, 0.2, 1); background: radial-gradient(circle at 50% 35%, #1d3d60, #0b1d33 70%, #06111f); box-shadow: 0 0 0 2px #0a1a2c, 0 12px 26px rgba(0, 0, 0, 0.65); }
 	.capin { position: relative; display: block; width: 100%; height: 100%; border-radius: 50%; }
 	.mring { position: absolute; inset: 0; width: 100%; height: 100%; }
 	.mring .lv { fill: none; stroke: rgba(255, 255, 255, 0.14); stroke-width: 12; }
@@ -243,7 +260,7 @@
 	.mini.off { color: #8a9fb3; box-shadow: 0 0 0 1px var(--line); }
 	.mmk { position: absolute; left: -8px; bottom: -2px; display: flex; flex-direction: column; gap: 2px; }
 	.mmk img { width: 22px; height: 22px; border-radius: 50%; box-shadow: 0 0 0 2px #0a1a2c; }
-	.dme { display: flex; flex-direction: column; gap: 4px; width: 96px; }
+	.dme { display: flex; flex-direction: column; gap: 4px; width: 112px; }
 	.dmn { padding: 0; border: 0; background: none; text-align: left; font-size: 19px; line-height: 1; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
 	.dmh { font-size: 11px; line-height: 1; color: var(--th); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 	.purse { align-self: flex-start; margin-top: 4px; display: inline-flex; align-items: center; gap: 4px; }
@@ -267,15 +284,32 @@
 	.dwc em { position: absolute; right: -5px; bottom: -5px; z-index: 1; min-width: 17px; height: 17px; border-radius: 9px; display: grid; place-items: center; font-style: normal; font-size: 10px; background: #0a1a2c; border: 1px solid var(--line); }
 	.discpop { position: absolute; bottom: calc(100% + 14px); left: 50%; transform: translateX(-50%); z-index: 5; display: flex; gap: 6px; padding: 8px; border-radius: 12px; background: rgba(8, 22, 38, 0.97); border: 1px solid var(--line); box-shadow: 0 10px 24px rgba(0, 0, 0, 0.6); }
 	.discpop button { width: 78px; padding: 0; border: 0; background: none; cursor: pointer; }
-	.deckw, .ultw { cursor: pointer; }
+	.deckw { cursor: pointer; }
 	.stack i, .stack .top { position: absolute; inset: 0; border-radius: 5px; overflow: hidden; box-shadow: 0 0 0 1px rgba(120, 95, 55, 0.5), 0 2px 5px rgba(0, 0, 0, 0.5); }
 	.stack i:nth-child(1) { transform: translate(3px, -3px); opacity: 0.6; } .stack i:nth-child(2) { transform: translate(1.5px, -1.5px); opacity: 0.8; }
 	.deckw.lvup .stack .top { box-shadow: 0 0 0 2px var(--brass-hi), 0 0 14px 3px rgba(244, 223, 168, 0.55); }
-	.ultw .dwc { border: 1px solid rgba(164, 107, 232, 0.35); background: rgba(90, 50, 150, 0.18); }
-	.ultw .dwc b { font-weight: 400; font-size: 14px; color: rgba(196, 160, 255, 0.5); }
-	.ultw.ready .dwc { border-color: #a46be8; box-shadow: 0 0 10px 2px rgba(164, 107, 232, 0.55); }
-	.ultw.on .dwc { border: 0; box-shadow: 0 0 0 2px #a46be8, 0 0 10px 2px rgba(164, 107, 232, 0.5); }
-	.ultw:disabled { cursor: default; }
+	/* the ultimate's compartment: the level ring slides --uw to the left and this opens out from under it (transform only) */
+	.ulted .medal { transform: translate(calc(-1 * var(--uw)), -50%); }
+	.uexw { position: absolute; z-index: 1; top: -2px; bottom: -1px; right: calc(100% - var(--cap)); width: calc(var(--cap) + var(--uw)); visibility: hidden; pointer-events: none; }
+	.uexw.open, .uexw.sliding { visibility: visible; }
+	.uexw.open { pointer-events: auto; }
+	.uexw.sliding { overflow: hidden; }
+	.uext { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding-left: 86px; box-sizing: border-box; border-radius: 44px 0 0 44px; transform: translateX(100%);
+		background: radial-gradient(ellipse at 70% 50%, rgba(140, 80, 220, 0.28), transparent 70%), linear-gradient(180deg, rgba(16, 44, 72, 0.97), rgba(6, 21, 38, 0.97));
+		border: 1px solid rgba(180, 130, 255, 0.45); border-right: 0; border-top: 2px solid #a46be8; transition: transform 0.42s cubic-bezier(0.2, 0.8, 0.2, 1); }
+	.open .uext { transform: none; }
+	.ucard { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 0; border: 0; background: none; cursor: pointer; }
+	.ucw { width: 44px; aspect-ratio: 1192 / 1664; border-radius: 5px; overflow: hidden; opacity: 0.55; box-shadow: 0 0 0 1px rgba(196, 160, 255, 0.5); }
+	.ucw :global(.card), .ucw :global(.cardface) { width: 100%; }
+	.ucard.on .ucw { opacity: 1; box-shadow: 0 0 0 2px #a46be8, 0 0 12px 3px rgba(164, 107, 232, 0.6); }
+	.ucard small { font-size: 9px; line-height: 1; letter-spacing: 0.1em; text-transform: uppercase; color: #d9c2ff; white-space: nowrap; }
+	.ucard small.unl { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border-radius: 999px; color: #1b1204; background: linear-gradient(180deg, #e6d2ff, #a46be8); }
+	.ucoin { width: 13px; height: 13px; border-radius: 50%; display: inline-grid; place-items: center; font-style: normal; font-size: 8px; color: #3a2606; background: radial-gradient(circle at 35% 30%, #fff2c0, #e8bd58 55%, #a8792a); }
+	/* level 8: the whole ring turns purple and breathes (opacity only, over a still glow) */
+	.ascended .mring .lv { stroke: #b383f5; }
+	.ascended .mring { filter: drop-shadow(0 0 4px rgba(179, 131, 245, 0.85)); }
+	.ascended .medal::after { content: ''; position: absolute; inset: -8px; border-radius: 50%; box-shadow: 0 0 22px 6px rgba(164, 107, 232, 0.65); opacity: 0.35; animation: ascend 2.6s ease-in-out infinite; pointer-events: none; }
+	@keyframes ascend { 50% { opacity: 1; } }
 	.dtools { display: grid; grid-template-columns: repeat(3, 28px); gap: 5px; }
 	.tl, .tslot :global(.radbtn), .tslot :global(.tokbtn) { position: relative; width: 28px; height: 28px; min-width: 0; border-radius: 50%; display: grid; place-items: center; padding: 0; color: var(--brass-hi);
 		background: rgba(0, 0, 0, 0.3); border: 1px solid var(--line); cursor: pointer; box-sizing: border-box; }
@@ -321,7 +355,28 @@
 	.gsub { align-self: start; width: 66%; padding-top: 4px; }
 	.gin small { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; font-size: 9px; line-height: 1.2; letter-spacing: 0.05em; text-transform: uppercase; text-align: center; text-wrap: balance; overflow-wrap: anywhere; color: #bccbd9; }
 	.gin small.long { font-size: 8px; }
-	.gob.go .gin, .gob.team .gin { background: radial-gradient(circle at 50% 40%, #3a5f86, #13304f 62%, #081626); color: #fff3c8; }
+	/* silver: every action without a colour of its own (a card's colour or the team's takes over — see .tinted / .team) */
+	.gob.go .gin, .gob.quiet .gin { background: radial-gradient(circle at 50% 32%, #ffffff, #c9d1db 40%, #7c8796 80%, #55606e); color: #13202f; }
+	.gob.go .gin b, .gob.quiet .gin b { text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6); }
+	.gob.go .gin small, .gob.quiet .gin small { color: #2a3747; }
+	.gob.wait .gin { background: radial-gradient(circle at 50% 32%, #aab4c0, #6d7887 55%, #3f4855); color: #eef2f6; }
+	.gob.wait .gin small { color: #dce3ea; }
+	.gob.off .gin { background: radial-gradient(circle at 50% 32%, #7d8794, #4d5662 60%, #2f363f); color: #c7cfd8; }
+	.gob.team .gin { background: radial-gradient(circle at 50% 40%, #3a5f86, #13304f 62%, #081626); color: #fff3c8; }
+	/* Next turn / Minion battle / Next round: a lava lamp — blue and orange blobs drifting (transform only) */
+	.gob.next .gin { position: relative; isolation: isolate; color: #fff; background: #120d24; }
+	.gob.next .gin b { text-shadow: 0 1px 3px #000, 0 0 8px rgba(0, 0, 0, 0.8); }
+	.gob.next .gin small { color: #fff; text-shadow: 0 1px 3px #000; }
+	.lava { position: absolute; inset: 0; z-index: -1; border-radius: 50%; overflow: hidden; }
+	.lava i { position: absolute; left: 0; top: 0; width: 78%; height: 78%; border-radius: 50%; will-change: transform; }
+	.lava .lb { background: radial-gradient(circle, #4d9bff 0, rgba(47, 127, 230, 0.85) 30%, rgba(47, 127, 230, 0) 68%); animation: lavaA 7s ease-in-out infinite alternate; }
+	.lava .lo { background: radial-gradient(circle, #ffad5c 0, rgba(239, 125, 34, 0.85) 30%, rgba(239, 125, 34, 0) 68%); animation: lavaB 8.5s ease-in-out infinite alternate; }
+	.lava .lb2 { width: 55%; height: 55%; background: radial-gradient(circle, rgba(120, 180, 255, 0.9), rgba(47, 127, 230, 0) 68%); animation: lavaC 6s ease-in-out infinite alternate; }
+	.lava .lo2 { width: 55%; height: 55%; background: radial-gradient(circle, rgba(255, 170, 90, 0.9), rgba(239, 125, 34, 0) 68%); animation: lavaD 9s ease-in-out infinite alternate; }
+	@keyframes lavaA { 0% { transform: translate(-18%, 30%) scale(1); } 50% { transform: translate(30%, -10%) scale(1.25); } 100% { transform: translate(-5%, -25%) scale(0.9); } }
+	@keyframes lavaB { 0% { transform: translate(40%, -15%) scale(1.1); } 50% { transform: translate(-10%, 35%) scale(0.85); } 100% { transform: translate(35%, 40%) scale(1.2); } }
+	@keyframes lavaC { 0% { transform: translate(70%, 70%); } 100% { transform: translate(10%, 5%); } }
+	@keyframes lavaD { 0% { transform: translate(5%, 60%); } 100% { transform: translate(75%, 10%); } }
 	.gob.team .gin { background: radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--tc) 70%, #fff 10%), color-mix(in srgb, var(--tc) 55%, #000) 70%); color: #fff; }
 	.gob.tinted .gin { background: radial-gradient(circle at 50% 38%, color-mix(in srgb, var(--rc) 80%, #fff 12%), color-mix(in srgb, var(--rc) 62%, #000) 72%); color: #fff; }
 	.gob.tinted .gin small { color: rgba(255, 255, 255, 0.82); }
@@ -348,13 +403,10 @@
 	.half.r { background: radial-gradient(circle at 20% 45%, #e0533f, #8f1d12 80%); }
 	.half.r { padding: 0 2px 0 6px; }
 	.half:hover { filter: brightness(1.15); }
-	.gob.quiet { filter: saturate(0.4) brightness(0.85); }
-	.gob.wait .gin, .gob.off .gin { color: #8a9fb3; }
-	.gob.off { filter: saturate(0.5) brightness(0.8); }
 	.gx { position: absolute; right: 0; bottom: 0; z-index: 3; width: 28px; height: 28px; padding: 0; border-radius: 50%; display: grid; place-items: center; cursor: pointer;
 		color: #ffd9d3; background: linear-gradient(180deg, #5a1712, #2a0806); border: 2px solid #0a1a2c; box-shadow: 0 0 0 1px rgba(229, 72, 77, 0.7), 0 3px 8px rgba(0, 0, 0, 0.6); }
 	.gx svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; }
 	.gx:hover { color: #fff; }
 	.galt { position: absolute; left: 50%; bottom: -12px; transform: translateX(-50%); padding: 3px 10px; border-radius: 999px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #fff; background: #b42318; border: 2px solid #0a1a2c; cursor: pointer; }
-	@media (prefers-reduced-motion: reduce) { .gob.pulse::after { animation: none; opacity: 0.7; } .gob.lvl .gin::before { animation: none; } }
+	@media (prefers-reduced-motion: reduce) { .gob.pulse::after { animation: none; opacity: 0.7; } .gob.lvl .gin::before, .lava i, .ascended .medal::after { animation: none; } }
 </style>

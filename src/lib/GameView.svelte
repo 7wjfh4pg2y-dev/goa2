@@ -183,7 +183,16 @@
 	$: beamWon = $ms.wonBy && /throne|push/i.test($ms.wonBy.reason ?? '') ? $ms.wonBy.team : null;
 	$: designW = gvw / lay.s;
 	// the board's resting view leaves room for the bar, the columns and the dash (px)
-	$: boardInset = hud2 ? { t: 172 * lay.s, b: 112 * lay.s, l: 372 * lay.s, r: 372 * lay.s } : null;
+	// the compact HUD parts (each player's own; see boardPrefs) and the room they leave the island
+	$: allCompact = $boardPrefs.compact && $boardPrefs.cTop && $boardPrefs.cOrder && $boardPrefs.cLog;
+	$: platesTop = $boardPrefs.compact && $boardPrefs.cTop;
+	let topW = 640; // (from CardLayer) the compact top bar's width
+	$: boardInset = hud2 ? {
+		t: ($boardPrefs.cTop ? (platesTop ? 96 : 58) + ($boardPrefs.cOrder ? 30 : 60) + 6 : 172) * lay.s,
+		b: 112 * lay.s,
+		l: (platesTop ? 40 : $boardPrefs.compact ? 372 : 372) * lay.s,
+		r: (platesTop && $boardPrefs.cLog ? 40 : 372) * lay.s
+	} : null;
 	// a piece's pills ring its token: [immune] then the actions, clockwise from 12 o'clock
 	const CLOCK = [0, 90, 180, 270, 45, 135, 225, 315];
 	type Pill = { label: string; run?: () => void; kind?: 'go' | 'bad' | 'rem' | 'move' | 'imm' | 'force'; coin?: number; off?: boolean; title?: string };
@@ -229,6 +238,11 @@
 		wisps: '<path d="M12 12a1.5 1.5 0 0 1 3 0a3 3 0 0 1-6 0a4.5 4.5 0 0 1 9 0a6 6 0 0 1-12 0a7.5 7.5 0 0 1 15 0" />',
 		beam: '<path d="M2 14h7M15 14h7" /><circle cx="12" cy="14" r="2.6" /><path d="M12 8.5v-3M8.6 9.8 7 8M15.4 9.8 17 8" />',
 		hud: '<rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 9h18M8 9v11M16 9v11" />',
+		hudAll: '<rect x="3" y="4" width="18" height="16" rx="2" /><path d="M7 9h10M7 13h10M7 17h6" />',
+		hudTop: '<rect x="3" y="4" width="18" height="6" rx="1.5" /><path d="M3 14h18M3 18h18" stroke-opacity=".35" />',
+		hudBoards: '<rect x="3" y="5" width="8" height="5" rx="1.2" /><rect x="13" y="5" width="8" height="5" rx="1.2" /><path d="M5 12v3M8 12v5M15 12v2M18 12v4" />',
+		hudOrder: '<rect x="3" y="9" width="18" height="6" rx="3" /><circle cx="7.5" cy="12" r="1.3" /><circle cx="12" cy="12" r="1.3" /><circle cx="16.5" cy="12" r="1.3" />',
+		hudLog: '<rect x="3" y="13" width="9" height="7" rx="1.5" /><path d="M14 15h7M14 18h5M5.5 15.5h4M5.5 18h3" />',
 		spawn: '<path d="M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9z" /><path d="M12 8v8M8 12h8" />',
 		push: '<path d="M2 9c2.5-2.5 4.5-2.5 7 0s4.5 2.5 7 0 4.5-2.5 6 0" /><path d="M2 15c2.5-2.5 4.5-2.5 7 0s4.5 2.5 7 0 4.5-2.5 6 0" />',
 		// a breaking wave, curling to the right (mirrored for the left)
@@ -275,7 +289,15 @@
 			{ id: 'rotl', label: 'Left', icon: ICON.rotl, title: 'Turn anticlockwise (45°)', act: () => board?.rotateBy(-45) },
 			{ id: 'rotr', label: 'Right', icon: ICON.rotr, title: 'Turn clockwise (45°)', act: () => board?.rotateBy(45) }
 		] },
-		...(hud2 ? [{ id: 'hudsize', label: $boardPrefs.compact ? 'Compact' : 'Expanded', icon: ICON.hud, on: $boardPrefs.compact, title: 'Player boards: expanded or compact (only on your screen)', act: () => boardPrefs.set({ compact: !$boardPrefs.compact }) }] : []),
+		// the HUD: each part expanded or compact (lit = compact), or all at once — only on your screen, remembered
+		...(hud2 ? [{ id: 'hud', label: 'HUD', icon: ICON.hud, on: allCompact, title: 'The HUD: expanded or compact, part by part (only on your screen)', act: () => {}, sub: [
+			{ id: 'hud-all', label: allCompact ? 'Expand' : 'Compact', icon: ICON.hudAll, on: allCompact, title: allCompact ? 'Expand every part' : 'Make every part compact',
+				act: () => { const c = !allCompact; boardPrefs.set({ compact: c, cTop: c, cOrder: c, cLog: c }); } },
+			{ id: 'hud-top', label: 'Top bar', icon: ICON.hudTop, on: $boardPrefs.cTop, title: `Top bar: ${$boardPrefs.cTop ? 'compact' : 'expanded'}`, act: () => boardPrefs.set({ cTop: !$boardPrefs.cTop }) },
+			{ id: 'hud-boards', label: 'Boards', icon: ICON.hudBoards, on: $boardPrefs.compact, title: `Player boards: ${$boardPrefs.compact ? 'nameplates' : 'expanded'}`, act: () => boardPrefs.set({ compact: !$boardPrefs.compact }) },
+			{ id: 'hud-order', label: 'Order', icon: ICON.hudOrder, on: $boardPrefs.cOrder, title: `Initiative / planning bar: ${$boardPrefs.cOrder ? 'compact' : 'expanded'}`, act: () => boardPrefs.set({ cOrder: !$boardPrefs.cOrder }) },
+			{ id: 'hud-log', label: 'Log', icon: ICON.hudLog, on: $boardPrefs.cLog, title: `Chronicle: ${$boardPrefs.cLog ? 'compact, bottom left' : 'expanded'}`, act: () => boardPrefs.set({ cLog: !$boardPrefs.cLog }) }
+		] }] : []),
 		{ id: 'views', label: 'Views', icon: ICON.views, title: 'Saved views', act: () => {} },
 		// which version of things you see: the map's look and (desktop) the HUD — only on your screen
 		{ id: 'version', label: 'Version', icon: ICON.version, title: 'Map and HUD — only on your screen', act: () => {}, sub: [
@@ -946,7 +968,7 @@
 	<BoardCanvas bind:this={board} map={$ms.map ?? {}} inset={boardInset} look={boardLook} {glowZone} activeZone={$ms.wonBy ? null : battleZone($ms)} effects={!deckCovered} sea={$boardPrefs.sea} rims={$boardPrefs.rims} rotation={orientation} interactive={true} {placing} {placeGhost} holdColor={myHoldColor} onCancelPlace={cancelPlace} {areas} marks={boardMarks} badges={defBadges} wisps={$boardPrefs.wisps} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} pings={boardPings} onPing={doPing} {pingArmed} />
 	</div>
 
-	<CardLayer bind:this={cardLayer} {mobile} {hud2} {phone2} {ringAsk} onResults={() => (victoryClosed = false)} compact={$boardPrefs.compact} {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} bind:covered={deckCovered} bind:phoneStatus onRespawn={placeMyHero} onEnter={placeMyHero} onArmToken={armToken} holdingToken={!!pendingToken} {pingArmed} onPing={pingButton} bind:previewId />
+	<CardLayer bind:this={cardLayer} {mobile} {hud2} {phone2} {ringAsk} onResults={() => (victoryClosed = false)} compact={$boardPrefs.compact} cTop={$boardPrefs.cTop} cOrder={$boardPrefs.cOrder} cLog={$boardPrefs.cLog} bind:topW {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} bind:covered={deckCovered} bind:phoneStatus onRespawn={placeMyHero} onEnter={placeMyHero} onArmToken={armToken} holdingToken={!!pendingToken} {pingArmed} onPing={pingButton} bind:previewId />
 
 	<!-- selected minion/token: offer delete (heroes aren't deletable) -->
 	{#if hud2}
@@ -998,13 +1020,13 @@
 
 	{#if hud2}
 		<!-- ───────── the 2.0 HUD's top layer (design px, zoomed as one): ☰ · the top bar · the control wheel · the pills ───────── -->
-		<div class="h2top">
+		<div class="h2top" class:ctop={$boardPrefs.cTop}>
 			<button class="h2corner menu" on:click={() => (lobbyOpen = true)} title="Game lobby — the room, the players, your HUD, leave" aria-label="Game lobby">
 				<svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
 				{#if $status !== 'connected'}<i class="cdot {$status}"></i>{/if}{#if iAmHost && seatRequests.length}<b class="h2badge">{seatRequests.length}</b>{/if}
 			</button>
-			<div class="h2bar">
-				<HudTop W={designW} round={$ms.round} turn={$ms.turn} lifeTok={$ms.lifeTok ?? { orange: [], blue: [] }} waveTok={$ms.waveTok ?? []} tieBreaker={$ms.tieBreaker} {flips} {tieFlip}
+			<div class="h2bar" class:ctop={$boardPrefs.cTop}>
+				<HudTop W={designW} compact={$boardPrefs.cTop} cw={topW} round={$ms.round} turn={$ms.turn} lifeTok={$ms.lifeTok ?? { orange: [], blue: [] }} waveTok={$ms.waveTok ?? []} tieBreaker={$ms.tieBreaker} {flips} {tieFlip}
 					left={viewTeam === 'orange' ? 'blue' : 'orange'} zone={$ms.lane ?? 1} zones={LANE.length} counts={zoneCount} starts={waveStarts} won={beamWon} fx={$boardPrefs.beam}
 					{lifeArt} {tieArt} onLife={toggleLife} onWave={toggleWave} onTie={flipTie} />
 			</div>
@@ -1722,6 +1744,8 @@
 	/* ── the 2.0 HUD's top layer: design px, zoomed as one; only its children take clicks ── */
 	.h2top { position: absolute; inset: 0; z-index: 9; zoom: var(--uis, 1); pointer-events: none; --brass: #d8b36a; --brass-hi: #f4dfa8; --line: rgba(216, 179, 106, 0.4); }
 	.h2bar { position: absolute; top: 24px; left: 50%; transform: translateX(-50%); }
+	.h2bar.ctop { top: 8px; }
+	.h2top.ctop .h2corner { top: 8px; width: 50px; height: 50px; }
 	.h2corner { position: absolute; top: 26px; width: 52px; height: 52px; border-radius: 14px; display: grid; place-items: center; padding: 0; cursor: pointer; pointer-events: auto; color: var(--brass-hi);
 		background: linear-gradient(180deg, rgba(16, 44, 72, 0.97), rgba(6, 21, 38, 0.97)); border: 1px solid var(--line); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45); box-sizing: border-box; }
 	.h2corner svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }

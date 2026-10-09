@@ -166,6 +166,12 @@
 	.act.team { color: #fff; background: linear-gradient(180deg, color-mix(in srgb, var(--tc) 85%, #fff 10%), color-mix(in srgb, var(--tc) 70%, #000)); }
 	.act.tinted { color: #fff; background: linear-gradient(180deg, color-mix(in srgb, var(--rc) 85%, #fff 12%), color-mix(in srgb, var(--rc) 70%, #000)); }
 	.act.bad { color: #fff; background: linear-gradient(180deg, #e0533f, #8f1d12); border-color: rgba(255, 170, 160, 0.7); }
+	/* Next turn / Minion battle / Next round: blue and orange drifting through the pill (a strip slid by transform) */
+	.act.next { color: #fff; background: #13213f; border-color: rgba(255, 255, 255, 0.5); text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8); }
+	.act.next::before { content: ''; position: absolute; top: 0; bottom: 0; left: -200%; width: 300%; background: linear-gradient(90deg, #2f7fe6, #ef7d22 25%, #2f7fe6 50%, #ef7d22 75%, #2f7fe6); animation: pnext 6s ease-in-out infinite alternate; }
+	.act.next b, .act.next small { position: relative; }
+	@keyframes pnext { to { transform: translateX(50%); } }
+	@media (prefers-reduced-motion: reduce) { .act.next::before { animation: none; } }
 	.act.bad.tinted { background: linear-gradient(180deg, color-mix(in srgb, var(--rc) 85%, #fff 12%), color-mix(in srgb, var(--rc) 70%, #000)); }
 	.act.quiet { color: #e9dcc0; }
 	.act:disabled { cursor: default; }

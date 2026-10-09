@@ -35,6 +35,7 @@
 	import PhoneBoard from '$lib/hud2/PhoneBoard.svelte';
 	import HudDash, { type Order } from '$lib/hud2/HudDash.svelte';
 	import Chronicle, { type FxGroup } from '$lib/hud2/Chronicle.svelte';
+	import Nameplate from '$lib/hud2/Nameplate.svelte';
 	import { portraitCss } from '$lib/heroes';
 
 	export let session: MatchSession;
@@ -59,7 +60,11 @@
 	export let ringAsk: Order | null = null;
 	/** game over: reopen the victory card / battle report */
 	export let onResults: () => void = () => {};
-	export let compact = false; // 2.0: the side boards shrink to nameplates
+	export let compact = false; // 2.0: the player boards as nameplates (in the top row when the top bar is compact too)
+	export let cTop = false; // 2.0: the narrow top bar
+	export let cOrder = false; // 2.0: the one-line initiative / planning bar
+	export let cLog = false; // 2.0: the Chronicle in the bottom-left corner, as tall as the dash
+	export let topW = 640; // (out) the compact top bar's width, so the nameplates fit either side of it
 
 	const ORANGE = '#ef7d22';
 	const BLUE = '#2f7fe6';
@@ -696,7 +701,26 @@
 	const teamOfPid = (pid: string) => { const p = $players.find((q: Player) => q.id === pid); return p ? pTeam(p) : ($ms.pieces?.[pid]?.team as 'orange' | 'blue' | undefined) ?? null; };
 	// the planning dots in each player's colour: the enemy on the left, your team on the right (you last)
 	$: h2dots = [...seatedWithCards.filter((p) => pTeam(p) !== viewTeam), ...seatedWithCards.filter((p) => pTeam(p) === viewTeam && p.id !== clientId), ...seatedWithCards.filter((p) => p.id === clientId)]
-		.map((p) => ({ team: pTeam(p), color: colorHex(p.color), ok: levelPhase ? !mustLevel(cards[p.id]) : isReady(cards[p.id]) }));
+		.map((p) => ({ team: pTeam(p), color: colorHex(p.color), ok: levelPhase ? !mustLevel(cards[p.id]) : isReady(cards[p.id]), portrait: cards[p.id] ? portraitCss(cards[p.id].hero) : '', hero: heroName(cards[p.id]?.hero ?? '') }));
+	// ── the compact parts' layout (design px) ──
+	// nameplates up in the top row (boards AND top bar compact): the enemy left of the bar, your team right of it, you last
+	$: platesTop = compact && cTop;
+	$: canvasW = vw / lay.s;
+	$: meP = seated.find((p) => p.id === clientId) ?? null;
+	$: npRight = meP && cards[clientId] ? [...h2allies, meP] : h2allies;
+	$: npN = Math.max(h2enemies.length, npRight.length, 1);
+	// the room beside the bar: the canvas less the two corner buttons (82 each) and the gaps; plates aim for 190 wide
+	$: topW = platesTop ? Math.round(Math.max(440, Math.min(560, canvasW - 200 - 2 * npN * 190))) : 640;
+	$: npW = Math.round(Math.max(118, Math.min(210, (canvasW - 200 - topW - 2 * (npN - 1) * 8) / (2 * npN))));
+	// the order bar under the top bar (lower when the stat plates hang from nameplates beside it); the columns under that
+	$: orderTop = cTop ? (platesTop ? 96 : 58) : 100;
+	$: colTop = orderTop + (cOrder ? 30 : 60) + (cOrder ? 26 : 34);
+	// the Chronicle in the corner: beside the dash when there's room, else just above its left end
+	const DASH_W = 900; // the dash's width (design px) without the ultimate's compartment
+	$: myUltOpen = !!mine && myUlt >= 0 && (mine.ultimate || ultReady);
+	$: logRoom = canvasW / 2 - DASH_W / 2 - 14 - (myUltOpen ? 96 : 0) - 36;
+	$: logBeside = logRoom >= 220;
+	$: logW = logBeside ? Math.min(340, logRoom) : 300;
 	// the card picked in your hand (armed to commit, or open to defend / discard): the action ring takes its colour
 	const CARD_HUE: Record<string, string> = { RED: '#b8322f', BLUE: '#2a64c4', GREEN: '#2b8a43', GOLD: '#c9982f', SILVER: '#8d99a8' };
 	$: ringCard = armed ?? (selected != null && previewSrc === 'hand' && mine?.hand.includes(selected) ? selected : null);
@@ -753,7 +777,7 @@
 			if (!levelPhase) return iAmHost ? { label: 'Level up', kind: 'lvl', run: startLevelUp } : { label: 'Waiting', sub: 'Host', kind: 'wait' };
 			if (iMustLevel) return { label: 'Level up', kind: 'lvl', pulse: true, run: () => { deckOpen = true; deckTab = 'deck'; } };
 			if (levelWaiting.length) return { label: 'Waiting', sub: waitFor(levelWaiting), kind: 'wait' };
-			return iAmHost ? { label: 'Next round', kind: 'go', run: onAdvanceTurn } : { label: 'Waiting', sub: 'Host', kind: 'wait' };
+			return iAmHost ? { label: 'Next round', kind: 'next', run: onAdvanceTurn } : { label: 'Waiting', sub: 'Host', kind: 'wait' };
 		}
 		if (revealed) {
 			// your card names a lingering effect: on your turn the ring asks first (× = no effect), then End turn
@@ -762,7 +786,7 @@
 			if (actor) return { label: 'Waiting', sub: actorName, kind: 'wait', alt: iAmHost ? { label: 'Skip', run: endAct } : undefined };
 			// everyone has acted (turn 4: the minion battle comes next)
 			if (!iAmHost) return { label: 'Waiting', sub: 'Host', kind: 'wait' };
-			return isFinalTurn ? { label: 'Minion battle', kind: 'go', run: startBattle } : { label: 'Next turn', kind: 'go', run: onAdvanceTurn };
+			return isFinalTurn ? { label: 'Minion battle', kind: 'next', run: startBattle } : { label: 'Next turn', kind: 'next', run: onAdvanceTurn };
 		}
 		if (myReady) return { label: 'Take back', sub: `${readyCount} of ${seatedWithCards.length} in`, kind: 'quiet', run: takeBack };
 		if (armed != null && armedKind === 'commit' && canCommit && mine) return { label: 'Commit', sub: heroCards(mine.hero)[armed]?.name, kind: 'go', pulse: true, run: commitArmed, cancel: () => (armed = null) };
@@ -776,6 +800,10 @@
 <svelte:window on:pointerdown={onWindowDown} bind:innerWidth={vw} bind:innerHeight={vhPx} />
 
 <!-- controls shared by the desktop dash and the phone dash -->
+{#snippet plate(p: Player, cs: PlayerCardState, w = npW)}
+	<Nameplate {cs} name={p.name} color={colorHex(p.color)} team={pTeam(p)} {turnIdx} {revealed} ready={isReady(cards[p.id] ?? cs)} me={p.id === clientId} width={w}
+		fx={!!fxFor(p.id, slotIdx(cs, turnIdx))} onOpen={() => (overlayId = p.id)} onSlot={(e, t) => peekSlot(e, cs, t)} />
+{/snippet}
 {#snippet radiusCtl()}
 	<span class="radwrap">
 					<button class="radbtn" class:on={myRadius > 0} on:click={() => (radiusOpen = !radiusOpen)} title={myRadius ? `Radius ${myRadius} showing — click to change or clear` : 'Show an area radius around your hero'} aria-label="Area radius">
@@ -999,25 +1027,43 @@
 	<!-- ───────── 2.0 HUD: the order row, the side columns (the enemy left · your teammates + the Chronicle right) ───────── -->
 	{#if hud2 && !mobile}
 		<div class="h2helm">
-			<div class="h2order">
+			<div class="h2order" style="top:{orderTop}px">
 				<HudOrder planning={!revealed || levelPhase} title={levelPhase ? 'Levelling' : 'Planning'} doneWord={levelPhase ? 'done' : 'ready'} countdown={countdownActive ? countdownLabel : ''} dots={h2dots} order={h2order} bonus={itemBonus} tieArt={icon(`tiebreaker_${$ms.tieBreaker}`)}
-					small={h2order.length > 4} acting={actAt} canPoint={iAmHost} onPoint={pointAct} onRead={(pid, hid, idx) => (examine = { hid, idx, pid })} />
+					compact={cOrder} me={clientId} small={h2order.length > 4} acting={actAt} canPoint={iAmHost} onPoint={pointAct} onRead={(pid, hid, idx) => (examine = { hid, idx, pid })} />
 			</div>
-			<div class="h2col l" class:tight={h2tight}>
-				{#each h2enemies as p (p.id)}
-					{@const cs = viewCards[p.id]}
-					{#if cs}<HudBoard {cs} name={p.name} color={colorHex(p.color)} team={pTeam(p)} {turnIdx} {revealed} ready={isReady(cards[p.id] ?? cs)} compact={h2compact} small={h2tight}
-						fxAt={(t) => !!fxFor(p.id, slotIdx(cs, t))} onOpen={() => (overlayId = p.id)} onSlot={(e, t) => peekSlot(e, cs, t)} />{/if}
-				{/each}
+			{#if platesTop}
+				<!-- nameplates either side of the compact top bar: the enemy on the left, your team on the right (you last) -->
+				<div class="nprow l" style="right:calc(50% + {topW / 2 + 10}px)">
+					{#each h2enemies as p (p.id)}{@const cs = viewCards[p.id]}{#if cs}{@render plate(p, cs)}{/if}{/each}
+				</div>
+				<div class="nprow r" style="left:calc(50% + {topW / 2 + 10}px)">
+					{#each npRight as p (p.id)}{@const cs = viewCards[p.id] ?? cards[p.id]}{#if cs}{@render plate(p, cs)}{/if}{/each}
+				</div>
+			{/if}
+			<div class="h2col l" class:tight={h2tight} class:np={compact} style="top:{colTop}px">
+				{#if !platesTop}
+					{#each h2enemies as p (p.id)}
+						{@const cs = viewCards[p.id]}
+						{#if cs}{#if compact}{@render plate(p, cs, 344)}{:else}<HudBoard {cs} name={p.name} color={colorHex(p.color)} team={pTeam(p)} {turnIdx} {revealed} ready={isReady(cards[p.id] ?? cs)} compact={h2compact} small={h2tight}
+							fxAt={(t) => !!fxFor(p.id, slotIdx(cs, t))} onOpen={() => (overlayId = p.id)} onSlot={(e, t) => peekSlot(e, cs, t)} />{/if}{/if}
+					{/each}
+				{/if}
 			</div>
-			<div class="h2col r" class:tight={h2tight}>
-				{#each h2allies as p (p.id)}
-					{@const cs = viewCards[p.id]}
-					{#if cs}<HudBoard {cs} name={p.name} color={colorHex(p.color)} team={pTeam(p)} {turnIdx} {revealed} ready={isReady(cards[p.id] ?? cs)} compact={h2compact} small={h2tight}
-						fxAt={(t) => !!fxFor(p.id, slotIdx(cs, t))} onOpen={() => (overlayId = p.id)} onSlot={(e, t) => peekSlot(e, cs, t)} />{/if}
-				{/each}
-				<Chronicle log={$ms.log ?? []} who={chronWho} fx={chronFx} host={iAmHost} canUndo={$canUndoNow} team={viewTeam} small={h2tight} onUndo={() => session.undo()} onRead={readFx} />
+			<div class="h2col r" class:tight={h2tight} class:np={compact} style="top:{colTop}px">
+				{#if !platesTop}
+					{#each h2allies as p (p.id)}
+						{@const cs = viewCards[p.id]}
+						{#if cs}{#if compact}{@render plate(p, cs, 344)}{:else}<HudBoard {cs} name={p.name} color={colorHex(p.color)} team={pTeam(p)} {turnIdx} {revealed} ready={isReady(cards[p.id] ?? cs)} compact={h2compact} small={h2tight}
+							fxAt={(t) => !!fxFor(p.id, slotIdx(cs, t))} onOpen={() => (overlayId = p.id)} onSlot={(e, t) => peekSlot(e, cs, t)} />{/if}{/if}
+					{/each}
+				{/if}
+				{#if !cLog}<Chronicle log={$ms.log ?? []} who={chronWho} fx={chronFx} host={iAmHost} canUndo={$canUndoNow} team={viewTeam} small={h2tight} onUndo={() => session.undo()} onRead={readFx} />{/if}
 			</div>
+			{#if cLog}
+				<div class="h2log" style="width:{logW}px; bottom:{logBeside ? 12 : 116}px">
+					<Chronicle compact log={$ms.log ?? []} who={chronWho} fx={chronFx} host={iAmHost} canUndo={$canUndoNow} team={viewTeam} onUndo={() => session.undo()} onRead={readFx} />
+				</div>
+			{/if}
 		</div>
 	{/if}
 
@@ -1710,6 +1756,10 @@
 	/* ── the 2.0 HUD: one layer in design px (1440 × 900), zoomed as a whole; only the parts take clicks ── */
 	.h2helm { position: absolute; inset: 0; z-index: 7; zoom: var(--uis, 1); pointer-events: none; }
 	.h2order { position: absolute; top: 100px; left: 0; right: 0; }
+	.nprow { position: absolute; top: 8px; display: flex; gap: 8px; }
+	.nprow.l { flex-direction: row; }
+	.h2col.np { gap: 40px; }
+	.h2log { position: absolute; left: 20px; z-index: 2; }
 	.h2col { position: absolute; top: 194px; width: 344px; display: flex; flex-direction: column; gap: 24px; }
 	.h2col.tight { gap: 10px; }
 	.h2col.l { left: 20px; } .h2col.r { right: 20px; }

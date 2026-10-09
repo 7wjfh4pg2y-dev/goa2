@@ -4,11 +4,14 @@
 // default and stored that, so their effect switches are not read — everyone starts with them on once.)
 import { writable } from 'svelte/store'
 
-// hud: the in-game screen — the 2.0 HUD (top bar, side boards, Chronicle, dash) or the classic one; compact: the
-// 2.0 side boards shrink to nameplates; beam: the spark and pulses on the top bar's minion beam
+// hud: the in-game screen — the 2.0 HUD (top bar, side boards, Chronicle, dash) or the classic one; beam: the spark
+// and pulses on the top bar's minion beam. The 2.0 HUD's parts, each expanded (default) or compact — the player's own
+// choice, remembered here: compact = the player boards as nameplates (up in the top bar when that is compact too),
+// cTop = the narrow top bar, cOrder = the one-line initiative / planning bar, cLog = the Chronicle in the bottom-left
+// corner, as tall as the dash
 // wisps: the spirit swirl on hexes to act on (spawn points, minions to remove, …); off = a still glowing hex
-export type BoardPrefs = { rims: boolean; zone: boolean; sea: boolean; look: 'island' | 'classic'; hud: '2.0' | 'classic'; compact: boolean; beam: boolean; wisps: boolean }
-export const DEFAULT_PREFS: BoardPrefs = { rims: true, zone: true, sea: true, look: 'island', hud: '2.0', compact: false, beam: true, wisps: true }
+export type BoardPrefs = { rims: boolean; zone: boolean; sea: boolean; look: 'island' | 'classic'; hud: '2.0' | 'classic'; compact: boolean; cTop: boolean; cOrder: boolean; cLog: boolean; beam: boolean; wisps: boolean }
+export const DEFAULT_PREFS: BoardPrefs = { rims: true, zone: true, sea: true, look: 'island', hud: '2.0', compact: false, cTop: false, cOrder: false, cLog: false, beam: true, wisps: true }
 const VERSION = 2
 const KEY = 'goa2-board-prefs'
 
@@ -23,6 +26,9 @@ export function readPrefs(raw: string | null): BoardPrefs {
 			look: p.look === 'classic' ? 'classic' : 'island',
 			hud: p.hud === 'classic' ? 'classic' : '2.0',
 			compact: p.compact === true,
+			cTop: p.cTop === true,
+			cOrder: p.cOrder === true,
+			cLog: p.cLog === true,
 			beam: fx.beam !== false,
 			wisps: fx.wisps !== false
 		}
