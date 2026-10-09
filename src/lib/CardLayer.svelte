@@ -715,6 +715,8 @@
 	$: meP = seated.find((p) => p.id === clientId) ?? null;
 	$: npRight = meP && cards[clientId] ? [...h2allies, meP] : h2allies;
 	$: npN = Math.max(h2enemies.length, npRight.length, 1);
+	// the right column: your teammates, then the Chronicle — or, with the Chronicle in the corner, YOUR board in its slot
+	$: colRight = cLog ? npRight : h2allies;
 	// the room beside the bar: the canvas less the two corner buttons (82 each) and the gaps; plates aim for 190 wide
 	$: topW = platesTop ? Math.round(Math.max(440, Math.min(560, canvasW - 200 - 2 * npN * 190))) : 640;
 	$: npW = Math.round(Math.max(118, Math.min(210, (canvasW - 200 - topW - 2 * (npN - 1) * 8) / (2 * npN))));
@@ -1059,7 +1061,7 @@
 			</div>
 			<div class="h2col r" class:tight={h2tight} class:np={compact} style="top:{colTop}px">
 				{#if !platesTop}
-					{#each h2allies as p (p.id)}
+					{#each colRight as p (p.id)}
 						{@const cs = viewCards[p.id]}
 						{#if cs}{#if compact}{@render plate(p, cs, 344)}{:else}<HudBoard {cs} name={p.name} color={colorHex(p.color)} team={pTeam(p)} {turnIdx} {revealed} ready={isReady(cards[p.id] ?? cs)} compact={h2compact} small={h2tight}
 							fxAt={(t) => !!fxFor(p.id, slotIdx(cs, t))} onOpen={() => (overlayId = p.id)} onSlot={(e, t) => peekSlot(e, cs, t)} />{/if}{/if}
