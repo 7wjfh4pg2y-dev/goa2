@@ -15,6 +15,12 @@
 	import { heroCards } from '$lib/cards/deck';
 	import { teamName } from '$lib/teams';
 	import Icon from '$lib/ui/Icon.svelte';
+	import PlayerCard from '$lib/hall/PlayerCard.svelte';
+	import HeroCard from '$lib/hall/HeroCard.svelte';
+	import GameCard from '$lib/hall/GameCard.svelte';
+	import OverTime from '$lib/hall/OverTime.svelte';
+	import Rivalries from '$lib/hall/Rivalries.svelte';
+	import Glyph from '$lib/hall/Glyph.svelte';
 	import { role } from '$lib/role';
 
 	type Tab = 'players' | 'log' | 'awards' | 'heroes' | 'games';
@@ -162,6 +168,26 @@
 		a.click();
 		setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 	}
+	// ── the lists: search + sort (players / heroes), search (games); players also as a chart or a grid ──
+	let pq = '', psort: 'rating' | 'games' | 'win' | 'kd' | 'name' = 'rating', pview: 'cards' | 'time' | 'rivals' = 'cards';
+	let hq = '', hsort: 'picks' | 'win' | 'impact' | 'name' = 'picks';
+	let gq = '';
+	const has = (txt: string, q: string) => txt.toLowerCase().includes(q.trim().toLowerCase());
+	const kdOf = (p: PlayerAgg) => (p.kdaGames ? p.kills / Math.max(1, p.deaths) : -1);
+	$: rankByRating = new Map((league?.players ?? []).map((p, i) => [p.key, i + 1]));
+	$: plist = (league?.players ?? []).filter((p) => !pq.trim() || has(p.name, pq)).sort((a, b) =>
+		psort === 'games' ? b.games - a.games || b.rating - a.rating
+		: psort === 'win' ? b.wins / b.games - a.wins / a.games || b.games - a.games
+		: psort === 'kd' ? kdOf(b) - kdOf(a)
+		: psort === 'name' ? a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+		: b.rating - a.rating);
+	$: hlist = (league?.heroes ?? []).filter((h) => !hq.trim() || has(heroName(h.hero), hq) || (heroById(h.hero)?.traits ?? []).some((t) => has(TRAIT_LABELS[t as Trait], hq))).sort((a, b) =>
+		hsort === 'win' ? b.wins / b.games - a.wins / a.games || b.games - a.games
+		: hsort === 'impact' ? (b.impact ?? -999) - (a.impact ?? -999)
+		: hsort === 'name' ? heroName(a.hero).localeCompare(heroName(b.hero))
+		: b.games - a.games || b.wins - a.wins);
+	$: glist = [...(league?.games ?? [])].reverse().filter((g) => !gq.trim() || g.players.some((p) => has(p.name, gq) || has(heroName(p.hero), gq)));
+
 	// ── feats and defences (the extras) for one player ──
 	function featRows(p: PlayerAgg) {
 		const n = (v: number, ok: number) => (ok ? String(v) : '–');
@@ -220,6 +246,12 @@
 {/snippet}
 {#snippet seat(x: { key: string; name: string; hero: string; level: number; k: number | null; d: number | null; a: number | null })}
 	<span class="lseat">{@render face(x.hero, 24)}<span class="lsn">{@render lwho(x)}<small>{heroName(x.hero)} · Lv {x.level}</small></span><b>{kda(x)}</b></span>
+{/snippet}
+{#snippet toolbar(q: string, setQ: (v: string) => void, ph: string, opts: [string, string][], cur: string, setSort: (v: string) => void)}
+	<div class="panel tbar">
+		<label class="srch"><Glyph name="search" size={16} /><input placeholder={ph} value={q} on:input={(e) => setQ(e.currentTarget.value)} /></label>
+		{#if opts.length}<div class="sorts" role="group" aria-label="Sort">{#each opts as [k, l] (k)}<button class:on={cur === k} on:click={() => setSort(k)}>{l}</button>{/each}</div>{/if}
+	</div>
 {/snippet}
 {#snippet feats(p: PlayerAgg)}
 	<div class="lgrid">
@@ -474,37 +506,23 @@
 				</section>
 			</div>
 		{:else if tab === 'players'}
-			<!-- ── the table of players ── -->
-			<div class="cards">
-				{#each league.players as p, i (p.key)}
-					{@const nem = nemesisOf(p)}
-					{@const mate = bestMateOf(p)}
-					<button class="panel pcard" on:click={() => openPlayer(p.key)}>
-						<div class="pc-top">
-							<span class="rk" class:gold={i === 0} class:silver={i === 1} class:bronze={i === 2}>{i === 0 ? '' : `#${i + 1}`}{#if i === 0}<Icon name="crown" fill />{/if}</span>
-							<span class="pc-name">{p.name}</span>
-							<span class="rating sm"><b>{p.rating}</b><span>rating</span></span>
-						</div>
-						<span class="tchips">{#each (titles[p.key] ?? []).slice(0, 2) as t (t.title)}<span class="tchip" title={t.blurb}>{t.title}</span>{/each}</span>
-						<div class="wr"><span class="bar big"><i style="transform:scaleX({p.games ? p.wins / p.games : 0})"></i></span><b>{pct(p.wins, p.games)}%</b></div>
-						<div class="trio"><span><b class="g">{p.wins}</b> W</span><span><b class="r">{p.losses}</b> L</span><span><b>{p.games}</b> games</span><span>streak <b class:g={p.streak > 0} class:r={p.streak < 0}>{streakTxt(p.streak)}</b></span></div>
-						<div class="mini">
-							<span><small>K/D/A</small><b>{p.kdaGames ? `${p.kills}/${p.deaths}/${p.assists}` : '–'}</b></span>
-							<span><small>K/D</small><b>{kd(p)}</b></span>
-							<span><small>Coins</small><b>{avg(p.coins, p.coinGames)}</b></span>
-						</div>
-						<div class="favs">
-							{#each favHeroes(p) as [h, t] (h)}<span class="fav">{@render face(h, 30)}<small>{t.games}</small></span>{/each}
-							<span class="froles">{#each favRoles(p) as [t] (t)}{#if traitIcon(t)}<img src={traitIcon(t)} alt={TRAIT_LABELS[t]} title={TRAIT_LABELS[t]} />{/if}{/each}</span>
-						</div>
-						<div class="pc-rel">
-							{#if mate}<span class="good"><small>Best mate</small> {mate.name}</span>{/if}
-							{#if nem}<span class="bad"><small>Nemesis</small> {nem.name}</span>{/if}
-						</div>
-					</button>
-				{/each}
+			<!-- ── the players: cards, the rating over time, or every rivalry at once ── -->
+			<div class="views" role="group" aria-label="View">
+				<button class:on={pview === 'cards'} on:click={() => (pview = 'cards')}>Cards</button>
+				<button class:on={pview === 'time'} on:click={() => (pview = 'time')}>Over time</button>
+				<button class:on={pview === 'rivals'} on:click={() => (pview = 'rivals')}>Rivalries</button>
 			</div>
-			{#if league.withEvents < league.games.length}<p class="fine c">K/D/A and nemeses count the {league.withEvents} game{league.withEvents === 1 ? '' : 's'} recorded with kill events; the rest count for everything else.</p>{/if}
+			{#if pview === 'time'}
+				<OverTime {league} onOpen={openPlayer} />
+			{:else if pview === 'rivals'}
+				<Rivalries {league} onOpen={openPlayer} />
+			{:else}
+				{@render toolbar(pq, (v) => (pq = v), 'Search players…', [['rating', 'Rating'], ['games', 'Games'], ['win', 'Win %'], ['kd', 'K/D'], ['name', 'Name']], psort, (v) => (psort = v as typeof psort))}
+				<div class="pgrid">
+					{#each plist as p (p.key)}<PlayerCard {p} rank={rankByRating.get(p.key) ?? 0} titles={titles[p.key] ?? []} onOpen={() => openPlayer(p.key)} />{:else}<p class="note">Nobody by that name.</p>{/each}
+				</div>
+			{/if}
+			{#if league.withEvents < league.games.length}<p class="fine c">K/D/A counts the {league.withEvents} game{league.withEvents === 1 ? '' : 's'} recorded with kill events; the rest count for everything else.</p>{/if}
 		{:else if tab === 'log'}
 			<!-- ── the player log: everyone A–Z · one player's whole record, every match in full ── -->
 			<div class="plog">
@@ -581,21 +599,10 @@
 				{/if}
 			</div>
 		{:else if tab === 'heroes'}
-			<!-- ── heroes and their builds ── -->
-			<div class="heroes">
-				{#each league.heroes as h (h.hero)}
-					{@const top = popular(h.paths)}
-					<button class="panel hcard" class:on={heroSel === h.hero} on:click={() => (heroSel = heroSel === h.hero ? null : h.hero)}>
-						{@render face(h.hero, 44)}
-						<span class="hcol">
-							<span class="hn">{heroName(h.hero)}</span>
-							<span class="hs"><b>{h.games}</b> picks · <b>{pct(h.wins, h.games)}%</b> wins</span>
-							<span class="hp">{Object.entries(h.players).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([n, c]) => `${n}${c > 1 ? ` ×${c}` : ''}`).join(', ')}</span>
-						</span>
-						<span class="bar"><i style="transform:scaleX({h.wins / h.games})"></i></span>
-						{#if top}<span class="hpath">{@render pathRow(h.hero, top.path)}</span>{/if}
-					</button>
-				{/each}
+			<!-- ── heroes: win rate, impact, how their games ended, who they win with / beat / lose to ── -->
+			{@render toolbar(hq, (v) => (hq = v), 'Search heroes or roles…', [['picks', 'Picks'], ['win', 'Win %'], ['impact', 'Impact'], ['name', 'Name']], hsort, (v) => (hsort = v as typeof hsort))}
+			<div class="hgrid">
+				{#each hlist as h (h.hero)}<HeroCard {h} onBuilds={() => (heroSel = h.hero)} />{:else}<p class="note">No hero matches.</p>{/each}
 			</div>
 			{#if heroSel}
 				{@const h = league.heroes.find((x) => x.hero === heroSel)}
@@ -649,28 +656,29 @@
 			{/each}
 			{#if league.withClashes < league.games.length}<p class="fine c">Defences and aces count the {league.withClashes} game{league.withClashes === 1 ? '' : 's'} recorded with them{league.withClashes ? '' : ' — they start with the next game'}.</p>{/if}
 		{:else}
-			<!-- ── every game ── -->
-			<div class="games">
-				{#each [...league.games].reverse() as g (g.id)}
-					<div class="panel game">
-						<div class="gh"><span class="dt">{day(g.at)}</span><span class="gw is-{g.winner}">{teamName(g.winner)} win</span><span class="ty2">{WIN_LABEL[g.type]} · {g.rounds} round{g.rounds === 1 ? '' : 's'} · {g.minutes}m</span></div>
-						<div class="gt">
-							{#each SIDES as t (t)}
-								<div class="side is-{t}" class:won={g.winner === t}>
-									{#each teamOf(g, t) as gp (gp.id)}
-										<span class="gp">{@render face(gp.hero, 26)}{@render who(gp.name)}{#if gp.kills != null}<small>{gp.kills}/{gp.deaths}/{gp.assists}</small>{/if}</span>
-									{/each}
-								</div>
-							{/each}
-						</div>
-					</div>
-				{/each}
+			<!-- ── every game, newest first ── -->
+			{@render toolbar(gq, (v) => (gq = v), 'Search by player or hero…', [], '', () => {})}
+			<div class="glist">
+				{#each glist as g (g.id)}<GameCard {g} onPlayer={openLog} />{:else}<p class="note">No game matches.</p>{/each}
 			</div>
 		{/if}
 	</main>
 </div>
 
 <style>
+	/* ── lists: toolbar, views, grids ── */
+	.tbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px; margin-bottom: 14px; }
+	.srch { flex: 1 1 260px; display: flex; align-items: center; gap: 8px; padding: 0 12px; height: 40px; border-radius: 10px; background: var(--well); border: 1px solid var(--hair); color: var(--ink-3); }
+	.srch input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: none; color: var(--ink); font: inherit; font-size: 15px; padding: 0; }
+	.srch:focus-within { border-color: var(--brass-line); }
+	.sorts, .views { display: flex; gap: 4px; padding: 3px; border-radius: 10px; background: var(--well); border: 1px solid var(--hair); }
+	.sorts button, .views button { padding: 6px 12px; border-radius: 8px; border: 0; background: none; color: var(--ink-2); font: inherit; font-size: 14px; cursor: pointer; white-space: nowrap; }
+	.sorts button.on, .views button.on { color: var(--ink-dark); background: linear-gradient(180deg, var(--brass-hi), var(--brass)); }
+	.views { width: max-content; margin: 0 auto 14px; border-radius: 999px; }
+	.views button { border-radius: 999px; padding: 6px 18px; }
+	.pgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 22px 18px; padding-top: 6px; }
+	.hgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
+	.glist { display: flex; flex-direction: column; gap: 14px; }
 	/* ── the player log ── */
 	.plog { display: grid; grid-template-columns: 240px 1fr; gap: 14px; align-items: start; }
 	.lgl { position: sticky; top: 0; display: flex; flex-direction: column; gap: 4px; padding: 12px; max-height: calc(100dvh - 120px); overflow-y: auto; }
@@ -781,29 +789,10 @@
 	.tchip { padding: 1px 8px; border-radius: 999px; font-size: 12px; color: var(--brass-hi); border: 1px solid var(--brass-line); background: var(--brass-faint); white-space: nowrap; }
 
 	/* the table of players */
-	.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; }
-	.pcard { display: flex; flex-direction: column; gap: 10px; text-align: left; cursor: pointer; color: inherit; font: inherit; transition: border-color 0.12s, transform 0.12s; }
-	.pcard:hover { border-color: var(--brass); transform: translateY(-2px); }
-	.pc-top { display: flex; align-items: center; gap: 10px; }
-	.pc-name { flex: 1; min-width: 0; font-size: 22px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-	.wr { display: flex; align-items: center; gap: 10px; }
-	.wr .bar { flex: 1; }
-	.wr b { font-size: 18px; font-weight: 400; min-width: 44px; text-align: right; }
-	.trio { display: flex; justify-content: space-between; font-size: 13px; color: var(--ink-2); }
-	.trio b { font-weight: 400; font-size: 16px; color: var(--ink); }
 	.g { color: var(--ready-hi) !important; }
 	.r { color: var(--danger-hi) !important; }
-	.mini { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 6px; }
-	.mini span { display: flex; flex-direction: column; align-items: center; padding: 6px 4px; border-radius: 8px; background: var(--well); }
-	.mini small { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; }
-	.mini b { font-weight: 400; font-size: 16px; }
-	.favs { display: flex; align-items: center; gap: 8px; }
-	.fav { position: relative; display: inline-flex; }
-	.fav small { position: absolute; right: -6px; bottom: -4px; min-width: 16px; height: 16px; padding: 0 3px; border-radius: 8px; display: grid; place-items: center; font-size: 11px; color: var(--ink-dark); background: var(--brass); }
-	.froles { margin-left: auto; display: flex; gap: 4px; }
-	.froles img, .role img { width: 22px; height: 22px; object-fit: contain; }
-	.pc-rel { display: flex; justify-content: space-between; gap: 8px; min-height: 18px; font-size: 13px; }
-	.pc-rel small, .rel .rk2 { letter-spacing: 0.08em; text-transform: uppercase; font-size: 10px; }
+	.role img { width: 22px; height: 22px; object-fit: contain; }
+	.rel .rk2 { letter-spacing: 0.08em; text-transform: uppercase; font-size: 10px; }
 	.good { color: var(--ready-hi); }
 	.bad { color: var(--danger-hi); }
 
@@ -893,17 +882,8 @@
 	.dl.down { color: var(--danger-hi); }
 
 	/* heroes */
-	.heroes { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 10px; }
-	.hcard { display: grid; grid-template-columns: 44px 1fr; grid-template-rows: auto auto auto; gap: 6px 12px; align-items: center; text-align: left; cursor: pointer; color: inherit; font: inherit; padding: 12px; }
-	.hcard:hover, .hcard.on { border-color: var(--brass); }
-	.hcard > .face { grid-row: 1; }
-	.hcol { display: flex; flex-direction: column; min-width: 0; }
-	.hcol .hn { font-size: 18px; }
 	.hs { font-size: 13px; color: var(--ink-2); }
 	.hs b { font-weight: 400; color: var(--ink); }
-	.hp { font-size: 12px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-	.hcard > .bar { grid-column: 1 / -1; }
-	.hpath { grid-column: 1 / -1; }
 	.scrim { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 16px; background: rgba(3, 11, 21, 0.72); }
 	.hdet { width: min(980px, 100%); max-height: 100%; overflow-y: auto; }
 	.hdh { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
@@ -935,17 +915,6 @@
 	.mbadge { padding: 2px 10px; border-radius: 999px; font-size: 12.5px; color: var(--ink-dark); background: linear-gradient(180deg, var(--brass-hi), var(--brass)); }
 
 	/* games */
-	.games { display: flex; flex-direction: column; gap: 10px; }
-	.gh { display: flex; align-items: baseline; gap: 12px; margin-bottom: 8px; }
-	.gw { font-size: 18px; }
-	.gw.is-orange { color: var(--orange-hi); }
-	.gw.is-blue { color: var(--blue-hi); }
-	.gt { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-	.side { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--hair); opacity: 0.75; }
-	.side.is-orange { background: var(--orange-glass); }
-	.side.is-blue { background: var(--blue-glass); }
-	.side.won { opacity: 1; border-color: var(--brass-line); }
-	.gp { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; }
 
 	@media (max-width: 1000px) {
 		.cols { grid-template-columns: 1fr; }
@@ -961,7 +930,8 @@
 		.tab { flex: 1; padding: 6px 4px; font-size: 14px; }
 		.body { padding: 12px; }
 		.body :global(.panel) { padding: 14px; }
-		.cards, .heroes, .recs { grid-template-columns: 1fr; }
+		.recs, .pgrid, .hgrid { grid-template-columns: 1fr; }
+		.sorts { overflow-x: auto; max-width: 100%; }
 		.pn { font-size: 28px; }
 		.tiles { grid-template-columns: repeat(4, 1fr); gap: 6px; }
 		.tile b { font-size: 20px; }
@@ -973,7 +943,6 @@
 		.opt { padding: 3px 5px; }
 		.opt .on { font-size: 12px; }
 		.opt .ob { font-size: 11px; }
-		.gt { grid-template-columns: 1fr; }
 		.rating b { font-size: 28px; }
 	}
 </style>

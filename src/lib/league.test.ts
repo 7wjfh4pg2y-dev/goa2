@@ -120,6 +120,24 @@ describe('the league', () => {
 	})
 })
 
+describe('heroes', () => {
+	it('team-mates and opponents by hero, victory types, K/D/A and impact', () => {
+		const one = buildLeague([row('g1', 1, ['Zara', 'Mo', 'Priya', 'Sam'], 'orange', [{ by: 'a', v: 'c' }])])
+		const arien = one.heroes.find((h) => h.hero === 'arien')!
+		expect(arien.mates).toEqual({ brogan: { games: 1, wins: 1 } })
+		expect(arien.foes).toEqual({ tigerclaw: { games: 1, wins: 1 }, wasp: { games: 1, wins: 1 } })
+		expect(arien.byType.throne).toEqual({ games: 1, wins: 1 })
+		expect([arien.kills, arien.deaths, arien.kdaGames]).toEqual([1, 0, 1])
+		expect(arien.impact).toBeNull() // nobody has two games yet
+		// Zara wins on Arien, loses on another hero: Arien beats their own average
+		const r2 = row('g2', 2, ['Zara', 'Mo', 'Priya', 'Sam'], 'blue')
+		r2.data.players.a.hero = 'dodger'
+		const two = buildLeague([row('g1', 1, ['Zara', 'Mo', 'Priya', 'Sam'], 'orange'), r2])
+		expect(two.heroes.find((h) => h.hero === 'arien')!.impact).toBe(50)
+		expect(two.heroes.find((h) => h.hero === 'dodger')!.impact).toBe(-50)
+	})
+})
+
 describe('the awards and the extras', () => {
 	// a, b = Atlanteans · c, d = Titans; clashes recorded (evv 2)
 	const clashRow = (id: string, ev: Partial<GameEvent>[], winner: 'orange' | 'blue' = 'orange') => { const r = row(id, 5, ['Zara', 'Mo', 'Priya', 'Sam'], winner, ev); r.data.evv = 2; return r }

@@ -48,6 +48,8 @@ export const pathKey = (p: Path) => `${p.cards.join('.')}${p.ult ? '.U' : ''}`
 export type GamePlayer = {
 	key: string
 	name: string
+	/** the player's colour (a PLAYER_COLORS id) in that game */
+	color: string
 	id: string
 	hero: string
 	team: Team
@@ -218,7 +220,7 @@ export function gameOfRow(row: GameRowIn): LeagueGame | null {
 	// the brink: the battle zone on a team's own beach (Atlanteans: lane 0, Titans: lane 2), or its Life down to 1
 	const snaps = [...(Array.isArray(d.turns) ? d.turns : []), ...(d.final ? [d.final] : [])] as { lane?: number; life?: Record<Team, number> }[]
 	const brinkOf = (t: Team) => snaps.some((x) => x.lane === (t === 'orange' ? 0 : 2) || (x.life?.[t] != null && x.life[t] <= 1))
-	for (const [id, p] of Object.entries((d.players ?? {}) as Record<string, { name: string; seat: number; hero: string; team?: Team }>)) {
+	for (const [id, p] of Object.entries((d.players ?? {}) as Record<string, { name: string; seat: number; hero: string; team?: Team; color?: string }>)) {
 		if (!p?.hero || !p.name) continue
 		const st = exact?.players.find((x) => x.id === id)
 		if (exact && !st) continue // a seat taken over mid-game: the report counts its last owner
@@ -229,7 +231,7 @@ export function gameOfRow(row: GameRowIn): LeagueGame | null {
 		const key = playerKey(p.name)
 		keyOf.set(id, key)
 		players.push({
-			key, name: p.name.trim(), id, hero: p.hero, team, won: team === winner, level,
+			key, name: p.name.trim(), color: p.color ?? '', id, hero: p.hero, team, won: team === winner, level,
 			coins: st?.coins ?? (end ? (end.coins ?? 0) + levelsPaid(level) : null),
 			kills: st?.kills ?? null, deaths: st?.deaths ?? null, assists: st?.assists ?? null, minions: st?.minions ?? null,
 			mRoles: exact ? minionRoles(d.ev, id) : null,
@@ -267,6 +269,8 @@ export type MatchLine = { id: string; at: number; startedAt: number; room: strin
 export type PlayerAgg = {
 	key: string
 	name: string
+	/** their latest colour (a PLAYER_COLORS id; '' if never recorded) */
+	color: string
 	games: number
 	wins: number
 	losses: number
@@ -312,7 +316,14 @@ export type PlayerAgg = {
 	brinks: number
 	fastUlt: number | null
 }
-export type HeroAgg = { hero: string; games: number; wins: number; players: Record<string, number>; paths: PathTally[] }
+export type HeroAgg = { hero: string; games: number; wins: number; players: Record<string, number>; paths: PathTally[]
+	/** K / D / A over the games recorded with events, coins over the games with a final card state */
+	kills: number; deaths: number; assists: number; kdaGames: number; coins: number; coinGames: number
+	byType: Record<WinType, Tally>
+	/** other heroes: on its side (`mates`) / against it (`foes`), as games + this hero's wins */
+	mates: Record<string, Tally>; foes: Record<string, Tally>
+	/** how much better its players do on it than they do overall (win-rate points; players with 2+ games) */
+	impact: number | null; impactN: number }
 /** An award: who holds it now (everyone tied at the top), with what. `scope` game = the best single game,
  *  career = the most over every game. `hidden` = not shown yet (the 4 v 4 / 5 v 5 ones). `extra` = one of the
  *  MOBA extras, beyond the user's list. No holders = still up for grabs. */
@@ -331,7 +342,7 @@ export function buildLeague(rows: GameRowIn[]): League {
 	const get = (gp: GamePlayer) => {
 		let p = P.get(gp.key)
 		if (!p) {
-			p = { key: gp.key, name: gp.name, games: 0, wins: 0, losses: 0, rating: START_RATING, ratingHist: [START_RATING], streak: 0, bestStreak: 0, worstStreak: 0,
+			p = { key: gp.key, name: gp.name, color: '', games: 0, wins: 0, losses: 0, rating: START_RATING, ratingHist: [START_RATING], streak: 0, bestStreak: 0, worstStreak: 0,
 				byType: { throne: { games: 0, wins: 0 }, final: { games: 0, wins: 0 }, life: { games: 0, wins: 0 }, other: { games: 0, wins: 0 } },
 				kills: 0, deaths: 0, assists: 0, kdaGames: 0, teamKills: 0, minions: 0, coins: 0, coinGames: 0, levels: 0, heroes: {}, roles: {},
 				mates: [], foes: [], paths: [], history: [], firstAt: 0, lastAt: 0, peak: START_RATING, minutes: 0, rounds: 0, ults: 0, maxLevel: 0, mRoles: { melee: 0, ranged: 0, heavy: 0 },
@@ -339,6 +350,7 @@ export function buildLeague(rows: GameRowIn[]): League {
 			P.set(gp.key, p)
 		}
 		p.name = gp.name // the latest spelling
+		if (gp.color) p.color = gp.color
 		return p
 	}
 	const addPath = (m: Map<string, PathTally>, gp: GamePlayer) => {
@@ -417,8 +429,18 @@ export function buildLeague(rows: GameRowIn[]): League {
 				x: gp.x, ultRound: gp.ultRound, brink: gp.brink,
 				rating: p.rating, delta })
 			// heroes
-			const h = H.get(gp.hero) ?? { hero: gp.hero, games: 0, wins: 0, players: {} as Record<string, number>, paths: [], _paths: new Map<string, PathTally>() }
+			const h = H.get(gp.hero) ?? { hero: gp.hero, games: 0, wins: 0, players: {} as Record<string, number>, paths: [], _paths: new Map<string, PathTally>(),
+				kills: 0, deaths: 0, assists: 0, kdaGames: 0, coins: 0, coinGames: 0, byType: { throne: { games: 0, wins: 0 }, final: { games: 0, wins: 0 }, life: { games: 0, wins: 0 }, other: { games: 0, wins: 0 } },
+				mates: {} as Record<string, Tally>, foes: {} as Record<string, Tally>, impact: null, impactN: 0 }
 			h.games++; if (gp.won) h.wins++
+			if (gp.kills != null && gp.deaths != null && gp.assists != null) { h.kills += gp.kills; h.deaths += gp.deaths; h.assists += gp.assists; h.kdaGames++ }
+			if (gp.coins != null) { h.coins += gp.coins; h.coinGames++ }
+			h.byType[g.type].games++; if (gp.won) h.byType[g.type].wins++
+			for (const o of g.players) {
+				if (o.key === gp.key || o.hero === gp.hero) continue
+				const t = o.team === gp.team ? h.mates : h.foes
+				t[o.hero] = { games: (t[o.hero]?.games ?? 0) + 1, wins: (t[o.hero]?.wins ?? 0) + (gp.won ? 1 : 0) }
+			}
 			h.players[gp.name] = (h.players[gp.name] ?? 0) + 1
 			addPath(h._paths, gp)
 			H.set(gp.hero, h)
@@ -432,7 +454,20 @@ export function buildLeague(rows: GameRowIn[]): League {
 		paths: [..._paths.values()].sort(byPop),
 		history: [...p.history].reverse()
 	})).sort((a, b) => b.rating - a.rating || b.wins - a.wins || a.name.localeCompare(b.name))
-	const heroes = [...H.values()].map(({ _paths, ...h }) => ({ ...h, paths: [..._paths.values()].sort(byPop) })).sort((a, b) => b.games - a.games || b.wins - a.wins)
+	// hero impact: each pick against its player's own overall win rate (players with 2+ games — one game says nothing)
+	const wr = new Map([...P.values()].map((p) => [p.key, p.games >= 2 ? p.wins / p.games : null]))
+	const imp = new Map<string, { sum: number; n: number }>()
+	for (const g of games) for (const gp of g.players) {
+		const base = wr.get(gp.key)
+		if (base == null) continue
+		const x = imp.get(gp.hero) ?? { sum: 0, n: 0 }
+		x.sum += (gp.won ? 1 : 0) - base; x.n++
+		imp.set(gp.hero, x)
+	}
+	const heroes = [...H.values()].map(({ _paths, ...h }) => {
+		const x = imp.get(h.hero)
+		return { ...h, paths: [..._paths.values()].sort(byPop), impact: x?.n ? Math.round((1000 * x.sum) / x.n) / 10 : null, impactN: x?.n ?? 0 }
+	}).sort((a, b) => b.games - a.games || b.wins - a.wins)
 	return { games, players, heroes, awards: awardsOf(games, players), withEvents: games.filter((g) => g.events).length, withClashes: games.filter((g) => g.clashes).length }
 }
 
