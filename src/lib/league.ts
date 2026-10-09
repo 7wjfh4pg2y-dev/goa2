@@ -61,10 +61,38 @@ export type GamePlayer = {
 	/** minions this player defeated, by role (games recorded with events) */
 	mRoles: { melee: number; ranged: number; heavy: number } | null
 	path: Path
+	/** the rest of the story, from the game's events (null when it wasn't recorded with them) */
+	x: Extras | null
+	/** the round their ultimate came on (null: never, or no build steps) */
+	ultRound: number | null
+	/** won after the battle zone sat on their own beach, or with their team down to its last Life */
+	brink: boolean
+}
+/** One player's extra numbers in one game. The clash ones (`defends` …) need a game recorded with clashes
+ *  (`evv` ≥ 2) and `giants` needs the killers' levels — otherwise they are null and count for nothing. */
+export type Extras = {
+	firstBlood: number // 1 = theirs was the game's first hero defeat
+	wipe: number // 1 = they defeated every enemy hero at least once
+	shutdowns: number // defeated a hero on a streak of 3+ defeats without falling
+	paybacks: number // defeated the hero who last defeated them
+	multis: number // turns with 2+ defeats
+	aces: number // times their team had every enemy hero down at once
+	heavies: number // heavy minions defeated
+	bounty: number // coins from hero defeats + assists
+	giants: number | null // defeated a hero 2+ levels above them
+	defends: number | null // attacks survived by defending
+	defDied: number | null // defended (discarded) and still fell
+	noDefDied: number | null // fell without discarding a card (an attack, or discard-or-die)
+	beatDefended: number | null // defeated a hero who had defended
+	relentless: number | null // defeats of a hero they had already attacked that round
 }
 export type LeagueGame = {
 	id: string
 	room: string
+	/** heroes a side (2 = a 2 v 2) */
+	side: number
+	/** recorded with clashes (defences) */
+	clashes: boolean
 	startedAt: number
 	at: number
 	minutes: number
@@ -127,6 +155,52 @@ const minionRoles = (ev: unknown, id: string) => {
 	return out
 }
 
+const other = (t: Team): Team => (t === 'orange' ? 'blue' : 'orange')
+/** The extras for every player of one game, from its events (see Extras). */
+function extrasOf(evIn: unknown, clashes: boolean, team: Record<string, Team>): Record<string, Extras> {
+	const ev = (Array.isArray(evIn) ? evIn : []) as GameEvent[]
+	const ids = Object.keys(team)
+	const H = ev.map((e, i) => ({ e, i })).filter((x): x is { e: Extract<GameEvent, { k: 'hero' }>; i: number } => x.e.k === 'hero' && x.e.by in team && x.e.v in team)
+	const C = ev.map((e, i) => ({ e, i })).filter((x): x is { e: Extract<GameEvent, { k: 'clash' }>; i: number } => x.e.k === 'clash')
+	const levels = H.some((h) => h.e.kl != null)
+	const out: Record<string, Extras> = {}
+	for (const id of ids) out[id] = { firstBlood: 0, wipe: 0, shutdowns: 0, paybacks: 0, multis: 0, aces: 0, heavies: 0, bounty: 0,
+		giants: levels ? 0 : null, defends: clashes ? 0 : null, defDied: clashes ? 0 : null, noDefDied: clashes ? 0 : null, beatDefended: clashes ? 0 : null, relentless: clashes ? 0 : null }
+	if (H[0]) out[H[0].e.by].firstBlood = 1
+	const streak: Record<string, number> = {}, lastKiller: Record<string, string> = {}, turnKills: Record<string, number> = {}
+	for (const { e, i } of H) {
+		const x = out[e.by]
+		if ((streak[e.v] ?? 0) >= 3) x.shutdowns++
+		if (lastKiller[e.by] === e.v) { x.paybacks++; delete lastKiller[e.by] }
+		streak[e.by] = (streak[e.by] ?? 0) + 1
+		streak[e.v] = 0
+		lastKiller[e.v] = e.by
+		const tk = `${e.by}|${e.r}|${e.t}`
+		turnKills[tk] = (turnKills[tk] ?? 0) + 1
+		if (turnKills[tk] === 2) x.multis++
+		x.bounty += e.c ?? 0
+		for (const a of e.a ?? []) if (out[a]) out[a].bounty += e.ac ?? 0
+		if (levels && e.kl != null && (e.c ?? 0) - e.kl >= 2) x.giants = (x.giants ?? 0) + 1
+		// already went after this hero this round (a clash that didn't finish them)
+		if (clashes && C.some((c) => c.i < i && c.e.by === e.by && c.e.v === e.v && c.e.r === e.r && c.e.out !== 'cancel' && c.e.out !== 'died')) x.relentless = (x.relentless ?? 0) + 1
+	}
+	for (const id of ids) {
+		const foes = ids.filter((o) => team[o] !== team[id])
+		const hit = new Set(H.filter((h) => h.e.by === id).map((h) => h.e.v))
+		if (foes.length && foes.every((f) => hit.has(f))) out[id].wipe = 1
+	}
+	for (const e of ev) {
+		if (e.k === 'minion' && e.role === 'heavy' && out[e.by]) out[e.by].heavies++
+		if (e.k === 'ace') for (const id of ids) if (team[id] === e.team) out[id].aces++
+	}
+	if (clashes) for (const { e } of C) {
+		if (e.out === 'defended' && e.kind === 'attack' && out[e.v]) out[e.v].defends!++
+		if (e.out === 'died' && e.disc && e.kind === 'attack') { if (out[e.v]) out[e.v].defDied!++; if (out[e.by]) out[e.by].beatDefended!++ }
+		if (e.out === 'died' && !e.disc && out[e.v]) out[e.v].noDefDied!++
+	}
+	return out
+}
+
 /** One game, ready to count — or null when the row can't say who won or who played. */
 export function gameOfRow(row: GameRowIn): LeagueGame | null {
 	const d = row.data ?? {}
@@ -137,6 +211,13 @@ export function gameOfRow(row: GameRowIn): LeagueGame | null {
 	const endCards = (d.final?.cards ?? {}) as Record<string, { coins?: number; level?: number; upgrade?: unknown[]; ultimate?: boolean }>
 	const keyOf = new Map<string, string>()
 	const players: GamePlayer[] = []
+	const teamOfId: Record<string, Team> = {}
+	for (const [id, p] of Object.entries((d.players ?? {}) as Record<string, { name: string; seat: number; hero: string; team?: Team }>))
+		if (p?.hero && p.name) teamOfId[id] = exact?.players.find((x) => x.id === id)?.team ?? p.team ?? (p.seat < Math.floor((d.seats || 2) / 2) ? 'orange' : 'blue')
+	const xs = exact ? extrasOf(d.ev, (d.evv ?? 0) >= 2, teamOfId) : null
+	// the brink: the battle zone on a team's own beach (Atlanteans: lane 0, Titans: lane 2), or its Life down to 1
+	const snaps = [...(Array.isArray(d.turns) ? d.turns : []), ...(d.final ? [d.final] : [])] as { lane?: number; life?: Record<Team, number> }[]
+	const brinkOf = (t: Team) => snaps.some((x) => x.lane === (t === 'orange' ? 0 : 2) || (x.life?.[t] != null && x.life[t] <= 1))
 	for (const [id, p] of Object.entries((d.players ?? {}) as Record<string, { name: string; seat: number; hero: string; team?: Team }>)) {
 		if (!p?.hero || !p.name) continue
 		const st = exact?.players.find((x) => x.id === id)
@@ -152,6 +233,9 @@ export function gameOfRow(row: GameRowIn): LeagueGame | null {
 			coins: st?.coins ?? (end ? (end.coins ?? 0) + levelsPaid(level) : null),
 			kills: st?.kills ?? null, deaths: st?.deaths ?? null, assists: st?.assists ?? null, minions: st?.minions ?? null,
 			mRoles: exact ? minionRoles(d.ev, id) : null,
+			x: xs?.[id] ?? null,
+			ultRound: (steps ?? []).find((b) => b.ult)?.r ?? null,
+			brink: team === winner && brinkOf(team),
 			path: steps?.length ? pathOfSteps(p.hero, steps) : pathOfFinal(p.hero, end)
 		})
 	}
@@ -162,7 +246,7 @@ export function gameOfRow(row: GameRowIn): LeagueGame | null {
 		: []
 	const at = Date.parse(row.ended_at) || Date.parse(row.started_at) || 0
 	const minutes = exact?.minutes ?? Math.max(1, Math.round((Date.parse(row.ended_at) - Date.parse(row.started_at)) / 60000) || 0)
-	return { id: row.id, room: row.room ?? '', startedAt: Date.parse(row.started_at) || at, at, minutes, rounds: row.rounds ?? d.final?.round ?? 0, winner, type: winType(row.reason ?? d.final?.wonBy?.reason), players, defeats, events: !!exact }
+	return { id: row.id, room: row.room ?? '', side: Math.max(1, ...(['orange', 'blue'] as Team[]).map((t) => players.filter((p) => p.team === t).length)), clashes: (d.evv ?? 0) >= 2, startedAt: Date.parse(row.started_at) || at, at, minutes, rounds: row.rounds ?? d.final?.round ?? 0, winner, type: winType(row.reason ?? d.final?.wonBy?.reason), players, defeats, events: !!exact }
 }
 
 // ── the league ────────────────────────────────────────────────────────────────────────────────
@@ -178,6 +262,7 @@ export type MatchLine = { id: string; at: number; startedAt: number; room: strin
 	mates: TableMate[]; foes: TableMate[]
 	/** who they defeated / who defeated them / whose defeats they assisted — round and turn */
 	kills: { name: string; r: number; t: number }[]; deaths: { name: string; r: number; t: number }[]; assisted: { name: string; r: number; t: number }[]
+	x: Extras | null; ultRound: number | null; brink: boolean
 	rating: number; delta: number }
 export type PlayerAgg = {
 	key: string
@@ -217,13 +302,26 @@ export type PlayerAgg = {
 	ults: number
 	maxLevel: number
 	mRoles: { melee: number; ranged: number; heavy: number }
+	/** the Extras added up, and how many games each kind rests on */
+	ex: Record<keyof Extras, number>
+	xGames: number
+	clashGames: number
+	/** won without falling / without a hero defeat (games with events) · won from the brink · fastest ultimate (round) */
+	flawless: number
+	pacifist: number
+	brinks: number
+	fastUlt: number | null
 }
 export type HeroAgg = { hero: string; games: number; wins: number; players: Record<string, number>; paths: PathTally[] }
-export type Record_ = { id: string; title: string; blurb: string; who: string; value: string; at?: number }
-export type League = { games: LeagueGame[]; players: PlayerAgg[]; heroes: HeroAgg[]; records: Record_[]; withEvents: number }
+/** An award: who holds it now (everyone tied at the top), with what. `scope` game = the best single game,
+ *  career = the most over every game. `hidden` = not shown yet (the 4 v 4 / 5 v 5 ones). `extra` = one of the
+ *  MOBA extras, beyond the user's list. No holders = still up for grabs. */
+export type Award = { id: string; title: string; blurb: string; scope: 'game' | 'career'; holders: { key: string; name: string }[]; value: string; at?: number; hidden?: boolean; extra?: boolean }
+export type League = { games: LeagueGame[]; players: PlayerAgg[]; heroes: HeroAgg[]; awards: Award[]; withEvents: number; withClashes: number }
 
 export const START_RATING = 1200
 const K = 32
+const ZERO_EX: Record<keyof Extras, number> = { firstBlood: 0, wipe: 0, shutdowns: 0, paybacks: 0, multis: 0, aces: 0, heavies: 0, bounty: 0, giants: 0, defends: 0, defDied: 0, noDefDied: 0, beatDefended: 0, relentless: 0 }
 const heroTraits = (id: string) => (HEROES.find((h) => h.id === id)?.traits ?? []) as Trait[]
 
 export function buildLeague(rows: GameRowIn[]): League {
@@ -236,7 +334,8 @@ export function buildLeague(rows: GameRowIn[]): League {
 			p = { key: gp.key, name: gp.name, games: 0, wins: 0, losses: 0, rating: START_RATING, ratingHist: [START_RATING], streak: 0, bestStreak: 0, worstStreak: 0,
 				byType: { throne: { games: 0, wins: 0 }, final: { games: 0, wins: 0 }, life: { games: 0, wins: 0 }, other: { games: 0, wins: 0 } },
 				kills: 0, deaths: 0, assists: 0, kdaGames: 0, teamKills: 0, minions: 0, coins: 0, coinGames: 0, levels: 0, heroes: {}, roles: {},
-				mates: [], foes: [], paths: [], history: [], firstAt: 0, lastAt: 0, peak: START_RATING, minutes: 0, rounds: 0, ults: 0, maxLevel: 0, mRoles: { melee: 0, ranged: 0, heavy: 0 }, _mates: new Map(), _foes: new Map(), _paths: new Map() }
+				mates: [], foes: [], paths: [], history: [], firstAt: 0, lastAt: 0, peak: START_RATING, minutes: 0, rounds: 0, ults: 0, maxLevel: 0, mRoles: { melee: 0, ranged: 0, heavy: 0 },
+					ex: { ...ZERO_EX }, xGames: 0, clashGames: 0, flawless: 0, pacifist: 0, brinks: 0, fastUlt: null, _mates: new Map(), _foes: new Map(), _paths: new Map() }
 			P.set(gp.key, p)
 		}
 		p.name = gp.name // the latest spelling
@@ -282,6 +381,15 @@ export function buildLeague(rows: GameRowIn[]): League {
 			if (gp.path.ult) p.ults++
 			p.maxLevel = Math.max(p.maxLevel, gp.level)
 			if (gp.mRoles) { p.mRoles.melee += gp.mRoles.melee; p.mRoles.ranged += gp.mRoles.ranged; p.mRoles.heavy += gp.mRoles.heavy }
+			if (gp.x) {
+				p.xGames++
+				if (gp.x.defends != null) p.clashGames++
+				for (const k of Object.keys(ZERO_EX) as (keyof Extras)[]) p.ex[k] += gp.x[k] ?? 0
+			}
+			if (gp.won && gp.deaths === 0) p.flawless++
+			if (gp.won && gp.kills === 0) p.pacifist++
+			if (gp.brink) p.brinks++
+			if (gp.ultRound != null) p.fastUlt = p.fastUlt == null ? gp.ultRound : Math.min(p.fastUlt, gp.ultRound)
 			for (const o of g.players) {
 				if (o.key === gp.key) continue
 				if (o.team === gp.team) {
@@ -306,6 +414,7 @@ export function buildLeague(rows: GameRowIn[]): League {
 				kills: g.defeats.filter((x) => x.by === gp.key).map((x) => ({ name: nameOf(x.v), ...at(x) })),
 				deaths: g.defeats.filter((x) => x.v === gp.key).map((x) => ({ name: nameOf(x.by), ...at(x) })),
 				assisted: g.defeats.filter((x) => x.a.includes(gp.key)).map((x) => ({ name: nameOf(x.v), ...at(x) })),
+				x: gp.x, ultRound: gp.ultRound, brink: gp.brink,
 				rating: p.rating, delta })
 			// heroes
 			const h = H.get(gp.hero) ?? { hero: gp.hero, games: 0, wins: 0, players: {} as Record<string, number>, paths: [], _paths: new Map<string, PathTally>() }
@@ -324,7 +433,7 @@ export function buildLeague(rows: GameRowIn[]): League {
 		history: [...p.history].reverse()
 	})).sort((a, b) => b.rating - a.rating || b.wins - a.wins || a.name.localeCompare(b.name))
 	const heroes = [...H.values()].map(({ _paths, ...h }) => ({ ...h, paths: [..._paths.values()].sort(byPop) })).sort((a, b) => b.games - a.games || b.wins - a.wins)
-	return { games, players, heroes, records: records(games, players), withEvents: games.filter((g) => g.events).length }
+	return { games, players, heroes, awards: awardsOf(games, players), withEvents: games.filter((g) => g.events).length, withClashes: games.filter((g) => g.clashes).length }
 }
 
 // ── nemesis / partner picks for one player ─────────────────────────────────────────────────────
@@ -345,73 +454,108 @@ export const worstMateOf = (p: PlayerAgg): Mate | null => {
 	return w && w.wins < w.games ? w : null
 }
 
-// ── a title or two for each player: the per-game stat they lead the table in ─────────────────────
-const TITLES: { title: string; blurb: string; val: (p: PlayerAgg) => number | null; low?: boolean }[] = [
-	{ title: 'Headhunter', blurb: 'Most hero kills a game', val: (p) => (p.kdaGames ? p.kills / p.kdaGames : null) },
-	{ title: 'Guardian Angel', blurb: 'Most assists a game', val: (p) => (p.kdaGames ? p.assists / p.kdaGames : null) },
-	{ title: 'Frequent Flyer', blurb: 'Most respawns a game', val: (p) => (p.kdaGames ? p.deaths / p.kdaGames : null) },
-	{ title: 'Survivor', blurb: 'Fewest defeats a game', val: (p) => (p.kdaGames >= 2 ? p.deaths / p.kdaGames : null), low: true },
-	{ title: 'Minion Farmer', blurb: 'Most minions a game', val: (p) => (p.kdaGames ? p.minions / p.kdaGames : null) },
-	{ title: 'Banker', blurb: 'Most coins a game', val: (p) => (p.coinGames ? p.coins / p.coinGames : null) },
-	{ title: 'Lucky Charm', blurb: 'Best win rate (3+ games)', val: (p) => (p.games >= 3 ? p.wins / p.games : null) },
-	{ title: 'Veteran', blurb: 'Most games played', val: (p) => p.games }
-]
-/** player key → the titles they hold (only with 2+ players to compare; a tie goes to nobody) */
-export function titlesOf(players: PlayerAgg[]): Record<string, { title: string; blurb: string }[]> {
-	const out: Record<string, { title: string; blurb: string }[]> = {}
-	if (players.length < 2) return out
-	for (const t of TITLES) {
-		const vals = players.map((p) => ({ p, v: t.val(p) })).filter((x): x is { p: PlayerAgg; v: number } => x.v != null)
-		if (vals.length < 2) continue
-		vals.sort((a, b) => (t.low ? a.v - b.v : b.v - a.v))
-		if (vals[0].v === vals[1].v || (!t.low && vals[0].v <= 0)) continue
-		;(out[vals[0].p.key] ??= []).push({ title: t.title, blurb: t.blurb })
-	}
-	return out
-}
-
-// ── the silly records ───────────────────────────────────────────────────────────────────────────
-function records(games: LeagueGame[], players: PlayerAgg[]): Record_[] {
-	const out: Record_[] = []
+// ── the awards ──────────────────────────────────────────────────────────────────────────────────
+const hm = (m: number) => (m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`)
+const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`
+export function awardsOf(games: LeagueGame[], players: PlayerAgg[]): Award[] {
+	const out: Award[] = []
 	const heroName = (id: string) => HEROES.find((h) => h.id === id)?.name ?? id
-	const best = (title: string, blurb: string, val: (gp: GamePlayer, g: LeagueGame) => number | null, fmt: (n: number) => string, min = 1) => {
-		let top: { gp: GamePlayer; g: LeagueGame; v: number } | null = null
-		for (const g of games) for (const gp of g.players) {
-			const v = val(gp, g)
-			if (v != null && v >= min && (!top || v > top.v)) top = { gp, g, v }
+	type Meta = { hidden?: boolean; extra?: boolean }
+	// the best single game: every player tied at the top holds it
+	const game = (id: string, title: string, blurb: string, val: (gp: GamePlayer, g: LeagueGame) => number | null, fmt: (n: number) => string, m: Meta & { only?: (g: LeagueGame) => boolean } = {}) => {
+		let top = 0, holders: { key: string; name: string }[] = [], at: number | undefined
+		for (const g of games) {
+			if (m.only && !m.only(g)) continue
+			for (const gp of g.players) {
+				const v = val(gp, g)
+				if (v == null || v < 1 || v < top) continue
+				if (v > top) { top = v; holders = []; at = g.at }
+				if (!holders.some((h) => h.key === gp.key)) holders.push({ key: gp.key, name: gp.name })
+				at = Math.max(at ?? 0, g.at)
+			}
 		}
-		if (top) out.push({ id: title, title, blurb, who: `${top.gp.name} (${heroName(top.gp.hero)})`, value: fmt(top.v), at: top.g.at })
+		out.push({ id, title, blurb, scope: 'game', holders, value: holders.length ? fmt(top) : '', at: holders.length ? at : undefined, hidden: m.hidden, extra: m.extra })
 	}
-	best('Bloodthirsty', 'Most heroes defeated in one game', (gp) => gp.kills, (n) => `${n} kills`)
-	best('Respawn Enthusiast', 'Most times defeated in one game', (gp) => gp.deaths, (n) => `${n} deaths`)
-	best('Wingman', 'Most assists in one game', (gp) => gp.assists, (n) => `${n} assists`)
-	best('Minion Menace', 'Most minions defeated in one game', (gp) => gp.minions, (n) => `${n} minions`)
-	best('Dragon\'s Hoard', 'Most coins earned in one game', (gp) => gp.coins, (n) => `${n} coins`)
-	best('Untouchable', 'Won without being defeated once — most kills while at it', (gp) => (gp.won && gp.deaths === 0 ? gp.kills ?? 0 : null), (n) => `${n} kills, 0 deaths`, 0)
-	best('Pacifist', 'Won without defeating a single hero — the most assists while at it', (gp) => (gp.won && gp.kills === 0 ? gp.assists ?? 0 : null), (n) => `0 kills, ${n} assists`, 0)
-	// whole games
-	const fast = [...games].filter((g) => g.rounds > 0).sort((a, b) => a.rounds - b.rounds || a.minutes - b.minutes)[0]
-	if (fast) out.push({ id: 'speedrun', title: 'Speedrun', blurb: 'The quickest win', who: fast.players.filter((p) => p.won).map((p) => p.name).join(' & '), value: `${fast.rounds} round${fast.rounds === 1 ? '' : 's'}`, at: fast.at })
-	const long = [...games].sort((a, b) => b.minutes - a.minutes)[0]
-	if (long && long.minutes > 1) out.push({ id: 'marathon', title: 'Marathon', blurb: 'The longest game', who: long.players.map((p) => p.name).join(', '), value: long.minutes >= 60 ? `${Math.floor(long.minutes / 60)}h ${long.minutes % 60}m` : `${long.minutes}m`, at: long.at })
+	// the most over a career
+	const career = (id: string, title: string, blurb: string, val: (p: PlayerAgg) => number | null, fmt: (n: number, p: PlayerAgg) => string, m: Meta & { min?: number; low?: boolean } = {}) => {
+		const vals = players.map((p) => ({ p, v: val(p) })).filter((x): x is { p: PlayerAgg; v: number } => x.v != null && (m.low ? true : x.v >= (m.min ?? 1)))
+		const best = vals.length ? (m.low ? Math.min(...vals.map((x) => x.v)) : Math.max(...vals.map((x) => x.v))) : 0
+		const top = vals.filter((x) => x.v === best)
+		out.push({ id, title, blurb, scope: 'career', holders: top.map((x) => ({ key: x.p.key, name: x.p.name })), value: top.length ? fmt(best, top[0].p) : '', hidden: m.hidden, extra: m.extra })
+	}
+	const ex = (k: keyof Extras, clash = false) => (p: PlayerAgg) => ((clash ? p.clashGames : p.xGames) ? p.ex[k] : null)
+	const kills = (gp: GamePlayer) => gp.kills
+
+	// the killers, by size of game
+	game('double-killer', 'Double-Killer', 'Most hero kills in one 2 v 2 game', kills, (n) => plural(n, 'kill'), { only: (g) => g.side === 2 })
+	game('triple-killer', 'Triple-Killer', 'Most hero kills in one 3 v 3 game', kills, (n) => plural(n, 'kill'), { only: (g) => g.side === 3 })
+	game('ultra-killer', 'Ultra-Killer', 'Most hero kills in one 4 v 4 game', kills, (n) => plural(n, 'kill'), { only: (g) => g.side === 4, hidden: true })
+	game('mega-killer', 'Mega-Killer', 'Most hero kills in one 5 v 5 game', kills, (n) => plural(n, 'kill'), { only: (g) => g.side === 5, hidden: true })
 	// careers
-	const top = (title: string, blurb: string, val: (p: PlayerAgg) => number, fmt: (n: number, p: PlayerAgg) => string, min = 1) => {
-		const p = [...players].sort((a, b) => val(b) - val(a))[0]
-		if (p && val(p) >= min) out.push({ id: title, title, blurb, who: p.name, value: fmt(val(p), p) })
-	}
-	top('On Fire', 'The longest winning streak', (p) => p.bestStreak, (n) => `${n} in a row`, 2)
-	top('Cursed', 'The longest losing streak', (p) => -p.worstStreak, (n) => `${n} in a row`, 2)
-	top('Hero Hopper', 'The most different heroes played', (p) => Object.keys(p.heroes).length, (n) => `${n} heroes`, 2)
-	top('One-Trick', 'Most games on one hero', (p) => Math.max(0, ...Object.values(p.heroes).map((h) => h.games)), (n, p) => {
+	career('bloodthirsty', 'Bloodthirsty!', 'Most hero kills', (p) => (p.kdaGames ? p.kills : null), (n) => plural(n, 'kill'))
+	career('respawn', 'Respawn Enthusiast!', 'Most deaths', (p) => (p.kdaGames ? p.deaths : null), (n) => plural(n, 'death'))
+	career('enabler', 'The Enabler', 'Most assists', (p) => (p.kdaGames ? p.assists : null), (n) => plural(n, 'assist'))
+	career('last-hit', 'Last-Hit Legend', 'Most minions defeated', (p) => (p.kdaGames ? p.minions : null), (n) => plural(n, 'minion'))
+	// single games
+	game('killing-spree', 'Killing Spree', 'Most hero kills in one game', kills, (n) => plural(n, 'kill'))
+	game('indomitable', 'Indomitable', 'Most attacks defended in one game', (gp) => gp.x?.defends ?? null, (n) => plural(n, 'defence'))
+	game('wingman', 'Wingman', 'Most assists in one game', (gp) => gp.assists, (n) => plural(n, 'assist'))
+	game('wicked-sick', 'Wicked Sick', 'Most minions defeated in one game', (gp) => gp.minions, (n) => plural(n, 'minion'))
+	// defences
+	career('unstoppable', 'Unstoppable', 'Most kills on heroes who defended the attack', ex('beatDefended', true), (n) => plural(n, 'kill'))
+	career('untouchable', 'Untouchable', 'Most attacks defended', ex('defends', true), (n) => plural(n, 'defence'))
+	career('death-wish', 'Death Wish', 'Most deaths without defending — took the hit instead of discarding', ex('noDefDied', true), (n) => plural(n, 'death'))
+	career('swinging', 'Went Down Swinging', 'Most defences that still ended in death', ex('defDied', true), (n) => plural(n, 'defence'))
+	// streaks and feats
+	career('dominating', 'Dominating!', 'Longest winning streak', (p) => p.bestStreak, (n) => `${n} in a row`, { min: 2 })
+	career('cursed', 'You Are Cursed!', 'Longest losing streak', (p) => -p.worstStreak, (n) => `${n} in a row`, { min: 2 })
+	career('first-blood', 'First Blood Hunter', 'Most first kills of a game', ex('firstBlood'), (n) => plural(n, 'first blood'))
+	career('godlike', 'Godlike', 'Most games won without dying', (p) => (p.kdaGames ? p.flawless : null), (n) => plural(n, 'flawless win'))
+	career('rampage', 'RAMPAGE!', 'Most games where they killed every enemy hero at least once', ex('wipe'), (n) => plural(n, 'rampage'))
+	career('relentless', 'Relentless', 'Most kills on a hero they had already attacked that round', ex('relentless', true), (n) => plural(n, 'kill'))
+	career('pacifist', 'Pacifist', 'Most games won without a single hero kill', (p) => (p.kdaGames ? p.pacifist : null), (n) => plural(n, 'peaceful win'))
+	// whole games
+	const timed = games.filter((g) => g.rounds > 0)
+	const fast = [...timed].sort((a, b) => a.rounds - b.rounds || a.minutes - b.minutes)[0]
+	out.push({ id: 'speedrun', title: 'Speedrun', blurb: 'The quickest game (fewest rounds) — its winners', scope: 'game', holders: fast ? fast.players.filter((p) => p.won).map((p) => ({ key: p.key, name: p.name })) : [], value: fast ? `${plural(fast.rounds, 'round')} · ${hm(fast.minutes)}` : '', at: fast?.at })
+	const long = [...timed].sort((a, b) => b.rounds - a.rounds || b.minutes - a.minutes)[0]
+	out.push({ id: 'marathon', title: 'Marathon', blurb: 'The longest game — everyone who played it', scope: 'game', holders: long ? long.players.map((p) => ({ key: p.key, name: p.name })) : [], value: long ? `${plural(long.rounds, 'round')} · ${hm(long.minutes)}` : '', at: long?.at })
+	// gold
+	game('hoard', "Dragon's Hoard", 'Most gold earned in one game', (gp) => gp.coins, (n) => plural(n, 'coin'))
+	career('old-money', 'Old Money', 'Most gold earned, all time', (p) => (p.coinGames ? p.coins : null), (n) => plural(n, 'coin'))
+	// heroes
+	career('commitment', 'Commitment Issues', 'The most different heroes played', (p) => Object.keys(p.heroes).length, (n) => plural(n, 'hero').replace('heros', 'heroes'), { min: 2 })
+	career('one-trick', 'One-Trick', 'Most games on one hero', (p) => Math.max(0, ...Object.values(p.heroes).map((h) => h.games)), (n, p) => {
 		const h = Object.entries(p.heroes).sort((a, b) => b[1].games - a[1].games)[0]
 		return `${heroName(h[0])} × ${n}`
-	}, 3)
+	}, { min: 2 })
+
+	// ── MOBA extras ──
+	const X = { extra: true }
+	career('ace', 'ACE!', 'Most times their team had every enemy hero down at once', ex('aces', true), (n) => plural(n, 'ace'), X)
+	career('shutdown', 'Shutdown', 'Most kills on a hero on a 3-kill streak', ex('shutdowns'), (n) => plural(n, 'shutdown'), X)
+	career('payback', 'Payback', 'Most kills on the hero who last killed them', ex('paybacks'), (n) => plural(n, 'revenge kill'), X)
+	career('two-birds', 'Two Birds, One Turn', 'Most turns with two or more kills', ex('multis'), (n) => plural(n, 'double'), X)
+	career('giant-slayer', 'Giant Slayer', 'Most kills on heroes 2+ levels above them', (p) => (p.xGames && p.ex.giants ? p.ex.giants : null), (n) => plural(n, 'giant'), X)
+	career('bounty-hunter', 'Bounty Hunter', 'Most gold from hero kills and assists', ex('bounty'), (n) => plural(n, 'coin'), X)
+	career('heavy-lifter', 'Heavy Lifter', 'Most heavy minions defeated', ex('heavies'), (n) => plural(n, 'heavy'), X)
+	career('brink', 'Back from the Brink', 'Most wins after the battle zone reached their own beach, or with one Life left', (p) => p.brinks, (n) => plural(n, 'comeback'), X)
+	career('throne-breaker', 'Throne Breaker', 'Most wins by pushing into the enemy throne', (p) => p.byType.throne.wins, (n) => plural(n, 'throne'), X)
+	career('ascended', 'Ascended', 'The earliest ultimate (round)', (p) => p.fastUlt, (n) => `round ${n}`, { ...X, low: true })
+	game('fed', 'Fed the Enemy', 'Most deaths in one game', (gp) => gp.deaths, (n) => plural(n, 'death'), X)
+	career('carry', 'The Carry', 'Biggest share of their team’s kills (3+ games)', (p) => (p.kdaGames >= 3 && p.teamKills ? Math.round((100 * p.kills) / p.teamKills) : null), (n) => `${n}% of the kills`, X)
+	return out
+}
+/** player key → the awards they hold now (titles on their card) */
+export function titlesOf(L: League): Record<string, { title: string; blurb: string }[]> {
+	const out: Record<string, { title: string; blurb: string }[]> = {}
+	for (const a of L.awards) if (!a.hidden) for (const h of a.holders) (out[h.key] ??= []).push({ title: a.title, blurb: a.blurb })
 	return out
 }
 
 // ── reading the table ───────────────────────────────────────────────────────────────────────────
 // Only the parts of `data` the league reads (not the whole log or the draft), each as its own column.
-const DATA_KEYS = ['seats', 'mapId', 'draftSystem', 'lifeMax', 'wavesMax', 'players', 'turns', 'final', 'ev', 'builds'] as const
+const DATA_KEYS = ['seats', 'mapId', 'draftSystem', 'lifeMax', 'wavesMax', 'players', 'turns', 'final', 'ev', 'evv', 'builds'] as const
 export const LEAGUE_SELECT = `id,room,started_at,ended_at,winner,reason,rounds,${DATA_KEYS.map((k) => `d_${k}:data->${k}`).join(',')}`
 /** A row fetched with LEAGUE_SELECT back into the uploaded shape. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

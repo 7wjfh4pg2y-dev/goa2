@@ -34,8 +34,12 @@ type Snap = {
  *  a hero defeat = one `lastDefeat` news id; a minion defeat = a minion leaving the board in
  *  the same change that paid a player its coins. `r` / `t` = the round and turn it happened in. */
 export type GameEvent =
-	| { k: 'hero'; id: string; r: number; t: number; by: string; v: string; a: string[]; c: number; ac: number; l: number; team: Team | null }
+	| { k: 'hero'; id: string; r: number; t: number; by: string; v: string; a: string[]; c: number; ac: number; l: number; team: Team | null; kl?: number }
 	| { k: 'minion'; id: string; r: number; t: number; by: string; role: string; team: Team }
+	/** how an attack / forced discard ended (match.ts ClashNews; journals with `evv` ≥ 2) */
+	| { k: 'clash'; id: string; r: number; t: number; kind: 'attack' | 'force'; by: string; v: string; out: 'defended' | 'died' | 'none' | 'cancel'; disc: boolean }
+	/** an ACE: every hero of the other team down at the same time (`team` = the team that did it) */
+	| { k: 'ace'; id: string; r: number; t: number; team: Team }
 
 /** A player's BUILD at a moment: the upgrade cards they keep (indices into heroCards(hero), Tier II / III),
  *  the twins they turned into items (`up`), whether the ultimate is on, and their level. The journal keeps
@@ -63,8 +67,11 @@ export interface Journal {
 	ev?: GameEvent[]
 	/** each player's build, one step per change (absent in journals begun before builds were recorded) */
 	builds?: Record<string, BuildStep[]>
-	/** what the event tracker saw last: the latest hero-defeat id and the minions on the board (id → "team|role") */
-	mark?: { d: string | null; m: Record<string, string> } | null
+	/** what the event tracker saw last: the latest hero-defeat id, the minions on the board (id → "team|role"),
+	 *  the latest clash id and which teams were all down */
+	mark?: { d: string | null; m: Record<string, string>; c?: string | null; a?: Partial<Record<Team, boolean>> } | null
+	/** event version: 2 = clashes and aces are recorded too (a game without it says nothing about defences) */
+	evv?: number
 	done: boolean // won — ready to upload
 	uploaded: boolean
 	/** the state as the game ended (kept so a failed upload can be retried later) */
@@ -87,7 +94,7 @@ export function newJournal(room: string, s: MatchState): Journal {
 		v: 1, id: gameId(room, s), room, startedAt: Date.now(), lastAt: Date.now(),
 		fromStart: s.round === 1 && s.turn === 1 && !s.wonBy,
 		seats: s.seats, mapId: s.mapId, draftSystem: s.draftSystem, lifeMax: s.lifeMax, wavesMax: s.wavesMax,
-		players: {}, draft: null, turns: [], cur: null, log: [], ev: [], builds: {}, mark: null, done: false, uploaded: false
+		players: {}, draft: null, turns: [], cur: null, log: [], ev: [], evv: 2, builds: {}, mark: null, done: false, uploaded: false
 	}
 }
 
@@ -110,7 +117,8 @@ function track(out: Journal, j: Journal, s: MatchState): boolean {
 	const ld = s.lastDefeat ?? null
 	const mark = j.mark
 	// the first look: a baseline only (a defeat left over in the room's state is not this game's)
-	if (!mark) { out.mark = { d: ld?.id ?? null, m: now }; return true }
+	const lc = s.lastClash ?? null
+	if (!mark) { out.mark = { d: ld?.id ?? null, m: now, c: lc?.id ?? null, a: {} }; return true }
 	const here = (e: GameEvent) => e.r === s.round && e.t === s.turn
 	let ev = j.ev
 	const paid: Record<string, number> = {} // hero-defeat coins that arrived with this very change
@@ -121,8 +129,9 @@ function track(out: Journal, j: Journal, s: MatchState): boolean {
 			ev = ev.filter((e, i) => !(e.k === 'hero' && i > at && here(e)))
 		} else {
 			const when = s.defeated?.[ld.victim]
+			const kl = s.cards?.[ld.by]?.level
 			ev = [...ev, { k: 'hero', id: ld.id, r: when?.round ?? s.round, t: when?.turn ?? s.turn, by: ld.by, v: ld.victim,
-				a: [...(ld.assists ?? [])], c: ld.coins ?? 0, ac: ld.assist ?? 0, l: ld.lives ?? 0, team: ld.team ?? null }]
+				a: [...(ld.assists ?? [])], c: ld.coins ?? 0, ac: ld.assist ?? 0, l: ld.lives ?? 0, team: ld.team ?? null, ...(kl != null ? { kl } : {}) }]
 			paid[ld.by] = ld.coins ?? 0
 			for (const a of ld.assists ?? []) paid[a] = (paid[a] ?? 0) + (ld.assist ?? 0)
 		}
@@ -153,10 +162,32 @@ function track(out: Journal, j: Journal, s: MatchState): boolean {
 			}
 		}
 	}
-	const moved = (ld?.id ?? null) !== mark.d || !sameKeys(mark.m, now)
+	// clashes (attacks / forced discards ending) — only on journals that track them from the start
+	let markC = mark.c
+	if (markC === undefined) markC = lc?.id ?? null // an older mark: start from here
+	else if ((lc?.id ?? null) !== markC && j.evv) {
+		const at = lc ? ev.findIndex((e) => e.k === 'clash' && e.id === lc.id) : -1
+		if (!lc || at >= 0) ev = ev.filter((e, i) => !(e.k === 'clash' && i > at && here(e))) // undone
+		else ev = [...ev, { k: 'clash', id: lc.id, r: s.round, t: s.turn, kind: lc.kind, by: lc.by, v: lc.v, out: lc.out, disc: !!lc.disc }]
+		markC = lc?.id ?? null
+	}
+	// aces: every hero of a team down (defeated, not just taken off) at the same moment
+	const aces = { ...(mark.a ?? {}) }
+	if (j.evv) for (const T of ['orange', 'blue'] as Team[]) {
+		const ids = Object.keys(out.players).filter((id) => out.players[id].team === T)
+		const down = ids.length > 0 && ids.every((id) => {
+			const d = s.defeated?.[id]
+			return !!d && ev.some((e) => e.k === 'hero' && e.v === id && e.r === d.round && e.t === d.turn)
+		})
+		if (down && !aces[T]) ev = [...ev, { k: 'ace', id: `a_${s.round}_${s.turn}_${T}`, r: s.round, t: s.turn, team: T === 'orange' ? 'blue' : 'orange' }]
+		else if (!down && aces[T]) ev = ev.filter((e) => !(e.k === 'ace' && here(e) && e.team !== T)) // undone this turn (a respawn comes later)
+		aces[T] = down
+	}
+	const acesMoved = (['orange', 'blue'] as Team[]).some((T) => !!aces[T] !== !!mark.a?.[T])
+	const moved = (ld?.id ?? null) !== mark.d || !sameKeys(mark.m, now) || markC !== mark.c || acesMoved
 	if (ev === j.ev && !moved) return false
 	out.ev = ev
-	if (moved) out.mark = { d: ld?.id ?? null, m: now }
+	if (moved) out.mark = { d: ld?.id ?? null, m: now, c: markC, a: aces }
 	return true
 }
 
@@ -260,7 +291,7 @@ export function gameRow(j: Journal) {
 		players: Object.keys(j.players).length,
 		data: {
 			v: j.v, seats: j.seats, mapId: j.mapId, draftSystem: j.draftSystem, lifeMax: j.lifeMax, wavesMax: j.wavesMax,
-			players: j.players, draft: j.draft, turns, log: j.log, final: f ?? null, ev: j.ev ?? null, builds: j.builds ?? null
+			players: j.players, draft: j.draft, turns, log: j.log, final: f ?? null, ev: j.ev ?? null, evv: j.evv ?? null, builds: j.builds ?? null
 		}
 	}
 }

@@ -60,11 +60,11 @@ describe('the league', () => {
 		expect(mo.assists).toBe(1)
 		expect(z.teamKills).toBe(1) // orange's one defeat, in two games
 		expect(L.players.find((p) => p.key === 'priya')!.teamKills).toBe(3)
-		// titles: Priya leads kills a game, Zara respawns most; nobody gets a tied one
-		const T = titlesOf(L.players)
-		expect(T.priya?.map((t) => t.title)).toContain('Headhunter')
-		expect(T.zara?.map((t) => t.title)).toContain('Frequent Flyer')
-		expect(Object.values(T).flat().some((t) => t.title === 'Veteran')).toBe(false) // all on 2 games
+		// awards → titles: Priya has the most kills, Zara the most deaths
+		const T = titlesOf(L)
+		expect(T.priya?.map((t) => t.title)).toContain('Bloodthirsty!')
+		expect(T.zara?.map((t) => t.title)).toContain('Respawn Enthusiast!')
+		expect(T.priya?.map((t) => t.title)).toContain('Double-Killer') // 2 kills in one 2 v 2
 	})
 
 	it('a level-up path keeps the order taken, drops a swap or an undo, keeps a tier II that a tier III replaced', () => {
@@ -97,7 +97,7 @@ describe('the league', () => {
 		expect(sum((p) => p.wins) + sum((p) => p.losses)).toBe(sum((p) => p.games))
 		expect(L.heroes.reduce((s, h) => s + h.games, 0)).toBe(sum((p) => p.games))
 		expect(L.heroes.some((h) => h.paths.length > 0)).toBe(true)
-		expect(L.records.length).toBeGreaterThan(5)
+		expect(L.awards.filter((a) => a.holders.length).length).toBeGreaterThan(10)
 	})
 
 	it("each player's log matches their totals: every defeat, fall and assist listed with its round and turn", () => {
@@ -117,6 +117,50 @@ describe('the league', () => {
 			expect(p.peak).toBeGreaterThanOrEqual(p.rating)
 			expect(p.mRoles.melee + p.mRoles.ranged + p.mRoles.heavy).toBeGreaterThan(0)
 		}
+	})
+})
+
+describe('the awards and the extras', () => {
+	// a, b = Atlanteans · c, d = Titans; clashes recorded (evv 2)
+	const clashRow = (id: string, ev: Partial<GameEvent>[], winner: 'orange' | 'blue' = 'orange') => { const r = row(id, 5, ['Zara', 'Mo', 'Priya', 'Sam'], winner, ev); r.data.evv = 2; return r }
+	it('first blood, shutdown, payback, rampage, doubles, defences and the rest — per game and per career', () => {
+		const L = buildLeague([clashRow('g1', [
+			{ k: 'clash', kind: 'attack', by: 'a', v: 'c', out: 'defended', disc: true, r: 1, t: 1 }, // Priya defends
+			{ by: 'a', v: 'c', r: 1, t: 2 }, // first blood — on a hero Zara already attacked this round (relentless)
+			{ k: 'clash', kind: 'attack', by: 'a', v: 'c', out: 'died', disc: true, r: 1, t: 2 }, // …who had defended (unstoppable / went down swinging)
+			{ by: 'a', v: 'd', r: 1, t: 2 }, // a double in one turn, and both Titans down: a rampage
+			{ k: 'clash', kind: 'attack', by: 'a', v: 'd', out: 'died', disc: false, r: 1, t: 2 }, // Sam took it (death wish)
+			{ k: 'ace', team: 'orange', r: 1, t: 2 },
+			{ by: 'a', v: 'c', r: 1, t: 3 }, // Zara on a 3-streak…
+			{ by: 'c', v: 'a', r: 1, t: 4 }, // …shut down by Priya
+			{ by: 'a', v: 'c', r: 2, t: 1 } // payback
+		])])
+		const x = (k: string) => L.players.find((p) => p.key === k)!
+		expect(x('zara').ex).toMatchObject({ firstBlood: 1, wipe: 1, multis: 1, relentless: 2, beatDefended: 1, paybacks: 1, aces: 1 }) // round 1: both later kills on Priya came after an earlier attack on her
+		expect(x('mo').ex.aces).toBe(1) // the whole team gets the ace
+		expect(x('priya').ex).toMatchObject({ shutdowns: 1, defends: 1, defDied: 1 })
+		expect(x('sam').ex.noDefDied).toBe(1)
+		const A = Object.fromEntries(L.awards.map((a) => [a.id, a]))
+		const who = (id: string) => A[id].holders.map((h) => h.name)
+		expect(who('first-blood')).toEqual(['Zara'])
+		expect(who('rampage')).toEqual(['Zara'])
+		expect(who('untouchable')).toEqual(['Priya'])
+		expect(who('death-wish')).toEqual(['Sam'])
+		expect(who('swinging')).toEqual(['Priya'])
+		expect(who('unstoppable')).toEqual(['Zara'])
+		expect(who('shutdown')).toEqual(['Priya'])
+		expect(who('ace').sort()).toEqual(['Mo', 'Zara'])
+		expect(who('killing-spree')).toEqual(['Zara'])
+		expect(A['killing-spree'].value).toBe('4 kills')
+		expect(A['triple-killer'].holders).toEqual([]) // no 3 v 3 yet: up for grabs
+		expect(A['ultra-killer'].hidden).toBe(true)
+	})
+	it('a game without clashes says nothing about defences; ties share an award', () => {
+		const L = buildLeague([row('g1', 1, ['Zara', 'Mo', 'Priya', 'Sam'], 'orange', [{ by: 'a', v: 'c' }, { by: 'c', v: 'a' }])])
+		const A = Object.fromEntries(L.awards.map((a) => [a.id, a]))
+		expect(A.untouchable.holders).toEqual([])
+		expect(L.players.find((p) => p.key === 'zara')!.clashGames).toBe(0)
+		expect(A['killing-spree'].holders.map((h) => h.name).sort()).toEqual(['Priya', 'Zara'])
 	})
 })
 

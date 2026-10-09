@@ -181,6 +181,25 @@ describe('attacking heroes', () => {
 	})
 })
 
+describe('how a clash ended (lastClash, for the Hall of Records)', () => {
+	const g = () => ({ ...game(), host: 'H' }) as MatchState
+	const atk = () => ({ ...g(), ...applyCardReq(g(), { kind: 'attack', pid: 'A', target: 'B' }) }) as MatchState
+	const disc = (s: MatchState) => ({ ...s, ...applyCardReq(s, { kind: 'defend', pid: 'B', idx: s.cards!.B.hand.find((i) => i !== s.cards!.B.pending)! }) }) as MatchState
+	it('an attack: died without a discard · defended · discarded and still died · called off', () => {
+		expect(applyCardReq(atk(), { kind: 'attackResolve', pid: 'B', target: 'B', result: 'defeated' }).lastClash).toMatchObject({ kind: 'attack', by: 'A', v: 'B', out: 'died', disc: false })
+		expect(applyCardReq(disc(atk()), { kind: 'attackResolve', pid: 'B', target: 'B', result: 'defended' }).lastClash).toMatchObject({ out: 'defended', disc: true })
+		expect(applyCardReq(disc(atk()), { kind: 'attackResolve', pid: 'B', target: 'B', result: 'defeated' }).lastClash).toMatchObject({ out: 'died', disc: true })
+		expect(applyCardReq(atk(), { kind: 'attackResolve', pid: 'A', target: 'B', result: 'cancel' }).lastClash).toMatchObject({ out: 'cancel' })
+		expect(applyCardReq(atk(), { kind: 'attackResolve', pid: 'B', target: 'B', result: 'defend' }).lastClash).toBeUndefined() // still going
+	})
+	it('a forced discard: discarded · or die and died · nothing to discard', () => {
+		const f = (die: boolean) => ({ ...g(), ...applyCardReq(g(), { kind: 'force', pid: 'A', target: 'B', die }) }) as MatchState
+		expect(applyCardReq(f(false), { kind: 'defend', pid: 'B', idx: f(false).cards!.B.hand.find((i) => i !== f(false).cards!.B.pending)! }).lastClash).toMatchObject({ kind: 'force', out: 'defended', disc: true })
+		expect(applyCardReq(f(true), { kind: 'forceResolve', pid: 'B', target: 'B', result: 'defeated' }).lastClash).toMatchObject({ kind: 'force', out: 'died', disc: false })
+		expect(applyCardReq(f(false), { kind: 'forceResolve', pid: 'B', target: 'B', result: 'none' }).lastClash).toMatchObject({ out: 'none' })
+	})
+})
+
 describe('forced discards', () => {
 	const g = () => ({ ...game(), host: 'H' }) as MatchState
 	it('discard: any card answers it; the forcer can call it off; only an enemy can force', () => {

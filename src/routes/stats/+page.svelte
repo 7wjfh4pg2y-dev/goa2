@@ -9,7 +9,7 @@
 	import {
 		buildLeague, titlesOf, nemesisOf, victimOf, rivalOf, bestMateOf, worstMateOf, rowOfSelect,
 		LEAGUE_SELECT, WIN_TYPES, WIN_LABEL, START_RATING,
-		type League, type PlayerAgg, type HeroAgg, type MatchLine, type PathTally, type GameRowIn, type LeagueGame, type Path, type Foe, type Mate
+		type League, type PlayerAgg, type HeroAgg, type MatchLine, type Award, type PathTally, type GameRowIn, type LeagueGame, type Path, type Foe, type Mate
 	} from '$lib/league';
 	import { heroById, portraitCss, traitIcon, TRAIT_LABELS, type Trait } from '$lib/heroes';
 	import { heroCards } from '$lib/cards/deck';
@@ -17,7 +17,7 @@
 	import Icon from '$lib/ui/Icon.svelte';
 	import { role } from '$lib/role';
 
-	type Tab = 'players' | 'log' | 'heroes' | 'records' | 'games';
+	type Tab = 'players' | 'log' | 'awards' | 'heroes' | 'games';
 	// GMs only for now (the soft admin gate in role.ts; the link is in the GM tools)
 	let phase: 'loading' | 'ready' | 'empty' | 'error' | 'locked' = 'loading';
 	let errMsg = '';
@@ -30,7 +30,7 @@
 
 	function use(rows: GameRowIn[]) {
 		league = buildLeague(rows);
-		titles = titlesOf(league.players);
+		titles = titlesOf(league);
 		phase = league.games.length ? 'ready' : 'empty';
 	}
 	async function load() {
@@ -162,6 +162,52 @@
 		a.click();
 		setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 	}
+	// ── feats and defences (the extras) for one player ──
+	function featRows(p: PlayerAgg) {
+		const n = (v: number, ok: number) => (ok ? String(v) : '–');
+		return [
+			{ k: 'First bloods', v: n(p.ex.firstBlood, p.xGames), tip: 'The first hero kill of a game' },
+			{ k: 'Rampages', v: n(p.ex.wipe, p.xGames), tip: 'Games where they killed every enemy hero at least once' },
+			{ k: 'Aces', v: n(p.ex.aces, p.clashGames), tip: 'Every enemy hero down at the same time' },
+			{ k: 'Shutdowns', v: n(p.ex.shutdowns, p.xGames), tip: 'Killed a hero on a 3-kill streak' },
+			{ k: 'Payback kills', v: n(p.ex.paybacks, p.xGames), tip: 'Killed the hero who last killed them' },
+			{ k: 'Double-kill turns', v: n(p.ex.multis, p.xGames), tip: 'Two or more kills in one turn' },
+			{ k: 'Giants slain', v: p.xGames && p.ex.giants ? String(p.ex.giants) : '–', tip: 'Kills on heroes 2+ levels above them' },
+			{ k: 'Heavy minions', v: n(p.ex.heavies, p.xGames), tip: 'Heavy minions defeated' },
+			{ k: 'Bounty gold', v: n(p.ex.bounty, p.xGames), tip: 'Gold from hero kills and assists' },
+			{ k: 'Flawless wins', v: n(p.flawless, p.kdaGames), tip: 'Won without dying' },
+			{ k: 'Peaceful wins', v: n(p.pacifist, p.kdaGames), tip: 'Won without a hero kill' },
+			{ k: 'Comebacks', v: String(p.brinks), tip: 'Won after the battle zone reached their own beach, or with one Life left' },
+			{ k: 'Throne wins', v: String(p.byType.throne.wins), tip: 'Won by pushing into the enemy throne' },
+			{ k: 'Earliest ultimate', v: p.fastUlt != null ? `Round ${p.fastUlt}` : '–', tip: 'The earliest round their ultimate came on' },
+			{ k: 'Attacks defended', v: n(p.ex.defends, p.clashGames), tip: 'Survived an attack by defending' },
+			{ k: 'Fell defending', v: n(p.ex.defDied, p.clashGames), tip: 'Defended and still died' },
+			{ k: 'Took the hit', v: n(p.ex.noDefDied, p.clashGames), tip: 'Died without discarding a card' },
+			{ k: 'Beat a defence', v: n(p.ex.beatDefended, p.clashGames), tip: 'Killed a hero who had defended' },
+			{ k: 'Relentless kills', v: n(p.ex.relentless, p.clashGames), tip: 'Killed a hero they had already attacked that round' }
+		];
+	}
+	// the little badges on one game in the log
+	function matchBadges(m: MatchLine) {
+		const x = m.x, b: string[] = [];
+		if (x?.firstBlood) b.push('First blood');
+		if (x?.wipe) b.push('Rampage');
+		if (m.won && m.d === 0) b.push('Flawless');
+		if (m.won && m.k === 0) b.push('Pacifist');
+		if (m.brink) b.push('Comeback');
+		if (x?.aces) b.push(x.aces > 1 ? `Ace ×${x.aces}` : 'Ace');
+		if (x?.multis) b.push(x.multis > 1 ? `Double ×${x.multis}` : 'Double kill');
+		if (x?.shutdowns) b.push(x.shutdowns > 1 ? `Shutdown ×${x.shutdowns}` : 'Shutdown');
+		if (x?.paybacks) b.push(x.paybacks > 1 ? `Payback ×${x.paybacks}` : 'Payback');
+		if (m.ultRound != null) b.push(`Ultimate R${m.ultRound}`);
+		return b;
+	}
+	// the awards, grouped
+	$: awardGroups = league ? [
+		{ k: 'Single game', list: league.awards.filter((a) => !a.hidden && !a.extra && a.scope === 'game') },
+		{ k: 'Career', list: league.awards.filter((a) => !a.hidden && !a.extra && a.scope === 'career') },
+		{ k: 'More awards', list: league.awards.filter((a) => !a.hidden && a.extra) }
+	] : [];
 	const SIDES = ['orange', 'blue'] as const;
 	const teamOf = (g: LeagueGame, t: 'orange' | 'blue') => g.players.filter((p) => p.team === t);
 </script>
@@ -174,6 +220,24 @@
 {/snippet}
 {#snippet seat(x: { key: string; name: string; hero: string; level: number; k: number | null; d: number | null; a: number | null })}
 	<span class="lseat">{@render face(x.hero, 24)}<span class="lsn">{@render lwho(x)}<small>{heroName(x.hero)} · Lv {x.level}</small></span><b>{kda(x)}</b></span>
+{/snippet}
+{#snippet feats(p: PlayerAgg)}
+	<div class="lgrid">
+		{#each featRows(p) as f (f.k)}<div class="st" title={f.tip}><span>{f.k}</span><b>{f.v}</b></div>{/each}
+	</div>
+	{#if p.clashGames < p.games}<p class="fine">Defences and aces count the {p.clashGames} of {p.games} games recorded with them{p.clashGames ? '' : ' — they start with the next game'}.</p>{/if}
+{/snippet}
+{#snippet awardCard(a: Award)}
+	<div class="panel award" class:open={!a.holders.length}>
+		<span class="at">{a.title}</span>
+		<span class="ab">{a.blurb}</span>
+		{#if a.holders.length}
+			<span class="av">{a.value}</span>
+			<span class="aw">{#each a.holders as h, i (h.key)}{#if i}<i>&amp;</i>{/if}<button class="who" on:click={() => openLog(h.key)}>{h.name}</button>{/each}{#if a.at}<small>&nbsp;· {day(a.at)}</small>{/if}</span>
+		{:else}
+			<span class="av none2">Up for grabs</span>
+		{/if}
+	</div>
 {/snippet}
 {#snippet matchCard(m: MatchLine)}
 	<article class="panel lm is-{m.team}" class:won={m.won}>
@@ -195,8 +259,10 @@
 					<span><small>Length</small>{m.rounds} round{m.rounds === 1 ? '' : 's'} · {hm(m.minutes)}</span>
 					<span><small>Rating</small>{m.rating - m.delta} → {m.rating}</span>
 					<span><small>Coins earned</small>{m.coins ?? '–'}</span>
+					<span><small>Defences</small>{#if m.x?.defends != null}{m.x.defends} held{#if m.x.defDied} · {m.x.defDied} fell{/if}{#if m.x.noDefDied} · {m.x.noDefDied} took the hit{/if}{:else}–{/if}</span>
 					<span><small>Minions</small>{#if m.mRoles}{m.minions ?? 0} <i class="mr">{m.mRoles.melee} melee · {m.mRoles.ranged} ranged · {m.mRoles.heavy} heavy</i>{:else}–{/if}</span>
 				</div>
+				{#if matchBadges(m).length}<div class="mbadges">{#each matchBadges(m) as b (b)}<span class="mbadge">{b}</span>{/each}</div>{/if}
 				{#if m.k != null}
 					<div class="lev">
 						<div><h4 class="sub">Defeated</h4>{#each m.kills as x, i (i)}<span class="evc k">{x.name}<small>{rt(x)}</small></span>{:else}<span class="none">—</span>{/each}</div>
@@ -235,7 +301,7 @@
 		<a class="btn btn-ghost btn-sm back" href={base + '/'}><Icon name="back" /> <span class="hidem">Home</span></a>
 		<h1 class="ttl">Hall of Records</h1>
 		<nav class="tabs" aria-label="Sections">
-			{#each [['players', 'Players'], ['log', 'Player log'], ['heroes', 'Heroes'], ['records', 'Records'], ['games', 'Games']] as [k, l] (k)}
+			{#each [['players', 'Players'], ['log', 'Player log'], ['awards', 'Awards'], ['heroes', 'Heroes'], ['games', 'Games']] as [k, l] (k)}
 				<button class="tab" class:on={tab === k && !(k === 'players' && sel)} class:crumb={tab === k && k === 'players' && !!sel} on:click={() => go(k as Tab)}>{l}</button>
 			{/each}
 		</nav>
@@ -357,6 +423,11 @@
 					</div>
 				</section>
 
+				<section class="panel">
+					<h3 class="t-label">Feats &amp; defence</h3>
+					{@render feats(p)}
+				</section>
+
 				<div class="cols">
 					<section class="panel">
 						<h3 class="t-label">Heroes</h3>
@@ -476,6 +547,11 @@
 						</section>
 
 						<section class="panel">
+							<h3 class="t-label">Feats &amp; defence</h3>
+							{@render feats(p)}
+						</section>
+
+						<section class="panel">
 							<h3 class="t-label">By hero</h3>
 							<div class="lhero">
 								<div class="lhr th"><span></span><span class="hn">Hero</span><span>Games</span><span>W–L</span><span>K/D/A</span><span>Minions</span><span>Avg level</span><span>Avg coins</span></div>
@@ -565,28 +641,13 @@
 					</div>
 				{/if}
 			{/if}
-		{:else if tab === 'records'}
-			<!-- ── the silly records ── -->
-			<div class="recs">
-				{#each league.records as r (r.id)}
-					<div class="panel rec">
-						<span class="rt">{r.title}</span>
-						<span class="rb">{r.blurb}</span>
-						<span class="rv">{r.value}</span>
-						<span class="rw">{r.who}{#if r.at}<small>&nbsp;· {day(r.at)}</small>{/if}</span>
-					</div>
-				{/each}
-			</div>
-			{#if Object.keys(titles).length}
-				<h3 class="t-label sp c">Titles held</h3>
-				<div class="recs">
-					{#each league.players.filter((p) => titles[p.key]) as p (p.key)}
-						{#each titles[p.key] as t (t.title)}
-							<div class="panel rec small"><span class="rt">{t.title}</span><span class="rb">{t.blurb}</span><span class="rw">{@render who(p.name)}</span></div>
-						{/each}
-					{/each}
-				</div>
-			{/if}
+		{:else if tab === 'awards'}
+			<!-- ── the awards: who holds each one now ── -->
+			{#each awardGroups as grp (grp.k)}
+				<h3 class="t-label sp c">{grp.k}</h3>
+				<div class="recs">{#each grp.list as a (a.id)}{@render awardCard(a)}{/each}</div>
+			{/each}
+			{#if league.withClashes < league.games.length}<p class="fine c">Defences and aces count the {league.withClashes} game{league.withClashes === 1 ? '' : 's'} recorded with them{league.withClashes ? '' : ' — they start with the next game'}.</p>{/if}
 		{:else}
 			<!-- ── every game ── -->
 			<div class="games">
@@ -861,12 +922,17 @@
 
 	/* records */
 	.recs { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
-	.rec { display: flex; flex-direction: column; gap: 4px; text-align: center; align-items: center; }
-	.rt { font-size: 22px; color: var(--brass-hi); }
-	.rb { font-size: 13px; color: var(--ink-3); }
-	.rv { font-size: 28px; margin-top: 4px; }
-	.rw { font-size: 15px; color: var(--ink-2); }
-	.rec.small .rt { font-size: 18px; }
+	.award { display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; padding: 14px 12px; }
+	.award .at { font-size: 21px; color: var(--brass-hi); }
+	.award .ab { font-size: 12.5px; color: var(--ink-3); min-height: 2.4em; }
+	.award .av { font-size: 24px; margin-top: 2px; }
+	.award .aw { display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline; gap: 2px 6px; font-size: 15px; color: var(--ink-2); }
+	.award .aw i { font-style: normal; color: var(--ink-3); }
+	.award .aw small { font-size: 12px; color: var(--ink-3); }
+	.award.open { opacity: 0.55; }
+	.award .none2 { font-size: 15px; color: var(--ink-3); letter-spacing: 0.06em; text-transform: uppercase; }
+	.mbadges { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 10px; }
+	.mbadge { padding: 2px 10px; border-radius: 999px; font-size: 12.5px; color: var(--ink-dark); background: linear-gradient(180deg, var(--brass-hi), var(--brass)); }
 
 	/* games */
 	.games { display: flex; flex-direction: column; gap: 10px; }

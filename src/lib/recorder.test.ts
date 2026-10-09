@@ -69,8 +69,24 @@ describe('game recorder', () => {
 		expect(j.ev).toEqual([])
 		j = journalUpdate(j, base({ turn: 2, lastDefeat: news('d1'), defeated: { b: { round: 1, turn: 2, piece: {} } } } as unknown as Partial<MatchState>))
 		const same = journalUpdate(j, base({ turn: 2, lastDefeat: news('d1') } as Partial<MatchState>))
-		expect(same.ev).toEqual([{ k: 'hero', id: 'd1', r: 1, t: 2, by: 'a', v: 'b', a: [], c: 1, ac: 1, l: 1, team: 'blue' }])
+		expect(same.ev).toEqual([{ k: 'hero', id: 'd1', r: 1, t: 2, by: 'a', v: 'b', a: [], c: 1, ac: 1, l: 1, team: 'blue', kl: 1 }])
 		expect(gameRow(same).data.ev).toHaveLength(1)
+	})
+	it('records how attacks end (defended / died / …) and an ACE when a whole team is down — and follows Undo', () => {
+		const clash = (id: string, out: string, disc = false) => ({ id, kind: 'attack', by: 'a', v: 'b', out, disc, at: 1 })
+		const kill = { lastDefeat: { id: 'd1', victim: 'b', by: 'a', coins: 1, assist: 0, assists: [], lives: 1, team: 'blue', at: 1 }, defeated: { b: { round: 1, turn: 2, piece: {} } } }
+		let j = journalUpdate(newJournal('ROOM', base()), base({ lastClash: clash('old', 'defended') } as unknown as Partial<MatchState>))
+		expect(j.evv).toBe(2)
+		j = journalUpdate(j, base({ lastClash: clash('c1', 'defended', true) } as unknown as Partial<MatchState>))
+		expect(j.ev!.filter((e) => e.k === 'clash')).toEqual([{ k: 'clash', id: 'c1', r: 1, t: 1, kind: 'attack', by: 'a', v: 'b', out: 'defended', disc: true }])
+		// turn 2: a defended-and-still-died; B is Blue's only hero → an ace for Orange
+		j = journalUpdate(j, base({ turn: 2, lastClash: clash('c2', 'died', true), ...kill } as unknown as Partial<MatchState>))
+		expect(j.ev!.map((e) => e.k)).toEqual(['clash', 'hero', 'clash', 'ace'])
+		expect(j.ev!.find((e) => e.k === 'ace')).toMatchObject({ team: 'orange', r: 1, t: 2 })
+		// the host undoes it: back to c1, nobody down
+		j = journalUpdate(j, base({ turn: 2, lastClash: clash('c1', 'defended', true) } as unknown as Partial<MatchState>))
+		expect(j.ev!.map((e) => e.id)).toEqual(['c1']) // the defeat, its clash and the ace all come off
+		expect(gameRow({ ...j, done: true }).data.evv).toBe(2)
 	})
 	it('joining mid-game, or playing alone, is a test run', () => {
 		const late = journalUpdate(newJournal('ROOM', base({ round: 2 })), base({ round: 3, wonBy: { team: 'orange', reason: 'x' } }))

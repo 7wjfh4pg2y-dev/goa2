@@ -237,7 +237,7 @@ export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 	else if (req.kind === 'swap') { if (!s.levelPhase) return {}; next = swapPick(cs, req.idx) }
 	// a discard while forced to discard answers the demand (any card will do)
 	const fd = s.forced?.[req.pid]
-	if (req.kind === 'defend' && fd && next !== cs) { const forced = { ...s.forced }; delete forced[req.pid]; return { cards: { ...cards, [req.pid]: next }, forced } }
+	if (req.kind === 'defend' && fd && next !== cs) { const forced = { ...s.forced }; delete forced[req.pid]; return { cards: { ...cards, [req.pid]: next }, forced, lastClash: clashNews('force', fd.by, req.pid, 'defended', true) } }
 	// a discard while being attacked is the defence: the defender may now answer Defended
 	const atk = s.attacks?.[req.pid]
 	if (req.kind === 'defend' && atk && next !== cs) return { cards: { ...cards, [req.pid]: next }, attacks: { ...s.attacks, [req.pid]: { ...atk, defending: true, discarded: true } } }
@@ -376,6 +376,8 @@ export interface MatchState {
 	battleNews?: BattleNews | null
 	/** the latest hero defeat — every client plays the defeat splash when `id` changes */
 	lastDefeat?: DefeatNews | null
+	/** how the latest attack / forced discard ended (the recorder reads it — the Hall of Records' defences) */
+	lastClash?: ClashNews | null
 	/** game start: heroes not yet placed — each player puts theirs on a base spawn point */
 	toSpawn?: Record<string, Piece>
 	// synced 3-2-1 pre-reveal countdown: epoch ms when cards flip face-up. Set by
@@ -1526,6 +1528,13 @@ export interface BattleNews {
 	at: number
 }
 
+/** How an attack or a forced discard ended: `defended` (survived — for a forced discard, the card was
+ *  discarded), `died` (defeated through it; `disc` = they had discarded a card first, i.e. defended and
+ *  still fell), `none` (forced, nothing to discard) or `cancel` (called off). */
+export interface ClashNews { id: string; kind: 'attack' | 'force'; by: string; v: string; out: 'defended' | 'died' | 'none' | 'cancel'; disc: boolean; at: number }
+const clashNews = (kind: ClashNews['kind'], by: string, v: string, out: ClashNews['out'], disc: boolean): ClashNews =>
+	({ id: `c_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`, kind, by, v, out, disc, at: Date.now() })
+
 export interface DefeatNews {
 	id: string
 	victim: string // playerId
@@ -1711,11 +1720,11 @@ export function resolveAttack(s: MatchState, pid: string, target: string, result
 	if (result === 'cancel' ? pid !== at.by && !isHost : pid !== target && !isHost) return {}
 	const attacks = { ...s.attacks }
 	if (result === 'defend') return { attacks: { ...attacks, [target]: { ...at, defending: true } } }
-	if (result === 'defeated') return defeatHero(s, at.by, target)
+	if (result === 'defeated') { const d = defeatHero(s, at.by, target); return d.lastDefeat ? { ...d, lastClash: clashNews('attack', at.by, target, 'died', !!at.discarded) } : d }
 	// a defence is a discarded card: the defender can only say Defended once they've discarded (the host can, for someone away)
 	if (result === 'defended' && !isHost && !at.discarded) return {}
 	delete attacks[target]
-	return { attacks }
+	return { attacks, lastClash: clashNews('attack', at.by, target, result === 'defended' ? 'defended' : 'cancel', !!at.discarded) }
 }
 
 // ── forced discards (card effects): "target discards a card" / "…or is defeated" ──────────
@@ -1732,10 +1741,10 @@ export function resolveForce(s: MatchState, pid: string, target: string, result:
 	const isHost = pid === s.host
 	if (result === 'cancel' ? pid !== f.by && !isHost : pid !== target && !isHost) return {}
 	// "…or die": not discarding = defeated, the forcer takes the rewards (like an attack)
-	if (result === 'defeated') return f.die ? defeatHero(s, f.by, target) : {}
+	if (result === 'defeated') { if (!f.die) return {}; const d = defeatHero(s, f.by, target); return d.lastDefeat ? { ...d, lastClash: clashNews('force', f.by, target, 'died', false) } : d }
 	const forced = { ...s.forced }
 	delete forced[target]
-	return { forced }
+	return { forced, lastClash: clashNews('force', f.by, target, result, false) }
 }
 
 /** The minion modifiers on a hero's defence (shown while they're attacked): enemy melee / heavy
