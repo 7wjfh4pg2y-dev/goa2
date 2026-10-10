@@ -922,6 +922,8 @@ export interface MatchSession {
 	resolveSeat: (reqId: string, approve: boolean) => void
 	/** Host: put a watcher (by id) in a seat whose player is away — their hero, cards and coins move with it. */
 	giveSeat: (pid: string, seat: number) => boolean
+	/** the host hands the role to someone here (they become the creator too, so it stays with them) */
+	passHost: (pid: string) => boolean
 	/** Emits { seat, colour } when THIS client is granted a seat takeover. */
 	seatGranted: Readable<{ seat: number; color: string; back?: boolean } | null>
 	/** Bumps (timestamp) when THIS client's seat request is denied. */
@@ -1535,6 +1537,16 @@ export function joinMatch(
 		}
 	}
 
+	// the host hands the role to someone here (e.g. before leaving): they become the room's creator too, so the old
+	// host does not take it back on return (the new host can pass it back)
+	const passHost = (pid: string) => {
+		if (local.host !== clientId || pid === clientId) return false
+		const p = playerList.find((q) => q.id === pid)
+		if (!p) return false
+		act(`made ${p.name} the host`, { host: pid, creator: pid, hostEpoch: (local.hostEpoch ?? 0) + 1 })
+		return true
+	}
+
 	// the host hands a seat to a watcher by hand (a player back under a different name, or a stand-in)
 	const giveSeat = (pid: string, seat: number) => {
 		if (local.host !== clientId) return false
@@ -1600,7 +1612,7 @@ export function joinMatch(
 	}
 	liveSessions.set(sessionKey, leave)
 
-	return { state, players, update, act, setSelf, cardAction, kick, flipJoin, joinFlip, undo, canUndo, requestSeat, resolveSeat, giveSeat, seatGranted, seatDenied, kicked, notFound, status: conn, leave, clientId, hostNow, ping, pings }
+	return { state, players, update, act, setSelf, cardAction, kick, flipJoin, joinFlip, undo, canUndo, requestSeat, resolveSeat, giveSeat, passHost, seatGranted, seatDenied, kicked, notFound, status: conn, leave, clientId, hostNow, ping, pings }
 }
 
 /**

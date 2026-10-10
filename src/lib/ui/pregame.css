@@ -292,6 +292,18 @@
 	background: rgba(229, 72, 77, 0.14);
 }
 
+/* the host's crown on another seat: hand the host role over (tap, then tap again) */
+.tide .seat-kick.mkhost:hover {
+	color: var(--brass-hi);
+	border-color: var(--brass-line);
+	background: rgba(216, 179, 106, 0.12);
+}
+.tide .seat-kick.mkhost.arm {
+	color: #2a1c06;
+	border-color: #f9ebc6;
+	background: linear-gradient(180deg, #f6e2ad, var(--brass));
+}
+
 /* ------------------------------------------------- the framed live board */
 .tide .boardframe {
 	position: relative;

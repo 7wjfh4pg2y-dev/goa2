@@ -713,6 +713,12 @@
 	}
 	function closeGame() { session?.update({ closed: true }); }
 	function kick(id: string) { session?.kick(id); }
+	// the host hands the role on (tap the crown, then tap again)
+	let hostArm = '', hostArmT: ReturnType<typeof setTimeout> | null = null;
+	function hostTap(id: string) {
+		if (hostArm !== id) { hostArm = id; if (hostArmT) clearTimeout(hostArmT); hostArmT = setTimeout(() => (hostArm = ''), 3000); return; }
+		hostArm = ''; session?.passHost(id);
+	}
 
 	async function copyLink() {
 		try { await navigator.clipboard.writeText(shareLink); copied = true; setTimeout(() => (copied = false), 1400); } catch {}
@@ -749,6 +755,7 @@
 							</span>
 							<span class="state" class:is-ready={p.ready}>{#if p.ready}<Icon name="check" /> Ready{:else}Not ready{/if}</span>
 						</span>
+						{#if iAmHost && !mine}<button class="seat-kick mkhost" class:arm={hostArm === p.id} title={hostArm === p.id ? `Tap again: ${p.name} becomes the host` : `Make ${p.name} the host`} aria-label="Make {p.name} the host" on:click={() => hostTap(p.id)}><Icon name="crown" fill={hostArm === p.id} /></button>{/if}
 						{#if iAmHost && !mine}<button class="seat-kick kick" title="Kick" aria-label="Kick {p.name}" on:click={() => kick(p.id)}><Icon name="x" /></button>{/if}
 					</div>
 				{:else}

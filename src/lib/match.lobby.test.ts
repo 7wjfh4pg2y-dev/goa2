@@ -218,6 +218,27 @@ describe('the host gives a seat by hand', () => {
 	});
 });
 
+describe('the host passes the role on', () => {
+	it('to someone here, who keeps it when the old host comes back', async () => {
+		vi.useFakeTimers();
+		const host = joinMatch('PASS', { name: 'Host', color: 'spectator' }, { seed: initialMatchState({ players: 4 }) });
+		const q = joinMatch('PASS', { name: 'Quinn', color: 'spectator' }, {});
+		await vi.advanceTimersByTimeAsync(500);
+		expect(q.passHost(host.clientId)).toBe(false); // only the host
+		expect(host.passHost('nobody')).toBe(false);
+		expect(host.passHost(q.clientId)).toBe(true);
+		await vi.advanceTimersByTimeAsync(500);
+		expect(get(host.state).host).toBe(q.clientId);
+		expect(get(q.state).host).toBe(q.clientId);
+		expect(get(q.state).log.at(-1)?.text).toBe('made Quinn the host');
+		await vi.advanceTimersByTimeAsync(10000); // the old creator never reclaims it
+		expect(get(q.state).host).toBe(q.clientId);
+		expect(host.passHost(q.clientId)).toBe(false);
+		host.leave(); q.leave();
+		vi.useRealTimers();
+	});
+});
+
 describe('GM tools: close a room', () => {
 	it('closes a live room for everyone in it', async () => {
 		vi.useFakeTimers();

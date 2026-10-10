@@ -140,6 +140,12 @@
 	function requestSeat(seat: number) { session.requestSeat(seat); }
 	function resolveSeat(id: string, ok: boolean) { if (iAmHost) session.resolveSeat(id, ok); }
 	function giveSeat(id: string, seat: number) { if (iAmHost && id) session.giveSeat(id, seat); }
+	function passHost(id: string) { if (iAmHost && id) session.passHost(id); }
+	let hostArm = '', hostArmT: ReturnType<typeof setTimeout> | null = null;
+	function hostTap(id: string) {
+		if (hostArm !== id) { hostArm = id; if (hostArmT) clearTimeout(hostArmT); hostArmT = setTimeout(() => (hostArm = ''), 3000); return; }
+		hostArm = ''; passHost(id);
+	}
 	function openDeckFor(id: string) { if (iAmHost && id) cardLayer?.openDeckFor(id); }
 
 	$: boardPieces = Object.values($ms.pieces).map((p) => ({
@@ -1077,7 +1083,7 @@
 		{#if lobbyOpen}
 			<GameLobby {room} conn={connLabel($status)} connClass={$status} seats={seatRows} watchers={spectators} requests={seatRequests} host={iAmHost} {clientId} {mySeat} myRequest={myRequestSeat}
 				colorOf={(id) => colorHex($players.find((p) => p.id === id)?.color ?? '')}
-				onKick={kickSeat} onSit={requestSeat} onResolve={resolveSeat} onGive={giveSeat} onDeck={mobile ? null : openDeckFor} onLeave={() => { lobbyOpen = false; askLeave(); }} onEnd={endGame} onClose={() => (lobbyOpen = false)} />
+				onKick={kickSeat} onSit={requestSeat} onResolve={resolveSeat} onGive={giveSeat} hostId={$ms.host} onHost={passHost} onDeck={mobile ? null : openDeckFor} onLeave={() => { lobbyOpen = false; askLeave(); }} onEnd={endGame} onClose={() => (lobbyOpen = false)} />
 		{/if}
 	{/if}
 
@@ -1172,6 +1178,7 @@
 									<button class="act sm" on:click={() => { manageOpen = false; openDeckFor(s.id); }} title="Edit their deck — level up / down, free">Deck</button>
 								{/if}
 								{#if iAmHost && s.present && s.id !== clientId}
+									<button class="act sm" on:click={() => hostTap(s.id)} title="Make {s.name} the host">{hostArm === s.id ? 'Sure?' : 'Make host'}</button>
 									<button class="act danger sm" on:click={() => kickSeat(s.id)}>Kick</button>
 								{/if}
 								{#if iAmHost && !s.present && spectators.some((sp) => sp.id !== clientId)}
@@ -1216,7 +1223,7 @@
 		{#if lobbyOpen}
 			<GameLobby phone {room} conn={connLabel($status)} connClass={$status} seats={seatRows} watchers={spectators} requests={seatRequests} host={iAmHost} {clientId} {mySeat} myRequest={myRequestSeat}
 				colorOf={(id) => colorHex($players.find((p) => p.id === id)?.color ?? '')} {log} canUndo={$canUndo} onUndo={() => session.undo()}
-				onKick={kickSeat} onSit={requestSeat} onResolve={resolveSeat} onGive={giveSeat} onDeck={mobile ? null : openDeckFor} onLeave={() => { lobbyOpen = false; askLeave(); }} onEnd={endGame} onClose={() => (lobbyOpen = false)} />
+				onKick={kickSeat} onSit={requestSeat} onResolve={resolveSeat} onGive={giveSeat} hostId={$ms.host} onHost={passHost} onDeck={mobile ? null : openDeckFor} onLeave={() => { lobbyOpen = false; askLeave(); }} onEnd={endGame} onClose={() => (lobbyOpen = false)} />
 		{/if}
 	{/if}
 	{#if mobile}

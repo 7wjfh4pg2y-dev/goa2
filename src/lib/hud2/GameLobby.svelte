@@ -28,6 +28,14 @@
 	$: givingName = watchers.find((w) => w.id === giving)?.name ?? '';
 	/** the host: open a seated player's deck for a free edit (level them up / down) */
 	export let onDeck: ((id: string) => void) | null = null;
+	/** the host: hand the host role to someone here (tap, then tap again) */
+	export let hostId = '';
+	export let onHost: ((id: string) => void) | null = null;
+	let hostArm = '', hostT: ReturnType<typeof setTimeout> | null = null;
+	function hostTap(id: string) {
+		if (hostArm !== id) { hostArm = id; if (hostT) clearTimeout(hostT); hostT = setTimeout(() => (hostArm = ''), 3000); return; }
+		hostArm = ''; onHost?.(id);
+	}
 	export let onLeave: () => void = () => {};
 	/** the host: end the game for everyone (tap, then tap again to confirm) */
 	export let onEnd: () => void = () => {};
@@ -57,8 +65,9 @@
 					{#each tm.rows as s (s.seat)}
 						<span class="gp" class:away={!s.present}>
 							<span class="gface" class:blank={!s.hero} style="--pc:{s.id ? colorOf(s.id) : '#555'}; {s.hero ? portraitCss(s.hero) : ''}"></span>
-							<span class="gn"><b>{s.hero ? heroById(s.hero)?.name ?? '' : 'Open seat'}</b><em>{s.name || '—'}{s.id === clientId ? ' · you' : !s.present && s.name ? ' · away' : ''}</em></span>
+							<span class="gn"><b>{s.hero ? heroById(s.hero)?.name ?? '' : 'Open seat'}</b><em>{s.name || '—'}{s.id === clientId ? ' · you' : !s.present && s.name ? ' · away' : ''}{s.id && s.id === hostId ? ' · host' : ''}</em></span>
 							{#if host && onDeck && s.id && s.hero}<button class="gok deck" on:click={() => { onDeck?.(s.id); onClose(); }} title="Edit {s.name || 'their'}'s deck — level up / down, free">Deck</button>{/if}
+							{#if host && onHost && s.present && s.id && s.id !== clientId}<button class="gok hostb" class:arm={hostArm === s.id} on:click={() => hostTap(s.id)} title="Make {s.name} the host">{hostArm === s.id ? 'Sure?' : 'Host'}</button>{/if}
 							{#if host && s.present && s.id && s.id !== clientId}<button class="gkick" on:click={() => onKick(s.id)}>Kick</button>{/if}
 							{#if host && giving && !s.present}<button class="gok give" on:click={() => { onGive(giving ?? '', s.seat); giving = null; }} title="Give this seat to {givingName}">Give</button>
 							{:else if mySeat < 0 && !s.present}
@@ -127,6 +136,8 @@
 	.gkick { color: #ffb4a8; border-color: rgba(194, 65, 47, 0.6); }
 	.gok { color: #86efac; border-color: rgba(34, 197, 94, 0.6); }
 	.gok:disabled { opacity: 0.4; cursor: default; }
+	.gok.hostb { color: #e9cf8e; border-color: rgba(216, 179, 106, 0.6); }
+	.gok.hostb.arm { color: #2a1c06; border-color: #f9ebc6; background: linear-gradient(180deg, #f6e2ad, #d8b36a); }
 	.gok.deck { color: #e9cf8e; border-color: rgba(216, 179, 106, 0.6); }
 	.gok.on, .gok.give { color: #2a1c06; border-color: #f9ebc6; background: linear-gradient(180deg, #f6e2ad, #d8b36a); }
 	.greq { font-size: 11px; color: #8a9fb3; }
