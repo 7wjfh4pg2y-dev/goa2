@@ -9,7 +9,7 @@
 	import coinOrange from '$lib/images/tiebreaker_orange.png';
 	import coinBlue from '$lib/images/tiebreaker_blue.png';
 	import { reveal } from '$lib/transitions';
-	import { role, tryAdmin, enterAsPlayer, signOut } from '$lib/role';
+	import { role, tryAdmin, enterAsPlayer, signOut, leaveRole, gmActive } from '$lib/role';
 	import { availableMaps, type MapChoice, type GameMap } from '$lib/maps';
 	import { announceRoom, browseRooms, type RoomInfo } from '$lib/lobby';
 	import { claimIdentity, tabClientId, writeTicket, clearTicket, type ResumeTicket } from '$lib/identity';
@@ -425,7 +425,7 @@
 	function goHome() {
 		closeSession();
 		clearActive();
-		signOut();
+		leaveRole(); // an active GM unlock stays (Sign out ends it)
 		pw = ''; pwError = false; notice = '';
 		mode = 'landing';
 	}
@@ -794,7 +794,7 @@
 									<span class="choice-txt"><span class="t-h2">Player</span><span class="t-body c-muted">Join or create a match</span></span>
 									<span class="choice-go"><Icon name="go" /></span>
 								</button>
-								<button class="choice card a" on:click={() => (mode = 'admin')}>
+								<button class="choice card a" on:click={() => (mode = gmActive() ? 'adminhub' : 'admin')}>
 									<span class="choice-ic"><Icon name="wrench" /></span>
 									<span class="choice-txt"><span class="t-h2">Admin</span><span class="t-body c-muted">GM tools</span></span>
 									<span class="choice-go"><Icon name="go" /></span>
@@ -832,7 +832,7 @@
 								<a class="btn btn-ghost" href={base + '/stats'}><Icon name="crown" /> Hall of Records</a>
 								<a class="btn btn-ghost" href={base + '/rooms'}><Icon name="eye" /> Open games</a>
 							</section>
-							<div class="row"><button class="btn btn-ghost on-art" on:click={goHome}>Sign out</button></div>
+							<div class="row"><button class="btn btn-ghost on-art" on:click={() => { signOut(); goHome(); }}>Sign out</button></div>
 						</div>
 					{:else if mode === 'menu'}
 						<div class="step" transition:reveal bind:clientHeight={h['menu']}>
