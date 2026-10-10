@@ -117,6 +117,7 @@
 		return Math.round(Math.min(1, Math.max(0, (splashFace(id)[0] * iw - w / 2) / (iw - w))) * 1000) / 10;
 	};
 	$: splashX = faceX(sel, artW, artH, splashAR);
+	const splashLoaded = (e: Event) => { const im = e.currentTarget as HTMLImageElement; splashAR = im.naturalWidth / Math.max(1, im.naturalHeight); };
 	const pip = (stat: [number, number], i: number) => (i < stat[0] ? 2 : i < stat[1] ? 1 : 0);
 
 	// can the active player lock `h` right now?
@@ -294,7 +295,7 @@
 	<div class="stage">
 		<!-- the hero's splash art, left uncovered: words bottom-left, the grid on the right -->
 		<div class="artbox" bind:clientWidth={artW} bind:clientHeight={artH}>
-			<img class="splash" src={heroSplash(sel)} alt={selHero.name} style="--fx:{splashX}%" on:load={(e) => (splashAR = e.currentTarget.naturalWidth / Math.max(1, e.currentTarget.naturalHeight))} />
+			<img class="splash" src={heroSplash(sel)} alt={selHero.name} style="--fx:{splashX}%" on:load={splashLoaded} />
 			<div class="scrim"></div>
 
 			<div class="ident">
