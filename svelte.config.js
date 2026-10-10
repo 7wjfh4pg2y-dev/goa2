@@ -10,8 +10,9 @@ const config = {
 	kit: {
 		adapter: adapter(),
 		paths: {
-			// BASE_PATH: the deploy builds 2.0 under /goa2/v2 (1.0 sits at /goa2; see siteVersion.ts)
-			base: dev ? '' : (process.env.BASE_PATH ?? '/goa2'),
+			// BASE_PATH: the GitHub Pages deploy builds under /goa2 (its workflow sets it); any other host
+			// (e.g. Cloudflare Pages) serves the site from the root, so the default is ''
+			base: dev ? '' : (process.env.BASE_PATH ?? ''),
 		},
 		// Poll for new deploys so the app self-updates without a manual hard refresh.
 		version: {
