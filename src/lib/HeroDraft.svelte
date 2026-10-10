@@ -284,7 +284,7 @@
 <div class="draft tide is-{myTeam ?? 'orange'}">
 	<div class="stage">
 		<!-- the hero's splash art, left uncovered: words bottom-left, the grid on the right -->
-		<div class="artbox" class:toasting={!!toastAction && !!toastHero}>
+		<div class="artbox">
 			<img class="splash" src={heroSplash(sel)} alt={selHero.name} />
 			<div class="scrim"></div>
 
@@ -311,7 +311,7 @@
 					</div>
 					<div class="traits n{Math.min(selHero.traits.length, 6)}">
 						{#each [...selHero.traits].sort((a, b) => TRAIT_LABELS[a].localeCompare(TRAIT_LABELS[b])) as t (t)}
-							<div class="trait">
+							<div class="trait" title={TRAIT_LABELS[t]}>
 								{#if traitIcon(t)}<img src={traitIcon(t)} alt="" />{:else}<span class="tdot">◈</span>{/if}
 								<span class="tl">{TRAIT_LABELS[t]}</span>
 							</div>
@@ -749,7 +749,8 @@
 	}
 
 	/* ═══════════ phone (≤760px): portrait draft ═══════════
-	   art on top (Leave, the turn pill, a stat plate; name and roles at its foot) ·
+	   art on top (Leave and the turn pill at its head; at its foot the name with the stats under it on the left, the
+	   roles stacked on the right — the upper art stays clear, where the faces are, left or right) ·
 	   filter row · hero grid · Lock In · two team rows */
 	@media (max-width: 760px) {
 		.draft { min-height: 0; }
@@ -775,37 +776,44 @@
 		.twho { font-size: var(--fs-small); letter-spacing: 0.02em; }
 		.tact { font-size: 19px; }
 		.ttitle { display: none; }
-		/* the stat plate steps aside while an announcement is up */
-		.stats { transition: opacity 0.2s; }
-		.toasting .stats { opacity: 0; }
 		.tban { font-size: 24px; }
 
-		/* the ident layer covers the art: words at its foot, the stat plate top-right */
-		.ident { inset: 0; left: 0; bottom: 0; width: auto; justify-content: flex-end; gap: 0; padding: 0 12px 8px; pointer-events: none; }
-		.meta { gap: 8px; margin: 0 0 2px 66px; }
+		/* the ident layer covers the art; everything sits at its foot: meta / name / stats on the left, the roles in a
+		   column on the right (a second column from the 4th role on), bottom-aligned with the stats */
+		.ident { --ri: clamp(22px, 7cqh, 32px); inset: 0; left: 0; bottom: 0; width: auto; display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto auto; align-content: end; column-gap: 12px; padding: 0 12px 8px; pointer-events: none; }
+		.meta { grid-column: 1; grid-row: 1; gap: 8px; margin: 0 0 2px 66px; }
+		.nameline { grid-column: 1; grid-row: 2; }
 		.star { width: 18px; height: 18px; }
 		.cxtag { display: none; }
 		.mtag { height: 22px; padding: 0 8px; border-radius: 6px; border-color: var(--brass-line); background: rgba(216,179,106,0.14); color: var(--brass-hi); font-size: var(--fs-micro); letter-spacing: 0.12em; text-transform: uppercase; }
-		.nameline { gap: 10px; }
+		.nameline { gap: 10px; min-width: 0; }
 		.logo { width: 56px; height: 56px; }
 		.nm { font-size: var(--fs-hero); }
+		.nm.long { font-size: 34px; }
 		.ti { margin-top: 2px; font-size: var(--fs-h3); color: var(--brass-hi); opacity: 1; }
 		.idrule { display: none; }
-		.cols { display: block; margin-top: 10px; }
-		.stats { position: absolute; top: 64px; right: 12px; gap: 7px; padding: 10px 12px; border-radius: 14px; background: var(--glass); border: 1px solid var(--brass-line); box-shadow: var(--sh-1); }
-		.statrow { grid-template-columns: 18px auto; gap: 8px; }
-		.sicon { width: 18px; height: 18px; }
+		.cols { display: contents; }
+		/* the stats: a 2 × 2 grid of icon + pips under the title */
+		.stats { grid-column: 1; grid-row: 3; display: grid; grid-template-columns: repeat(2, auto); justify-content: start; gap: 6px 16px; margin-top: 8px; }
+		.statrow { display: flex; align-items: center; gap: 6px; }
+		.sicon { width: 16px; height: 16px; }
 		.slabel { display: none; }
-		.pips { gap: 3px; }
-		.pip { width: 11px; height: 9px; border-radius: 2px; }
-		.traits, .traits.n4 { display: flex; flex-wrap: wrap; gap: 4px 10px; }
-		.trait { min-width: 0; gap: 3px; }
-		.trait img, .tdot { width: 32px; height: 32px; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; }
+		.pips { gap: 2px; }
+		.pip { width: 9px; height: 8px; border-radius: 2px; }
+		/* the roles: icons stacked from the bottom right, three to a column; the name says what they are (title) and
+		   the Roles sheet lists them by name */
+		.traits, .traits.n4, .traits.n6 { grid-column: 2; grid-row: 1 / 4; align-self: end; display: grid; grid-auto-flow: column; grid-template-rows: repeat(3, var(--ri)); grid-auto-columns: var(--ri); direction: rtl; gap: 6px 8px; }
+		.traits.n1 { grid-template-rows: var(--ri); }
+		.traits.n2 { grid-template-rows: repeat(2, var(--ri)); }
+		.traits.n4 { grid-template-rows: repeat(2, var(--ri)); }
+		/* five: the short column hangs from the bottom, not the top */
+		.traits.n5 .trait:nth-child(4) { grid-column: 2; grid-row: 2; }
+		.traits.n5 .trait:nth-child(5) { grid-column: 2; grid-row: 3; }
+		.trait { min-width: 0; gap: 0; }
+		.trait img, .tdot { width: var(--ri); height: var(--ri); padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; }
 		.trait img { filter: brightness(1.3) drop-shadow(0 2px 4px rgba(0,0,0,0.7)); }
-		.tl { font-size: var(--fs-label); letter-spacing: 0.02em; }
-		/* six roles still sit on one row */
-		.traits.n6 { gap: 4px 5px; }
-		.traits.n6 .tl { font-size: var(--fs-micro); letter-spacing: 0; }
+		.tdot { display: grid; place-items: center; font-size: calc(var(--ri) * 0.7); }
+		.tl { display: none; }
 
 		.rightcol { position: relative; top: auto; right: auto; bottom: auto; width: auto; flex: none; gap: 8px; padding: 6px 12px 0; background: var(--abyss); }
 		.browsewrap { flex: none; flex-direction: column; gap: 8px; }
@@ -868,26 +876,17 @@
 		.sheet-head { display: flex; align-items: center; justify-content: space-between; }
 		.sheet-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 
-		/* a short art box (small phones, browser bars): the stat plate folds into a row of numbers under the title,
-		   the roles lose their captions */
+		/* a short art box (small phones, browser bars): a smaller name, the stats a little tighter */
 		@container art (max-height: 350px) {
 			.meta { margin-left: 56px; }
 			.logo { width: 46px; height: 46px; }
 			.nm { font-size: 38px; }
+			.nm.long { font-size: 30px; }
 			.ti { margin-top: 0; font-size: 16px; }
-			.cols { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin-top: 6px; }
-			.stats, .toasting .stats { position: static; opacity: 1; flex-direction: row; gap: 14px; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
-			.statrow { display: flex; gap: 5px; }
-			.pip { width: 7px; height: 9px; }
-			.pips { gap: 2px; }
-			.sicon { width: 16px; height: 16px; }
-			.traits, .traits.n4, .traits.n6 { gap: 4px 12px; }
-			.trait img, .tdot { width: 28px; height: 28px; }
-			.tl { display: none; }
+			.stats { margin-top: 6px; gap: 5px 14px; }
 		}
 		@container art (max-height: 205px) {
 			.meta { display: none; }
-			.trait img, .tdot { width: 24px; height: 24px; }
 		}
 		.draft .rolechip { justify-content: flex-start; min-height: 48px; padding: 0 12px; gap: 10px; }
 		.rolechip img { width: 28px; height: 28px; object-fit: contain; filter: brightness(1.35) saturate(1.1); }
