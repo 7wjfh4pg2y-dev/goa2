@@ -11,6 +11,9 @@ import {
 	discardPlayed,
 	passTurn,
 	repairCards,
+	hostMoves,
+	hostMove,
+	ultimateIndex as ultIdx,
 	retrievePlayed,
 	undiscard,
 	endRound,
@@ -521,5 +524,74 @@ describe('no card is ever lost (a playtest bug: a picked Tier II card vanished f
 		const fixed = repairCards({ ...s, removed: s.removed.filter((i) => i !== tier1) })
 		expect(fixed.removed).toContain(tier1)
 		expect(fixed.hand).not.toContain(tier1)
+	})
+})
+
+describe('host moves (free deck edit: level a player up / down)', () => {
+	const cards = heroCards('arien')
+	const of = (color: string, lv: number) => cards.map((c, i) => ({ c, i })).filter(({ c }) => c.color === color && (c.level ?? 1) === lv).map(({ i }) => i)
+	const clean = (s: ReturnType<typeof newPlayerCardState>) => expect(repairCards(s)).toBe(s)
+
+	it('levels up for free, in order, and back down again', () => {
+		let s = newPlayerCardState('arien')
+		const [b2, b2t] = of('BLUE', 2), [b3] = of('BLUE', 3), [b1] = of('BLUE', 1)
+		expect(hostMoves(s, b3)).toEqual([]) // Tier III before Tier II: no
+		expect(hostMoves(s, b2)).toEqual(['hand', 'upgrade'])
+		s = hostMove(s, b2, 'hand')
+		expect(s.coins).toBe(0)
+		expect(s.level).toBe(2)
+		expect(s.hand).toContain(b2)
+		expect(s.upgrade).toContain(b2t)
+		expect(s.removed).toContain(b1)
+		clean(s)
+		s = hostMove(s, b3, 'upgrade') // the item path: its twin comes to hand
+		expect(s.level).toBe(3)
+		expect(s.upgrade).toContain(b3)
+		expect(s.removed).toContain(b2)
+		clean(s)
+		// level down from Tier II's item: Tier II and III both go, Tier I comes back
+		s = hostMove(s, b2t, 'deck')
+		expect(s.level).toBe(1)
+		expect(s.hand).toContain(b1)
+		expect(s.upgrade).toEqual([])
+		expect(s.removed).toEqual([])
+		expect(s.hand.sort()).toEqual(newPlayerCardState('arien').hand.sort())
+		clean(s)
+	})
+
+	it('swaps a chosen pair, takes a removed card back, and toggles the ultimate', () => {
+		let s = newPlayerCardState('arien')
+		const [r2, r2t] = of('RED', 2), [r1] = of('RED', 1)
+		s = hostMove(s, r2, 'hand')
+		s = hostMove(s, r2, 'upgrade')
+		expect(s.hand).toContain(r2t)
+		expect(s.upgrade).toEqual([r2])
+		expect(s.level).toBe(2)
+		s = hostMove(s, r1, 'hand') // the removed Tier I back = Red back to Tier I
+		expect(s.level).toBe(1)
+		expect(s.hand).toContain(r1)
+		expect(s.hand).not.toContain(r2t)
+		clean(s)
+		const u = ultIdx('arien')
+		s = hostMove(s, u, 'hand')
+		expect(s.ultimate).toBe(true)
+		expect(s.level).toBe(2)
+		s = hostMove(s, u, 'deck')
+		expect(s.ultimate).toBe(false)
+		expect(s.level).toBe(1)
+	})
+
+	it('works on a card that is played or discarded, and forgets this round\'s pick it undid', () => {
+		let s = { ...newPlayerCardState('arien'), coins: 2 }
+		const [g2] = of('GREEN', 2)
+		s = levelUp(s, g2)
+		expect(s.roundPicks).toEqual([g2])
+		s = revealTurn(commitCard(s, g2), 0)
+		s = hostMove(s, g2, 'deck')
+		expect(s.turns[0]).toBe(null)
+		expect(s.roundPicks).toEqual([])
+		expect(s.roundPaid).toBe(0)
+		expect(s.level).toBe(1)
+		clean(s)
 	})
 })

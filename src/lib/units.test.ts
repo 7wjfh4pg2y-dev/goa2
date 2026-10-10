@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { applyCardReq, canRespawn, turnOrder, turnPlan, claimable, reclaimableSeat, transferSeat, nameKey, turnKey, actorOf, lifeTier, cardInitiative, cardResolved, clearable, minionDefense, boardLookOf, zoneGlowOf, boardFxOf, type MatchState, type Piece } from './match'
 import { newPlayerCardState } from './cards/cardstate'
+import { heroCards as heroCardsOf } from './cards/deck'
 
 // A (orange) + C (orange, A's teammate) vs B (blue, level 3) and D (blue)
 const hero = (id: string, team: 'orange' | 'blue', hex: string): Piece => ({ id, hex, team, kind: 'hero', hero: 'arien' })
@@ -365,3 +366,19 @@ describe('coming back to your seat under the same name (a new device, the app vs
 	})
 })
 
+
+describe('the host edits a player\'s deck (free level up / down)', () => {
+	it('only the host, on another player\'s cards, without coins', () => {
+		const s = { ...game(), host: 'H', cards: { ...game().cards, D: { ...newPlayerCardState('arien'), coins: 0 } } } as MatchState
+		const cards = heroCardsOf('arien')
+		const r2 = cards.findIndex((c) => c.color === 'RED' && c.level === 2)
+		expect(applyCardReq(s, { kind: 'hostMove', pid: 'A', target: 'D', idx: r2, to: 'hand' })).toEqual({})
+		const up = applyCardReq(s, { kind: 'hostMove', pid: 'H', target: 'D', idx: r2, to: 'hand' })
+		expect(up.cards!.D.level).toBe(2)
+		expect(up.cards!.D.coins).toBe(0)
+		expect(up.cards!.D.hand).toContain(r2)
+		const down = applyCardReq({ ...s, cards: up.cards } as MatchState, { kind: 'hostMove', pid: 'H', target: 'D', idx: r2, to: 'deck' })
+		expect(down.cards!.D.level).toBe(1)
+		expect(down.cards!.D.hand).not.toContain(r2)
+	})
+})

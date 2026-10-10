@@ -528,6 +528,73 @@ function pay(before: PlayerCardState, after: PlayerCardState, pick: number): Pla
 	}
 }
 
+/**
+ * The HOST's free deck edit (fixing a player's levels mid-game): no coins, any phase, nothing locked. It still
+ * keeps the shape of a deck — one card per colour held, a pick's twin as its item — so a level goes up or down
+ * cleanly:
+ * - the ultimate: on (hand) / off (deck);
+ * - Tier I: hand ↔ Removed (a removed one back to the hand drops its colour's higher tiers);
+ * - Tier II / III not chosen: a free level-up, in order per colour (to the hand, or to the items = its twin to hand);
+ * - Tier II / III chosen: swap hand ↔ item, or back to the Deck = a level down (that colour's tiers from this one
+ *   up go back, the card below returns to the hand).
+ */
+export function hostMoves(s: PlayerCardState, idx: number): CardZone[] {
+	const c = heroCards(s.hero)[idx]
+	if (!c) return []
+	if (c.color === 'PURPLE') return [s.ultimate ? 'deck' : 'hand']
+	if (!isColor(c.color, ...COLOURS)) return []
+	const t = c.level ?? 1
+	const held = heldList(s)
+	if (s.removed.includes(idx)) return ['hand']
+	if (t === 1) return held.includes(idx) ? ['removed'] : ['hand']
+	if (held.includes(idx)) return ['upgrade', 'deck']
+	if (s.upgrade.includes(idx)) return ['hand', 'deck']
+	const tw = twinOf(s.hero, idx)
+	if (tw >= 0 && (held.includes(tw) || s.upgrade.includes(tw))) return []
+	return tierIn(s, c.color) === t - 1 ? ['hand', 'upgrade'] : []
+}
+
+/** Apply a host move (see hostMoves). Level follows the cards; coins never change. */
+export function hostMove(s: PlayerCardState, idx: number, to: CardZone): PlayerCardState {
+	if (!hostMoves(s, idx).includes(to)) return s
+	const cards = heroCards(s.hero)
+	const c = cards[idx]
+	const done = (n: PlayerCardState): PlayerCardState => {
+		// a pick that left play is no longer this round's to swap; never refund more levels than are still picked
+		const live = new Set([...heldList(n), ...n.upgrade])
+		const picks = (n.roundPicks ?? []).filter((p) => (p === ultimateIndex(n.hero) ? n.ultimate : live.has(p)))
+		return { ...n, roundPicks: picks, roundPaid: Math.min(n.roundPaid ?? 0, picks.length), level: levelOf(n) }
+	}
+	if (c.color === 'PURPLE') return done({ ...s, ultimate: to === 'hand', hand: s.hand.filter((i) => i !== idx) })
+	const t = c.level ?? 1
+	// every card of this colour from `tier` up (chosen, or removed by a higher pick) goes back to the deck
+	const dropFrom = (n: PlayerCardState, tier: number) => {
+		const gone = n.removed.filter((i) => cards[i]?.color === c.color && (cards[i]?.level ?? 1) >= tier)
+		for (const i of [...chosenAbove(n, c.color, tier - 1), ...gone]) n = moveCard(lift(n, i), i, 'deck')
+		return n
+	}
+	if (s.removed.includes(idx)) return done(moveCard(dropFrom(s, t + 1), idx, 'hand'))
+	if (t === 1) return done(moveCard(lift(s, idx), idx, to))
+	if (to === 'deck') {
+		const lower = s.removed.find((i) => cards[i]?.color === c.color && (cards[i]?.level ?? 1) === t - 1)
+		const next = dropFrom(s, t)
+		return done(lower != null ? moveCard(next, lower, 'hand') : next)
+	}
+	const tw = twinOf(s.hero, idx)
+	const held = heldList(s)
+	// a chosen pair: swap which one is held and which is the item
+	if (held.includes(idx) || s.upgrade.includes(idx)) {
+		const up = to === 'upgrade' ? idx : tw, down = to === 'upgrade' ? tw : idx
+		const next = moveCard(moveCard(lift(s, up), up, 'upgrade'), down, 'hand')
+		return done({ ...next, roundPicks: (s.roundPicks ?? []).map((p) => (p === up ? down : p)) })
+	}
+	// a free level-up
+	const pick = to === 'hand' ? idx : tw
+	let next = to === 'upgrade' ? moveCard(s, idx, 'upgrade') : s
+	next = pick >= 0 ? takeUpgrade(next, pick) : next
+	return done(next)
+}
+
 /** Apply a manual move if it's allowed (see allowedMoves), one card per colour in hand. */
 export function manualMove(s: PlayerCardState, idx: number, to: CardZone): PlayerCardState {
 	if (!allowedMoves(s, idx).includes(to)) return s

@@ -24,7 +24,7 @@
 	import { heroSplash, HERO_BY_ID } from '$lib/heroes';
 	import ultGear from '$lib/images/ult_gear.png';
 	import {
-		levelOf, levelCost, ultimateIndex, tierIn, canPick, canAfford, mustLevel, swapSource, twinOf, allowedMoves, pickedThisRound,
+		levelOf, levelCost, ultimateIndex, tierIn, canPick, canAfford, mustLevel, swapSource, twinOf, allowedMoves, hostMoves, pickedThisRound,
 		type PlayerCardState, type CardZone
 	} from '$lib/cards/cardstate';
 
@@ -38,6 +38,8 @@
 	export let onTake: (idx: number) => void;
 	export let onSwap: (idx: number) => void;
 	export let onPreview: (idx: number) => void;
+	/** the HOST editing another player's deck (cardstate hostMoves): free moves, no coins, no Take / Swap */
+	export let free = false;
 
 	const icons = import.meta.glob('./cards/images/*.png', { eager: true, import: 'default' }) as Record<string, string>;
 	const ic = (n: string) => icons[`./cards/images/${n}.png`] ?? '';
@@ -58,7 +60,7 @@
 	$: basics = [find('GOLD')[0], find('SILVER')[0]].filter((i) => i != null && i >= 0);
 	$: LV = levelOf(cs);
 	$: afford = canAfford(cs);
-	$: forced = levelPhase && mustLevel(cs);
+	$: forced = !free && levelPhase && mustLevel(cs);
 
 	// held this round = in hand, played, discarded or face down
 	$: heldSet = new Set<number>([...cs.hand, ...cs.discard, ...cs.turns.filter((x): x is number => x != null), ...(cs.pending != null && cs.pending >= 0 ? [cs.pending] : [])]);
@@ -73,8 +75,8 @@
 	};
 	$: tiers = COLS.map((c) => tierIn(cs, c));
 	$: t3done = tiers.filter((t) => t >= 3).length;
-	$: canTakeNow = (i: number) => levelPhase && afford && canPick(cs, i);
-	$: canSwapNow = (i: number) => levelPhase && swapSource(cs, i) != null;
+	$: canTakeNow = (i: number) => !free && levelPhase && afford && canPick(cs, i);
+	$: canSwapNow = (i: number) => !free && levelPhase && swapSource(cs, i) != null;
 
 	$: twin = (i: number) => twinOf(H, i);
 	$: itemOf = (i: number) => cards[i]?.item ?? '';
@@ -122,7 +124,7 @@
 		else (confirm.kind === 'take' ? onTake : onSwap)(confirm.idx);
 		confirm = null; hov = null;
 	}
-	$: ultReady = ult >= 0 && allowedMoves(cs, ult).includes('hand');
+	$: ultReady = !free && ult >= 0 && allowedMoves(cs, ult).includes('hand');
 	// the trees are done (level 7) but the coins aren't there yet: the rim starts to glow
 	$: ultCharging = ult >= 0 && !cs.ultimate && !ultReady && t3done === 3;
 
@@ -165,6 +167,11 @@
 	const MOVE_BTNS: Array<[CardZone, string, string, string]> = [['hand', 'Hand', 'H', 'hand'], ['upgrade', 'Item', 'U', 'upg'], ['deck', 'Deck', 'D', 'deck'], ['removed', 'Remove', 'R', 'rem']];
 	$: moves = (i: number | null): Array<[CardZone, string, string, string]> => {
 		if (i == null) return [];
+		if (free) {
+			const ok = hostMoves(cs, i);
+			if (i === ult) return ok.includes('hand') ? [['hand', 'Unlock', 'H', 'hand']] : ok.includes('deck') ? [['deck', 'Relock', 'D', 'deck']] : [];
+			return MOVE_BTNS.filter(([to]) => ok.includes(to));
+		}
 		const ok = allowedMoves(cs, i);
 		if (i === ult) return ok.includes('deck') ? [['deck', '↺ Undo', 'D', 'deck']] : [];
 		return MOVE_BTNS.filter(([to]) => ok.includes(to));
@@ -393,7 +400,7 @@
 		<aside class="ins" style="width:{INS}px">
 			<div class="ih">
 				<div class="por"><img src={heroSplash(H)} alt="" /></div>
-				<div class="hn"><b>{hero?.name ?? H}</b>{#if player}<em>{player}</em>{/if}</div>
+				<div class="hn"><b>{hero?.name ?? H}</b>{#if player || free}<em>{player}{#if free}<i class="hedit">Host edit · free</i>{/if}</em>{/if}</div>
 				<span class="money" title="Coins">{cs.coins}</span>
 				<button class="ix" on:click={onClose} aria-label="Close deck">✕</button>
 			</div>
@@ -420,7 +427,7 @@
 			<div class="iinfo" style="--c:{focus != null ? COL[cards[focus]?.color] ?? '#888' : '#c79a4e'}">
 				{#if focus == null}
 					<div class="in1"><b>{hero?.name ?? H}'s deck</b></div>
-					<p class="nt">Hover a card to read it · click to move it</p>
+					<p class="nt">{free ? 'Click a card, then move it — no coins, the level follows' : 'Hover a card to read it · click to move it'}</p>
 				{:else}
 					{@const f = info(focus)}
 					{@const c = cards[focus]}
@@ -607,6 +614,7 @@
 	.hn { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 	.hn b { font-weight: normal; font-size: 24px; line-height: 1; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 	.hn em { font-style: normal; font-size: 13px; color: var(--ink-3); }
+	.hedit { margin-left: 8px; padding: 1px 8px; border-radius: 999px; font-style: normal; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: #2a1c06; background: linear-gradient(180deg, #f6e2ad, var(--brass)); }
 	.money { flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 34px; height: 34px; box-sizing: border-box; padding: 0 7px; border-radius: 999px;
 		background: linear-gradient(#f2d072, #c99a3e); color: #3a2a10; font-size: 19px; line-height: 1; font-variant-numeric: tabular-nums;
 		border: 1px solid rgba(0, 0, 0, .3); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .45); }

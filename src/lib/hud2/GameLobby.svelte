@@ -26,6 +26,8 @@
 	let giving: string | null = null;
 	$: if (giving && !watchers.some((w) => w.id === giving)) giving = null;
 	$: givingName = watchers.find((w) => w.id === giving)?.name ?? '';
+	/** the host: open a seated player's deck for a free edit (level them up / down) */
+	export let onDeck: ((id: string) => void) | null = null;
 	export let onLeave: () => void = () => {};
 	/** the host: end the game for everyone (tap, then tap again to confirm) */
 	export let onEnd: () => void = () => {};
@@ -56,6 +58,7 @@
 						<span class="gp" class:away={!s.present}>
 							<span class="gface" class:blank={!s.hero} style="--pc:{s.id ? colorOf(s.id) : '#555'}; {s.hero ? portraitCss(s.hero) : ''}"></span>
 							<span class="gn"><b>{s.hero ? heroById(s.hero)?.name ?? '' : 'Open seat'}</b><em>{s.name || '—'}{s.id === clientId ? ' · you' : !s.present && s.name ? ' · away' : ''}</em></span>
+							{#if host && onDeck && s.id && s.hero}<button class="gok deck" on:click={() => { onDeck?.(s.id); onClose(); }} title="Edit {s.name || 'their'}'s deck — level up / down, free">Deck</button>{/if}
 							{#if host && s.present && s.id && s.id !== clientId}<button class="gkick" on:click={() => onKick(s.id)}>Kick</button>{/if}
 							{#if host && giving && !s.present}<button class="gok give" on:click={() => { onGive(giving ?? '', s.seat); giving = null; }} title="Give this seat to {givingName}">Give</button>
 							{:else if mySeat < 0 && !s.present}
@@ -124,6 +127,7 @@
 	.gkick { color: #ffb4a8; border-color: rgba(194, 65, 47, 0.6); }
 	.gok { color: #86efac; border-color: rgba(34, 197, 94, 0.6); }
 	.gok:disabled { opacity: 0.4; cursor: default; }
+	.gok.deck { color: #e9cf8e; border-color: rgba(216, 179, 106, 0.6); }
 	.gok.on, .gok.give { color: #2a1c06; border-color: #f9ebc6; background: linear-gradient(180deg, #f6e2ad, #d8b36a); }
 	.greq { font-size: 11px; color: #8a9fb3; }
 	.gspec { display: flex; flex-direction: column; gap: 8px; }

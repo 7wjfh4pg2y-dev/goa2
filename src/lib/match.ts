@@ -36,6 +36,7 @@ import {
 	endRoundAll,
 	levelUp,
 	manualMove,
+	hostMove,
 	swapPick,
 	closeLevelPhase,
 	lockPicks,
@@ -58,6 +59,7 @@ export type CardReq =
 	| { kind: 'retrievePlayed'; pid: string; idx: number } // an effect returns a card already played to the hand
 	| { kind: 'coins'; pid: string; delta: number }
 	| { kind: 'cardmove'; pid: string; idx: number; to: CardZone } // move a card between hand/deck/upgrade/removed
+	| { kind: 'hostMove'; pid: string; target: string; idx: number; to: CardZone } // host only: a free deck edit on target's cards (level them up / down, no coins)
 	| { kind: 'ult'; pid: string; on: boolean } // unlock / relock the ultimate (level 8)
 	| { kind: 'take'; pid: string; idx: number } // level-up pick (level-up phase only, pays coins): card → hand, twin → item, older card → removed
 	| { kind: 'swap'; pid: string; idx: number } // level-up phase: swap this round's pick for its twin (idx = the twin)
@@ -222,6 +224,13 @@ export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 		// the losing team's players (or the host) choose
 		if (!s.battle?.loser || (req.pid !== s.host && teamOf(s, req.pid) !== s.battle.loser)) return {}
 		return req.kind === 'battleAuto' ? battleAuto(s) : battleRemove(s, req.piece)
+	}
+
+	if (req.kind === 'hostMove') {
+		const cs = cards[req.target]
+		if (req.pid !== s.host || !cs) return {}
+		const next = repairCards(hostMove(cs, req.idx, req.to))
+		return next === cs ? {} : { cards: { ...cards, [req.target]: next } }
 	}
 
 	const cs = cards[req.pid]
@@ -1469,6 +1478,13 @@ export function joinMatch(
 			if (before && after && levelOf(after) > levelOf(before)) note(pid, `reached Level ${levelOf(after)} ⬆`)
 			if (req.kind === 'advance' && (local.battlePhase || local.levelPhase) && before && after && !(before.roundPicks ?? []).length && after.coins > before.coins)
 				note(pid, `couldn't level up — pity coin +1 → ${after.coins}`)
+		}
+		if (req.kind === 'hostMove' && patch.cards?.[req.target]) {
+			const name = heroCards(local.cards?.[req.target]?.hero ?? '')[req.idx]?.name ?? 'a card'
+			const before = local.cards?.[req.target], after = patch.cards[req.target]
+			const where = ({ hand: 'Hand', upgrade: 'Item', deck: 'Deck', removed: 'Removed' } as const)[req.to]
+			note(req.pid, `moved ${nameOf(req.target)}'s ${name} → ${where} (host)`)
+			if (before && levelOf(after) < levelOf(before)) note(req.target, `back to Level ${levelOf(after)} ⬇`)
 		}
 		if (req.kind === 'swap' && patch.cards?.[req.pid]) note(req.pid, 'swapped a level-up pick for its twin')
 		// lingering effects that just ran out

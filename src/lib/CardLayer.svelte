@@ -206,7 +206,7 @@
 	$: actAt = actingIdx($ms);
 	$: actor = revealed ? actorOf($ms) : null;
 	$: actorName = actor ? heroName(cards[actor]?.hero ?? '') : '';
-	$: covered = deckOpen || !!lvConfirm;
+	$: covered = deckOpen || !!lvConfirm || !!deckFor;
 	// the strip's level ring (8 arcs round the portrait, the 8th purple) — like the desktop boards
 	const lvArc = (i: number, r = 22) => {
 		const a0 = ((i * 45 + 5) * Math.PI) / 180, a1 = ((i * 45 + 40) * Math.PI) / 180;
@@ -407,6 +407,14 @@
 		examine = { hid: at.hid, idx: at.idx, pid: at.pid, list };
 	}
 	// phone top bar: the Ultimate button opens the unlock confirmation once it's affordable
+	/** the host: open another player's deck for a free edit (level them up / down; cardstate hostMove) */
+	let deckFor: string | null = null;
+	export function openDeckFor(pid: string) { if ($ms.host === clientId && cards[pid]) deckFor = pid; }
+	$: if (deckFor && ($ms.host !== clientId || !cards[deckFor])) deckFor = null;
+	$: forCs = deckFor ? cards[deckFor] : null;
+	$: forSeat = deckFor ? Object.entries($ms.seatMap ?? {}).find(([, v]) => v.id === deckFor) : undefined;
+	$: forName = forSeat?.[1].name ?? $players.find((q: Player) => q.id === deckFor)?.name ?? '';
+	$: forTeam = forSeat ? teamForSeat(Number(forSeat[0]), $ms.seats) : null;
 	export function askUnlockUlt() { if (mine && myUlt >= 0) lvConfirm = { kind: 'take', idx: myUlt }; }
 
 	// discard piles (dash + boards): hover (mouse) or tap to fan out every card;
@@ -1230,6 +1238,15 @@
 			onTake={(i) => session.cardAction({ kind: 'take', pid: clientId, idx: i })}
 			onSwap={(i) => session.cardAction({ kind: 'swap', pid: clientId, idx: i })}
 			onPreview={(i) => mine && examineCard(mine.hero, i)} />
+	{/if}
+
+	<!-- the host editing another player's deck (free moves, no coins) -->
+	{#if deckFor && forCs}
+		{@const fid = deckFor}
+		<DeckView cs={forCs} free teamStyle={teamVars(forTeam)} player={forName}
+			onClose={() => (deckFor = null)}
+			onMove={(i, to) => session.cardAction({ kind: 'hostMove', pid: clientId, target: fid, idx: i, to })}
+			onTake={() => {}} onSwap={() => {}} onPreview={(i) => forCs && examineCard(forCs.hero, i)} />
 	{/if}
 
 	<!-- ───────── phone deck view: tabs across the four zones ───────── -->
