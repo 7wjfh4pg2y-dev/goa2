@@ -34,7 +34,9 @@
 		type MatchSession,
 		type ConnStatus,
 		type Team,
-		type DraftSystem
+		type DraftSystem,
+		nameKey,
+		cachedRoom
 	} from '$lib/match';
 	import { HEROES } from '$lib/heroes';
 	import { initCards } from '$lib/cards/cardstate';
@@ -382,7 +384,13 @@
 	}
 
 	// host keeps the directory entry in sync with the room
-	$: if (roomHandle) roomHandle.update({ count: seatedCount, started: $state.started });
+	// the directory also says where the room is (lobby / hero select / round N) and who is seated —
+	// the seat OWNERS once the draft has begun, so a dropped player finds their game under Rejoin
+	$: roomNames = $state.seatMap && Object.keys($state.seatMap).length
+		? Object.values($state.seatMap).map((o) => o.name)
+		: $players.filter((p) => p.seat >= 0).map((p) => p.name);
+	$: roomPhase = ($state.started ? 'game' : $state.draft ? 'draft' : 'lobby') as 'game' | 'draft' | 'lobby';
+	$: if (roomHandle) roomHandle.update({ count: seatedCount, started: $state.started, phase: roomPhase, round: $state.round, names: roomNames });
 
 	// (host hand-over lives in match.ts: a grace period, seat order, an epoch so a stale
 	// update can't undo it, and the creator takes the role back when they're here)
@@ -390,7 +398,7 @@
 	// whoever is host keeps the room in the public directory (covers handoff),
 	// in every in-game phase so it stays discoverable/spectatable throughout
 	$: if (browser && session && iAmHost && !roomHandle && (mode === 'lobby' || mode === 'draft' || mode === 'game')) {
-		roomHandle = announceRoom({ room, host: name, seats: $state.seats, count: seatedCount, started: $state.started });
+		roomHandle = announceRoom({ room, host: name, seats: $state.seats, count: seatedCount, started: $state.started, phase: roomPhase, round: $state.round, names: roomNames });
 	}
 
 	// browse open rooms only while on the Join screen
@@ -459,8 +467,8 @@
 			color = c;
 			s.setSelf({ seat: g.seat, color: c, ready: false });
 			writeActive({ seat: g.seat, color: c });
-			seatNotice = 'You took the seat!';
-			setTimeout(() => (seatNotice = ''), 3000);
+			seatNotice = g.back ? 'Welcome back — your seat is yours again.' : 'You took the seat!';
+			setTimeout(() => (seatNotice = ''), 3500);
 		});
 		s.seatDenied.subscribe((t) => { if (t && session === s) { seatNotice = 'The host declined your seat request.'; setTimeout(() => (seatNotice = ''), 3000); } });
 		// another player flipped in → show the same coin animation for everyone
@@ -503,6 +511,22 @@
 			}
 		}
 	}
+	// Our seat handed to us again on another device (same name, new id — match.ts checkReturns): this one
+	// steps out to watch, so two screens never drive one hero. Only once the room has recorded the seat as
+	// OURS (`ownedSeat`), so a fresh hand-back isn't undone before the new seatMap arrives.
+	let ownedSeat = -1;
+	$: if (session && $state.seatMap) checkOwned(mySeat, $state.seatMap[String(mySeat)]?.id);
+	function checkOwned(seat: number, owner: string | undefined) {
+		if (!session || seat < 0) return;
+		if (owner === session.clientId) { ownedSeat = seat; return; }
+		if (ownedSeat !== seat || !owner) return;
+		ownedSeat = -1;
+		color = 'spectator';
+		session.setSelf({ seat: -1, color: 'spectator', ready: false });
+		writeActive({ seat: -1, color: 'spectator' });
+		seatNotice = 'Your seat moved to your other device.';
+		setTimeout(() => (seatNotice = ''), 4000);
+	}
 	// Spin the coin so it actually animates: mount at the current angle, then bump
 	// the rotation on the next frame so the CSS transition has something to run
 	// from (otherwise it appears already at the final face — the "only blue" bug).
@@ -537,6 +561,14 @@
 	}
 	// join reached a room code with no host → don't create one
 	function failJoin() {
+		// everyone dropped out of a game in progress: bring it back from this device's copy (kept by match.ts,
+		// 12 h) — the others rejoin it and get their seats back by name
+		const cached = cachedRoom(room);
+		if (cached) {
+			resumeSeed = null; recreateFrom(cached, false);
+			notice = 'Everyone had dropped out — the game was restored from this device.';
+			return;
+		}
 		// a lone creator whose room emptied out while away just recreates it
 		if (resumeSeed) { const seed = resumeSeed; resumeSeed = null; recreateFrom(seed); return; }
 		const st = session ? get(session.status) : 'reconnecting';
@@ -548,14 +580,16 @@
 		mode = 'join';
 	}
 	// recreate a room from a stored seed (creator resuming an emptied room)
-	function recreateFrom(seed: MatchState) {
+	function recreateFrom(seed: MatchState, keepSeed = true) {
 		// leave the probing session first: the Supabase client has ONE channel per room, and a second
 		// session would be handed the first one's (already subscribed → "cannot add presence callbacks")
 		session?.leave();
+		joining = false;
 		session = joinMatch(room, { name, color: 'spectator' }, { seed });
-		roomHandle = announceRoom({ room, host: name, seats: seed.seats, count: 0, started: false });
-		writeActive({ creator: true, seed });
-		bindSession(true);
+		roomHandle = announceRoom({ room, host: name, seats: seed.seats, count: 0, started: !!seed.started });
+		writeActive(keepSeed ? { creator: true, seed } : { creator: true, seed: null });
+		bindSession(false);
+		mode = seed.started ? 'game' : seed.draft ? 'draft' : 'lobby';
 	}
 	function createGame() {
 		persistName();
@@ -831,16 +865,17 @@
 									{#if !openRooms.length}<p class="t-small c-muted gempty">No open games right now.</p>{/if}
 									{#each openRooms as r (r.room)}
 										{@const spectate = r.started || r.count >= r.seats}
+										{@const back = !!(r.started || r.phase === 'draft') && !!nameKey(name) && (r.names ?? []).some((n) => nameKey(n) === nameKey(name))}
 										<button class="listrow gcard" on:click={() => joinFromList(r)}>
 											<span class="state" class:is-live={r.started}></span>
 											<span class="who">
 												<span class="t-h3">{r.host} <span class="t-small t-mono">{r.room}</span></span>
 												<span class="sub">
 													<span class="seatdots">{#each Array(r.seats) as _, i (i)}<i class:on={i < r.count}></i>{/each}</span>
-													<span class="t-small">{r.started ? 'in progress' : `${r.count} / ${r.seats} seated`}</span>
+													<span class="t-small">{r.started ? (r.round ? `Round ${r.round} · in progress` : 'in progress') : r.phase === 'draft' ? 'Hero select' : `${r.count} / ${r.seats} seated`}</span>
 												</span>
 											</span>
-											<span class="go">{spectate ? 'Spectate' : 'Join'} <Icon name="go" /></span>
+											<span class="go" class:back>{back ? 'Rejoin' : spectate ? 'Spectate' : 'Join'} <Icon name="go" /></span>
 										</button>
 									{/each}
 								</div>
@@ -1127,6 +1162,8 @@
 	/* exactly three rows tall; a fourth game scrolls */
 	.glist { --gr: 64px; --gg: 8px; display: flex; flex-direction: column; gap: var(--gg); height: calc(var(--gr) * 3 + var(--gg) * 2); overflow-y: auto; flex: none; }
 	.glist .gcard { flex: none; min-height: 0; height: var(--gr); }
+	/* your own game in progress (your name is in its seats) — green = yes, come back in */
+	.glist .gcard .go.back { color: #4ade80; }
 
 	/* ------------------------------------------------------------------- create game */
 	/* a little more water over the island behind a full screen of panels */

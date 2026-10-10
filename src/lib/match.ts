@@ -540,6 +540,41 @@ export function transferSeat(s: MatchState, from: string, to: string, toName: st
 	return patch
 }
 
+/** A player name as the seat map compares it: trimmed, spacing and case ignored. */
+export const nameKey = (n: string) => (n ?? '').trim().replace(/\s+/g, ' ').toLowerCase()
+/**
+ * A seat a returning player lost: they came back with a NEW id (another device, the Home Screen app instead of
+ * the browser, cleared storage, a resume ticket that ran out) under the same name. The seat's recorded owner has
+ * that name and isn't here, and nobody else is sitting in it. Null when there's nothing to give back.
+ */
+export function reclaimableSeat(s: MatchState, present: Player[], p: Player): number | null {
+	if (p.seat >= 0 || !nameKey(p.name)) return null
+	for (const [seat, o] of Object.entries(s.seatMap ?? {})) {
+		if (o.id === p.id || nameKey(o.name) !== nameKey(p.name)) continue
+		if (present.some((q) => q.id === o.id || q.seat === Number(seat))) continue
+		return Number(seat)
+	}
+	return null
+}
+
+// ── a copy of the room on every device (the room only lives in the players' browsers) ──────
+// If everyone drops at once, the first one back restores the game from their copy instead of losing it.
+const ROOM_CACHE = 'goa2-room:'
+export const ROOM_CACHE_TTL = 12 * 3600 * 1000
+export function cacheRoom(room: string, s: MatchState) {
+	try {
+		if (s.closed) { localStorage.removeItem(ROOM_CACHE + room); return }
+		localStorage.setItem(ROOM_CACHE + room, JSON.stringify({ at: Date.now(), state: s }))
+	} catch { /* full / private mode: skip */ }
+}
+export function cachedRoom(room: string): MatchState | null {
+	try {
+		const raw = JSON.parse(localStorage.getItem(ROOM_CACHE + room) || 'null') as { at: number; state: MatchState } | null
+		if (!raw?.state || Date.now() - raw.at > ROOM_CACHE_TTL || raw.state.closed || !(raw.state.started || raw.state.draft)) return null
+		return raw.state
+	} catch { return null }
+}
+
 /** Build a fresh minion piece for a team, placed on that team's throne hex. */
 export function spawnMinion(state: MatchState, team: Team, role: 'melee' | 'ranged' | 'heavy'): Piece {
 	const hex = throneHex(state.map, team) ?? Object.keys(state.map?.cells ?? {})[0] ?? '0_0'
@@ -863,7 +898,7 @@ export interface MatchSession {
 	/** Host: approve or deny a pending seat-takeover request (by requester id). */
 	resolveSeat: (reqId: string, approve: boolean) => void
 	/** Emits { seat, colour } when THIS client is granted a seat takeover. */
-	seatGranted: Readable<{ seat: number; color: string } | null>
+	seatGranted: Readable<{ seat: number; color: string; back?: boolean } | null>
 	/** Bumps (timestamp) when THIS client's seat request is denied. */
 	seatDenied: Readable<number>
 	/** Becomes true when THIS client has been kicked. */
@@ -924,7 +959,7 @@ export function joinMatch(
 	let graceTimer: ReturnType<typeof setTimeout> | null = null
 	const kicked = writable(false)
 	const notFound = writable(false)
-	const seatGranted = writable<{ seat: number; color: string } | null>(null)
+	const seatGranted = writable<{ seat: number; color: string; back?: boolean } | null>(null)
 	const seatDenied = writable(0)
 	// another player flipped to join a team — everyone plays the coin animation
 	const joinFlip = writable<{ id: string; name: string; side: Team; at: number } | null>(null)
@@ -1044,8 +1079,8 @@ export function joinMatch(
 				update({ seatRequests: reqs })
 			})
 			.on('broadcast', { event: 'seatgrant' }, ({ payload }) => {
-				const p = payload as { to: string; seat: number; color: string }
-				if (p.to === clientId) seatGranted.set({ seat: p.seat, color: p.color })
+				const p = payload as { to: string; seat: number; color: string; back?: boolean }
+				if (p.to === clientId) seatGranted.set({ seat: p.seat, color: p.color, back: !!p.back })
 			})
 			.on('broadcast', { event: 'seatdeny' }, ({ payload }) => {
 				if ((payload as { to: string }).to === clientId) seatDenied.set(Date.now())
@@ -1075,6 +1110,7 @@ export function joinMatch(
 				}
 				players.set(list)
 				checkHost()
+				checkReturns()
 			})
 	}
 
@@ -1113,6 +1149,34 @@ export function joinMatch(
 	// while we're offline — re-check on those too (cheap; it only arms a timer)
 	state.subscribe(() => checkHost())
 	conn.subscribe(() => checkHost())
+
+	// A player back under the same name with a new id gets their seat — hero, cards, coins, tokens — straight
+	// back (the host applies it: `reclaimableSeat` + `transferSeat`). Each player + seat is tried once.
+	const handedBack = new Set<string>()
+	function checkReturns() {
+		if (!live() || local.host !== clientId || !local.seatMap) return
+		for (const p of playerList) {
+			const seat = reclaimableSeat(local, playerList, p)
+			if (seat == null || handedBack.has(`${p.id}:${seat}`)) continue
+			handedBack.add(`${p.id}:${seat}`)
+			const from = local.seatMap[String(seat)].id
+			const color = local.pieces?.[from]?.color ?? local.defeated?.[from]?.piece?.color ?? local.toSpawn?.[from]?.color ?? ''
+			const patch = transferSeat(local, from, p.id, p.name, seat)
+			if (local.creator === from) patch.creator = p.id
+			act(`${p.name} is back in their seat`, patch)
+			const grant = { to: p.id, seat, color: color || 'spectator', back: true }
+			if (p.id === clientId) seatGranted.set({ seat, color: grant.color, back: true })
+			else try { channel.send({ type: 'broadcast', event: 'seatgrant', payload: grant }) } catch { /* ignore */ }
+		}
+	}
+	state.subscribe(() => checkReturns())
+
+	// every device keeps a copy of a game under way (throttled), for `cachedRoom`
+	let cacheTimer: ReturnType<typeof setTimeout> | null = null
+	state.subscribe((v) => {
+		if (v.rev < 0 || !(v.started || v.draft || v.closed) || cacheTimer || typeof localStorage === 'undefined') return
+		cacheTimer = setTimeout(() => { cacheTimer = null; if (!left) cacheRoom(room, local) }, 2500)
+	})
 
 	// Presence updates are throttled: Supabase Realtime rate-limits messages per
 	// channel, so rapid color switches (fast clicks) would otherwise flood track()
@@ -1433,8 +1497,36 @@ export function joinMatch(
 		}
 	}
 
+	// Phones: a page coming back from the background (or a network that comes back) reconnects at once rather
+	// than waiting out the backoff; after more than a few seconds away the socket is presumed dead and rebuilt.
+	let hiddenAt = 0
+	const wake = (hard: boolean) => {
+		if (left) return
+		if (hard || get(conn) !== 'connected') { backoff = 750; void hardReconnect() }
+		else { trackNow(); try { channel.send({ type: 'broadcast', event: 'hello', payload: { id: clientId } }) } catch { /* ignore */ } }
+	}
+	const onVis = () => {
+		if (document.visibilityState === 'hidden') { hiddenAt = Date.now(); return }
+		const away = hiddenAt ? Date.now() - hiddenAt : 0
+		hiddenAt = 0
+		wake(away > 8000)
+	}
+	const onOnline = () => wake(true)
+	const onShow = (e: PageTransitionEvent) => { if (e.persisted) wake(true) }
+	if (typeof document !== 'undefined' && typeof window !== 'undefined') {
+		document.addEventListener('visibilitychange', onVis)
+		window.addEventListener('online', onOnline)
+		window.addEventListener('pageshow', onShow)
+	}
+
 	const leave = () => {
 		if (left) return // a second leave must not reach the channel a NEWER session of this room now holds
+		if (typeof document !== 'undefined' && typeof window !== 'undefined') {
+			document.removeEventListener('visibilitychange', onVis)
+			window.removeEventListener('online', onOnline)
+			window.removeEventListener('pageshow', onShow)
+		}
+		if (cacheTimer) { clearTimeout(cacheTimer); cacheTimer = null }
 		if (graceTimer) clearTimeout(graceTimer)
 		if (trackTimer) clearTimeout(trackTimer)
 		if (stateTimer) clearTimeout(stateTimer)

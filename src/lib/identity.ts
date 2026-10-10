@@ -13,7 +13,7 @@
 const ID_KEY = 'goa2-client-id';
 const TICKET_PREFIX = 'goa2-active:';
 const LEGACY_TICKET = 'goa2-active'; // pre-per-tab builds kept one shared ticket
-export const RESUME_TTL_MS = 30 * 60 * 1000;
+export const RESUME_TTL_MS = 6 * 60 * 60 * 1000; // a whole evening: a dropped player is put straight back in
 
 export interface ResumeTicket {
 	id: string; // the player id this ticket belongs to

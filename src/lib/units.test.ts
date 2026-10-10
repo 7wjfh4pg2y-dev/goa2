@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { applyCardReq, canRespawn, turnOrder, turnPlan, claimable, turnKey, actorOf, lifeTier, cardInitiative, cardResolved, clearable, minionDefense, boardLookOf, zoneGlowOf, boardFxOf, type MatchState, type Piece } from './match'
+import { applyCardReq, canRespawn, turnOrder, turnPlan, claimable, reclaimableSeat, transferSeat, nameKey, turnKey, actorOf, lifeTier, cardInitiative, cardResolved, clearable, minionDefense, boardLookOf, zoneGlowOf, boardFxOf, type MatchState, type Piece } from './match'
 import { newPlayerCardState } from './cards/cardstate'
 
 // A (orange) + C (orange, A's teammate) vs B (blue, level 3) and D (blue)
@@ -343,3 +343,25 @@ describe('active turns (after the reveal the cards act one at a time)', () => {
 		expect(applyCardReq(t, { kind: 'endAct', pid: 'H' })).toEqual({})
 	})
 })
+
+describe('coming back to your seat under the same name (a new device, the app vs the browser)', () => {
+	const pl = (id: string, name: string, seat = -1) => ({ id, name, color: 'spectator', ready: false, seat })
+	const s = () => ({ ...game(), seatMap: { '0': { id: 'A', name: 'Avery' }, '2': { id: 'B', name: 'Harper' } } }) as MatchState
+	it('hands the seat back only when its owner has gone and nobody else sits there', () => {
+		expect(nameKey('  aVeRy ')).toBe('avery')
+		expect(reclaimableSeat(s(), [pl('A2', 'avery')], pl('A2', 'avery'))).toBe(0)
+		expect(reclaimableSeat(s(), [pl('A', 'Avery', 0), pl('A2', 'Avery')], pl('A2', 'Avery'))).toBeNull() // the owner is still here
+		expect(reclaimableSeat(s(), [pl('X', 'Quinn', 0), pl('A2', 'Avery')], pl('A2', 'Avery'))).toBeNull() // someone sits in it
+		expect(reclaimableSeat(s(), [pl('A2', 'Avery', 1)], pl('A2', 'Avery', 1))).toBeNull() // already seated
+		expect(reclaimableSeat(s(), [pl('Q', 'Stranger')], pl('Q', 'Stranger'))).toBeNull()
+	})
+	it('the hand-back carries the hero, cards and tokens over to the new id', () => {
+		const st = s()
+		const p = transferSeat(st, 'A', 'A2', 'Avery', 0)
+		expect(p.seatMap!['0']).toEqual({ id: 'A2', name: 'Avery' })
+		expect(p.cards!.A2).toBeTruthy()
+		expect(p.cards!.A).toBeUndefined()
+		expect(p.pieces!.A2?.id).toBe('A2')
+	})
+})
+

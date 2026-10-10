@@ -134,6 +134,61 @@ describe('lobby: second player picks a colour', () => {
 	});
 });
 
+describe('a dropped player gets their seat back', () => {
+	it('rejoining under the same name (new id, any case) hands back the seat, hero and cards', async () => {
+		vi.useFakeTimers();
+		const host = joinMatch('BACK', { name: 'Host', color: 'spectator' }, { seed: initialMatchState({ players: 4 }) });
+		const a = joinMatch('BACK', { name: 'Avery', color: 'spectator' }, {});
+		host.setSelf({ seat: 0 });
+		a.setSelf({ seat: 1, color: 'teal' });
+		await vi.advanceTimersByTimeAsync(500);
+		const hero: any = { id: a.clientId, hex: '3_4', team: 'orange', kind: 'hero', color: 'teal' };
+		host.update({
+			started: true,
+			seatMap: { '0': { id: host.clientId, name: 'Host' }, '1': { id: a.clientId, name: 'Avery' } },
+			pieces: { [a.clientId]: hero },
+			cards: { [a.clientId]: { coins: 7 } as any }
+		});
+		await vi.advanceTimersByTimeAsync(500);
+
+		a.leave(); // the phone dies
+		const b = joinMatch('BACK', { name: ' avery ', color: 'spectator' }, {}); // a new tab, a new id
+		const grants: any[] = [];
+		b.seatGranted.subscribe((g) => g && grants.push(g));
+		await vi.advanceTimersByTimeAsync(1000);
+
+		const s = get(host.state);
+		expect(s.seatMap?.['1'].id).toBe(b.clientId);
+		expect(s.pieces[b.clientId]).toMatchObject({ id: b.clientId, hex: '3_4' });
+		expect(s.pieces[a.clientId]).toBeUndefined();
+		expect((s.cards as any)[b.clientId].coins).toBe(7);
+		expect(s.log.at(-1)?.text).toContain('is back in their seat');
+		expect(grants).toMatchObject([{ seat: 1, color: 'teal', back: true }]);
+		expect(get(b.state).seatMap?.['1'].id).toBe(b.clientId);
+		host.leave(); b.leave();
+		vi.useRealTimers();
+	});
+
+	it('never takes a seat whose player is still connected, or one under another name', async () => {
+		vi.useFakeTimers();
+		const host = joinMatch('KEEP', { name: 'Host', color: 'spectator' }, { seed: initialMatchState({ players: 4 }) });
+		const a = joinMatch('KEEP', { name: 'Avery', color: 'spectator' }, {});
+		a.setSelf({ seat: 1, color: 'teal' });
+		await vi.advanceTimersByTimeAsync(500);
+		host.update({ started: true, seatMap: { '1': { id: a.clientId, name: 'Avery' } } });
+		const twin = joinMatch('KEEP', { name: 'Avery', color: 'spectator' }, {}); // same name, but Avery is still here
+		const other = joinMatch('KEEP', { name: 'Harper', color: 'spectator' }, {});
+		await vi.advanceTimersByTimeAsync(1000);
+		expect(get(host.state).seatMap?.['1'].id).toBe(a.clientId);
+		a.leave();
+		other.setSelf({ ready: true }); // a presence change: Avery gone → the twin (same name) gets it, Harper never
+		await vi.advanceTimersByTimeAsync(1000);
+		expect(get(host.state).seatMap?.['1'].id).toBe(twin.clientId);
+		host.leave(); twin.leave(); other.leave();
+		vi.useRealTimers();
+	});
+});
+
 describe('host hand-over', () => {
 	const p = (id: string, seat: number) => ({ id, name: id, color: 'red', ready: false, seat });
 
