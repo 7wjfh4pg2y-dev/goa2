@@ -4,7 +4,7 @@
 	import type { Readable } from 'svelte/store';
 	import MatchupSplash from '$lib/MatchupSplash.svelte';
 	import {
-		HEROES_ALPHA, heroAvatar, heroSplash, heroLogo, heroById,
+		HEROES_ALPHA, heroAvatar, heroSplash, heroLogo, heroById, splashFace,
 		statIcon, traitIcon, starIcon, STAT_LABELS, STAT_PIPS, TRAIT_LABELS, PACK_LABELS,
 		type Hero, type Trait
 	} from '$lib/heroes';
@@ -108,6 +108,15 @@
 	// all-pick: if someone takes the hero you're looking at, move to the next available one
 	$: if (d && d.system === 'all-pick' && !lockedIn && sel && blocked.has(sel) && sel !== myPick) sel = firstFor(filter) ?? sel;
 	$: selHero = heroById(sel);
+	// phones: the art box is narrower than the painting, so slide it sideways until the hero's face (splashFace)
+	// is in the middle — object-position x for a cover-fitted image; desktop shows the whole width and ignores it
+	let artW = 0, artH = 0, splashAR = 0;
+	const faceX = (id: string, w: number, h: number, ar: number) => {
+		const iw = Math.max(w, h * ar); // the painting's width once it covers the box
+		if (!ar || !w || iw - w < 1) return 50;
+		return Math.round(Math.min(1, Math.max(0, (splashFace(id)[0] * iw - w / 2) / (iw - w))) * 1000) / 10;
+	};
+	$: splashX = faceX(sel, artW, artH, splashAR);
 	const pip = (stat: [number, number], i: number) => (i < stat[0] ? 2 : i < stat[1] ? 1 : 0);
 
 	// can the active player lock `h` right now?
@@ -284,8 +293,8 @@
 <div class="draft tide is-{myTeam ?? 'orange'}">
 	<div class="stage">
 		<!-- the hero's splash art, left uncovered: words bottom-left, the grid on the right -->
-		<div class="artbox">
-			<img class="splash" src={heroSplash(sel)} alt={selHero.name} />
+		<div class="artbox" bind:clientWidth={artW} bind:clientHeight={artH}>
+			<img class="splash" src={heroSplash(sel)} alt={selHero.name} style="--fx:{splashX}%" on:load={(e) => (splashAR = e.currentTarget.naturalWidth / Math.max(1, e.currentTarget.naturalHeight))} />
 			<div class="scrim"></div>
 
 			<div class="ident">
@@ -756,7 +765,7 @@
 		.draft { min-height: 0; }
 		.stage { display: flex; flex-direction: column; overflow: visible; }
 		.artbox { position: relative; inset: auto; flex: 1 1 0; min-height: 0; overflow: hidden; }
-		.splash { object-position: center 16%; }
+		.splash { object-position: var(--fx, 50%) 16%; }
 		.scrim { background:
 			linear-gradient(0deg, rgba(3,11,21,1) 0%, rgba(3,11,21,0.78) 30%, rgba(3,11,21,0) 62%),
 			linear-gradient(180deg, rgba(3,11,21,0.75) 0%, rgba(3,11,21,0) 24%); }
