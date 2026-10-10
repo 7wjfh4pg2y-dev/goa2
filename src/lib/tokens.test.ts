@@ -71,12 +71,14 @@ describe('minion battle', () => {
 		const s = { turn: 4, round: 1, pieces: {}, cards: { a: cs } } as unknown as MatchState
 		const p = battlePatch(s)
 		expect(p.battlePhase).toBe(true)
-		expect(p.cards!.a.hand).toEqual([0, 1, 2, 3, 4, 5])
+		// every card comes back (the fixture's cards are made up, so the self-repair may also restore one of
+		// Arien's real starting five that it leaves out of every pile)
+		expect(p.cards!.a.hand).toEqual(expect.arrayContaining([0, 1, 2, 3, 4, 5]))
 		expect(p.cards!.a.turns).toEqual([null, null, null, null])
 		expect(p.cards!.a.pending).toBeNull()
 		// the round advance afterwards has nothing left to return
 		const after = applyCardReq({ ...s, cards: p.cards, battlePhase: true } as MatchState, { kind: 'advance', pid: 'a' })
-		expect(after.cards!.a.hand).toEqual([0, 1, 2, 3, 4, 5])
+		expect(after.cards!.a.hand).toEqual(p.cards!.a.hand)
 		expect(after.round).toBe(2)
 		expect(after.cards!.a.coins).toBe(1) // no level-up this round → pity coin
 	})

@@ -190,12 +190,16 @@ export const PASS = -1
  */
 export function commitCard(s: PlayerCardState, idx: number): PlayerCardState {
 	if (!s.hand.includes(idx)) return s
-	return { ...s, hand: s.hand.filter((i) => i !== idx), pending: idx }
+	// a card already face down goes back to the hand first: a second commit (two taps racing over a slow
+	// connection) used to overwrite it, and that card was lost from every pile
+	const back = s.pending != null && s.pending !== PASS ? [s.pending] : []
+	return { ...s, hand: [...s.hand.filter((i) => i !== idx), ...back].sort((a, b) => a - b), pending: idx }
 }
 
 /** Ready up with no card (nothing to play / choosing to pass this turn). */
 export function passTurn(s: PlayerCardState): PlayerCardState {
-	return { ...s, pending: PASS }
+	const back = s.pending != null && s.pending !== PASS ? [s.pending] : []
+	return { ...s, hand: [...s.hand, ...back].sort((a, b) => a - b), pending: PASS }
 }
 
 /** Reveal on the shared count-of-three: a real card lands in its slot; a pass clears. */
@@ -216,8 +220,11 @@ export function uncommit(s: PlayerCardState): PlayerCardState {
 export function revealTurn(s: PlayerCardState, turn: number): PlayerCardState {
 	if (s.pending == null || turn < 0 || turn >= TURNS_PER_ROUND) return s
 	const turns = s.turns.slice()
+	const old = turns[turn]
 	turns[turn] = s.pending
-	return { ...s, turns, pending: null }
+	// never write over a card already in the slot (it would vanish): it goes back to the hand
+	const hand = old != null && old !== s.pending ? [...s.hand, old].sort((a, b) => a - b) : s.hand
+	return { ...s, turns, hand, pending: null }
 }
 
 /** Defend / effect-discard: spend a card from hand this round. */
@@ -259,13 +266,37 @@ export function undiscard(s: PlayerCardState, idx: number): PlayerCardState {
 export function endRound(s: PlayerCardState): PlayerCardState {
 	const back = [...s.turns.filter((x): x is number => x != null), ...s.discard]
 	if (s.pending != null && s.pending !== PASS) back.push(s.pending)
-	return {
+	return repairCards({
 		...s,
 		hand: [...s.hand, ...back].sort((a, b) => a - b),
 		turns: Array(TURNS_PER_ROUND).fill(null),
 		pending: null,
 		discard: []
+	})
+}
+
+/**
+ * Self-repair: a card the player owns but that sits in NO pile (hand, played slot, face down, discard,
+ * removed, items) is put back — to Removed when a higher tier of its colour is already chosen, else to
+ * the hand. Owned = the starting five, plus every Tier II / III pick (its twin is an item). Nothing in
+ * the rules empties a card out of every pile, so this only ever finds a card some race dropped.
+ */
+export function repairCards(s: PlayerCardState): PlayerCardState {
+	const cards = heroCards(s.hero)
+	const placed = new Set<number>([...s.hand, ...s.discard, ...s.removed, ...s.upgrade,
+		...s.turns.filter((x): x is number => x != null), ...(s.pending != null && s.pending >= 0 ? [s.pending] : [])])
+	const owned = new Set<number>(startingHand(s.hero))
+	cards.forEach((c, i) => { if ((c.level ?? 1) >= 2 && c.color !== 'PURPLE' && s.upgrade.includes(twinOf(s.hero, i))) owned.add(i) })
+	const lost = [...owned].filter((i) => !placed.has(i) && cards[i])
+	if (!lost.length) return s
+	const live = (j: number) => placed.has(j) && !s.removed.includes(j)
+	const hand = s.hand.slice(), removed = s.removed.slice()
+	for (const i of lost) {
+		const c = cards[i]
+		const higher = cards.some((x, j) => x.color === c.color && (x.level ?? 1) > (c.level ?? 1) && live(j))
+		;(higher ? removed : hand).push(i)
 	}
+	return { ...s, hand: hand.sort((a, b) => a - b), removed }
 }
 
 /** Adjust a player's coin bank (never below 0). */

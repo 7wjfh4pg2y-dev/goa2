@@ -39,6 +39,7 @@ import {
 	swapPick,
 	closeLevelPhase,
 	lockPicks,
+	repairCards,
 	addCoins,
 	levelOf,
 	statDeltas,
@@ -226,6 +227,8 @@ export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 	const cs = cards[req.pid]
 	if (!cs) return {}
 	let next = cs
+	// no playing a card between the minion battle and the next round (the client hides it; a late request mustn't land)
+	if (req.kind === 'commit' && (s.battlePhase || s.levelPhase)) return {}
 	if (req.kind === 'commit') next = commitCard(cs, req.idx)
 	else if (req.kind === 'pass') next = passTurn(cs)
 	else if (req.kind === 'uncommit') next = uncommit(cs)
@@ -238,12 +241,15 @@ export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 	else if (req.kind === 'ult') next = { ...cs, ultimate: req.on }
 	else if (req.kind === 'take') { if (!s.levelPhase) return {}; next = levelUp(cs, req.idx) }
 	else if (req.kind === 'swap') { if (!s.levelPhase) return {}; next = swapPick(cs, req.idx) }
+	// a card some race dropped out of every pile comes back (cardstate repairCards; a no-op when all is well)
+	const changed = next !== cs
+	next = repairCards(next)
 	// a discard while forced to discard answers the demand (any card will do)
 	const fd = s.forced?.[req.pid]
-	if (req.kind === 'defend' && fd && next !== cs) { const forced = { ...s.forced }; delete forced[req.pid]; return { cards: { ...cards, [req.pid]: next }, forced, lastClash: clashNews('force', fd.by, req.pid, 'defended', true) } }
+	if (req.kind === 'defend' && fd && changed) { const forced = { ...s.forced }; delete forced[req.pid]; return { cards: { ...cards, [req.pid]: next }, forced, lastClash: clashNews('force', fd.by, req.pid, 'defended', true) } }
 	// a discard while being attacked is the defence: the defender may now answer Defended
 	const atk = s.attacks?.[req.pid]
-	if (req.kind === 'defend' && atk && next !== cs) return { cards: { ...cards, [req.pid]: next }, attacks: { ...s.attacks, [req.pid]: { ...atk, defending: true, discarded: true } } }
+	if (req.kind === 'defend' && atk && changed) return { cards: { ...cards, [req.pid]: next }, attacks: { ...s.attacks, [req.pid]: { ...atk, defending: true, discarded: true } } }
 	return { cards: { ...cards, [req.pid]: next } }
 }
 
@@ -1387,6 +1393,8 @@ export function joinMatch(
 	// host applies a card instruction; a coins change is also written to the log,
 	// attributed to the player it belongs to (not the host who applied it)
 	const hostApplyReq = (req: CardReq) => {
+		// a commit that arrives once the cards are revealed (a slow connection) would change a played card
+		if (req.kind === 'commit' && local.revealAt != null && Date.now() >= local.revealAt) return
 		const patch = applyCardReq(local, req)
 		if (!Object.keys(patch).length) return
 		// Maintain the synced 3-2-1 reveal countdown. When a card action leaves

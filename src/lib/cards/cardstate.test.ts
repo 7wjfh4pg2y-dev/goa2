@@ -9,6 +9,8 @@ import {
 	revealTurn,
 	discardCard,
 	discardPlayed,
+	passTurn,
+	repairCards,
 	retrievePlayed,
 	undiscard,
 	endRound,
@@ -455,5 +457,69 @@ describe('statColors', () => {
 		expect(t2).toBeGreaterThan(-1)
 		const s = { ...newPlayerCardState('arien'), upgrade: [t3, t2], items: { init: 1 } }
 		expect(statColors(s).init).toEqual(['BLUE', 'RED', 'BRASS'])
+	})
+})
+
+
+describe('no card is ever lost (a playtest bug: a picked Tier II card vanished from every pile)', () => {
+	const all = (s: ReturnType<typeof newPlayerCardState>) =>
+		[...s.hand, ...s.discard, ...s.removed, ...s.upgrade, ...s.turns.filter((x): x is number => x != null), ...(s.pending != null && s.pending >= 0 ? [s.pending] : [])].sort((a, b) => a - b)
+
+	it('a second commit (two taps racing) puts the first face-down card back in the hand', () => {
+		let s = newPlayerCardState('arien')
+		const [a, b] = s.hand
+		s = commitCard(commitCard(s, a), b)
+		expect(s.pending).toBe(b)
+		expect(s.hand).toContain(a)
+		expect(all(s)).toEqual(all(newPlayerCardState('arien')))
+	})
+
+	it('a pass over a face-down card returns it to the hand', () => {
+		let s = newPlayerCardState('arien')
+		const a = s.hand[0]
+		s = passTurn(commitCard(s, a))
+		expect(s.hand).toContain(a)
+	})
+
+	it('revealing into a filled slot keeps the card that was there', () => {
+		let s = newPlayerCardState('arien')
+		const [a, b] = s.hand
+		s = revealTurn(commitCard(s, a), 0)
+		s = revealTurn(commitCard(s, b), 0)
+		expect(s.turns[0]).toBe(b)
+		expect(s.hand).toContain(a)
+	})
+
+	it('repairCards brings back a Tier II pick that fell out of every pile (the twin stays the item, Tier I stays removed)', () => {
+		const cards = heroCards('arien')
+		let s = { ...newPlayerCardState('arien'), coins: 10 }
+		const pick = cards.findIndex((c, i) => c.color === 'BLUE' && c.level === 2 && canPick(s, i))
+		s = levelUp(s, pick)
+		const twin = twinOf('arien', pick)
+		const tier1 = cards.findIndex((c) => c.color === 'BLUE' && (c.level ?? 1) === 1)
+		expect(s.upgrade).toContain(twin)
+		expect(s.removed).toContain(tier1)
+		// the bug: the pick is nowhere
+		const broken = { ...s, hand: s.hand.filter((i) => i !== pick) }
+		const fixed = repairCards(broken)
+		expect(fixed.hand).toContain(pick)
+		expect(fixed.upgrade).toContain(twin)
+		expect(fixed.removed).toContain(tier1)
+		expect(fixed.hand).not.toContain(tier1)
+		// and a healthy state is left exactly as it is
+		expect(repairCards(s)).toBe(s)
+		// round end repairs too
+		expect(endRound(broken).hand).toContain(pick)
+	})
+
+	it('a lost Tier I card whose colour already climbed goes to Removed, not back to the hand', () => {
+		const cards = heroCards('arien')
+		let s = { ...newPlayerCardState('arien'), coins: 10 }
+		const pick = cards.findIndex((c, i) => c.color === 'RED' && c.level === 2 && canPick(s, i))
+		s = levelUp(s, pick)
+		const tier1 = cards.findIndex((c) => c.color === 'RED' && (c.level ?? 1) === 1)
+		const fixed = repairCards({ ...s, removed: s.removed.filter((i) => i !== tier1) })
+		expect(fixed.removed).toContain(tier1)
+		expect(fixed.hand).not.toContain(tier1)
 	})
 })
