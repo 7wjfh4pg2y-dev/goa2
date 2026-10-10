@@ -1,22 +1,5 @@
-# GoA2
+# GoA2 — notes and deploy
 
-## Developing
-
-Once dependencies are installed with `npm install` (or `pnpm install` or `yarn`), start a development server:
-
-```bash
-npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
-```
-
-## Building
-
-To create a production version of the app:
-
-```bash
-npm run build
-```
-
-Preview the production build with `npm run preview`.
+This branch holds only the project notes (`CLAUDE.md`) and the GitHub Pages workflow
+(`.github/workflows/deploy.yml`). The app itself lives on the `release` branch: a push
+here (or a manual run of the workflow) builds `release` and publishes it.
