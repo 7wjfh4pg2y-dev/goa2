@@ -139,6 +139,7 @@
 	function kickSeat(id: string) { if (iAmHost && id) session.kick(id); }
 	function requestSeat(seat: number) { session.requestSeat(seat); }
 	function resolveSeat(id: string, ok: boolean) { if (iAmHost) session.resolveSeat(id, ok); }
+	function giveSeat(id: string, seat: number) { if (iAmHost && id) session.giveSeat(id, seat); }
 
 	$: boardPieces = Object.values($ms.pieces).map((p) => ({
 		id: p.id, hex: effectiveHex($ms.pieces, p), team: p.team, role: p.role, token: p.token === 'companion' ? undefined : p.token,
@@ -1075,7 +1076,7 @@
 		{#if lobbyOpen}
 			<GameLobby {room} conn={connLabel($status)} connClass={$status} seats={seatRows} watchers={spectators} requests={seatRequests} host={iAmHost} {clientId} {mySeat} myRequest={myRequestSeat}
 				colorOf={(id) => colorHex($players.find((p) => p.id === id)?.color ?? '')}
-				onKick={kickSeat} onSit={requestSeat} onResolve={resolveSeat} onLeave={() => { lobbyOpen = false; askLeave(); }} onEnd={endGame} onClose={() => (lobbyOpen = false)} />
+				onKick={kickSeat} onSit={requestSeat} onResolve={resolveSeat} onGive={giveSeat} onLeave={() => { lobbyOpen = false; askLeave(); }} onEnd={endGame} onClose={() => (lobbyOpen = false)} />
 		{/if}
 	{/if}
 
@@ -1169,6 +1170,12 @@
 								{#if iAmHost && s.present && s.id !== clientId}
 									<button class="act danger sm" on:click={() => kickSeat(s.id)}>Kick</button>
 								{/if}
+								{#if iAmHost && !s.present && spectators.some((sp) => sp.id !== clientId)}
+									<select class="act sm" value="" on:change={(e) => { giveSeat(e.currentTarget.value, s.seat); e.currentTarget.value = ''; }}>
+										<option value="" disabled>Give to…</option>
+										{#each spectators.filter((sp) => sp.id !== clientId) as sp (sp.id)}<option value={sp.id}>{sp.name}</option>{/each}
+									</select>
+								{/if}
 								{#if mySeat < 0 && !s.present}
 									{#if myRequestSeat === s.seat}
 										<span class="reqpending">Requested…</span>
@@ -1205,7 +1212,7 @@
 		{#if lobbyOpen}
 			<GameLobby phone {room} conn={connLabel($status)} connClass={$status} seats={seatRows} watchers={spectators} requests={seatRequests} host={iAmHost} {clientId} {mySeat} myRequest={myRequestSeat}
 				colorOf={(id) => colorHex($players.find((p) => p.id === id)?.color ?? '')} {log} canUndo={$canUndo} onUndo={() => session.undo()}
-				onKick={kickSeat} onSit={requestSeat} onResolve={resolveSeat} onLeave={() => { lobbyOpen = false; askLeave(); }} onEnd={endGame} onClose={() => (lobbyOpen = false)} />
+				onKick={kickSeat} onSit={requestSeat} onResolve={resolveSeat} onGive={giveSeat} onLeave={() => { lobbyOpen = false; askLeave(); }} onEnd={endGame} onClose={() => (lobbyOpen = false)} />
 		{/if}
 	{/if}
 	{#if mobile}

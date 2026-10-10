@@ -21,6 +21,11 @@
 	export let onKick: (id: string) => void = () => {};
 	export let onSit: (seat: number) => void = () => {};
 	export let onResolve: (id: string, ok: boolean) => void = () => {};
+	/** the host: put a watcher in an away / open seat (tap Seat on the watcher, then Give on the seat) */
+	export let onGive: (id: string, seat: number) => void = () => {};
+	let giving: string | null = null;
+	$: if (giving && !watchers.some((w) => w.id === giving)) giving = null;
+	$: givingName = watchers.find((w) => w.id === giving)?.name ?? '';
 	export let onLeave: () => void = () => {};
 	/** the host: end the game for everyone (tap, then tap again to confirm) */
 	export let onEnd: () => void = () => {};
@@ -52,7 +57,8 @@
 							<span class="gface" class:blank={!s.hero} style="--pc:{s.id ? colorOf(s.id) : '#555'}; {s.hero ? portraitCss(s.hero) : ''}"></span>
 							<span class="gn"><b>{s.hero ? heroById(s.hero)?.name ?? '' : 'Open seat'}</b><em>{s.name || '—'}{s.id === clientId ? ' · you' : !s.present && s.name ? ' · away' : ''}</em></span>
 							{#if host && s.present && s.id && s.id !== clientId}<button class="gkick" on:click={() => onKick(s.id)}>Kick</button>{/if}
-							{#if mySeat < 0 && !s.present}
+							{#if host && giving && !s.present}<button class="gok give" on:click={() => { onGive(giving ?? '', s.seat); giving = null; }} title="Give this seat to {givingName}">Give</button>
+							{:else if mySeat < 0 && !s.present}
 								{#if myRequest === s.seat}<span class="greq">Requested…</span>
 								{:else}<button class="gok" on:click={() => onSit(s.seat)} disabled={myRequest >= 0}>Take seat</button>{/if}
 							{/if}
@@ -70,7 +76,9 @@
 						<span class="gface blank"></span>
 						<span class="gn"><b>{w.name}{w.id === clientId ? ' (you)' : ''}</b><em>{r ? `wants seat ${r.seat + 1}` : 'watching'}</em></span>
 						{#if host && r}<button class="gok" on:click={() => onResolve(w.id, true)}>Approve</button><button class="gkick" on:click={() => onResolve(w.id, false)}>Deny</button>
-						{:else if host && w.id !== clientId}<button class="gkick" on:click={() => onKick(w.id)}>Remove</button>{/if}
+						{:else if host && w.id !== clientId}
+							{#if seats.some((x) => !x.present)}<button class="gok" class:on={giving === w.id} on:click={() => (giving = giving === w.id ? null : w.id)}>{giving === w.id ? 'Pick a seat' : 'Seat'}</button>{/if}
+							<button class="gkick" on:click={() => onKick(w.id)}>Remove</button>{/if}
 					</span>
 				{/each}
 			</div>
@@ -116,6 +124,7 @@
 	.gkick { color: #ffb4a8; border-color: rgba(194, 65, 47, 0.6); }
 	.gok { color: #86efac; border-color: rgba(34, 197, 94, 0.6); }
 	.gok:disabled { opacity: 0.4; cursor: default; }
+	.gok.on, .gok.give { color: #2a1c06; border-color: #f9ebc6; background: linear-gradient(180deg, #f6e2ad, #d8b36a); }
 	.greq { font-size: 11px; color: #8a9fb3; }
 	.gspec { display: flex; flex-direction: column; gap: 8px; }
 	/* phone: the whole screen */

@@ -540,6 +540,11 @@ export function transferSeat(s: MatchState, from: string, to: string, toName: st
 	return patch
 }
 
+/** The colour a seat's hero wears (its piece on the board, knocked out or waiting to spawn), or 'spectator'. */
+export function seatColor(s: MatchState, id: string): string {
+	return (id && (s.pieces?.[id]?.color ?? s.defeated?.[id]?.piece?.color ?? s.toSpawn?.[id]?.color)) || 'spectator'
+}
+
 /** A player name as the seat map compares it: trimmed, spacing and case ignored. */
 export const nameKey = (n: string) => (n ?? '').trim().replace(/\s+/g, ' ').toLowerCase()
 /**
@@ -897,6 +902,8 @@ export interface MatchSession {
 	requestSeat: (seat: number) => void
 	/** Host: approve or deny a pending seat-takeover request (by requester id). */
 	resolveSeat: (reqId: string, approve: boolean) => void
+	/** Host: put a watcher (by id) in a seat whose player is away — their hero, cards and coins move with it. */
+	giveSeat: (pid: string, seat: number) => boolean
 	/** Emits { seat, colour } when THIS client is granted a seat takeover. */
 	seatGranted: Readable<{ seat: number; color: string; back?: boolean } | null>
 	/** Bumps (timestamp) when THIS client's seat request is denied. */
@@ -1160,11 +1167,11 @@ export function joinMatch(
 			if (seat == null || handedBack.has(`${p.id}:${seat}`)) continue
 			handedBack.add(`${p.id}:${seat}`)
 			const from = local.seatMap[String(seat)].id
-			const color = local.pieces?.[from]?.color ?? local.defeated?.[from]?.piece?.color ?? local.toSpawn?.[from]?.color ?? ''
+			const color = seatColor(local, from)
 			const patch = transferSeat(local, from, p.id, p.name, seat)
 			if (local.creator === from) patch.creator = p.id
 			act(`${p.name} is back in their seat`, patch)
-			const grant = { to: p.id, seat, color: color || 'spectator', back: true }
+			const grant = { to: p.id, seat, color, back: true }
 			if (p.id === clientId) seatGranted.set({ seat, color: grant.color, back: true })
 			else try { channel.send({ type: 'broadcast', event: 'seatgrant', payload: grant }) } catch { /* ignore */ }
 		}
@@ -1497,6 +1504,28 @@ export function joinMatch(
 		}
 	}
 
+	// the host hands a seat to a watcher by hand (a player back under a different name, or a stand-in)
+	const giveSeat = (pid: string, seat: number) => {
+		if (local.host !== clientId) return false
+		const p = playerList.find((q) => q.id === pid)
+		const owner = local.seatMap?.[String(seat)]
+		if (!p || p.seat >= 0) return false
+		if (playerList.some((q) => q.id !== pid && (q.seat === seat || (owner && q.id === owner.id)))) return false // someone is in it
+		const from = owner?.id ?? ''
+		const color = seatColor(local, from)
+		const patch: Partial<MatchState> = from
+			? transferSeat(local, from, pid, p.name, seat)
+			: { seatMap: { ...(local.seatMap ?? {}), [String(seat)]: { id: pid, name: p.name } } }
+		if (from && local.creator === from) patch.creator = pid
+		patch.seatRequests = (local.seatRequests ?? []).filter((r) => r.id !== pid)
+		const back = !!owner && nameKey(owner.name) === nameKey(p.name)
+		act(back ? `put ${p.name} back in their seat` : `gave ${p.name} ${owner?.name ? `${owner.name}'s` : 'a'} seat`, patch)
+		const grant = { to: pid, seat, color, back }
+		if (pid === clientId) seatGranted.set({ seat, color, back })
+		else try { channel.send({ type: 'broadcast', event: 'seatgrant', payload: grant }) } catch { /* ignore */ }
+		return true
+	}
+
 	// Phones: a page coming back from the background (or a network that comes back) reconnects at once rather
 	// than waiting out the backoff; after more than a few seconds away the socket is presumed dead and rebuilt.
 	let hiddenAt = 0
@@ -1540,7 +1569,32 @@ export function joinMatch(
 	}
 	liveSessions.set(sessionKey, leave)
 
-	return { state, players, update, act, setSelf, cardAction, kick, flipJoin, joinFlip, undo, canUndo, requestSeat, resolveSeat, seatGranted, seatDenied, kicked, notFound, status: conn, leave, clientId, hostNow, ping, pings }
+	return { state, players, update, act, setSelf, cardAction, kick, flipJoin, joinFlip, undo, canUndo, requestSeat, resolveSeat, giveSeat, seatGranted, seatDenied, kicked, notFound, status: conn, leave, clientId, hostNow, ping, pings }
+}
+
+/**
+ * GM tools: close a room from outside. Joins it as a watcher, waits for its state, then sets `closed` (everyone in
+ * it drops to the menu, and the host's directory entry goes with them). 'empty' = nobody answered — the listing
+ * was a ghost of a dead connection and drops off by itself.
+ */
+export function closeRoom(room: string, by = 'A GM'): Promise<'closed' | 'empty'> {
+	return new Promise((done) => {
+		const s = joinMatch(room, { name: by, color: 'spectator' }, {})
+		let over = false
+		const finish = (r: 'closed' | 'empty', wait: number) => {
+			if (over) return
+			over = true
+			setTimeout(() => { s.leave(); done(r) }, wait)
+		}
+		const offState = s.state.subscribe((v) => {
+			if (over || v.rev < 0) return
+			s.act('closed the room (GM tools)', { closed: true })
+			queueMicrotask(() => offState?.())
+			finish('closed', 1200) // let the throttled broadcast go out first
+		})
+		s.notFound.subscribe((v) => { if (v) finish('empty', 0) })
+		setTimeout(() => finish('empty', 0), 25000)
+	})
 }
 
 // ---- Round/turn helpers (encode the rulebook's structure) -------------------

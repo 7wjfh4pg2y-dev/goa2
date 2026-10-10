@@ -49,7 +49,7 @@ vi.mock('./supabase', () => ({
 	supabase: { channel: (topic: string, config: any) => makeChannel(topic, config) }
 }));
 
-const { joinMatch, initialMatchState, nextHost, LOG_CAP } = await import('./match');
+const { joinMatch, initialMatchState, nextHost, LOG_CAP, closeRoom } = await import('./match');
 
 describe('lobby: second player picks a colour', () => {
 	it('does not kick or close the joiner', () => {
@@ -185,6 +185,55 @@ describe('a dropped player gets their seat back', () => {
 		await vi.advanceTimersByTimeAsync(1000);
 		expect(get(host.state).seatMap?.['1'].id).toBe(twin.clientId);
 		host.leave(); twin.leave(); other.leave();
+		vi.useRealTimers();
+	});
+});
+
+describe('the host gives a seat by hand', () => {
+	it('moves an away seat (hero, cards) to a watcher under any name, but never a seat someone is in', async () => {
+		vi.useFakeTimers();
+		const host = joinMatch('GIVE', { name: 'Host', color: 'spectator' }, { seed: initialMatchState({ players: 4 }) });
+		const a = joinMatch('GIVE', { name: 'Avery', color: 'spectator' }, {});
+		a.setSelf({ seat: 1, color: 'teal' });
+		await vi.advanceTimersByTimeAsync(500);
+		host.update({ started: true, seatMap: { '1': { id: a.clientId, name: 'Avery' } }, pieces: { [a.clientId]: { id: a.clientId, hex: '3_4', team: 'orange', kind: 'hero', color: 'teal' } as any } });
+		const w = joinMatch('GIVE', { name: 'Avery (phone)', color: 'spectator' }, {});
+		const grants: any[] = [];
+		w.seatGranted.subscribe((g) => g && grants.push(g));
+		await vi.advanceTimersByTimeAsync(500);
+		expect(host.giveSeat(w.clientId, 1)).toBe(false); // Avery is still here
+		expect(w.giveSeat(w.clientId, 1)).toBe(false); // only the host
+		a.leave();
+		w.setSelf({ ready: false });
+		await vi.advanceTimersByTimeAsync(500);
+		expect(host.giveSeat(w.clientId, 1)).toBe(true);
+		await vi.advanceTimersByTimeAsync(500);
+		const s = get(host.state);
+		expect(s.seatMap?.['1']).toEqual({ id: w.clientId, name: 'Avery (phone)' });
+		expect(s.pieces[w.clientId]).toMatchObject({ hex: '3_4' });
+		expect(s.log.at(-1)?.text).toBe("gave Avery (phone) Avery's seat");
+		expect(grants).toMatchObject([{ seat: 1, color: 'teal', back: false }]);
+		host.leave(); w.leave();
+		vi.useRealTimers();
+	});
+});
+
+describe('GM tools: close a room', () => {
+	it('closes a live room for everyone in it', async () => {
+		vi.useFakeTimers();
+		const host = joinMatch('SHUT', { name: 'Host', color: 'spectator' }, { seed: initialMatchState({ players: 4 }) });
+		const done = closeRoom('SHUT');
+		await vi.advanceTimersByTimeAsync(2000);
+		expect(await done).toBe('closed');
+		expect(get(host.state).closed).toBe(true);
+		host.leave();
+		vi.useRealTimers();
+	});
+	it('says empty when nobody holds the room', async () => {
+		vi.useFakeTimers();
+		const done = closeRoom('NOBODY');
+		await vi.advanceTimersByTimeAsync(5000);
+		expect(await done).toBe('empty');
 		vi.useRealTimers();
 	});
 });

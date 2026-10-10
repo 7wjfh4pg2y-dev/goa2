@@ -351,7 +351,7 @@
 	// then the board when the draft is done.
 	$: if (mode === 'lobby' && $state.draft && !$state.started && !coinShown) mode = 'draft';
 	$: if ((mode === 'lobby' || mode === 'draft') && $state.started && !coinShown) mode = 'game';
-	$: if ((mode === 'lobby' || mode === 'draft' || mode === 'game') && $state.closed) bail('The host closed the game.');
+	$: if ((mode === 'lobby' || mode === 'draft' || mode === 'game') && $state.closed) bail(/GM tools/.test($state.log.at(-1)?.text ?? '') ? 'A GM closed the game.' : 'The host closed the game.');
 	// host sets the board up once, when it first appears: the minions stand ready and
 	// every hero waits off the board until its player places it on a base spawn point
 	$: if (mode === 'game' && iAmHost && session && $state.draft && !Object.keys($state.pieces).length && !$state.toSpawn) {
@@ -830,6 +830,7 @@
 							</div>
 							<section class="panel verpanel">
 								<a class="btn btn-ghost" href={base + '/stats'}><Icon name="crown" /> Hall of Records</a>
+								<a class="btn btn-ghost" href={base + '/rooms'}><Icon name="eye" /> Open games</a>
 							</section>
 							<div class="row"><button class="btn btn-ghost on-art" on:click={goHome}>Sign out</button></div>
 						</div>
