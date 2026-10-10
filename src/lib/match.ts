@@ -31,6 +31,7 @@ import {
 	discardCard,
 	undiscard,
 	discardPlayed,
+	retrievePlayed,
 	revealPlayer,
 	endRoundAll,
 	levelUp,
@@ -53,6 +54,7 @@ export type CardReq =
 	| { kind: 'defend'; pid: string; idx: number }
 	| { kind: 'undiscard'; pid: string; idx: number }
 	| { kind: 'discardPlayed'; pid: string; idx: number } // an effect discards a card already played (turn slot / this turn's card)
+	| { kind: 'retrievePlayed'; pid: string; idx: number } // an effect returns a card already played to the hand
 	| { kind: 'coins'; pid: string; delta: number }
 	| { kind: 'cardmove'; pid: string; idx: number; to: CardZone } // move a card between hand/deck/upgrade/removed
 	| { kind: 'ult'; pid: string; on: boolean } // unlock / relock the ultimate (level 8)
@@ -230,6 +232,7 @@ export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 	else if (req.kind === 'defend') next = discardCard(cs, req.idx)
 	else if (req.kind === 'undiscard') next = undiscard(cs, req.idx)
 	else if (req.kind === 'discardPlayed') next = discardPlayed(cs, req.idx)
+	else if (req.kind === 'retrievePlayed') next = retrievePlayed(cs, req.idx)
 	else if (req.kind === 'coins') next = addCoins(cs, req.delta)
 	else if (req.kind === 'cardmove') next = manualMove(cs, req.idx, req.to)
 	else if (req.kind === 'ult') next = { ...cs, ultimate: req.on }
@@ -1418,6 +1421,10 @@ export function joinMatch(
 			note(req.pid, req.kind === 'defeatMinion' ? `defeated ${what} (+${minionCoins(m?.role)} coins)` : `removed ${what} (no coins)`)
 		}
 		if (req.kind === 'respawn' && patch.pieces) note(req.pid, 'respawned ⤴')
+		if ((req.kind === 'discardPlayed' || req.kind === 'retrievePlayed') && patch.cards?.[req.pid]) {
+			const name = heroCards(local.cards?.[req.pid]?.hero ?? '')[req.idx]?.name ?? 'a played card'
+			note(req.pid, req.kind === 'retrievePlayed' ? `retrieved ${name} to their hand` : `discarded ${name} (played)`)
+		}
 		if (req.kind === 'endAct' && (patch.acting !== undefined || patch.turn)) { const who = actorOf(local); if (who) note(who, req.pid === who ? 'ends their turn' : 'turn skipped by the host') }
 		if (req.kind === 'endAct' && patch.tieBreaker) note(req.pid, `the tie-breaker coin flips to the ${teamName(patch.tieBreaker)}`)
 		if (req.kind === 'claim' && patch.tieClaims) note(req.pid, 'claims the tie — goes first')

@@ -235,6 +235,14 @@ export function discardPlayed(s: PlayerCardState, idx: number): PlayerCardState 
 	return s
 }
 
+/** An effect returns a card already played (a turn slot, or this turn's card) to the hand. */
+export function retrievePlayed(s: PlayerCardState, idx: number): PlayerCardState {
+	const t = s.turns.indexOf(idx)
+	if (t >= 0) { const turns = s.turns.slice(); turns[t] = null; return { ...s, turns, hand: [...s.hand, idx].sort((a, b) => a - b) } }
+	if (s.pending === idx) return { ...s, pending: PASS, hand: [...s.hand, idx].sort((a, b) => a - b) }
+	return s
+}
+
 /** Undo a discard (pull it back into hand). */
 export function undiscard(s: PlayerCardState, idx: number): PlayerCardState {
 	if (!s.discard.includes(idx)) return s

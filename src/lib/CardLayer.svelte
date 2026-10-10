@@ -356,15 +356,25 @@
 	$: examineDetected = examine ? detectDuration(heroCards(examine.hid)[examine.idx]?.description) : null;
 	// (not on your own still-hidden card: an effect would show it to everyone before the reveal)
 	$: canFx = !!examine?.pid && (examine.pid === clientId || iAmHost) && !examine.secret;
-	// a played card (turn slot / this turn's card) can be discarded by an effect (owner or host)
+	// a played card (turn slot / this turn's card) can be retrieved or discarded by an effect (owner or host)
 	$: exOwner = examine?.pid ? cards[examine.pid] : undefined;
 	$: canDiscardEx = canFx && !!exOwner && !!examine && (exOwner.turns.includes(examine.idx) || exOwner.pending === examine.idx);
 	let fxOpen = false; // "Activate effect" pressed → pick how long
 	$: if (examine) fxOpen = false;
-	function discardEx() {
+	// a played card's Retrieve (back to the hand) / Discard (card effects): with the action ring (2.0 HUD / phone)
+	// the button only LOADS it and the ring confirms (× drops it); the classic HUD acts at once
+	let playedArm: { pid: string; idx: number; hid: string; kind: 'retrieve' | 'discard' } | null = null;
+	$: if (playedArm && !(cards[playedArm.pid] && (cards[playedArm.pid].turns.includes(playedArm.idx) || cards[playedArm.pid].pending === playedArm.idx))) playedArm = null;
+	function playedAction(kind: 'retrieve' | 'discard') {
 		if (!examine?.pid) return;
-		session.cardAction({ kind: 'discardPlayed', pid: examine.pid, idx: examine.idx });
+		const a = { pid: examine.pid, idx: examine.idx, hid: examine.hid, kind };
 		examine = null;
+		if (hud2 || phone2) { playedArm = a; armed = null; return; }
+		runPlayed(a);
+	}
+	function runPlayed(a: { pid: string; idx: number; kind: 'retrieve' | 'discard' }) {
+		session.cardAction({ kind: a.kind === 'retrieve' ? 'retrievePlayed' : 'discardPlayed', pid: a.pid, idx: a.idx });
+		playedArm = null;
 	}
 	function activateFx(pid: string, hero: string, idx: number, dur: EffectDur) {
 		const name = heroCards(hero)[idx]?.name ?? 'Effect';
@@ -742,10 +752,10 @@
 	// preview — the ring then asks to confirm: "Discard <card>")
 	let armedKind: 'commit' | 'discard' = 'commit';
 	$: if (armed != null && (!mine || !mine.hand.includes(armed) || (armedKind === 'commit' && !canCommit))) armed = null;
-	function armFor(kind: 'commit' | 'discard', idx: number) { armed = idx; armedKind = kind; selected = null; }
+	function armFor(kind: 'commit' | 'discard', idx: number) { armed = idx; armedKind = kind; selected = null; playedArm = null; }
 	function handCardClick2(idx: number) {
 		if (autoRetract && !handUp && !dockHand) { handUp = true; return; }
-		if (canCommit && armed !== idx) { armed = idx; armedKind = 'commit'; return; }
+		if (canCommit && armed !== idx) { armed = idx; armedKind = 'commit'; playedArm = null; return; }
 		armed = null;
 		preview(idx);
 	}
@@ -766,6 +776,8 @@
 		// game over: the ring brings the results (the victory card + battle report) back
 		if ($ms.wonBy) return { label: 'Results', sub: 'Game over', kind: 'go', run: onResults };
 		if (ringAsk) return playedHue ? { ...ringAsk, tint: true } : ringAsk;
+		// a played card loaded from its preview: Retrieve (to the hand) / Discard — the ring confirms
+		if (playedArm) { const a = playedArm; return { label: a.kind === 'retrieve' ? 'Retrieve' : 'Discard', sub: heroCards(a.hid)[a.idx]?.name, kind: a.kind === 'retrieve' ? 'go' : 'bad', pulse: true, run: () => runPlayed(a), cancel: () => (playedArm = null) }; }
 		// a card chosen in its preview to discard (any time — a defence, or an effect): the ring asks once more
 		if (armed != null && armedKind === 'discard' && mine) { const i = armed; return { label: 'Discard', sub: heroCards(mine.hero)[i]?.name, kind: 'bad', pulse: true, run: () => { defend(i); armed = null; }, cancel: () => (armed = null) }; }
 		if (iCanRespawn) return { label: 'Respawn', kind: 'team', pulse: true, run: onRespawn };
@@ -1191,7 +1203,7 @@
 						{#if examineFx}
 							<span class="fxstate">Effect active · <b>{fxLabel(examineFx)}</b></span>
 							{#if canFx}<button class="fxend" on:click={() => endFx(examineFx)}>End effect</button>{/if}
-							{#if canDiscardEx}<button class="fxdisc" on:click={discardEx}>Discard</button>{/if}
+							{#if canDiscardEx}<button class="fxret" on:click={() => playedAction('retrieve')}>Retrieve</button><button class="fxdisc" on:click={() => playedAction('discard')}>Discard</button>{/if}
 						{:else if fxOpen}
 							<div class="fxdurs">
 								{#each ['turn', 'next', 'round'] as d}
@@ -1203,7 +1215,7 @@
 							<button class="fxend" on:click={() => (fxOpen = false)} title="Back">✕</button>
 						{:else}
 							<button class="fxgo" on:click={() => (fxOpen = true)}>Activate effect</button>
-							{#if canDiscardEx}<button class="fxdisc" on:click={discardEx}>Discard</button>{/if}
+							{#if canDiscardEx}<button class="fxret" on:click={() => playedAction('retrieve')}>Retrieve</button><button class="fxdisc" on:click={() => playedAction('discard')}>Discard</button>{/if}
 						{/if}
 					</div>
 				{/if}
@@ -2125,6 +2137,7 @@
 	.fxdur i { font-style: normal; margin-left: 4px; color: #e8c173; }
 	.fxdur.on { background: rgba(199,154,78,.32); border-color: rgba(230,190,110,.85); color: #fff; }
 	.fxgo { padding: 5px 14px; border-radius: 8px; cursor: pointer; font-size: .78rem; color: #1a0f06; background: linear-gradient(180deg, #f3d08a, #d4a64a); border: 1px solid #fbe7b0; }
+	.fxret { padding: 5px 16px; border-radius: 8px; cursor: pointer; font-size: .78rem; color: #eaf7ee; background: linear-gradient(180deg, #2a9d5c, #17663a); border: 1px solid rgba(160,240,190,.6); }
 	.fxdisc { padding: 5px 16px; border-radius: 8px; cursor: pointer; font-size: .78rem; color: #fff; background: linear-gradient(180deg, #e0463c, #a82620); border: 1px solid rgba(255,170,160,.7); }
 	/* the very first step of the game: impossible to miss */
 	.act.spawnglow { animation: spawnglow 1.4s ease-in-out infinite; position: relative; }

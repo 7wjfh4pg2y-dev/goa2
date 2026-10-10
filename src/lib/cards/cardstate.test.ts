@@ -8,6 +8,8 @@ import {
 	uncommit,
 	revealTurn,
 	discardCard,
+	discardPlayed,
+	retrievePlayed,
 	undiscard,
 	endRound,
 	addCoins,
@@ -71,6 +73,23 @@ describe('round loop', () => {
 		expect(s.turns[0]).toBe(card)
 		expect(s.pending).toBeNull()
 		expect(s.hand).not.toContain(card)
+	})
+
+	it('a played card can be retrieved to the hand or discarded (card effects); its turn slot empties', () => {
+		let s = newPlayerCardState('arien')
+		const [c1, c2] = s.hand
+		s = revealTurn(commitCard(s, c1), 0)
+		s = revealTurn(commitCard(s, c2), 1)
+		const back = retrievePlayed(s, c1)
+		expect(back.turns[0]).toBeNull()
+		expect(back.hand).toContain(c1)
+		expect(back.hand).toEqual([...back.hand].sort((a, b) => a - b))
+		const gone = discardPlayed(s, c2)
+		expect(gone.turns[1]).toBeNull()
+		expect(gone.discard).toEqual([c2])
+		expect(gone.hand).not.toContain(c2)
+		// a card that was never played changes nothing
+		expect(retrievePlayed(s, s.hand[0])).toBe(s)
 	})
 
 	it('ignores commit of a card not in hand', () => {
