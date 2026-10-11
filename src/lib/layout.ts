@@ -26,11 +26,12 @@ export interface UiLayout {
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
-/** The smallest scale: low enough that a phone turned sideways (e.g. 844×390 → 0.43) still gets the whole
- *  1440×900 design, like an iPad does, instead of a cut-off one. */
+/** Narrow screens keep at least 0.7 (a portrait tablet: the dash spans under the panels instead of shrinking
+ *  further), but a SHORT screen — a phone turned sideways, e.g. 844×390 → 0.43 — scales down until the whole
+ *  1440×900 design's height fits, like an iPad, instead of being cut off at the bottom (never below 0.35). */
 export const MIN_SCALE = 0.35;
 export function uiScale(w: number, h: number): number {
-	return clamp(Math.min(w / DESIGN_W, h / DESIGN_H), MIN_SCALE, 2.2);
+	return clamp(Math.min(Math.max(w / DESIGN_W, 0.7), h / DESIGN_H), MIN_SCALE, 2.2);
 }
 
 export function uiLayout(w: number, h: number): UiLayout {
