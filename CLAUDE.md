@@ -3,7 +3,7 @@
 A **digital multiplayer** version of the
 Guards of Atlantis II board game (lobby → teams → hero draft → board). Personal use.
 
-Deployed to GitHub Pages: **https://7wjfh4pg2y-dev.github.io/goa2/**
+Live at **https://goa2digital.pages.dev/** (Cloudflare Pages, since 2026-10-11). The old https://7wjfh4pg2y-dev.github.io/goa2/ only redirects there.
 
 ## Working agreement (read this first)
 - **Cost matters.** Prefer **Sonnet** for routine work (wiring, CSS, copy); use Opus only for gnarly logic (realtime sync, draft engine).
@@ -29,7 +29,8 @@ Deployed to GitHub Pages: **https://7wjfh4pg2y-dev.github.io/goa2/**
 
 ## Git / deploy
 - Branches: app code on **`release`** (the live site); notes + workflow on **`claude/stats-of-atlantis-replica-hg5nv2`**. Push with `git push -u origin <branch>` (retry w/ backoff on network errors).
-- Every push of the notes branch (or a workflow dispatch) deploys `release` (~1 min).
+- **Deploy = push `release`.** Cloudflare Pages (project `goa2digital`, the user's account; Git-connected, production branch `release`, build command `npm run build`, output `build`, env `NODE_VERSION=22`) rebuilds the site on every push to `release` (~1–2 min). `npm run build` = `vitest run && vite build` (a failing test stops the deploy; `npm run build:only` skips the tests locally). The sandbox can't reach pages.dev — the user checks the live site.
+- Pushing the notes branch only redeploys the OLD GitHub Pages address, which is now a redirect (`.github/workflows/deploy.yml` writes an `index.html` + `404.html` that `location.replace` to goa2digital.pages.dev, keeping the path minus `/goa2`, the `?query` (room invites) and `#hash`; `/goa2/v1|v2/…` → home).
 - Commit trailer:
   ```
   Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
@@ -37,6 +38,7 @@ Deployed to GitHub Pages: **https://7wjfh4pg2y-dev.github.io/goa2/**
   ```
   (Never put a model id anywhere else in the repo.)
 - Don't open PRs unless asked.
+- **MOVED (2026-10-11):** the game is served from the ROOT of goa2digital.pages.dev (`base` = '' unless `BASE_PATH` is set). localStorage is per origin, so each browser's HUD prefs, GM unlock, resume tickets, room cache and unsent game journals stayed behind on github.io (one-time fresh start; journals not yet uploaded from there are lost unless someone opens the old origin — it now redirects, so they are). The history below describes the github.io era.
 - **LAUNCHED (2026-10-09): the site at `/goa2/` IS the `release` branch.** All app work happens on `release` (a worktree / checkout of it); THIS branch only carries these notes and the deploy workflow. `.github/workflows/deploy.yml` (here) checks out `release`, runs its tests, builds it with `BASE_PATH=/goa2` and adds a `404.html` that sends any missing page — incl. the old `/goa2/v1/…` (release preview) and `/goa2/v2/…` (2.0) — home with its `?query`. A push to `release` alone does NOT deploy: push this branch, or `gh api -X POST repos/7wjfh4pg2y-dev/goa2/actions/workflows/deploy.yml/dispatches -f ref=claude/stats-of-atlantis-replica-hg5nv2`. Open tabs reload themselves onto a new deploy (`$updated` in +layout). The 1.0 / 2.0 version switch (`siteVersion.ts`, Supabase `goa2_settings.site_version`) is gone from the release; the row is unused. Cleanup 2026-10-10: branches `1.0` and `endgame-polish-wip` were deleted (1.0 lives on as tag `v1.0`), and THIS branch was cut down to the notes, the deploy workflow, a README and `.gitignore` — the archived 2.0 app code is only in its git history now. `RELEASE.md` on `release` = the history of how it was assembled. The 2.0 preview portal / `/sandbox` below are archived with 2.0; on `release` the sandbox is the git-ignored `src/routes/preview-game`.
 - (ARCHIVED with 2.0) **2.0 preview portal** (`/goa2/v2/preview`, `src/routes/preview/+page.svelte`; linked from both versions' GM tools): every 2.0-only feature with a way to see it and a tick box (ticks in localStorage `goa2-preview-picks`, "Copy my picks" → a list for Claude). Opening `/preview` or `/sandbox` turns on PREVIEW MODE for the tab (`setPreview` / `isPreview` in siteVersion.ts, sessionStorage `goa2-preview`) so `followSiteVersion` stops redirecting it — the whole 2.0 app can then be clicked through. **`/sandbox`** (`src/routes/sandbox/+page.svelte`) = a 2.0 game with a local fake session (you = p1 = host; `?n=2..10`, `?scene=plan|levelup`). Don't nest a route under `/preview` (a page AND a folder of the same name may 404 on GitHub Pages). Update the portal's list as features move to 1.0.
 - (ARCHIVED) **1.0 plays on the CLASSIC board only** (its GameView pins `boardLook = 'classic'`, no zone outline, no moving effects; the lobby's and the game menu's board switches are gone). It keeps the new tokens, markers and minion art. The island look / outline / effects are 2.0 items in the portal.

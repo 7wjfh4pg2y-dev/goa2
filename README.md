@@ -1,5 +1,5 @@
-# GoA2 — notes and deploy
+# GoA2 — notes
 
-This branch holds only the project notes (`CLAUDE.md`) and the GitHub Pages workflow
-(`.github/workflows/deploy.yml`). The app itself lives on the `release` branch: a push
-here (or a manual run of the workflow) builds `release` and publishes it.
+The game is live at https://goa2digital.pages.dev/ — Cloudflare Pages builds the `release` branch
+(the app) on every push. This branch holds only the project notes (`CLAUDE.md`) and a GitHub Pages
+workflow that turns the old github.io address into a redirect to the new one.
