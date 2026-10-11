@@ -11,6 +11,7 @@
 
 	export let g: LeagueGame;
 	export let onPlayer: (key: string) => void = () => {};
+	export let onReport: (() => void) | null = null;
 	let open = true;
 	let timeline = false;
 
@@ -67,10 +68,11 @@
 				</section>
 			{/each}
 		</div>
-		{#if feats.length || g.defeats.length}
+		{#if feats.length || g.defeats.length || onReport}
 			<div class="foot">
 				<div class="feats">{#each feats as f (f)}<span class="feat">{f}</span>{/each}</div>
 				{#if g.defeats.length}<button class="tl" on:click={() => (timeline = !timeline)}>{timeline ? 'Hide' : 'Show'} timeline ({g.defeats.length})</button>{/if}
+				{#if onReport}<button class="tl" on:click={onReport}>Report</button>{/if}
 			</div>
 			{#if timeline}
 				<ol class="line">

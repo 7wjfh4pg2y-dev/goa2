@@ -22,21 +22,24 @@
 	import Rivalries from '$lib/hall/Rivalries.svelte';
 	import Glyph from '$lib/hall/Glyph.svelte';
 	import AwardsHall from '$lib/hall/AwardsHall.svelte';
+	import Reports from '$lib/hall/Reports.svelte';
 	import { role } from '$lib/role';
 
-	type Tab = 'players' | 'log' | 'awards' | 'heroes' | 'games';
+	type Tab = 'players' | 'log' | 'awards' | 'heroes' | 'games' | 'reports';
 	// GMs only for now (the soft admin gate in role.ts; the link is in the GM tools)
 	let phase: 'loading' | 'ready' | 'empty' | 'error' | 'locked' = 'loading';
 	let errMsg = '';
 	let league: League | null = null;
+	let rows: GameRowIn[] = []; // the raw games (the reports are drafted from them)
 	let titles: Record<string, { title: string; blurb: string }[]> = {};
 	let tab: Tab = 'players';
 	let sel: string | null = null; // the player whose page is open
 	let heroSel: string | null = null; // the hero whose builds are open
 	let body: HTMLElement;
 
-	function use(rows: GameRowIn[]) {
-		league = buildLeague(rows);
+	function use(got: GameRowIn[]) {
+		rows = got;
+		league = buildLeague(got);
 		titles = titlesOf(league);
 		phase = league.games.length ? 'ready' : 'empty';
 	}
@@ -316,7 +319,7 @@
 		<a class="btn btn-ghost btn-sm back" href={base + '/'}><Icon name="back" /> <span class="hidem">Home</span></a>
 		<h1 class="ttl">Hall of Records</h1>
 		<nav class="tabs" aria-label="Sections">
-			{#each [['players', 'Players'], ['log', 'Player log'], ['awards', 'Awards'], ['heroes', 'Heroes'], ['games', 'Games']] as [k, l] (k)}
+			{#each [['players', 'Players'], ['log', 'Player log'], ['awards', 'Awards'], ['heroes', 'Heroes'], ['games', 'Games'], ['reports', 'Reports']] as [k, l] (k)}
 				<button class="tab" class:on={tab === k && !(k === 'players' && sel)} class:crumb={tab === k && k === 'players' && !!sel} on:click={() => go(k as Tab)}>{l}</button>
 			{/each}
 		</nav>
@@ -331,6 +334,9 @@
 				<p class="t-body c-muted">Sign in as Admin to open the Hall of Records.</p>
 				<a class="btn btn-ghost" href={base + '/'}>Home</a>
 			</section>
+		{:else if tab === 'reports'}
+			<!-- ── the weekly game reports: online drafts + table games ── -->
+			<Reports {rows} />
 		{:else if phase === 'error'}
 			<section class="panel msg">
 				<h2 class="t-h2">The records are locked</h2>
@@ -638,7 +644,7 @@
 			<!-- ── every game, newest first ── -->
 			{@render toolbar(gq, (v) => (gq = v), 'Search by player or hero…', [], '', () => {})}
 			<div class="glist">
-				{#each glist as g (g.id)}<GameCard {g} onPlayer={openLog} />{:else}<p class="note">No game matches.</p>{/each}
+				{#each glist as g (g.id)}<GameCard {g} onPlayer={openLog} onReport={() => go('reports')} />{:else}<p class="note">No game matches.</p>{/each}
 			</div>
 		{/if}
 	</main>
