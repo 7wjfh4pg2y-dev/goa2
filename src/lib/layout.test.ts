@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { uiLayout, DASH_W, HUD_R } from './layout';
+import { uiLayout, DASH_W, HUD_R, DESIGN_W, DESIGN_H } from './layout';
 
 describe('uiLayout', () => {
 	it('is 1:1 at the 1440×900 design size', () => {
@@ -11,6 +11,13 @@ describe('uiLayout', () => {
 	it('scales by the tighter axis, so big and small screens keep proportions', () => {
 		expect(uiLayout(2560, 1440).s).toBeCloseTo(1.6);
 		expect(uiLayout(1280, 720).s).toBeCloseTo(0.8);
+	});
+	it('fits the whole design on a phone turned sideways (no part cut off)', () => {
+		for (const [w, h] of [[844, 390], [932, 430], [852, 393], [812, 375]]) {
+			const s = uiLayout(w, h).s;
+			expect(DESIGN_W * s).toBeLessThanOrEqual(w + 0.01);
+			expect(DESIGN_H * s).toBeLessThanOrEqual(h + 0.01);
+		}
 	});
 	it('keeps the dash beside the HUD in landscape', () => {
 		const l = uiLayout(1180, 820);

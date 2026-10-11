@@ -147,7 +147,10 @@
 	$: curtainRows = revealRows(seatedWithCards, pTeam, (mySeat >= 0 && teamForSeat(mySeat, $ms.seats)) || 'orange');
 	// each team's row may wrap (e.g. 3 + 2 on a portrait phone): pick the column
 	// count that gives the biggest cards for this screen
-	let vhPx = 800;
+	// the game area (GameView's .gamewrap: the window minus a sideways iPhone's notch insets); the window until measured
+	export let areaW = 0, areaH = 0;
+	let winW = 1440, winH = 800;
+	$: vhPx = areaH || winH;
 	$: curtainFit = fitReveal(curtainRows.map((r) => r.length), vw, vhPx);
 	$: curtainCols = curtainFit.cols;
 	function fitReveal(counts: number[], w: number, h: number) {
@@ -655,7 +658,7 @@
 	// Desktop/tablet: ONE UI scale for the whole layout (see layout.ts). The dash is a
 	// fixed DASH_W × DASH_H design scaled as a whole; it runs under a shortened player
 	// panel (and, on portrait screens, under the HUD too) when it needs the room.
-	let vw = 1440;
+	$: vw = areaW || winW;
 	$: lay = uiLayout(vw, vhPx);
 	$: dashUnderPanel = lay.underPanel;
 	$: dashVars = layoutVars(lay);
@@ -826,7 +829,7 @@
 	const canUndoNow = session.canUndo;
 </script>
 
-<svelte:window on:pointerdown={onWindowDown} bind:innerWidth={vw} bind:innerHeight={vhPx} />
+<svelte:window on:pointerdown={onWindowDown} bind:innerWidth={winW} bind:innerHeight={winH} />
 
 <!-- controls shared by the desktop dash and the phone dash -->
 {#snippet plate(p: Player, cs: PlayerCardState, w = npW)}

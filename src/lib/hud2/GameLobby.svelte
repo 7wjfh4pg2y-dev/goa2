@@ -110,7 +110,7 @@
 
 <style>
 	.scrim { position: fixed; inset: 0; z-index: 46; display: grid; place-items: center; background: rgba(3, 8, 16, 0.5); }
-	.glob { --brass: #d8b36a; --brass-hi: #f4dfa8; --line: rgba(216, 179, 106, 0.4); zoom: var(--uis, 1); width: 520px; max-height: 86vh; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; padding: 0 18px 18px; border-radius: 18px; color: #f5f1e8;
+	.glob { --brass: #d8b36a; --brass-hi: #f4dfa8; --line: rgba(216, 179, 106, 0.4); zoom: var(--uis, 1); width: 760px; max-width: calc(96vw / var(--uis, 1)); max-height: calc(92vh / var(--uis, 1)); max-height: calc(92dvh / var(--uis, 1)); box-sizing: border-box; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; padding: 0 18px 18px; border-radius: 18px; color: #f5f1e8;
 		background: linear-gradient(180deg, rgba(16, 44, 72, 0.98), rgba(6, 21, 38, 0.98)); border: 1px solid var(--line); border-top: 3px solid var(--brass); box-shadow: 0 18px 44px rgba(0, 0, 0, 0.7); }
 	button { font: inherit; }
 	.ghead { display: flex; align-items: center; gap: 12px; margin: 0 -18px; padding: 12px 18px; border-bottom: 1px solid var(--line); }
@@ -120,19 +120,19 @@
 	.gconn.connected { color: #86efac; } .gconn.connected i { background: #22c55e; }
 	.gconn.closed { color: #fca5a5; } .gconn.closed i { background: #ef4444; }
 	.gx { margin-left: auto; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line); background: none; color: #bccbd9; cursor: pointer; }
-	.gteams { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-	.gteam { display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 12px; background: var(--tg); box-shadow: inset 0 3px 0 var(--tc); }
+	.gteams { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+	.gteam { min-width: 0; display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 12px; background: var(--tg); box-shadow: inset 0 3px 0 var(--tc); }
 	.is-orange { --tc: #ef7d22; --tg: rgba(239, 125, 34, 0.16); --th: #ffb878; } .is-blue { --tc: #2f7fe6; --tg: rgba(47, 127, 230, 0.18); --th: #9ccbff; }
 	small { font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--brass-hi); }
 	.gteam small { color: var(--th); }
-	.gp { display: flex; align-items: center; gap: 8px; }
+	.gp { display: flex; align-items: center; gap: 6px; min-width: 0; }
 	.gp.away { opacity: 0.6; }
 	.gface { width: 30px; height: 30px; flex: none; border-radius: 50%; background-repeat: no-repeat; background-color: #0b101a; box-shadow: 0 0 0 2px var(--pc, #555); }
 	.gface.blank { background: rgba(255, 255, 255, 0.08); box-shadow: 0 0 0 1px var(--line); }
 	.gn { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 	.gn b { font-weight: 400; font-size: 14px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 	.gn em { font-style: normal; font-size: 11px; color: #8a9fb3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-	.gkick, .gok { height: 24px; padding: 0 10px; border-radius: 999px; font-size: 11px; cursor: pointer; background: rgba(0, 0, 0, 0.3); border: 1px solid var(--line); }
+	.gkick, .gok { flex: none; height: 24px; padding: 0 9px; border-radius: 999px; font-size: 11px; cursor: pointer; background: rgba(0, 0, 0, 0.3); border: 1px solid var(--line); }
 	.gkick { color: #ffb4a8; border-color: rgba(194, 65, 47, 0.6); }
 	.gok { color: #86efac; border-color: rgba(34, 197, 94, 0.6); }
 	.gok:disabled { opacity: 0.4; cursor: default; }
@@ -146,8 +146,22 @@
 	.scrim.phone { place-items: stretch; }
 	.phone .glob { zoom: 1; width: auto; max-height: none; height: 100dvh; border-radius: 0; padding: 0 14px calc(14px + env(safe-area-inset-bottom)); box-sizing: border-box; }
 	.phone .ghead { flex-wrap: wrap; row-gap: 4px; }
-	.phone .gteams { grid-template-columns: 1fr; gap: 8px; }
-	.glog { flex: 1; min-height: 120px; display: flex; flex-direction: column; gap: 6px; }
+	.phone .gteams { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+	.phone .glob { gap: 10px; }
+	.phone .gteam { gap: 4px; padding: 8px 10px; }
+	.phone .gface { width: 26px; height: 26px; }
+	.phone .gn { gap: 0; }
+	.phone .gn b { font-size: 13px; }
+	.phone .gkick, .phone .gok { height: 26px; }
+	/* a small phone turned sideways (it keeps the phone layout): the teams side by side, the log's lines left out (Undo stays) */
+	@media (orientation: landscape) {
+		.phone .glob { gap: 6px; }
+		.phone .ghead { padding-top: 8px; padding-bottom: 8px; }
+		.phone .gteams { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+		.phone .glog { flex: none; min-height: 0; }
+		.phone .gll { display: none; }
+	}
+	.glog { flex: 1; min-height: 64px; display: flex; flex-direction: column; gap: 6px; }
 	.glh { display: flex; align-items: center; justify-content: space-between; }
 	.gundo { height: 28px; padding: 0 12px; border-radius: 999px; font-size: 12px; color: #1b1204; background: linear-gradient(180deg, var(--brass-hi), var(--brass)); border: 0; cursor: pointer; }
 	.gundo:disabled { opacity: 0.4; cursor: default; }

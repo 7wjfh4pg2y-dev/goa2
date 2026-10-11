@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { uiScale } from '$lib/layout';
 	import { teamName, aTeam } from '$lib/teams';
 	import { sweepJournals } from '$lib/recorder';
 	import { onMount, onDestroy, tick } from 'svelte';
@@ -126,7 +127,7 @@
 	// real size instead — their own portrait CSS takes over (see @media max-width 760px).
 	let mobile = false; // phone layout (≤760px wide): also tells the backdrop how to stage the island
 	let portrait = false; // a tablet held upright: the menu column is centred over the island
-	const fitUi = () => { if (browser) { mobile = innerWidth <= 760; portrait = innerWidth < innerHeight; ui = mobile ? 1 : Math.min(2.2, Math.max(0.7, Math.min(innerWidth / 1440, innerHeight / 900))); } };
+	const fitUi = () => { if (browser) { mobile = innerWidth <= 760; portrait = innerWidth < innerHeight; ui = mobile ? 1 : uiScale(innerWidth, innerHeight); } };
 	fitUi();
 	let coinCaption = '';
 	let coinPending = 'Flipping…'; // caption while the coin spins

@@ -26,8 +26,11 @@ export interface UiLayout {
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
+/** The smallest scale: low enough that a phone turned sideways (e.g. 844×390 → 0.43) still gets the whole
+ *  1440×900 design, like an iPad does, instead of a cut-off one. */
+export const MIN_SCALE = 0.35;
 export function uiScale(w: number, h: number): number {
-	return clamp(Math.min(w / DESIGN_W, h / DESIGN_H), 0.7, 2.2);
+	return clamp(Math.min(w / DESIGN_W, h / DESIGN_H), MIN_SCALE, 2.2);
 }
 
 export function uiLayout(w: number, h: number): UiLayout {
