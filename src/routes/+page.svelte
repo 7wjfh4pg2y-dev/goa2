@@ -48,7 +48,7 @@
 	import SeaBackdrop from '$lib/ui/SeaBackdrop.svelte';
 	import Icon from '$lib/ui/Icon.svelte';
 
-	type Mode = 'landing' | 'choose' | 'admin' | 'adminhub' | 'menu' | 'create' | 'join' | 'lobby' | 'draft' | 'game';
+	type Mode = 'landing' | 'choose' | 'admin' | 'adminhub' | 'menu' | 'learn' | 'create' | 'join' | 'lobby' | 'draft' | 'game';
 	let mode: Mode = 'landing';
 	let notice = '';
 
@@ -277,7 +277,7 @@
 
 	// --- how the screens are staged (presentation only) ---
 	// landing → join share one left column (crest + a stage of steps); create and lobby are their own screens
-	$: family = mode === 'landing' || mode === 'choose' || mode === 'admin' || mode === 'adminhub' || mode === 'menu' || mode === 'join';
+	$: family = mode === 'landing' || mode === 'choose' || mode === 'admin' || mode === 'adminhub' || mode === 'menu' || mode === 'learn' || mode === 'join';
 	// the island behind: large beside the column, pushed away and dimmed behind a form
 	$: bgScene = (mode === 'landing' ? 'landing' : mode === 'lobby' ? 'lobby' : mode === 'create' || ((mobile || portrait) && (mode === 'join' || mode === 'admin')) ? 'form' : 'menu') as 'landing' | 'menu' | 'form' | 'lobby';
 	// the island behind only redraws when the map's CONTENT changes: the room's copy of the chosen map is a new
@@ -824,7 +824,7 @@
 					{:else if mode === 'adminhub'}
 						<div class="step" transition:reveal bind:clientHeight={h['adminhub']}>
 							<header class="head"><span class="t-label">You're in as Admin</span><h1 class="t-h1">GM tools</h1></header>
-							<div class="choices">
+							<div class="choices dense">
 								<button class="choice card p" on:click={() => (mode = 'menu')}>
 									<span class="choice-ic"><Icon name="plus" /></span>
 									<span class="choice-txt"><span class="t-h2">Create / Join</span><span class="t-body c-muted">Run a game</span></span>
@@ -832,15 +832,24 @@
 								</button>
 								<a class="choice card a" href={base + '/editor'}>
 									<span class="choice-ic"><Icon name="pen" /></span>
-									<span class="choice-txt"><span class="t-h2">Map editor</span><span class="t-body c-muted">Paint maps & battle zones</span></span>
+									<span class="choice-txt"><span class="t-h2">Map editor</span><span class="t-body c-muted">Maps & battle zones</span></span>
+									<span class="choice-go"><Icon name="go" /></span>
+								</a>
+								<a class="choice card a" href={base + '/stats'}>
+									<span class="choice-ic"><Icon name="trophy" /></span>
+									<span class="choice-txt"><span class="t-h2">Hall of Records</span><span class="t-body c-muted">Stats & reports</span></span>
+									<span class="choice-go"><Icon name="go" /></span>
+								</a>
+								<a class="choice card a" href={base + '/openings'}>
+									<span class="choice-ic"><Icon name="flag" /></span>
+									<span class="choice-txt"><span class="t-h2">Openings</span><span class="t-body c-muted">Work in progress</span></span>
 									<span class="choice-go"><Icon name="go" /></span>
 								</a>
 							</div>
-							<section class="panel verpanel">
-								<a class="btn btn-ghost" href={base + '/stats'}><Icon name="crown" /> Hall of Records</a>
-								<a class="btn btn-ghost" href={base + '/rooms'}><Icon name="eye" /> Open games</a>
-							</section>
-							<div class="row"><button class="btn btn-ghost on-art" on:click={() => { signOut(); goHome(); }}>Sign out</button></div>
+							<div class="row gmrow">
+								<a class="btn btn-ghost on-art" href={base + '/rooms'}><Icon name="eye" /> Open games</a>
+								<button class="btn btn-ghost on-art" on:click={() => { signOut(); goHome(); }}>Sign out</button>
+							</div>
 						</div>
 					{:else if mode === 'menu'}
 						<div class="step" transition:reveal bind:clientHeight={h['menu']}>
@@ -855,8 +864,24 @@
 									<span class="choice-txt"><span class="t-h2">Join game</span><span class="t-body c-muted">Enter a room code</span></span>
 									<span class="choice-go"><Icon name="go" /></span>
 								</button>
+								<!-- the third card hangs below the first two (out of the step's measured height, so they don't move) -->
+								<button class="choice card hang" on:click={() => (mode = 'learn')}>
+									<span class="choice-ic"><Icon name="book" /></span>
+									<span class="choice-txt"><span class="t-h2">Learn to play</span><span class="t-body c-muted">Rules, step by step</span></span>
+									<span class="choice-go"><Icon name="go" /></span>
+								</button>
 							</div>
-							<div class="row"><a class="btn btn-ghost on-art" href={base + '/learn'}>How to play</a></div>
+						</div>
+					{:else if mode === 'learn'}
+						<div class="step" transition:reveal bind:clientHeight={h['learn']}>
+							<div class="choices">
+								<a class="choice card p" href={base + '/learn'}>
+									<span class="choice-ic"><Icon name="book" /></span>
+									<span class="choice-txt"><span class="t-h2">Tutorial</span><span class="t-body c-muted">Rules for a first game</span></span>
+									<span class="choice-go"><Icon name="go" /></span>
+								</a>
+							</div>
+							<div class="row"><button class="btn btn-ghost on-art" on:click={() => (mode = 'menu')}><Icon name="back" /> Back</button></div>
 						</div>
 					{:else if mode === 'join'}
 						<div class="step" transition:reveal bind:clientHeight={h['join']}>
@@ -1161,7 +1186,15 @@
 	.choices :global(.choice .c-muted) { color: rgba(255, 255, 255, 0.86); }
 	.choices :global(.choice-go) { color: #fff; }
 	.choices :global(.choice .t-h2) { text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45); }
-	.choices { display: flex; flex-direction: column; gap: 16px; width: 100%; }
+	.choices { display: flex; flex-direction: column; gap: 16px; width: 100%; position: relative; }
+	/* the menu's third card: hangs one gap below the last, outside the measured height */
+	.choices :global(.choice.hang) { position: absolute; left: 0; right: 0; top: calc(100% + 16px); }
+	/* the GM tools: four cards, so a little tighter (they must fit a phone) */
+	.choices.dense { gap: 10px; }
+	.choices.dense :global(.choice) { min-height: 74px; padding: 10px 16px; }
+	.choices.dense :global(.choice-ic) { width: 46px; height: 46px; }
+	.step .gmrow { display: flex; gap: 10px; }
+	.step .gmrow .btn { flex: 1; justify-content: center; white-space: nowrap; }
 	.step .formpanel { display: flex; flex-direction: column; gap: 16px; padding: 24px 26px; }
 	.step .formpanel .row { margin-top: 4px; }
 	.field.up { text-transform: uppercase; }
@@ -1315,8 +1348,13 @@
 		.step .formpanel { padding: 16px; gap: 14px; }
 		.step .openpanel { padding: 14px 16px 16px; }
 		.choices { gap: 12px; }
+		.choices :global(.choice.hang) { top: calc(100% + 12px); }
 		.choices :global(.choice) { min-height: 88px; padding: 12px 16px; gap: 14px; }
 		.choices :global(.choice-ic) { width: 52px; height: 52px; font-size: 24px; }
+		.choices.dense { gap: 8px; }
+		.step .gmrow .btn { padding: 0 10px; min-height: 40px; height: 40px; }
+		.choices.dense :global(.choice) { min-height: 62px; padding: 8px 14px; }
+		.choices.dense :global(.choice-ic) { width: 40px; height: 40px; }
 
 		/* create: a top line, one scrolling panel, the actions pinned to the bottom edge */
 		.s-create { padding: 0; overflow: hidden; }

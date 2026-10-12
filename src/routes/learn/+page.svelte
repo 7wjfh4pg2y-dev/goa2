@@ -18,6 +18,11 @@
 	$: phone = w <= 760;
 	$: step = steps[i];
 	$: scene = step.scene;
+	// the board step: tap (or hover) a zone in the key and only that zone lights up on the island
+	let zonePick = -1, zoneHover = -1;
+	$: keyBlock = step.blocks.find((b) => 'keys' in b) as { keys: { color: string; label: string; note: string; area: { hex: string; r: number; color: string; hexes?: string[]; alpha?: number } }[] } | undefined;
+	$: zoneOn = zoneHover >= 0 ? zoneHover : zonePick;
+	$: areas = keyBlock ? (zoneOn >= 0 ? [keyBlock.keys[zoneOn].area] : []) : scene.areas ?? [];
 	$: chapters = [...new Set(steps.map((s) => s.chapter))];
 	const thrones = (['orange', 'blue'] as const).map((t) => ({ hex: throneHex(LEARN_MAP, t), team: t })).filter((t): t is { hex: string; team: 'orange' | 'blue' } => !!t.hex);
 	// desktop: the island sits right of the text panel (and above the cards, when there are some)
@@ -27,6 +32,7 @@
 		const k = Math.max(0, Math.min(steps.length - 1, n));
 		if (k === i) return;
 		i = k;
+		zonePick = -1; zoneHover = -1;
 		textEl?.scrollTo(0, 0);
 		board?.reset();
 		try { sessionStorage.setItem('goa2-learn', String(k)); } catch { /* ignore */ }
@@ -61,7 +67,7 @@
 	<div class="stage">
 		{#if ready}
 			<BoardCanvas bind:this={board} map={LEARN_MAP} look="island" pieces={scene.pieces} {thrones} glowZone={scene.zone} activeZone={scene.zone}
-				areas={scene.areas ?? []} badges={scene.badges ?? []} {inset} />
+				{areas} badges={scene.badges ?? []} {inset} />
 		{/if}
 		{#if scene.cards}
 			{#key step.id}
@@ -95,7 +101,9 @@
 						{#if 'p' in b}<p>{@html md(b.p)}</p>
 						{:else if 'list' in b}<ul>{#each b.list as li, n (n)}<li>{@html md(li)}</li>{/each}</ul>
 						{:else if 'tip' in b}<p class="tip">{@html md(b.tip)}</p>
-						{:else if 'keys' in b}<div class="keys">{#each b.keys as z (z.label)}<span><i style="background:{z.color}"></i>{z.label}</span>{/each}</div>
+						{:else if 'keys' in b}
+							<div class="keys">{#each b.keys as z, n (z.label)}<button class:on={zonePick === n} on:click={() => (zonePick = zonePick === n ? -1 : n)} on:mouseenter={() => (zoneHover = n)} on:mouseleave={() => (zoneHover = -1)}><i style="background:{z.color}"></i>{z.label}</button>{/each}</div>
+							<p class="znote">{zoneOn >= 0 ? b.keys[zoneOn].note : 'Pick a zone to see it on the island.'}</p>
 						{:else if 'table' in b}
 							<table><tbody>{#each b.table as row, r (r)}<tr>{#each row as cell, c (c)}{#if r === 0 || c === 0}<th>{cell}</th>{:else}<td>{cell}</td>{/if}{/each}</tr>{/each}</tbody></table>
 						{/if}
@@ -140,7 +148,10 @@
 	.txt :global(b) { color: var(--ink); font-weight: inherit; }
 	.tip { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--brass-line); background: var(--brass-faint); }
 	.keys { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; margin: 4px 0 12px; }
-	.keys span { display: flex; align-items: center; gap: 8px; font-size: 15px; color: var(--ink-2); }
+	.keys button { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--hair); background: rgba(4, 14, 26, 0.4); color: var(--ink-2); font: inherit; font-size: 15px; text-align: left; cursor: pointer; }
+	.keys button:hover { border-color: var(--brass-line); color: var(--ink); }
+	.keys button.on { border-color: var(--brass); color: var(--ink); background: var(--brass-faint); }
+	.znote { min-height: 4.5em; color: var(--ink-2); }
 	.keys i { width: 14px; height: 14px; border-radius: 3px; flex: none; opacity: 0.85; }
 	table { width: 100%; border-collapse: collapse; margin: 0 0 14px; font-size: 15px; }
 	th, td { padding: 7px 8px; border-bottom: 1px solid var(--hair); text-align: left; }

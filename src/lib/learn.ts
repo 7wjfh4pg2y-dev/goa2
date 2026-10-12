@@ -24,7 +24,7 @@ export type Block =
 	| { list: string[] }
 	| { table: string[][] }
 	| { tip: string }
-	| { keys: { color: string; label: string }[] }
+	| { keys: { color: string; label: string; note: string; area: Area }[] }
 export type Step = { id: string; chapter: string; title: string; blocks: Block[]; scene: Scene }
 
 // ── the map ──
@@ -55,14 +55,14 @@ const minionsOf = (team: string, role?: string) => wave.filter((m) => m.team ===
 
 // ── colours ──
 const C = { or: '#ef7d22', ti: '#2f7fe6', gold: '#f3c454', green: '#35d07a', red: '#ef4f5c', sand: '#e9d6a0', jungle: '#5fbf6a', violet: '#a978ff' }
-const ZONES: { z: string; label: string; color: string }[] = [
-	{ z: 'Orange Base', label: 'Atlantean Throne', color: C.or },
-	{ z: 'Orange Beach', label: 'Atlantean Beach', color: C.sand },
-	{ z: 'Orange Jungle', label: 'Atlantean Jungle', color: C.jungle },
-	{ z: 'Center', label: 'Middle', color: C.gold },
-	{ z: 'Blue Jungle', label: 'Titan Jungle', color: C.jungle },
-	{ z: 'Blue Beach', label: 'Titan Beach', color: C.sand },
-	{ z: 'Blue Base', label: 'Titan Throne', color: C.ti }
+const ZONES: { z: string; label: string; color: string; note: string }[] = [
+	{ z: 'Orange Base', label: 'Atlantean Throne', color: C.or, note: 'The Atlanteans’ home. Their heroes start and respawn on its spawn points. The Titans win by pushing into it.' },
+	{ z: 'Orange Beach', label: 'Atlantean Beach', color: C.sand, note: 'The battle zone moves here when the Titans push the lane. The last stop before the Atlantean throne.' },
+	{ z: 'Orange Jungle', label: 'Atlantean Jungle', color: C.jungle, note: 'A path for heroes, past the middle. Minions never fight here.' },
+	{ z: 'Center', label: 'Middle', color: C.gold, note: 'Where every game starts: the first battle zone, with a wave of minions from each team.' },
+	{ z: 'Blue Jungle', label: 'Titan Jungle', color: C.jungle, note: 'A path for heroes, past the middle. Minions never fight here.' },
+	{ z: 'Blue Beach', label: 'Titan Beach', color: C.sand, note: 'The battle zone moves here when the Atlanteans push the lane. The last stop before the Titan throne.' },
+	{ z: 'Blue Base', label: 'Titan Throne', color: C.ti, note: 'The Titans’ home. Their heroes start and respawn on its spawn points. The Atlanteans win by pushing into it.' }
 ]
 const zoneArea = (z: string, color: string, alpha = 0.42): Area => ({ hex: zoneHexes(z)[0], r: 0, color, hexes: zoneHexes(z), alpha })
 
@@ -178,9 +178,9 @@ export function learnSteps(): Step[] {
 			id: 'map', chapter: 'The board', title: 'Seven zones',
 			blocks: [
 				{ p: 'The island is split into seven zones. Each team has a **throne** zone at its end. Minions only ever fight in the **middle** or on one of the two **beaches**. The two **jungles** are paths for heroes.' },
-				{ keys: ZONES.map((z) => ({ color: z.color, label: z.label })) }
+				{ keys: ZONES.map((z) => ({ color: z.color, label: z.label, note: z.note, area: zoneArea(z.z, '#ffd75e', 0.55) })) } // one strong highlight, whatever the zone's own colour
 			],
-			scene: { pieces: startHeroes, zone: null, areas: ZONES.map((z) => zoneArea(z.z, z.color)) }
+			scene: { pieces: startHeroes, zone: null }
 		},
 		{
 			id: 'zone', chapter: 'The board', title: 'The battle zone',
