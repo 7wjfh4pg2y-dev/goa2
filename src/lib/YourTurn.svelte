@@ -6,7 +6,7 @@
 		{ id: 'medal', label: 'Medal' }
 	];
 	/** the look the game uses (the user picks one on /splash-demo) */
-	export const TURN_CUE_DEFAULT: TurnCueLook = 'banner';
+	export const TURN_CUE_DEFAULT: TurnCueLook = 'medal';
 </script>
 
 <script lang="ts">
@@ -14,30 +14,46 @@
 	// has to say "hey, it's your turn". Three looks to choose from (see /splash-demo):
 	//   banner — a band sweeps across the upper screen: your hero's face, YOUR TURN, the card's name; ~2.2 s
 	//   edge   — the screen's edges glow in your colour twice and a small pill drops under the top bar; ~2.4 s
-	//   medal  — your hero's face pops in the middle with a ring of light, then flies down to the action ring; ~2.4 s
+	//   medal  — your hero's face pops in the middle with two ripples (team colour, then your colour), then flies into
+	//            the action button (measured on play; the game's look, the user's pick 2026-10-12); ~2.4 s
 	// Nothing to click (pointer-events: none) and only transform / opacity animate; it leaves the page when done.
 	import PlayerIcon from '$lib/PlayerIcon.svelte';
 
 	export let look: TurnCueLook = TURN_CUE_DEFAULT;
 	export let mobile = false;
 
-	type Cue = { id: number; hero: string; heroName: string; card: string; color: string; team: 'orange' | 'blue' };
+	type Cue = { id: number; hero: string; heroName: string; card: string; color: string; team: 'orange' | 'blue'; fly: string };
 	let cue: Cue | null = null;
 	let n = 0;
 	let t: ReturnType<typeof setTimeout> | null = null;
 	const LEN: Record<TurnCueLook, number> = { banner: 2300, edge: 2500, medal: 2400 };
 	/** play the cue (a new one replaces one still showing) */
-	export function play(c: Omit<Cue, 'id'>) {
+	export function play(c: Omit<Cue, 'id' | 'fly'>) {
 		if (t) clearTimeout(t);
-		cue = { ...c, id: ++n };
+		cue = { ...c, id: ++n, fly: flyTo() };
 		t = setTimeout(() => (cue = null), LEN[look]);
 	}
 	const TEAM: Record<string, string> = { orange: '#ef7d22', blue: '#2f7fe6' };
+	// the action button on screen: the 2.0 ring (split or not), the 2.0 phone pill, the classic dash's turn slot / phone dash
+	const TARGETS = ['.cap.gob', '.pdash .act', '.dact', '.mdash'];
+	/** where the medal flies: the offset from its rest point (50% / 42% of the window) to the action button's centre */
+	function flyTo(): string {
+		if (typeof document === 'undefined') return '';
+		for (const sel of TARGETS) {
+			const r = document.querySelector(sel)?.getBoundingClientRect();
+			if (r && r.width > 0 && r.height > 0) {
+				const x = r.left + r.width / 2 - window.innerWidth * 0.5;
+				const y = r.top + r.height / 2 - window.innerHeight * 0.42;
+				return `--fx:${Math.round(x)}px; --fy:${Math.round(y)}px;`;
+			}
+		}
+		return '';
+	}
 </script>
 
 {#if cue}
 	{#key cue.id}
-		<div class="yt {look}" class:mobile style="--pc:{cue.color}; --tc:{TEAM[cue.team]}" aria-live="polite">
+		<div class="yt {look}" class:mobile style="--pc:{cue.color}; --tc:{TEAM[cue.team]}; {cue.fly}" aria-live="polite">
 			{#if look === 'banner'}
 				<div class="band">
 					<span class="face"><PlayerIcon hero={cue.hero} team={cue.team} color={cue.color} size="100%" ring={3} /></span>
@@ -48,7 +64,7 @@
 				<div class="pill"><b>Your turn</b>{#if cue.card}<em>{cue.card}</em>{/if}</div>
 			{:else}
 				<div class="medal">
-					<span class="burst"></span>
+					<span class="burst b1"></span><span class="burst b2"></span>
 					<span class="face"><PlayerIcon hero={cue.hero} team={cue.team} color={cue.color} size="100%" ring={4} /></span>
 					<b>Your move</b>
 				</div>
@@ -97,19 +113,25 @@
 		0% { transform: translate(-50%, -50%) scale(0.3); opacity: 0; }
 		16% { transform: translate(-50%, -50%) scale(1.08); opacity: 1; }
 		20%, 70% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
-		100% { transform: translate(calc(-50% + 30vw), calc(-50% + 42vh)) scale(0.25); opacity: 0; }
+		94% { opacity: 1; }
+		100% { transform: translate(calc(-50% + var(--fx, 30vw)), calc(-50% + var(--fy, 42vh))) scale(0.2); opacity: 0; }
 	}
 	.mobile .medal { animation-name: medalFlyPh; }
 	@keyframes medalFlyPh {
 		0% { transform: translate(-50%, -50%) scale(0.3); opacity: 0; }
 		16% { transform: translate(-50%, -50%) scale(1.08); opacity: 1; }
 		20%, 70% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
-		100% { transform: translate(-50%, calc(-50% + 46vh)) scale(0.25); opacity: 0; }
+		94% { opacity: 1; }
+		100% { transform: translate(calc(-50% + var(--fx, 0px)), calc(-50% + var(--fy, 46vh))) scale(0.2); opacity: 0; }
 	}
 	.medal .face { position: relative; width: clamp(96px, 18vh, 170px); height: clamp(96px, 18vh, 170px); }
 	.medal .burst { position: absolute; left: 50%; top: clamp(48px, 9vh, 85px); width: clamp(96px, 18vh, 170px); height: clamp(96px, 18vh, 170px); margin: calc(clamp(96px, 18vh, 170px) / -2) 0 0 calc(clamp(96px, 18vh, 170px) / -2);
-		border-radius: 50%; box-shadow: 0 0 0 4px var(--pc), 0 0 40px 10px color-mix(in srgb, var(--pc) 60%, transparent); animation: burst 0.9s ease-out both; }
-	@keyframes burst { from { transform: scale(0.8); opacity: 1; } to { transform: scale(2.2); opacity: 0; } }
+		border-radius: 50%; opacity: 0; animation: burst 0.9s ease-out both; }
+	/* two ripples: the team's colour first, then the player's own */
+	.medal .b1 { --rc: var(--tc); animation-delay: 0.12s; }
+	.medal .b2 { --rc: var(--pc); animation-delay: 0.5s; }
+	.medal .burst { box-shadow: 0 0 0 4px var(--rc), 0 0 40px 10px color-mix(in srgb, var(--rc) 60%, transparent); }
+	@keyframes burst { 0% { transform: scale(0.8); opacity: 0; } 6% { opacity: 1; } 100% { transform: scale(2.3); opacity: 0; } }
 	.medal b { font-weight: 400; font-size: clamp(24px, 4.6vh, 44px); letter-spacing: 0.08em; text-transform: uppercase; color: #f4dfa8; text-shadow: 0 2px 8px #000; white-space: nowrap; }
 
 	@media (prefers-reduced-motion: reduce) {
@@ -117,6 +139,6 @@
 		.band, .pill { animation: none; }
 		.pill { transform: translateX(-50%); }
 		.medal { animation: none; transform: translate(-50%, -50%); }
-		.burst, .e { animation: none; opacity: 0.6; }
+		.medal .burst, .e { animation: none; opacity: 0.6; }
 	}
 </style>
