@@ -1,0 +1,103 @@
+/* THE HALL OF RECORDS — its own look (2026-10-12, the user's ask: "super cool", like a stats site, not the
+   Guards font). A near-black dashboard: charcoal cards, a clean system sans with tabular numbers, green = good /
+   win, red = bad / loss, blue = picks / rates, gold = records. Everything is scoped under `.hall`. */
+.hall {
+	--bg: #0a0c10; --p1: #11141a; --p2: #161a21; --p3: #1e232c; --ln: #232935; --ln2: #2d3442;
+	--tx: #e9ecf2; --tx2: #c3c9d3; --mu: #8a93a2; --mu2: #5d6675;
+	--gr: #35d07a; --rd: #ef4f5c; --bl: #3aa3ff; --au: #f3c454; --vi: #a978ff;
+	--or: #ef7d22; --ti: #2f7fe6;
+	font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+	font-synthesis: weight;
+	color: var(--tx);
+	background: var(--bg);
+	-webkit-font-smoothing: antialiased;
+}
+.hall .num, .hall .n { font-variant-numeric: tabular-nums; }
+.hall button { font-family: inherit; }
+
+/* cards */
+.hall .card { background: var(--p1); border: 1px solid var(--ln); border-radius: 12px; padding: 18px 20px; min-width: 0; }
+.hall .card > h3, .hall .ch { display: flex; align-items: baseline; gap: 10px; margin: 0 0 14px; font-size: 17px; font-weight: 700; letter-spacing: -0.01em; color: var(--tx); }
+.hall .ch small, .hall .card > h3 small { font-size: 12.5px; font-weight: 500; color: var(--mu); }
+.hall .ch .r, .hall .card > h3 .r { margin-left: auto; }
+.hall .sub { margin: 0 0 8px; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--mu); }
+.hall .muted { color: var(--mu); }
+.hall .fine { margin: 10px 0 0; font-size: 12px; color: var(--mu2); }
+.hall .g { color: var(--gr); } .hall .r-, .hall .bad { color: var(--rd); } .hall .b { color: var(--bl); } .hall .au { color: var(--au); }
+
+/* grids */
+.hall .row { display: grid; gap: 16px; margin-bottom: 16px; }
+.hall .row.c2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.hall .row.c3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.hall .row.c21 { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+.hall .row.c12 { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }
+.hall .row.auto { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+@media (max-width: 1100px) { .hall .row.c3, .hall .row.c21, .hall .row.c12 { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 760px) { .hall .row.c2 { grid-template-columns: minmax(0, 1fr); } .hall .card { padding: 14px; } }
+
+/* hero faces (square-ish, like a stats site) and people */
+.hall .face { --fs: 32px; flex: none; display: inline-block; width: var(--fs); height: var(--fs); border-radius: calc(var(--fs) * 0.22); background-color: #05070a; background-repeat: no-repeat; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08); }
+.hall .face.round { border-radius: 50%; }
+.hall .linky { padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; text-align: left; }
+.hall .linky:hover { color: var(--bl); }
+
+/* bars: a track and a fill scaled by --v (0..1); colour by class */
+.hall .bar { position: relative; height: 8px; border-radius: 2px; background: var(--p3); overflow: hidden; }
+.hall .bar > i { position: absolute; inset: 0; transform-origin: left; transform: scaleX(var(--v, 0)); background: var(--bl); border-radius: 2px; }
+.hall .bar.gr > i { background: var(--gr); } .hall .bar.rd > i { background: var(--rd); } .hall .bar.au > i { background: var(--au); } .hall .bar.vi > i { background: var(--vi); }
+.hall .bar.thin { height: 4px; }
+.hall .bar.half::after { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: rgba(255, 255, 255, 0.25); }
+
+/* stat line: label + value */
+.hall .kv { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.hall .kv > span { font-size: 11.5px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--mu); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hall .kv > b { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.hall .kv > b small { margin-left: 5px; font-size: 12px; font-weight: 500; color: var(--mu); }
+
+/* the big rate tiles (Win Rate 50.6%  #49 overall) */
+.hall .rate { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+.hall .rate h3 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.01em; }
+.hall .rate .big { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.hall .rate .rk { margin-left: auto; font-size: 13px; color: var(--mu); white-space: nowrap; }
+
+/* segmented toggles */
+.hall .seg { display: inline-flex; padding: 3px; gap: 2px; border-radius: 8px; background: var(--p3); border: 1px solid var(--ln); }
+.hall .seg button { padding: 5px 12px; border: 0; border-radius: 6px; background: none; color: var(--mu); font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.hall .seg button.on { background: var(--p1); color: var(--tx); box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04), 0 0 0 1px var(--ln2); }
+
+/* tables */
+.hall .tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
+.hall .tbl th { padding: 8px 10px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--mu); text-align: left; white-space: nowrap; border-bottom: 1px solid var(--ln); }
+.hall .tbl th.sortable { cursor: pointer; user-select: none; }
+.hall .tbl th.sortable:hover, .hall .tbl th.on { color: var(--tx); }
+.hall .tbl th.on::after { content: ' ▾'; color: var(--bl); }
+.hall .tbl td { padding: 9px 10px; border-bottom: 1px solid rgba(255, 255, 255, 0.04); vertical-align: middle; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.hall .tbl tbody tr { cursor: pointer; }
+.hall .tbl tbody tr:hover td { background: rgba(255, 255, 255, 0.025); }
+.hall .tbl .rt { text-align: right; }
+.hall .tbl .barcell { min-width: 120px; }
+.hall .tbl .barcell .bv { display: flex; align-items: center; gap: 10px; }
+.hall .tbl .barcell .bv b { width: 46px; flex: none; font-weight: 600; }
+.hall .tbl .barcell .bar { flex: 1; }
+.hall .scrollx { overflow-x: auto; margin: 0 -20px; padding: 0 20px; }
+
+/* chips */
+.hall .chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; color: var(--tx2); background: var(--p3); border: 1px solid var(--ln); white-space: nowrap; }
+.hall .chip.au { color: #241a00; background: var(--au); border-color: transparent; }
+.hall .chip.gr { color: #04230f; background: var(--gr); border-color: transparent; }
+.hall .chip.rd { color: #2b0306; background: var(--rd); border-color: transparent; }
+.hall .chip img { width: 14px; height: 14px; }
+
+/* W / L marks and deltas */
+.hall .wl { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 5px; font-size: 12px; font-weight: 800; color: #2b0306; background: var(--rd); }
+.hall .wl.w { color: #04230f; background: var(--gr); }
+.hall .up { color: var(--gr); } .hall .down { color: var(--rd); }
+.hall .team-o { color: var(--or); } .hall .team-b { color: var(--ti); }
+
+/* inputs */
+.hall .search { display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 12px; border-radius: 8px; background: var(--p1); border: 1px solid var(--ln); color: var(--mu); }
+.hall .search input { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; outline: 0; background: none; color: var(--tx); font: inherit; font-size: 14px; }
+.hall .search:focus-within { border-color: var(--bl); }
+.hall .btn2 { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px; border-radius: 8px; border: 1px solid var(--ln2); background: var(--p2); color: var(--tx); font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; text-decoration: none; }
+.hall .btn2:hover { border-color: var(--bl); }
+.hall .btn2.pri { background: var(--bl); border-color: transparent; color: #021426; }
