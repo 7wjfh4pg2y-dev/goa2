@@ -167,8 +167,13 @@
 				{/each}
 			</div>
 			<pre class:clip={!openId[r.id]}>{reportText(r)}</pre>
+			<div class="fold" class:open={openId[r.id]}>
+				<button class="more" on:click={() => (openId = { ...openId, [r.id]: !openId[r.id] })} aria-expanded={!!openId[r.id]}>
+					<span>{openId[r.id] ? 'Collapse' : 'Read the report'}</span>
+					<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
+				</button>
+			</div>
 			<footer class="rf">
-				<button class="linky more" on:click={() => (openId = { ...openId, [r.id]: !openId[r.id] })}>{openId[r.id] ? 'Show less' : 'Whole report'}</button>
 				<span class="sp"></span>
 				<button class="btn2" on:click={() => (editing = r)}>Edit</button>
 				{#if x.row}{@const gr = x.row}<button class="btn2" on:click={() => openPbp(gr, r)} disabled={pbpBusy === gr.id} title="The whole game, round by round — paste it to Claude to write the report">{pbpBusy === gr.id ? 'Loading…' : 'Play-by-play'}</button>{/if}
@@ -232,7 +237,12 @@
 	pre.clip { max-height: 220px; overflow: hidden; -webkit-mask-image: linear-gradient(180deg, #000 70%, transparent); mask-image: linear-gradient(180deg, #000 70%, transparent); }
 	.rf { display: flex; align-items: center; gap: 8px; padding: 8px 18px 14px; }
 	.rf .sp { flex: 1; }
-	.more { font-size: 13px; font-weight: 600; color: var(--bl); }
+	.fold { position: relative; display: flex; justify-content: center; margin-top: -22px; padding-bottom: 4px; }
+	.fold.open { margin-top: 4px; }
+	.more { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px 0 14px; border-radius: 999px; border: 1px solid var(--ln2); background: var(--p2); color: var(--tx2); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45); transition: color 0.15s, border-color 0.15s; }
+	.more:hover { color: var(--tx); border-color: var(--bl); }
+	.more svg { transition: transform 0.2s; }
+	.fold.open .more svg { transform: rotate(180deg); }
 	.msg { grid-column: 1 / -1; text-align: center; padding: 40px 20px; }
 	.msg h3 { margin: 0 0 6px; font-size: 17px; }
 	.msg p { margin: 0; }
