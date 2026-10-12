@@ -239,6 +239,29 @@ describe('the host passes the role on', () => {
 	});
 });
 
+describe('nudges', () => {
+	it('land on the target, then the target is safe for 10 s and the sender waits 15 s', async () => {
+		vi.useFakeTimers();
+		const a = joinMatch('NUDG', { name: 'Zara', color: 'spectator' }, { seed: initialMatchState({ players: 4 }) });
+		const b = joinMatch('NUDG', { name: 'Mo', color: 'spectator' }, {});
+		const c = joinMatch('NUDG', { name: 'Sam', color: 'spectator' }, {});
+		await vi.advanceTimersByTimeAsync(500);
+		const got: unknown[] = [];
+		b.nudged.subscribe((n) => n && got.push(n));
+		expect(a.nudge(b.clientId)).toBe(true);
+		await vi.advanceTimersByTimeAsync(200);
+		expect(got).toMatchObject([{ from: a.clientId, to: b.clientId }]);
+		expect(a.nudge(c.clientId)).toBe(false); // A waits 15 s
+		expect(c.nudge(b.clientId)).toBe(false); // B is safe for 10 s
+		await vi.advanceTimersByTimeAsync(10_000);
+		expect(c.nudge(b.clientId)).toBe(true);
+		await vi.advanceTimersByTimeAsync(200);
+		expect(got).toHaveLength(2);
+		a.leave(); b.leave(); c.leave();
+		vi.useRealTimers();
+	});
+});
+
 describe('GM tools: close a room', () => {
 	it('closes a live room for everyone in it', async () => {
 		vi.useFakeTimers();

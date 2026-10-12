@@ -47,6 +47,7 @@ import {
 	type CardZone
 } from './cards/cardstate'
 import { heroCards } from './cards/deck'
+import { emptyBook, nudgeWait as waitOf, seeNudge, type Nudge } from './nudge'
 
 /** A per-player card instruction, applied authoritatively by the host. */
 export type CardReq =
@@ -942,6 +943,12 @@ export interface MatchSession {
 	ping: (hex: string) => void
 	/** The live pings (each fades after PING_MS; one per player at a time). */
 	pings: Readable<Ping[]>
+	/** Nudge another player to hurry up (nudge.ts limits; false = not sent). */
+	nudge: (to: string) => boolean
+	/** ms before we may nudge `to` (0 = now). */
+	nudgeWait: (to: string) => number
+	/** The last nudge that landed on us. */
+	nudged: Readable<Nudge | null>
 }
 
 // One live session per room for a player (a tab). The Supabase client hands out ONE
@@ -997,6 +1004,14 @@ export function joinMatch(
 		setTimeout(() => pings.update((l) => l.filter((x) => x.id !== p.id)), PING_MS)
 	}
 	let lastPing = 0
+	// nudges ("hurry up"): their own broadcast too; every client keeps the same book of who was nudged when (nudge.ts)
+	let nudgeBook = emptyBook()
+	const nudged = writable<Nudge | null>(null)
+	const takeNudge = (n: Nudge) => {
+		const r = seeNudge(nudgeBook, n, clientId, Date.now())
+		nudgeBook = r.book
+		if (r.lands && n.to === clientId) nudged.set(n)
+	}
 	// host-local undo: snapshots of state before each logged action THIS turn.
 	// Immutable nested updates mean a shallow reference is a safe snapshot. The
 	// stack resets whenever the round/turn changes, so undo floors at turn start.
@@ -1118,6 +1133,7 @@ export function joinMatch(
 				hostApplyReq(payload as CardReq)
 			})
 			.on('broadcast', { event: 'ping' }, ({ payload }) => addPing(payload as Ping))
+			.on('broadcast', { event: 'nudge' }, ({ payload }) => takeNudge(payload as Nudge))
 			.on('broadcast', { event: 'joinflip' }, ({ payload }) => {
 				joinFlip.set(payload as { id: string; name: string; side: Team; at: number })
 			})
@@ -1369,6 +1385,15 @@ export function joinMatch(
 		undoing = false
 	}
 
+	const nudgeWait = (to: string) => waitOf(nudgeBook, clientId, to, Date.now())
+	const nudge = (to: string) => {
+		if (nudgeWait(to) > 0) return false
+		const n: Nudge = { id: `${clientId}-${Date.now()}`, from: clientId, to, at: Date.now() }
+		takeNudge(n)
+		try { channel.send({ type: 'broadcast', event: 'nudge', payload: n }) } catch { /* ignore */ }
+		return true
+	}
+
 	const ping = (hex: string) => {
 		const now = Date.now()
 		if (!hex || now - lastPing < 600) return // a gentle limit: the channel is rate-limited
@@ -1612,7 +1637,7 @@ export function joinMatch(
 	}
 	liveSessions.set(sessionKey, leave)
 
-	return { state, players, update, act, setSelf, cardAction, kick, flipJoin, joinFlip, undo, canUndo, requestSeat, resolveSeat, giveSeat, passHost, seatGranted, seatDenied, kicked, notFound, status: conn, leave, clientId, hostNow, ping, pings }
+	return { state, players, update, act, setSelf, cardAction, kick, flipJoin, joinFlip, undo, canUndo, requestSeat, resolveSeat, giveSeat, passHost, seatGranted, seatDenied, kicked, notFound, status: conn, leave, clientId, hostNow, ping, pings, nudge, nudgeWait, nudged }
 }
 
 /**

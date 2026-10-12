@@ -6,6 +6,7 @@
 	import TurnSplash from '$lib/TurnSplash.svelte';
 	import LevelSplash from '$lib/LevelSplash.svelte';
 	import VictorySplash from '$lib/VictorySplash.svelte';
+	import YourTurn, { TURN_CUE_LOOKS, TURN_CUE_DEFAULT, type TurnCueLook } from '$lib/YourTurn.svelte';
 	import type { BattleNews, DefeatNews, Team } from '$lib/match';
 	import type { PushNews } from '$lib/battle';
 	import type { PlayerCardState } from '$lib/cards/cardstate';
@@ -56,6 +57,11 @@
 	let me: Team | null = 'orange'; // whose eyes we watch through: your team sits on the right (null = a spectator)
 	$: side = (me ?? 'blue') as Team; // the lane / defeat splashes show spectators the Titan view
 	let turnSplash: TurnSplash;
+	// YOUR TURN: the three looks to choose from (the game uses TURN_CUE_DEFAULT)
+	let cueLook: TurnCueLook = TURN_CUE_DEFAULT;
+	let cue: YourTurn;
+	const CUE_HEROES = [{ hero: 'tigerclaw', heroName: 'Tigerclaw', card: 'Hit and Run', color: '#e11d48', team: 'orange' as const }, { hero: 'xargatha', heroName: 'Xargatha', card: 'Stone Gaze', color: '#14b8a6', team: 'blue' as const }];
+	function playCue(l: TurnCueLook) { cueLook = l; setTimeout(() => cue?.play(CUE_HEROES[me === 'blue' ? 1 : 0]), 0); }
 	let levelSplash: LevelSplash;
 	let round = 2, turn = 1;
 
@@ -115,6 +121,12 @@
 		<button class="b" class:off={me !== 'blue'} on:click={() => (me = 'blue')}>Titan player</button>
 		<button class:off={me !== null} on:click={() => (me = null)}>Spectator</button>
 	</div>
+	<section>
+		<h2>Your turn <small>(pick a look)</small></h2>
+		<div class="row">
+			{#each TURN_CUE_LOOKS as l (l.id)}<button class:off={cueLook !== l.id} on:click={() => playCue(l.id)}>{l.label}{l.id === TURN_CUE_DEFAULT ? ' (in the game now)' : ''}</button>{/each}
+		</div>
+	</section>
 	<section>
 		<h2>Minion battle</h2>
 		<div class="row">
@@ -188,6 +200,7 @@
 <PushSplash news={push} {mobile} myTeam={side} />
 <DefeatSplash news={kill} {cards} names={(i) => names[i] ?? i} {lifeArt} {mobile} myTeam={side} />
 <TurnSplash bind:this={turnSplash} {mobile} />
+<YourTurn bind:this={cue} look={cueLook} {mobile} />
 <LevelSplash bind:this={levelSplash} {mobile} />
 {#if won}
 	{#key won}<VictorySplash round={stats.rounds} team={won.team} reason={won.reason} myTeam={me} {mobile} {stats} onClose={() => (won = null)} />{/key}

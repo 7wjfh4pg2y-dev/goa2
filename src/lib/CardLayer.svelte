@@ -37,6 +37,8 @@
 	import Chronicle, { type FxGroup } from '$lib/hud2/Chronicle.svelte';
 	import Nameplate from '$lib/hud2/Nameplate.svelte';
 	import { portraitCss } from '$lib/heroes';
+	import YourTurn, { TURN_CUE_DEFAULT } from '$lib/YourTurn.svelte';
+	import { boardPrefs } from '$lib/boardPrefs';
 
 	export let session: MatchSession;
 	export let ms: Readable<MatchState>;
@@ -216,10 +218,65 @@
 		return `M ${(25 + r * Math.sin(a0)).toFixed(2)} ${(25 - r * Math.cos(a0)).toFixed(2)} A ${r} ${r} 0 0 1 ${(25 + r * Math.sin(a1)).toFixed(2)} ${(25 - r * Math.cos(a1)).toFixed(2)}`;
 	};
 	// the phone's top bar shows the turn's state in its free middle: planning dots, or the acting order
-	export let phoneStatus: { planning: boolean; countdown: boolean; dots: { color: string; ok: boolean }[]; order: { portrait: string; color: string; team: string }[]; acting: number } | null = null;
-	$: phoneStatus = phone2 ? { planning: !revealed || levelPhase, countdown: countdownActive, dots: h2dots, order: h2order.map((e) => ({ portrait: e.portrait, color: e.color, team: e.team })), acting: actAt } : null;
+	export let phoneStatus: { planning: boolean; countdown: boolean; dots: { pid?: string; color: string; ok: boolean }[]; order: { pid?: string; portrait: string; color: string; team: string }[]; acting: number } | null = null;
+	$: phoneStatus = phone2 ? { planning: !revealed || levelPhase, countdown: countdownActive, dots: h2dots, order: h2order.map((e) => ({ pid: e.pid, portrait: e.portrait, color: e.color, team: e.team })), acting: actAt } : null;
 	function endAct() { session.cardAction({ kind: 'endAct', pid: clientId }); }
 	function pointAct(k: number) { if (iAmHost) session.cardAction({ kind: 'setAct', pid: clientId, idx: k }); }
+	// a tap in the turn order LOADS a move onto the action ring, which confirms it: Nudge (another player — hurry up,
+	// nudge.ts limits) or, for the host, Skip to (another card becomes the one acting). The host's tap on the card
+	// acting now = Nudge.
+	let orderArm: { kind: 'nudge' | 'point'; pid: string; k: number } | null = null;
+	export function armNudge(pid: string) { if (!pid || pid === clientId) return; orderArm = { kind: 'nudge', pid, k: -1 }; armed = null; playedArm = null; }
+	export function pickOrder(k: number) {
+		const pid = h2order[k]?.pid;
+		if (!pid) return;
+		if (iAmHost && k !== actAt) { orderArm = { kind: 'point', pid, k }; armed = null; playedArm = null; }
+		else armNudge(pid);
+	}
+	// a loaded move goes stale when the turn moves on (or the card it pointed at starts acting)
+	$: dropStaleArm($ms.round, $ms.turn, revealed, actAt);
+	function dropStaleArm(..._: unknown[]) { if (orderArm?.kind === 'point' && (!revealed || orderArm.k === actAt)) orderArm = null; }
+	let tickNow = Date.now();
+	let tickT: ReturnType<typeof setInterval> | null = null;
+	$: if (orderArm?.kind === 'nudge' && !tickT) tickT = setInterval(() => (tickNow = Date.now()), 500);
+	$: if (orderArm?.kind !== 'nudge' && tickT) { clearInterval(tickT); tickT = null; }
+	const nudgeLeftAt = (pid: string, _now: number) => session.nudgeWait(pid);
+	$: nudgeLeft = orderArm?.kind === 'nudge' ? nudgeLeftAt(orderArm.pid, tickNow) : 0;
+	// (called from the ring's closures: a function, so the ring doesn't depend on what it clears)
+	function dropArm() { orderArm = null; }
+	function askNext(on: boolean) { nextAsk = on; }
+	const pidName = (pid: string) => $players.find((q: Player) => q.id === pid)?.name ?? heroName(cards[pid]?.hero ?? '');
+	// a nudge that landed on us: a small note under the top bar (and a buzz where phones can)
+	const nudgedStore = session.nudged;
+	let nudgeNote: { id: string; name: string; color: string } | null = null;
+	let nudgeT: ReturnType<typeof setTimeout> | null = null;
+	$: showNudge($nudgedStore);
+	function showNudge(n: { id: string; from: string; at: number } | null) {
+		if (!n || nudgeNote?.id === n.id || Date.now() - n.at > 8000) return;
+		const p = $players.find((q: Player) => q.id === n.from);
+		nudgeNote = { id: n.id, name: p?.name ?? 'Someone', color: colorHex(p?.color ?? '') };
+		try { navigator.vibrate?.(140); } catch { /* not on this device */ }
+		if (nudgeT) clearTimeout(nudgeT);
+		nudgeT = setTimeout(() => (nudgeNote = null), 3600);
+	}
+	// YOUR TURN: a short cue when the card acting now is yours (after the reveal curtain); Effects → Cue switches it off
+	let yourTurn: YourTurn;
+	let cueKey = '';
+	$: cueCheck(actor, revealed, curtain, actAt);
+	function cueCheck(..._: unknown[]) {
+		if (!revealed || curtain || actor !== clientId || !mine || !$boardPrefs.turnCue) return;
+		const key = `${$ms.round}-${$ms.turn}-${actAt}`;
+		if (key === cueKey) return;
+		cueKey = key;
+		const me = $players.find((q: Player) => q.id === clientId);
+		const c = myTurnCard != null ? heroCards(mine.hero)[myTurnCard] : null;
+		yourTurn?.play({ hero: mine.hero, heroName: heroName(mine.hero), card: c?.name ?? '', color: colorHex(me?.color ?? ''), team: myTeam === 'blue' ? 'blue' : 'orange' });
+	}
+	// the host's Next round after the level-up step: one tap loads it, the second goes — until then anyone may still
+	// change this round's level-ups (and a change that leaves someone owing a level-up takes the question back)
+	let nextAsk = false;
+	$: if (!levelPhase || levelWaiting.length) nextAsk = false;
+	function nextRound() { nextAsk = false; onAdvanceTurn(); }
 	$: battlePhase = $ms.battlePhase ?? false;
 	$: levelPhase = $ms.levelPhase ?? false;
 	// the battle's removals come first; then the host opens the level-up step
@@ -728,7 +785,7 @@
 	const teamOfPid = (pid: string) => { const p = $players.find((q: Player) => q.id === pid); return p ? pTeam(p) : ($ms.pieces?.[pid]?.team as 'orange' | 'blue' | undefined) ?? null; };
 	// the planning dots in each player's colour: the enemy on the left, your team on the right (you last)
 	$: h2dots = [...seatedWithCards.filter((p) => pTeam(p) !== viewTeam), ...seatedWithCards.filter((p) => pTeam(p) === viewTeam && p.id !== clientId), ...seatedWithCards.filter((p) => p.id === clientId)]
-		.map((p) => ({ team: pTeam(p), color: colorHex(p.color), ok: levelPhase ? !mustLevel(cards[p.id]) : isReady(cards[p.id]), portrait: cards[p.id] ? portraitCss(cards[p.id].hero) : '', hero: heroName(cards[p.id]?.hero ?? '') }));
+		.map((p) => ({ pid: p.id, team: pTeam(p), color: colorHex(p.color), ok: levelPhase ? !mustLevel(cards[p.id]) : isReady(cards[p.id]), portrait: cards[p.id] ? portraitCss(cards[p.id].hero) : '', hero: heroName(cards[p.id]?.hero ?? '') }));
 	// ── the compact parts' layout (design px) ──
 	// nameplates up in the top row (boards AND top bar compact): the enemy left of the bar, your team right of it, you last
 	$: platesTop = compact && cTop;
@@ -763,10 +820,10 @@
 	// preview — the ring then asks to confirm: "Discard <card>")
 	let armedKind: 'commit' | 'discard' = 'commit';
 	$: if (armed != null && (!mine || !mine.hand.includes(armed) || (armedKind === 'commit' && !canCommit))) armed = null;
-	function armFor(kind: 'commit' | 'discard', idx: number) { armed = idx; armedKind = kind; selected = null; playedArm = null; }
+	function armFor(kind: 'commit' | 'discard', idx: number) { armed = idx; armedKind = kind; selected = null; playedArm = null; orderArm = null; }
 	function handCardClick2(idx: number) {
 		if (autoRetract && !handUp && !dockHand) { handUp = true; return; }
-		if (canCommit && armed !== idx) { armed = idx; armedKind = 'commit'; playedArm = null; return; }
+		if (canCommit && armed !== idx) { armed = idx; armedKind = 'commit'; playedArm = null; orderArm = null; return; }
 		armed = null;
 		preview(idx);
 	}
@@ -789,6 +846,13 @@
 		if (ringAsk) return playedHue ? { ...ringAsk, tint: true } : ringAsk;
 		// a played card loaded from its preview: Retrieve (to the hand) / Discard — the ring confirms
 		if (playedArm) { const a = playedArm; return { label: a.kind === 'retrieve' ? 'Retrieve' : 'Discard', sub: heroCards(a.hid)[a.idx]?.name, kind: a.kind === 'retrieve' ? 'go' : 'bad', pulse: true, run: () => runPlayed(a), cancel: () => (playedArm = null) }; }
+		// a tap in the turn order: Nudge them / (host) Skip to their card
+		if (orderArm) {
+			const a = orderArm, who = pidName(a.pid), drop = dropArm;
+			if (a.kind === 'point') return { label: 'Skip to', sub: heroName(cards[a.pid]?.hero ?? '') || who, kind: 'go', pulse: true, run: () => { pointAct(a.k); drop(); }, cancel: drop };
+			if (nudgeLeft > 0) return { label: 'Nudge', sub: `in ${Math.ceil(nudgeLeft / 1000)} s`, kind: 'off', cancel: drop };
+			return { label: 'Nudge', sub: who, kind: 'go', pulse: true, run: () => { session.nudge(a.pid); drop(); }, cancel: drop };
+		}
 		// a card chosen in its preview to discard (any time — a defence, or an effect): the ring asks once more
 		if (armed != null && armedKind === 'discard' && mine) { const i = armed; return { label: 'Discard', sub: heroCards(mine.hero)[i]?.name, kind: 'bad', pulse: true, run: () => { defend(i); armed = null; }, cancel: () => (armed = null) }; }
 		if (iCanRespawn) return { label: 'Respawn', kind: 'team', pulse: true, run: onRespawn };
@@ -808,7 +872,9 @@
 			if (!levelPhase) return iAmHost ? { label: 'Level up', kind: 'lvl', run: startLevelUp } : { label: 'Waiting', sub: 'Host', kind: 'wait' };
 			if (iMustLevel) return { label: 'Level up', kind: 'lvl', pulse: true, run: () => { deckOpen = true; deckTab = 'deck'; } };
 			if (levelWaiting.length) return { label: 'Waiting', sub: waitFor(levelWaiting), kind: 'wait' };
-			return iAmHost ? { label: 'Next round', kind: 'next', run: onAdvanceTurn } : { label: 'Waiting', sub: 'Host', kind: 'wait' };
+			if (!iAmHost) return { label: 'Waiting', sub: 'Host', kind: 'wait' };
+			return nextAsk ? { label: 'Next round', sub: 'Level-ups lock', kind: 'next', pulse: true, run: nextRound, cancel: () => askNext(false) }
+				: { label: 'All done', sub: 'Next round?', kind: 'go', run: () => askNext(true) };
 		}
 		if (revealed) {
 			// your card names a lingering effect: on your turn the ring asks first (× = no effect), then End turn
@@ -935,7 +1001,8 @@
 			{:else if levelWaiting.length}
 				<span class="waithost" title="Level-ups are forced while a hero can afford them">Waiting for {levelWaiting.map((p) => p.name).join(', ')} to level up…</span>
 			{:else}
-				<button class="act primary" on:click={onAdvanceTurn}>Next round →</button>
+				{#if nextAsk}<button class="act primary" on:click={nextRound}>Sure? Level-ups lock →</button><button class="act" on:click={() => (nextAsk = false)}>✕</button>
+				{:else}<button class="act primary" on:click={() => (nextAsk = true)}>Next round →</button>{/if}
 			{/if}
 		{:else if battlePhase}
 			<span class="waithost">Waiting for host…</span>
@@ -1062,7 +1129,7 @@
 		<div class="h2helm">
 			<div class="h2order" style="top:{orderTop}px">
 				<HudOrder planning={!revealed || levelPhase} title={levelPhase ? 'Levelling' : 'Planning'} doneWord={levelPhase ? 'done' : 'ready'} countdown={countdownActive ? countdownLabel : ''} dots={h2dots} order={h2order} bonus={itemBonus} tieArt={icon(`tiebreaker_${$ms.tieBreaker}`)}
-					compact={cOrder} me={clientId} small={h2order.length > 4} acting={actAt} canPoint={iAmHost} onPoint={pointAct} onRead={(pid, hid, idx) => (examine = { hid, idx, pid })} />
+					compact={cOrder} me={clientId} small={h2order.length > 4} acting={actAt} canPoint={iAmHost} onPoint={pickOrder} onNudge={armNudge} onRead={(pid, hid, idx) => (examine = { hid, idx, pid })} />
 			</div>
 			{#if platesTop}
 				<!-- nameplates either side of the compact top bar: the enemy on the left, your team on the right (you last) -->
@@ -1764,6 +1831,10 @@
 	<LevelSplash bind:this={levelSplash} {mobile} />
 
 	<!-- ───────── dramatic simultaneous reveal ───────── -->
+	<YourTurn bind:this={yourTurn} look={TURN_CUE_DEFAULT} mobile={mobile} />
+	{#if nudgeNote}
+		{#key nudgeNote.id}<div class="nudge" class:ph={mobile} style="--nc:{nudgeNote.color}" role="status"><span class="ng">⏳</span><span><b>{nudgeNote.name}</b> is waiting on you</span></div>{/key}
+	{/if}
 	{#if curtain}
 		<div class="curtain" on:click={skipCurtain} on:keydown={(e) => e.key === 'Escape' && skipCurtain()} role="presentation">
 			<div class="curtain-inner">
@@ -2110,6 +2181,16 @@
 	.cd-sub { font-size: .85rem; letter-spacing: .14em; text-transform: uppercase; font-weight: 700; color: #f0dcae; padding: 4px 14px; border-radius: 999px; background: rgba(6,9,16,.72); text-shadow: 0 2px 8px rgba(0,0,0,.8); }
 	.phasetag.counting { color: #ffcf9b; }
 
+	/* a nudge that landed on you: drops in under the top bar, gives two small shakes, fades (transform / opacity only) */
+	.nudge { position: fixed; left: 50%; top: calc(var(--uis, 1) * 150px); z-index: 57; display: flex; align-items: center; gap: 10px; padding: 9px 18px; border-radius: 999px; pointer-events: none;
+		font-size: calc(var(--uis, 1) * 17px); color: #f5f1e8; background: rgba(6, 18, 32, 0.95); box-shadow: 0 0 0 2px var(--nc), 0 10px 26px rgba(0, 0, 0, 0.55); white-space: nowrap;
+		animation: nudgeIn 3.6s ease both; }
+	.nudge.ph { top: 104px; font-size: 14px; padding: 7px 14px; }
+	.nudge b { font-weight: 400; color: #f4dfa8; }
+	.nudge .ng { display: inline-block; animation: ngShake 0.9s ease 0.3s 2; }
+	@keyframes nudgeIn { 0% { transform: translate(-50%, -24px); opacity: 0; } 8%, 85% { transform: translate(-50%, 0); opacity: 1; } 100% { transform: translate(-50%, -10px); opacity: 0; } }
+	@keyframes ngShake { 0%, 100% { transform: rotate(0); } 20% { transform: rotate(-22deg); } 45% { transform: rotate(18deg); } 70% { transform: rotate(-10deg); } }
+	@media (prefers-reduced-motion: reduce) { .nudge { animation: none; transform: translateX(-50%); } .nudge .ng { animation: none; } }
 	/* dramatic reveal curtain */
 	/* round-start banner */
 
@@ -2121,9 +2202,10 @@
 	.curtain-title { font-family: 'Modesto Poster', serif; font-size: clamp(1.1rem, 5.2vw, 2.4rem); white-space: nowrap; letter-spacing: .06em; color: #f6ead2; text-shadow: 0 2px 12px rgba(0,0,0,.7), 0 0 22px rgba(199,154,78,.4); }
 	/* cards as large as both the width (widest row) and the height (all rows) allow */
 	.curtain-cards { --gap: clamp(16px, 2.4vw, 26px); display: flex; flex-direction: column; align-items: center; gap: calc(var(--gap) * 1.2);
-		--cw: min(320px, calc((100vw - 32px - (var(--cols) - 1) * var(--gap)) / var(--cols)), calc(((100vh - 120px) / var(--rows) - 44px) * 1192 / 1664)); }
+		--cw: min(320px, calc((100vw - 32px - (var(--cols) - 1) * var(--gap)) / var(--cols)), calc(((100vh - 120px) / var(--rows) - 52px) * 1192 / 1664 * 0.97)); }
 	.cc-row { display: flex; flex-wrap: wrap; justify-content: center; gap: calc(var(--gap) * 1.2) var(--gap); max-width: calc(var(--cols) * var(--cw) + (var(--cols) - 1) * var(--gap) + 1px); }
-	.cc { display: flex; flex-direction: column; align-items: center; gap: 6px; perspective: 1300px; width: var(--cw); }
+	/* the face-up card grows 4% (the flip's scale), i.e. 2% of its height past its foot: the gap leaves room for that */
+	.cc { display: flex; flex-direction: column; align-items: center; gap: calc(8px + var(--cw) * 0.03); perspective: 1300px; width: var(--cw); }
 	.cc-flip { width: var(--cw); aspect-ratio: 1192 / 1664; position: relative; transform-style: preserve-3d; transition: transform .7s cubic-bezier(.34,.08,.2,1); }
 	.cc-face { box-shadow: 0 12px 30px rgba(0,0,0,.6); }
 	.cc-flip.up { transform: rotateY(180deg) scale(1.04); }

@@ -244,6 +244,7 @@
 		waves: '<path d="M2 9c2.5-2.5 4.5-2.5 7 0s4.5 2.5 7 0 4.5-2.5 6 0" /><path d="M2 15c2.5-2.5 4.5-2.5 7 0s4.5 2.5 7 0 4.5-2.5 6 0" />',
 		fx: '<path d="M2 15c2.5-2.5 4.5-2.5 7 0s4.5 2.5 7 0 4.5-2.5 6 0" /><path d="M12 3v3M6.5 5.5l1.6 2M17.5 5.5l-1.6 2" />',
 		wisps: '<path d="M12 12a1.5 1.5 0 0 1 3 0a3 3 0 0 1-6 0a4.5 4.5 0 0 1 9 0a6 6 0 0 1-12 0a7.5 7.5 0 0 1 15 0" />',
+		cue: '<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z" />',
 		beam: '<path d="M2 14h7M15 14h7" /><circle cx="12" cy="14" r="2.6" /><path d="M12 8.5v-3M8.6 9.8 7 8M15.4 9.8 17 8" />',
 		hud: '<rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 9h18M8 9v11M16 9v11" />',
 		lock: '<rect x="5" y="10.5" width="14" height="10" rx="2" /><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" />',
@@ -288,6 +289,7 @@
 			{ id: 'sea', label: 'Waves', icon: ICON.waves, on: onIsland && $boardPrefs.sea, disabled: !onIsland,
 				title: onIsland ? `Moving sea: ${$boardPrefs.sea ? 'on' : 'off'}` : 'The sea is drawn on the island only', act: () => boardPrefs.set({ sea: !$boardPrefs.sea }) },
 			{ id: 'wisps', label: 'Wisps', icon: ICON.wisps, on: $boardPrefs.wisps, title: `The spirit swirl on spaces to act on: ${$boardPrefs.wisps ? 'on' : 'off'}`, act: () => boardPrefs.set({ wisps: !$boardPrefs.wisps }) },
+			{ id: 'cue', label: 'Cue', icon: ICON.cue, on: $boardPrefs.turnCue, title: `The YOUR TURN cue when your card acts: ${$boardPrefs.turnCue ? 'on' : 'off'}`, act: () => boardPrefs.set({ turnCue: !$boardPrefs.turnCue }) },
 			...(hud2 || phone2 ? [{ id: 'beam', label: 'Beam', icon: ICON.beam, on: $boardPrefs.beam, title: `The beam's spark and pulses: ${$boardPrefs.beam ? 'on' : 'off'}`, act: () => boardPrefs.set({ beam: !$boardPrefs.beam }) }] : [])
 		] },
 		{ id: 'zoom', label: 'Zoom', icon: ICON.zoom, title: 'Zoom in / out', act: () => {}, sub: [
@@ -1222,7 +1224,7 @@
 		<PhoneTop round={$ms.round} turn={$ms.turn} tieBreaker={$ms.tieBreaker} {tieArt} {tieFlip} waves={$ms.waves} life={$ms.life} {lifeSplit}
 			left={viewTeam === 'orange' ? 'blue' : 'orange'} coins={myCoins} conn={$status} badge={iAmHost ? seatRequests.length : 0}
 			zone={$ms.lane ?? 1} zones={LANE.length} counts={zoneCount} starts={waveStarts} won={beamWon} fx={$boardPrefs.beam} status={phoneStatus}
-			onMenu={() => (lobbyOpen = true)} onWheel={() => (wheelOpen = true)} onTie={flipTie} onSheet={() => (lwOpen = true)} onOrder={() => cardLayer?.showOrder()} onCoins={coins} />
+			onMenu={() => (lobbyOpen = true)} onWheel={() => (wheelOpen = true)} onTie={flipTie} onSheet={() => (lwOpen = true)} onOrder={() => cardLayer?.showOrder()} onPick={(k) => cardLayer?.pickOrder(k)} onDot={(pid) => cardLayer?.armNudge(pid)} me={clientId} onCoins={coins} />
 		{#if lobbyOpen}
 			<GameLobby phone {room} conn={connLabel($status)} connClass={$status} seats={seatRows} watchers={spectators} requests={seatRequests} host={iAmHost} {clientId} {mySeat} myRequest={myRequestSeat}
 				colorOf={(id) => colorHex($players.find((p) => p.id === id)?.color ?? '')} {log} canUndo={$canUndo} onUndo={() => session.undo()}

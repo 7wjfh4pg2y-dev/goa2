@@ -6,7 +6,9 @@
 	// The row under the top bar. While players choose: "Planning", a dot per player (filled once they're in), "N of M
 	// ready" — or the countdown. After the reveal: the cards as banners, highest initiative first (a tie goes to the
 	// team holding the tie-breaker coin, marked by the coin between them). The lit banner is whose card acts now —
-	// shared (match.ts active turns); the host may click another banner to point at it, anyone else reads the card.
+	// shared (match.ts active turns). A click LOADS a move onto the action ring (it confirms): another player's banner or
+	// planning dot = Nudge them (hurry up; nudge.ts limits); the host: the acting banner = Nudge, any other = Skip to it.
+	// Your own banner reads your card.
 	import { heroCards, backgroundSlug } from '$lib/cards/deck';
 
 	export let planning = true;
@@ -14,7 +16,7 @@
 	export let title = 'Planning';
 	export let doneWord = 'ready';
 	export let countdown = '';
-	export let dots: { team: string; color?: string; ok: boolean; portrait?: string; hero?: string }[] = [];
+	export let dots: { pid?: string; team: string; color?: string; ok: boolean; portrait?: string; hero?: string }[] = [];
 	export let order: OrderEntry[] = [];
 	export let bonus: (pid: string, act: string) => number = () => 0;
 	export let tieArt = '';
@@ -27,6 +29,7 @@
 	export let canPoint = false; // the host may say who is acting
 	export let onPoint: (k: number) => void = () => {};
 	export let onRead: (pid: string, hero: string, idx: number) => void = () => {};
+	export let onNudge: (pid: string) => void = () => {};
 
 	const ui = import.meta.glob('$lib/cards/images/*.png', { eager: true, import: 'default' }) as Record<string, string>;
 	const ic = (n: string) => Object.entries(ui).find(([k]) => k.endsWith(`/${n}.png`))?.[1] ?? '';
@@ -41,8 +44,11 @@
 	}
 	function click(k: number, e: OrderEntry) {
 		if (canPoint && k !== acting) onPoint(k);
-		else onRead(e.pid, e.hero, e.idx);
+		else if (e.pid === me) onRead(e.pid, e.hero, e.idx);
+		else onNudge(e.pid);
 	}
+	const tip = (k: number, e: OrderEntry) => (canPoint && k !== acting ? 'Skip to this card' : e.pid === me ? 'Read your card' : 'Nudge — hurry them up');
+	const dotTip = (d: { pid?: string; hero?: string }) => (d.pid && d.pid !== me ? `${d.hero ?? ''} — nudge them` : d.hero ?? '');
 </script>
 
 {#if compact}
@@ -51,14 +57,14 @@
 		{#if countdown}<b class="ct">Revealing</b>
 		{:else}
 			<b class="ct">{title}</b><span class="csub">{title === 'Planning' ? 'Choose a card' : 'Take your cards'}</span>
-			<span class="cfaces">{#each dots as d, i (i)}<span class="cf t-{d.team}" class:ok={d.ok} style="--pc:{d.color ?? '#888'}; {d.portrait ?? ''}" title={d.hero ?? ''}><i>{d.ok ? '✓' : '…'}</i></span>{/each}</span>
+			<span class="cfaces">{#each dots as d, i (i)}<button class="cf t-{d.team}" class:ok={d.ok} style="--pc:{d.color ?? '#888'}; {d.portrait ?? ''}" title={dotTip(d)} disabled={!d.pid || d.pid === me} on:click={() => d.pid && onNudge(d.pid)}><i>{d.ok ? '✓' : '…'}</i></button>{/each}</span>
 			<em class="ccount">{ready} of {dots.length} {doneWord === 'ready' ? 'in' : doneWord}</em>
 		{/if}
 	{:else}
 		<b class="ct">Initiative</b>
 		{#each order as e, k (e.pid)}
 			{#if k}{#if e.tied && (e.tieImg || tieArt)}<img class="ctie" src={e.tieImg ?? tieArt} alt="Tie" title="A tie: the coin's holders went first, then it flipped" />{:else}<i class="cchev">›</i>{/if}{/if}
-			<button class="ce is-{e.team}" class:done={k < acting} class:now={k === acting} on:click={() => click(k, e)} title={canPoint && k !== acting ? 'Make this card the one acting' : 'Read the card'}>
+			<button class="ce is-{e.team}" class:done={k < acting} class:now={k === acting} on:click={() => click(k, e)} title={tip(k, e)}>
 				<span class="cfc" style="--pc:{e.color}; {e.portrait}"></span>
 				<span class="ch">{e.heroName}</span><b class="ci">{e.ini}</b>{#if e.pid === me}<em class="cyou">you</em>{/if}
 			</button>
@@ -70,14 +76,14 @@
 	{#if planning}
 		<div class="status">
 			{#if countdown}<b>Revealing</b>
-			{:else}<b>{title}</b><span class="sdots">{#each dots as d, i (i)}<i class="t-{d.team}" class:ok={d.ok} style={d.color ? `--tc:${d.color}` : ''}></i>{/each}</span><em>{ready} of {dots.length} {doneWord}</em>{/if}
+			{:else}<b>{title}</b><span class="sdots">{#each dots as d, i (i)}<button class="sd" title={dotTip(d)} disabled={!d.pid || d.pid === me} on:click={() => d.pid && onNudge(d.pid)}><i class="t-{d.team}" class:ok={d.ok} style={d.color ? `--tc:${d.color}` : ''}></i></button>{/each}</span><em>{ready} of {dots.length} {doneWord}</em>{/if}
 		</div>
 	{:else}
 		{#each order as e, k (e.pid)}
 			{@const c = heroCards(e.hero)[e.idx]}
 			{@const a = act(e)}
 			{#if k}{#if e.tied}<img class="tiemark" src={e.tieImg ?? tieArt} alt="Tie" title="A tie: the coin's holders went first, then it flipped" />{:else}<i class="chev">›</i>{/if}{/if}
-			<button class="ban is-{e.team}" class:done={k < acting} class:now={k === acting} style="--c:{COL[c?.color ?? ''] ?? '#666'}; --art:url({artOf(e.hero, e.idx)})" on:click={() => click(k, e)} title={canPoint && k !== acting ? 'Make this card the one acting' : 'Read the card'}>
+			<button class="ban is-{e.team}" class:done={k < acting} class:now={k === acting} style="--c:{COL[c?.color ?? ''] ?? '#666'}; --art:url({artOf(e.hero, e.idx)})" on:click={() => click(k, e)} title={tip(k, e)}>
 				<span class="bini">{e.ini}</span>
 				<span class="bbody">
 					<span class="bname">{c?.name ?? ''}</span>
@@ -95,6 +101,9 @@
 {/if}
 
 <style>
+	.sd { padding: 3px; margin: -3px; border: 0; background: none; cursor: pointer; display: inline-flex; }
+	.sd:disabled, .cf:disabled { cursor: default; }
+	button.cf { padding: 0; font: inherit; color: inherit; cursor: pointer; }
 	.orow { --brass: #d8b36a; --brass-hi: #f4dfa8; --line: rgba(216, 179, 106, 0.4); display: flex; align-items: center; justify-content: center; gap: 12px; height: 60px; color: #f5f1e8; }
 	.orow.small { gap: 8px; }
 	.status { display: flex; align-items: center; gap: 16px; height: 40px; padding: 0 24px; border-radius: 999px; pointer-events: auto;
