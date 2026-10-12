@@ -856,6 +856,7 @@
 									<span class="choice-go"><Icon name="go" /></span>
 								</button>
 							</div>
+							<div class="row"><a class="btn btn-ghost on-art" href={base + '/learn'}>How to play</a></div>
 						</div>
 					{:else if mode === 'join'}
 						<div class="step" transition:reveal bind:clientHeight={h['join']}>

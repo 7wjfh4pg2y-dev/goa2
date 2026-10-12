@@ -30,7 +30,7 @@
 	// aren't picked up, and a hex with a hero on it is still a valid target
 	export let placing = false;
 	// temporary area-effect radii: every hex within r of a hero, in that player's colour
-	export let areas: Array<{ hex: string; r: number; color: string }> = [];
+	export let areas: Array<{ hex: string; r: number; color: string; hexes?: string[]; alpha?: number }> = []; // hexes = a set of hexes instead of a radius; alpha = fill strength (.2)
 	// single hexes to act on (spawn points, minions to remove, where a stray goes, tokens to clear): a spirit swirl
 	// round each, in its colour (the `.marks` layer: html spans turning on the GPU, like the minion rims)
 	// (the team picks the colours: Titans deep blue with light blue, Atlanteans deep red with pale yellow; `picked` = ticked)
@@ -587,7 +587,7 @@
 	const DIRS: Array<[number, number, number]> = [[1, 0, 0], [0, 1, 60], [-1, 1, 120], [-1, 0, 180], [0, -1, 240], [1, -1, 300]];
 	const axialId = (q: number, r: number) => `${q + (r - (r & 1)) / 2}_${r}`;
 	$: areaShapes = areas.map((a) => {
-		const inside = new Set(hexes.filter((h) => hexDist(h.id, a.hex) <= a.r).map((h) => h.id));
+		const inside = a.hexes ? new Set(a.hexes) : new Set(hexes.filter((h) => hexDist(h.id, a.hex) <= a.r).map((h) => h.id));
 		const edges: string[] = [];
 		for (const id of inside) {
 			const { x: q, z: r } = toCube(id); const c = centerOf(id);
@@ -597,7 +597,7 @@
 				edges.push(`M${(c.x + size * Math.cos(a1)).toFixed(1)} ${(c.y + size * Math.sin(a1)).toFixed(1)}L${(c.x + size * Math.cos(a2)).toFixed(1)} ${(c.y + size * Math.sin(a2)).toFixed(1)}`);
 			}
 		}
-		return { color: a.color, cells: [...inside].map((id) => centerOf(id)), outline: edges.join('') };
+		return { color: a.color, alpha: a.alpha ?? 0.2, cells: [...inside].map((id) => centerOf(id)), outline: edges.join('') };
 	});
 	// the spirit swirl (hex radius 100): tapered spiral wisps, built once — three arms close in, two finer ones out
 	function wispPath(n: number, r0: number, r1: number, sweep: number, w: number, at = 0) {
@@ -749,7 +749,7 @@
 			<!-- area radii (under the pieces): translucent fill + a solid outer edge -->
 			{#each areaShapes as a}
 				<g pointer-events="none">
-					{#each a.cells as c}<polygon points={poly(c.x, c.y, size)} fill={a.color} fill-opacity=".2" />{/each}
+					{#each a.cells as c}<polygon points={poly(c.x, c.y, size)} fill={a.color} fill-opacity={a.alpha} />{/each}
 					<path d={a.outline} fill="none" stroke={a.color} stroke-width={size * 0.07} stroke-linecap="round" stroke-opacity=".95" />
 				</g>
 			{/each}
