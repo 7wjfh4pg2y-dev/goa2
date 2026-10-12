@@ -1200,7 +1200,6 @@
 	.field.up { text-transform: uppercase; }
 	.field--code::placeholder { letter-spacing: 0.12em; }
 	.step .openpanel { display: flex; flex-direction: column; gap: 10px; padding: 18px 26px 22px; }
-	.step .verpanel { display: flex; flex-direction: column; gap: 10px; padding: 16px 22px 18px; margin-top: 14px; }
 	/* a fixed-size list (it never grows the window): as tall as the screen allows, up to three rows */
 	/* exactly three rows tall; a fourth game scrolls */
 	.glist { --gr: 64px; --gg: 8px; display: flex; flex-direction: column; gap: var(--gg); height: calc(var(--gr) * 3 + var(--gg) * 2); overflow-y: auto; flex: none; }
