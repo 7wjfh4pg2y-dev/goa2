@@ -5,8 +5,7 @@
 	import { onMount } from 'svelte';
 	import { HEROES_ALPHA } from '$lib/heroes';
 	import { CONDITIONS, reportText, type Report, type ReportSeat } from '$lib/reports';
-	import Icon from '$lib/ui/Icon.svelte';
-
+	
 	export let report: Report;
 	/** saves; resolves false when it didn't (the editor then stays open) */
 	export let onSave: (r: Report) => Promise<boolean>;
@@ -48,10 +47,10 @@
 <datalist id="rep-heroes">{#each HEROES_ALPHA as h (h.id)}<option value={h.name}></option>{/each}</datalist>
 
 <div class="scrim" role="presentation" on:click|self={onCancel}>
-	<div class="panel ed" bind:this={box} role="dialog" aria-modal="true" aria-label="Edit report" tabindex="-1">
+	<div class="card ed" bind:this={box} role="dialog" aria-modal="true" aria-label="Edit report" tabindex="-1">
 		<header class="eh">
 			<h2>{r.kind === 'irl' ? 'Table game' : 'Online game'} report</h2>
-			<button class="btn btn-ghost btn-icon" on:click={onCancel} aria-label="Close"><Icon name="x" /></button>
+			<button class="btn2" on:click={onCancel} aria-label="Close">✕</button>
 		</header>
 		<div class="eb">
 			<div class="form">
@@ -79,7 +78,7 @@
 
 				<div class="f">
 					<span>Winner</span>
-					<div class="seg">
+					<div class="wseg">
 						<button class="w-red" class:on={r.winner === 'red'} on:click={() => (r.winner = 'red')}>Red</button>
 						<button class="w-blue" class:on={r.winner === 'blue'} on:click={() => (r.winner = 'blue')}>Blue</button>
 						<button class:on={r.winner === 'none'} on:click={() => (r.winner = 'none')}>Nobody</button>
@@ -105,59 +104,62 @@
 			</div>
 		</div>
 		<footer class="ef">
-			{#if redraft}<button class="btn btn-ghost btn-sm" on:click={() => redraft && (r = clone(redraft()))} title="Fill the form with the app's draft again (nothing is saved until Save)">Redraft</button>{/if}
-			{#if onDelete}<button class="btn btn-sm del" class:arm={delArm} on:click={delTap}>{delArm ? 'Tap again to delete' : 'Delete'}</button>{/if}
+			{#if redraft}<button class="btn2" on:click={() => redraft && (r = clone(redraft()))} title="Fill the form with the app's draft again (nothing is saved until Save)">Redraft</button>{/if}
+			{#if onDelete}<button class="btn2 del" class:arm={delArm} on:click={delTap}>{delArm ? 'Tap again to delete' : 'Delete'}</button>{/if}
 			<span class="sp"></span>
-			<button class="btn btn-ghost btn-sm" on:click={onCancel}>Cancel</button>
-			<button class="btn btn-primary btn-sm" on:click={save} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
+			<button class="btn2" on:click={onCancel}>Cancel</button>
+			<button class="btn2 pri" on:click={save} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
 		</footer>
 	</div>
 </div>
 
 <style>
-	.scrim { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 16px; background: rgba(2, 7, 14, 0.78); }
+	.scrim { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 16px; background: rgba(0, 0, 0, 0.72); }
 	.ed { width: min(1060px, 100%); max-height: calc(100dvh - 32px); display: flex; flex-direction: column; padding: 0; overflow: hidden; }
-	.eh { flex: none; display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--hair); }
-	.eh h2 { margin: 0; font-size: 22px; font-weight: 400; color: var(--brass-hi); }
-	.eb { flex: 1; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 16px; padding: 16px; }
-	.form { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+	.eh { flex: none; display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid var(--ln); }
+	.eh h2 { margin: 0; font-size: 18px; font-weight: 700; letter-spacing: -0.01em; color: var(--tx); }
+	.eb { flex: 1; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 20px; padding: 18px 20px; }
+	.form { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 	.row2 { display: flex; gap: 10px; flex-wrap: wrap; }
 	.f { display: flex; flex-direction: column; gap: 6px; flex: 1 1 160px; min-width: 0; }
 	.f.sm { flex: 0 1 96px; }
-	.f > span { font-size: 11.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); }
-	.f > span small { text-transform: none; letter-spacing: 0; }
-	input, textarea { width: 100%; box-sizing: border-box; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--hair); background: var(--well); color: var(--ink); font: inherit; font-size: 15px; }
-	input:focus, textarea:focus { outline: 0; border-color: var(--brass-line); }
-	textarea { resize: vertical; min-height: 180px; line-height: 1.4; }
-	.team { margin: 0; padding: 10px 12px 12px; border-radius: 10px; border: 1px solid var(--hair); background: var(--tl); display: flex; flex-direction: column; gap: 6px; }
-	.team.is-red { --tc: #ef7d22; --tl: rgba(239, 125, 34, 0.1); }
-	.team.is-blue { --tc: #2f7fe6; --tl: rgba(47, 127, 230, 0.12); }
-	legend { padding: 0 6px; display: flex; align-items: center; gap: 8px; font-size: 15px; color: var(--ink); }
-	legend i { width: 9px; height: 9px; border-radius: 50%; background: var(--tc); }
-	legend small { color: var(--ink-3); }
+	.f > span { font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--mu); }
+	.f > span small { text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--mu2); }
+	input, textarea { width: 100%; box-sizing: border-box; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--ln); background: var(--bg); color: var(--tx); font: inherit; font-size: 14px; }
+	input::placeholder, textarea::placeholder { color: var(--mu2); }
+	input:focus, textarea:focus { outline: 0; border-color: var(--bl); box-shadow: none; }
+	textarea { resize: vertical; min-height: 180px; line-height: 1.45; }
+	.team { margin: 0; padding: 10px 12px 12px; border-radius: 10px; border: 1px solid var(--ln); border-left: 3px solid var(--tc); background: var(--p2); display: flex; flex-direction: column; gap: 6px; }
+	.team.is-red { --tc: var(--or); }
+	.team.is-blue { --tc: var(--ti); }
+	legend { padding: 0 6px; display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--tc); }
+	legend i { width: 8px; height: 8px; border-radius: 50%; background: var(--tc); }
+	legend small { color: var(--mu); font-weight: 500; text-transform: none; letter-spacing: 0; }
 	.seat { display: grid; grid-template-columns: 1fr auto 1fr 30px; align-items: center; gap: 6px; }
-	.arr { color: var(--ink-3); }
-	.x { width: 30px; height: 30px; padding: 0; border-radius: 8px; border: 1px solid transparent; background: none; color: var(--ink-3); cursor: pointer; }
-	.x:hover:not(:disabled) { color: var(--danger-hi); border-color: rgba(229, 72, 77, 0.5); }
+	.arr { color: var(--mu2); }
+	.x { width: 30px; height: 30px; padding: 0; border-radius: 8px; border: 1px solid transparent; background: none; color: var(--mu); cursor: pointer; }
+	.x:hover:not(:disabled) { color: var(--rd); border-color: rgba(239, 79, 92, 0.45); }
 	.x:disabled { opacity: 0.3; cursor: default; }
-	.addp { align-self: flex-start; padding: 3px 12px; border-radius: 999px; border: 1px dashed var(--brass-line); background: none; color: var(--brass-hi); font: inherit; font-size: 13px; cursor: pointer; }
-	.seg, .chips { display: flex; flex-wrap: wrap; gap: 6px; }
-	.seg button, .chips button { padding: 6px 14px; border-radius: 999px; border: 1px solid var(--hair); background: var(--well); color: var(--ink-2); font: inherit; font-size: 14px; cursor: pointer; }
-	.chips button { padding: 4px 11px; font-size: 13px; }
-	.seg button.on, .chips button.on { color: var(--ink-dark); border-color: transparent; background: linear-gradient(180deg, var(--brass-hi), var(--brass)); }
-	.seg .w-red.on { color: #fff; background: #ef7d22; }
-	.seg .w-blue.on { color: #fff; background: #2f7fe6; }
+	.addp { align-self: flex-start; padding: 3px 12px; border-radius: 999px; border: 1px dashed var(--ln2); background: none; color: var(--bl); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+	.addp:hover { border-color: var(--bl); }
+	.wseg, .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+	.wseg button, .chips button { padding: 5px 13px; border-radius: 999px; border: 1px solid var(--ln); background: var(--p3); color: var(--tx2); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+	.chips button { padding: 4px 11px; font-size: 12.5px; }
+	.wseg button.on, .chips button.on { color: #021426; border-color: transparent; background: var(--bl); }
+	.wseg .w-red.on { color: #fff; background: var(--or); }
+	.wseg .w-blue.on { color: #fff; background: var(--ti); }
 	.prev { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
-	.pl { font-size: 11.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); }
-	pre { margin: 0; flex: 1; padding: 12px 14px; border-radius: 10px; background: rgba(3, 11, 21, 0.6); border: 1px solid var(--hair); color: var(--ink); font: inherit; font-size: 14px; line-height: 1.45; white-space: pre-wrap; word-break: break-word; }
-	.ef { flex: none; display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--hair); }
+	.pl { font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--mu); }
+	pre { margin: 0; flex: 1; padding: 12px 14px; border-radius: 8px; background: var(--bg); border: 1px solid var(--ln); color: var(--tx2); font: inherit; font-size: 13.5px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+	.ef { flex: none; display: flex; align-items: center; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--ln); }
 	.sp { flex: 1; }
-	.del { color: #ffb4a8; border: 1px solid rgba(194, 65, 47, 0.6); background: rgba(0, 0, 0, 0.3); }
-	.del.arm { color: #fff; border-color: #ffb4a8; background: linear-gradient(180deg, #e5484d, #8f1d1d); }
+	.btn2:disabled { opacity: 0.5; cursor: default; }
+	.del { color: var(--rd); border-color: rgba(239, 79, 92, 0.45); }
+	.del.arm { color: #2b0306; background: var(--rd); border-color: transparent; }
 	@media (max-width: 760px) {
 		.scrim { padding: 0; }
 		.ed { max-height: 100dvh; height: 100dvh; border-radius: 0; }
-		.eb { grid-template-columns: 1fr; }
-		.ef { padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }
+		.eb { grid-template-columns: 1fr; padding: 14px; }
+		.ef { padding: 12px 14px calc(12px + env(safe-area-inset-bottom, 0px)); }
 	}
 </style>

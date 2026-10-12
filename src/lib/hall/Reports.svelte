@@ -12,7 +12,8 @@
 	} from '$lib/reports';
 	import ReportEditor from './ReportEditor.svelte';
 	import { playByPlay } from '$lib/playbyplay';
-	import Glyph from './Glyph.svelte';
+	import { heroIdOfName } from '$lib/league';
+	import { portraitCss } from '$lib/heroes';
 
 	export let rows: GameRowIn[] = [];
 
@@ -121,17 +122,19 @@
 
 	let openId: Record<string, boolean> = {};
 	const winLabel = (r: Report) => (r.winner === 'none' ? 'No winner' : r.winner === 'red' ? 'Atlanteans won' : 'Titans won');
+	const face = (hero: string) => { const id = heroIdOfName(hero); return id ? portraitCss(id) : ''; };
+	$: counts = { all: online.length + irl.length, online: online.length, irl: irl.length };
 	$: editRow = editing ? online.find((x) => x.r.id === editing!.id)?.row ?? null : null;
 </script>
 
-<div class="panel tbar">
-	<label class="srch"><Glyph name="search" size={16} /><input placeholder="Search by player, hero or highlight…" bind:value={q} /></label>
-	<div class="sorts" role="group" aria-label="Show">
-		<button class:on={show === 'all'} on:click={() => (show = 'all')}>All</button>
-		<button class:on={show === 'online'} on:click={() => (show = 'online')}>Online</button>
-		<button class:on={show === 'irl'} on:click={() => (show = 'irl')}>Table games</button>
-	</div>
-	<button class="btn btn-primary btn-sm logb" on:click={() => (editing = newIrl())} disabled={status === 'loading'}>+ Log a table game</button>
+<div class="tbar">
+	<label class="search grow"><span>⌕</span><input placeholder="Search by player, hero or highlight…" bind:value={q} /></label>
+	<span class="seg" role="group" aria-label="Show">
+		<button class:on={show === 'all'} on:click={() => (show = 'all')}>All <small>{counts.all}</small></button>
+		<button class:on={show === 'online'} on:click={() => (show = 'online')}>Online <small>{counts.online}</small></button>
+		<button class:on={show === 'irl'} on:click={() => (show = 'irl')}>Table <small>{counts.irl}</small></button>
+	</span>
+	<button class="btn2 pri" on:click={() => (editing = newIrl())} disabled={status === 'loading'}>+ Log a table game</button>
 </div>
 
 {#if status === 'missing'}
@@ -139,28 +142,44 @@
 {:else if status === 'error'}
 	<p class="warn">Couldn't read the saved reports ({err}). The drafts below still work; saving may not.</p>
 {/if}
-<p class="fine">Table games count in the Hall as <b>Legacy</b> games (their own player records and awards) and in the hero stats. A cancelled game, or one marked "doesn't count", is left out.</p>
 
 <div class="rlist">
 	{#each list as x (x.r.id)}
 		{@const r = x.r}
-		<article class="panel rc is-{r.winner}">
+		<article class="card rc is-{r.winner}">
 			<header class="rh">
-				<span class="kind" class:irl={r.kind === 'irl'}>{r.kind === 'irl' ? 'Table game' : 'Online'}</span>
-				<span class="rt"><b>{dotDate(r.date)} · Match {r.match ?? '#'} · {r.red.length}v{r.blue.length}</b><small>{winLabel(r)}{r.condition ? ` · ${r.condition}` : ''}{x.draft ? ' · draft' : ''}</small></span>
-				<span class="acts">
-					<button class="btn btn-sm cp" on:click={() => copy(r)}>Copy</button>
-					{#if x.row}{@const gr = x.row}<button class="btn btn-ghost btn-sm" on:click={() => openPbp(gr, r)} disabled={pbpBusy === gr.id} title="The whole game, round by round — paste it to Claude to write the report">{pbpBusy === gr.id ? 'Loading…' : 'Play-by-play'}</button>{/if}
-					<button class="btn btn-ghost btn-sm" on:click={() => (editing = r)}>Edit</button>
+				<span class="rt"><b>{dotDate(r.date)} · Match {r.match ?? '#'}</b><small>{r.red.length}v{r.blue.length}{r.condition ? ` · ${r.condition}` : ''}{r.wave ? ` · Wave ${r.wave}` : ''}</small></span>
+				<span class="tags">
+					<span class="chip">{r.kind === 'irl' ? 'Table game' : 'Online'}</span>
+					{#if x.draft}<span class="chip dr">Draft</span>{/if}
+					<span class="chip win w-{r.winner}">{winLabel(r)}</span>
 				</span>
 			</header>
+			<div class="sides">
+				{#each [['red', 'Atlanteans'], ['blue', 'Titans']] as [sd, nm] (sd)}
+					{@const seats = sd === 'red' ? r.red : r.blue}
+					<div class="side s-{sd}" class:won={r.winner === sd}>
+						<span class="sl">{nm}{#if r.winner === sd}<em>WIN</em>{/if}</span>
+						{#each seats as st, i (i)}
+							<span class="st"><span class="face" style="--fs:26px; {face(st.hero)}"></span><span><b>{st.name || '—'}</b><small>{st.hero || '—'}</small></span></span>
+						{/each}
+					</div>
+				{/each}
+			</div>
 			<pre class:clip={!openId[r.id]}>{reportText(r)}</pre>
-			<button class="more" on:click={() => (openId = { ...openId, [r.id]: !openId[r.id] })}>{openId[r.id] ? 'Show less' : 'Show the whole report'}</button>
+			<footer class="rf">
+				<button class="linky more" on:click={() => (openId = { ...openId, [r.id]: !openId[r.id] })}>{openId[r.id] ? 'Show less' : 'Whole report'}</button>
+				<span class="sp"></span>
+				<button class="btn2" on:click={() => (editing = r)}>Edit</button>
+				{#if x.row}{@const gr = x.row}<button class="btn2" on:click={() => openPbp(gr, r)} disabled={pbpBusy === gr.id} title="The whole game, round by round — paste it to Claude to write the report">{pbpBusy === gr.id ? 'Loading…' : 'Play-by-play'}</button>{/if}
+				<button class="btn2 pri" on:click={() => copy(r)}>Copy</button>
+			</footer>
 		</article>
 	{:else}
-		<p class="note">{q ? 'No report matches.' : 'No reports yet.'}</p>
+		<section class="card msg"><h3>{q ? 'No report matches' : 'No reports yet'}</h3><p class="muted">{q ? 'Try a player, a hero or a word from the highlights.' : 'Online games get a drafted report when they are won; table games are logged with + Log a table game.'}</p></section>
 	{/each}
 </div>
+<p class="fine">Table games count in the Hall's <b>Legacy</b> and <b>Total</b> records. A cancelled game, or one marked "doesn't count", is left out.</p>
 
 {#if editing}
 	{@const er = editRow}
@@ -170,54 +189,66 @@
 {/if}
 {#if pbp}
 	<div class="pbpscrim" role="presentation" on:click|self={() => (pbp = null)}>
-		<div class="panel pbp" role="dialog" aria-label="Play-by-play">
-			<header><b>Play-by-play · {pbp.title}</b><button class="btn btn-ghost btn-sm" on:click={() => (pbp = null)} aria-label="Close">✕</button></header>
-			<p class="fine">The whole game round by round, with a request at the top — paste it to Claude and add anything else you remember.</p>
+		<div class="card pbp" role="dialog" aria-label="Play-by-play">
+			<header class="ch">Play-by-play <small>{pbp.title}</small><button class="btn2 r" on:click={() => (pbp = null)} aria-label="Close">✕</button></header>
+			<p class="fine top">The whole game round by round, with a request at the top — paste it to Claude and add anything else you remember.</p>
 			<textarea bind:this={pbpBox} readonly value={pbp.text}></textarea>
-			<footer><button class="btn btn-sm cp" on:click={copyPbp}>Copy play-by-play</button></footer>
+			<footer><button class="btn2 pri" on:click={copyPbp}>Copy play-by-play</button></footer>
 		</div>
 	</div>
 {/if}
-{#if toast}<div class="toast toast--plain pretoast rtoast">{toast}</div>{/if}
+{#if toast}<div class="rtoast" role="status">{toast}</div>{/if}
 
 <style>
-	.tbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px; margin-bottom: 10px; }
-	.srch { flex: 1 1 260px; display: flex; align-items: center; gap: 8px; padding: 0 12px; height: 40px; border-radius: 10px; background: var(--well); border: 1px solid var(--hair); color: var(--ink-3); }
-	.srch input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: none; color: var(--ink); font: inherit; font-size: 15px; padding: 0; }
-	.srch:focus-within { border-color: var(--brass-line); }
-	.sorts { display: flex; gap: 4px; padding: 3px; border-radius: 10px; background: var(--well); border: 1px solid var(--hair); }
-	.sorts button { padding: 6px 12px; border-radius: 8px; border: 0; background: none; color: var(--ink-2); font: inherit; font-size: 14px; cursor: pointer; white-space: nowrap; }
-	.sorts button.on { color: var(--ink-dark); background: linear-gradient(180deg, var(--brass-hi), var(--brass)); }
-	.warn { margin: 0 0 8px; padding: 8px 12px; border-radius: 8px; font-size: 13.5px; color: #ffd9a8; background: rgba(239, 125, 34, 0.12); border: 1px solid rgba(239, 125, 34, 0.4); }
-	.fine { font-size: 12px; color: var(--ink-3); margin: 0 0 12px; }
-	.rlist { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 14px; align-items: start; }
-	.rc { padding: 0; overflow: hidden; border-top: 3px solid var(--tc, var(--brass-line)); }
-	.rc.is-red { --tc: #ef7d22; } .rc.is-blue { --tc: #2f7fe6; }
-	.rh { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--hair); }
-	.kind { flex: none; padding: 2px 9px; border-radius: 999px; font-size: 11.5px; letter-spacing: 0.04em; color: var(--ink-2); background: var(--well); border: 1px solid var(--hair); }
-	.kind.irl { color: var(--ink-dark); border-color: transparent; background: linear-gradient(180deg, var(--brass-hi), var(--brass)); }
-	.rt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-	.rt b { font-weight: 400; font-size: 15.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-	.rt small { font-size: 12px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-	.acts { flex: none; display: flex; gap: 6px; }
-	.cp { color: var(--ink-dark); background: linear-gradient(180deg, var(--brass-hi), var(--brass)); border: 0; }
-	pre { margin: 0; padding: 12px 14px 4px; font: inherit; font-size: 14px; line-height: 1.45; color: var(--ink); white-space: pre-wrap; word-break: break-word; user-select: text; }
-	pre.clip { max-height: 300px; overflow: hidden; -webkit-mask-image: linear-gradient(180deg, #000 78%, transparent); mask-image: linear-gradient(180deg, #000 78%, transparent); }
-	.more { display: block; width: 100%; padding: 6px 0 10px; border: 0; background: none; color: var(--brass-hi); font: inherit; font-size: 13px; cursor: pointer; }
-	.note { text-align: center; color: var(--ink-3); margin-top: 12vh; grid-column: 1 / -1; }
-	.pbpscrim { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 16px; background: rgba(2, 8, 16, 0.72); }
-	.pbp { width: min(860px, 100%); height: min(86dvh, 900px); display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; }
-	.pbp header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-	.pbp header b { font-weight: 400; font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-	.pbp .fine { margin: 0; }
-	.pbp textarea { flex: 1; min-height: 0; resize: none; padding: 10px 12px; border-radius: 10px; background: var(--well); border: 1px solid var(--hair); color: var(--ink); font: inherit; font-size: 13px; line-height: 1.45; white-space: pre-wrap; }
+	.tbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 14px; }
+	.tbar .grow { flex: 1 1 260px; }
+	.seg small { margin-left: 4px; font-size: 11.5px; color: var(--mu2); font-variant-numeric: tabular-nums; }
+	.seg button.on small { color: var(--mu); }
+	.btn2:disabled { opacity: 0.5; cursor: default; }
+	.warn { margin: 0 0 12px; padding: 9px 12px; border-radius: 8px; font-size: 13.5px; color: #ffd9a8; background: rgba(239, 125, 34, 0.1); border: 1px solid rgba(239, 125, 34, 0.35); }
+	.rlist { display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: 16px; align-items: start; }
+	.rc { padding: 0; overflow: hidden; border-top: 2px solid var(--tc, var(--ln2)); }
+	.rc.is-red { --tc: var(--or); } .rc.is-blue { --tc: var(--ti); }
+	.rh { display: flex; align-items: center; gap: 12px; padding: 14px 18px 12px; }
+	.rt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+	.rt b { font-size: 16px; font-weight: 700; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.rt small { font-size: 12.5px; color: var(--mu); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.tags { flex: none; display: flex; gap: 6px; }
+	.chip.dr { color: var(--au); border-color: rgba(243, 196, 84, 0.35); background: rgba(243, 196, 84, 0.08); }
+	.chip.w-red { color: #fff; background: var(--or); border-color: transparent; }
+	.chip.w-blue { color: #fff; background: var(--ti); border-color: transparent; }
+	.sides { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 18px; padding: 0 18px 12px; border-bottom: 1px solid var(--ln); }
+	.side { display: flex; flex-direction: column; gap: 6px; min-width: 0; opacity: 0.6; }
+	.side.won { opacity: 1; }
+	.sl { display: flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
+	.s-red .sl { color: var(--or); } .s-blue .sl { color: var(--ti); }
+	.sl em { font-style: normal; padding: 1px 6px; border-radius: 4px; font-size: 10.5px; color: #04230f; background: var(--gr); }
+	.st { display: flex; align-items: center; gap: 8px; min-width: 0; }
+	.st > span:last-child { display: flex; flex-direction: column; min-width: 0; }
+	.st b { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.st small { font-size: 11.5px; color: var(--mu); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.won .face { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1), 0 0 0 2px var(--gr); }
+	pre { margin: 0; padding: 12px 18px 4px; font: inherit; font-size: 13.5px; line-height: 1.5; color: var(--tx2); white-space: pre-wrap; word-break: break-word; user-select: text; }
+	pre.clip { max-height: 220px; overflow: hidden; -webkit-mask-image: linear-gradient(180deg, #000 70%, transparent); mask-image: linear-gradient(180deg, #000 70%, transparent); }
+	.rf { display: flex; align-items: center; gap: 8px; padding: 8px 18px 14px; }
+	.rf .sp { flex: 1; }
+	.more { font-size: 13px; font-weight: 600; color: var(--bl); }
+	.msg { grid-column: 1 / -1; text-align: center; padding: 40px 20px; }
+	.msg h3 { margin: 0 0 6px; font-size: 17px; }
+	.msg p { margin: 0; }
+	.fine b { color: var(--tx2); }
+	.pbpscrim { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 16px; background: rgba(0, 0, 0, 0.7); }
+	.pbp { width: min(860px, 100%); height: min(86dvh, 900px); display: flex; flex-direction: column; gap: 10px; }
+	.pbp .ch { margin: 0; }
+	.pbp .fine.top { margin: 0; }
+	.pbp textarea { flex: 1; min-height: 0; resize: none; padding: 12px 14px; border-radius: 8px; background: var(--bg); border: 1px solid var(--ln); color: var(--tx); font: inherit; font-size: 13px; line-height: 1.5; white-space: pre-wrap; }
 	.pbp footer { display: flex; justify-content: flex-end; }
-	.rtoast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 70; }
+	.rtoast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 70; padding: 10px 16px; border-radius: 8px; background: var(--p3); border: 1px solid var(--ln2); color: var(--tx); font-size: 13.5px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5); }
 	@media (max-width: 760px) {
-		.rlist { grid-template-columns: 1fr; }
-		.logb { width: 100%; }
-		.rh { flex-wrap: wrap; }
-		.acts { width: 100%; }
-		.acts .btn { flex: 1; }
+		.rlist { grid-template-columns: minmax(0, 1fr); }
+		.tbar .btn2 { width: 100%; justify-content: center; }
+		.rh { flex-wrap: wrap; padding: 12px 14px 10px; }
+		.sides, pre { padding-left: 14px; padding-right: 14px; }
+		.rf { flex-wrap: wrap; padding: 8px 14px 12px; }
 	}
 </style>

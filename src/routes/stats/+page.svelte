@@ -184,7 +184,7 @@
 			{:else if phase === 'locked'}
 				<section class="card msg"><h3>GMs only</h3><p class="muted">Sign in as Admin to open the Hall of Records.</p><a class="btn2" href={base + '/'}>Home</a></section>
 			{:else if tab === 'reports'}
-				<div class="legacyui"><Reports {rows} /></div>
+				<Reports {rows} />
 			{:else if phase === 'error'}
 				<section class="card msg"><h3>The records are locked</h3><p class="muted">Couldn't read the games table ({errMsg}).</p></section>
 			{:else if tab === 'heroes' && league && league.games.length && phase === 'ready'}
