@@ -22,7 +22,7 @@
 	import { statsFromJournal } from '$lib/gamestats'; // battle report
 	import { zoneName, zoneTable } from '$lib/zones';
 	import { effectLabel } from '$lib/effects';
-	import { battleZone, canBattleRemove, pushLane, laneNotes, heavyImmune, returnPatch, minionCount } from '$lib/battle';
+	import { battleZone, canBattleRemove, pushLane, laneNotes, heavyImmune, returnPatch, minionCount, inZone } from '$lib/battle';
 	import lifeSplit from '$lib/images/life_split.png';
 	import { heroCards } from '$lib/cards/deck';
 	import { ultimateIndex, allowedMoves } from '$lib/cards/cardstate';
@@ -483,7 +483,7 @@
 			const m = $ms.pieces[id];
 			const rest = { ...($ms.strays ?? {}) };
 			delete rest[id];
-			session.act(`put ${aMinion(m.team, m.role)} back into the battle zone`, { ...movePiece($ms, id, hex), strays: rest });
+			session.act(inZone($ms, m.hex) ? `placed ${aMinion(m.team, m.role)} (its spawn point was blocked)` : `put ${aMinion(m.team, m.role)} back into the battle zone`, { ...movePiece($ms, id, hex), strays: rest });
 			return;
 		}
 		if (pendingRespawn) {
@@ -932,9 +932,9 @@
 		</div>
 	{/if}
 	{#if myStray && !pendingToken && !pendingRespawn && !pendingSpawn}
-		<div class="placehint stray"><span>Tap a glowing space: put the {teamAdj($ms.pieces[myStray[0]].team)} {$ms.pieces[myStray[0]].role ?? ''} minion back into the battle zone</span></div>
+		<div class="placehint stray"><span>{#if inZone($ms, $ms.pieces[myStray[0]].hex)}Its spawn point is blocked: tap a glowing space for the {teamAdj($ms.pieces[myStray[0]].team)} {$ms.pieces[myStray[0]].role ?? ''} minion{:else}Tap a glowing space: put the {teamAdj($ms.pieces[myStray[0]].team)} {$ms.pieces[myStray[0]].role ?? ''} minion back into the battle zone{/if}</span></div>
 	{:else if strayWait && !pendingToken && !pendingRespawn}
-		<div class="placehint stray"><span>Waiting for the {teamName($ms.pieces[strayWait[0]].team)} to put their minion back into the battle zone</span></div>
+		<div class="placehint stray"><span>Waiting for the {teamName($ms.pieces[strayWait[0]].team)} to {inZone($ms, $ms.pieces[strayWait[0]].hex) ? 'place their minion' : 'put their minion back into the battle zone'}</span></div>
 	{/if}
 	{#if pendingToken || pendingRespawn || (mobile && pendingSpawn)}
 		<div class="placehint">

@@ -100,8 +100,9 @@ const BLOCKED = new Set(['terrain'])
  *  from the map's meta, melee by default). A token on a spawn point is removed first and
  *  the minion spawns there (`cleared` = those tokens' ids). A spawn point held by anything
  *  else — a unit, or Trinkets' Turret, which is an object and not a token — sends its
- *  minion to the nearest empty hex in the same zone. (`cards` tells whose companion is the Turret.) */
-export function spawnWave(map: GameMap | null, zone: string, pieces: Record<string, Piece>, tag: string, cards?: Record<string, { hero: string }> | null): { minions: Record<string, Piece>; cleared: string[] } {
+ *  minion to the nearest empty hex in the same zone; when several are equally near, its TEAM chooses
+ *  (`choices` = minion id → those hexes; it waits on the first, like a stray). (`cards` tells whose companion is the Turret.) */
+export function spawnWave(map: GameMap | null, zone: string, pieces: Record<string, Piece>, tag: string, cards?: Record<string, { hero: string }> | null): { minions: Record<string, Piece>; cleared: string[]; choices: Record<string, string[]> } {
 	const cells = map?.cells ?? {}
 	const zones = zoneTable(map)
 	const onBoard = Object.values(pieces).filter((p) => !p.attachedTo)
@@ -111,15 +112,20 @@ export function spawnWave(map: GameMap | null, zone: string, pieces: Record<stri
 	const free = Object.keys(cells).filter((h) => zones[h] === zone && !BLOCKED.has(cells[h])).sort()
 	const minions: Record<string, Piece> = {}
 	const cleared: string[] = []
+	const choices: Record<string, string[]> = {}
 	const spawns = Object.keys(cells).filter((h) => zones[h] === zone && (cells[h] === 'spawnOrange' || cells[h] === 'spawnBlue')).sort()
 	// the open spawn points first, so a displaced minion never steals another's point
 	spawns.sort((a, b) => Number(blocked.has(a)) - Number(blocked.has(b)))
 	for (const sp of spawns) {
 		let hex: string | undefined = sp
+		let near: string[] = []
 		if (blocked.has(sp)) {
 			const c = hexCube(sp)
-			hex = free.filter((h) => !taken.has(h)).sort((a, b) => cubeDist(hexCube(a), c) - cubeDist(hexCube(b), c))[0]
-			if (!hex) continue
+			const open = free.filter((h) => !taken.has(h))
+			if (!open.length) continue
+			const d = Math.min(...open.map((h) => cubeDist(hexCube(h), c)))
+			near = open.filter((h) => cubeDist(hexCube(h), c) === d)
+			hex = near[0]
 		} else {
 			for (const p of onBoard) if (p.hex === sp && isToken(p)) cleared.push(p.id)
 		}
@@ -129,8 +135,12 @@ export function spawnWave(map: GameMap | null, zone: string, pieces: Record<stri
 		const role = m === 'ranged' || m === 'heavy' ? m : 'melee'
 		const id = `minion_${sp}_${tag}`
 		minions[id] = { id, hex, team, kind: 'minion', role }
+		if (near.length > 1) choices[id] = near
 	}
-	return { minions, cleared }
+	// a choice can't point at a space another minion of this wave took after it
+	for (const id in choices) choices[id] = choices[id].filter((h) => h === minions[id].hex || !Object.values(minions).some((m) => m.hex === h))
+	for (const id in choices) if (choices[id].length < 2) delete choices[id]
+	return { minions, cleared, choices }
 }
 
 /** Where a minion standing outside the battle zone has to go: the NEAREST empty spaces of the battle zone
@@ -193,6 +203,7 @@ export function pushLane(s: MatchState, winner: Team): Partial<MatchState> {
 	const wave = spawnWave(s.map, LANE[lane], pieces, `${s.round}_${s.turn}_${waves}`, s.cards)
 	for (const id of wave.cleared) delete pieces[id] // tokens on the new zone's spawn points make way
 	patch.pieces = { ...pieces, ...wave.minions }
+	patch.strays = wave.choices // a blocked spawn point with several nearest spaces: its team picks (see GameView strays)
 	patch.pushNews = news(LANE[lane], null)
 	return patch
 }

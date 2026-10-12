@@ -162,6 +162,18 @@ describe('the minion lane', () => {
 		expect(cleared).toEqual([])
 	})
 
+	it('a blocked spawn point with several equally near spaces lets its team choose (strays); none blocked = no choices', () => {
+		const hero: Piece = { id: 'X', hex: '9_10', team: 'blue', kind: 'hero' }
+		const { minions, choices } = spawnWave(M, 'Center', { X: hero }, 't')
+		const id = Object.keys(minions).find((k) => k.startsWith('minion_9_10_'))!
+		const opts = choices[id] ?? []
+		for (const h of opts) expect(Object.values(minions).filter((m) => m.hex === h && m.id !== id)).toHaveLength(0)
+		if (opts.length) expect(opts).toContain(minions[id].hex)
+		for (const k in choices) expect(k).toBe(id)
+		expect(Object.keys(spawnWave(M, 'Center', {}, 't').choices)).toEqual([])
+		expect(opts.length).toBeGreaterThan(1) // 9_10 has several equally near spaces on this map
+	})
+
 	it('a token on a spawn point is removed and the minion spawns there — but Trinkets\' Turret is an object and stays', () => {
 		const sp = Object.values(spawnWave(M, 'Center', {}, 't').minions).map((p) => p.hex)
 		expect(sp).toContain('9_10')
