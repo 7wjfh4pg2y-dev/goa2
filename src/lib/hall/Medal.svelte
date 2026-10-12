@@ -42,6 +42,6 @@
 <style>
 	.medal { position: relative; flex: none; display: inline-block; width: var(--s); height: calc(var(--s) * 1.2); }
 	.medal svg { position: absolute; inset: 0; width: 100%; height: 100%; filter: drop-shadow(0 5px 8px rgba(0, 0, 0, 0.55)); }
-	.ic { position: absolute; left: 0; right: 0; top: 0; height: calc(var(--s) * 0.8); display: grid; place-items: center; color: var(--ink); }
+	.ic { position: absolute; left: 0; right: 0; top: 0; height: var(--s); display: grid; place-items: center; color: var(--ink); }
 	.locked .ic { opacity: 0.8; }
 </style>

@@ -1,6 +1,6 @@
 <script lang="ts">
 	// One game in the Matches list: when, how it was won, the two teams as hero faces (winners lit), and — opened —
-	// every seat with K / D / A, minions, gold and level, plus the defeats in order.
+	// every seat with K / D / M (kills, deaths, minions), gold and level, plus the defeats in order.
 	import type { LeagueGame } from '$lib/league';
 	import { WIN_LABEL } from '$lib/league';
 	import { heroById, portraitCss } from '$lib/heroes';
@@ -35,13 +35,12 @@
 		<div class="mb">
 			{#each sides as s (s.t)}
 				<table class="tbl">
-					<thead><tr><th class:team-o={s.t === 'orange'} class:team-b={s.t === 'blue'}>{teamName(s.t)} {g.winner === s.t ? '· Victory' : '· Defeat'}</th><th class="rt">K</th><th class="rt">D</th><th class="rt">A</th><th class="rt">Minions</th><th class="rt">Gold</th><th class="rt">Lv</th></tr></thead>
+					<thead><tr><th class:team-o={s.t === 'orange'} class:team-b={s.t === 'blue'}>{teamName(s.t)} {g.winner === s.t ? '· Victory' : '· Defeat'}</th><th class="rt">K</th><th class="rt">D</th><th class="rt">M</th><th class="rt">Gold</th><th class="rt">Lv</th></tr></thead>
 					<tbody>
 						{#each s.ps as p (p.key + p.hero)}
 							<tr on:click={() => onPlayer(p.key)}>
 								<td><span class="pc"><button class="linky" on:click|stopPropagation={() => onHero(p.hero)} title={heroName(p.hero)}><span class="face" style="--fs:28px; {portraitCss(p.hero)}"></span></button><span><b>{p.name}</b><small>{heroName(p.hero)}</small></span></span></td>
-								<td class="rt up">{p.kills ?? '–'}</td><td class="rt down">{p.deaths ?? '–'}</td><td class="rt b">{p.assists ?? '–'}</td>
-								<td class="rt">{p.minions ?? '–'}</td><td class="rt au">{p.coins ?? '–'}</td><td class="rt">{p.level || '–'}</td>
+								<td class="rt up">{p.kills ?? '–'}</td><td class="rt down">{p.deaths ?? '–'}</td><td class="rt b">{p.minions ?? '–'}</td><td class="rt au">{p.coins ?? '–'}</td><td class="rt">{p.level || '–'}</td>
 							</tr>
 						{/each}
 					</tbody>

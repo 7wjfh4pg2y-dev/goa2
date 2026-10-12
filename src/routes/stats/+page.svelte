@@ -14,7 +14,7 @@
 	} from '$lib/league';
 	import { heroById, portraitCss, TRAIT_LABELS, type Trait } from '$lib/heroes';
 	import { colorHex } from '$lib/match';
-	import { heroRanks, overview } from '$lib/hallstats';
+	import { heroRanks, overview, heroPlayers } from '$lib/hallstats';
 	import OverTime from '$lib/hall/OverTime.svelte';
 	import Rivalries from '$lib/hall/Rivalries.svelte';
 	import AwardsHall from '$lib/hall/AwardsHall.svelte';
@@ -103,25 +103,32 @@
 	const pcol = (p: PlayerAgg) => (p.color ? colorHex(p.color) : 'var(--mu2)');
 
 	// ── the players: sortable leaderboard (or the rating over time / rivalries) ──
-	let pq = '', psort: 'rating' | 'games' | 'win' | 'kd' | 'name' = 'rating', pview: 'board' | 'time' | 'rivals' = 'board';
+	let pq = '', psort: 'rating' | 'games' | 'win' | 'kd' | 'kdm' | 'name' = 'rating', pflip = false, pview: 'board' | 'time' | 'rivals' = 'board';
+	// a click on the sorted column flips its order; a click on another column sorts by it (its natural order first)
+	const sortP = (k: string) => { if (psort === k) pflip = !pflip; else { psort = k as typeof psort; pflip = false; } };
+	const sortH = (k: string) => { if (hsort === k) hflip = !hflip; else { hsort = k as typeof hsort; hflip = false; } };
+	const flip = <T,>(xs: T[], f: boolean) => (f ? [...xs].reverse() : xs);
+	const perG = (n: number, g: number) => (g ? n / g : -1);
 	const has = (txt: string, q: string) => txt.toLowerCase().includes(q.trim().toLowerCase());
 	$: rankByRating = new Map((league?.players ?? []).map((p, i) => [p.key, i + 1]));
-	$: plist = (league?.players ?? []).filter((p) => !pq.trim() || has(p.name, pq)).sort((a, b) =>
+	$: plist = flip((league?.players ?? []).filter((p) => !pq.trim() || has(p.name, pq)).sort((a, b) =>
 		psort === 'games' ? b.games - a.games || b.rating - a.rating
 		: psort === 'win' ? pct(b.wins, b.games) - pct(a.wins, a.games) || b.games - a.games
 		: psort === 'kd' ? kdr(b) - kdr(a)
+		: psort === 'kdm' ? perG(b.kills, b.kdaGames) - perG(a.kills, a.kdaGames) || perG(b.minions, b.kdaGames) - perG(a.minions, a.kdaGames)
 		: psort === 'name' ? a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
-		: b.rating - a.rating);
+		: b.rating - a.rating), pflip);
 	// ── the heroes: sortable table (every game) ──
-	let hq = '', hsort: 'picks' | 'win' | 'kda' | 'gold' | 'impact' | 'name' = 'picks';
-	const hkda = (h: HeroAgg) => (h.kdaGames ? (h.kills + h.assists) / Math.max(1, h.deaths) : -1);
-	$: hlist = (allL?.heroes ?? []).filter((h) => !hq.trim() || has(heroName(h.hero), hq) || (heroById(h.hero)?.traits ?? []).some((t) => has(TRAIT_LABELS[t as Trait], hq))).sort((a, b) =>
+	let hq = '', hsort: 'picks' | 'win' | 'kdm' | 'gold' | 'impact' | 'name' = 'picks', hflip = false;
+	$: hlist = flip((allL?.heroes ?? []).filter((h) => !hq.trim() || has(heroName(h.hero), hq) || (heroById(h.hero)?.traits ?? []).some((t) => has(TRAIT_LABELS[t as Trait], hq))).sort((a, b) =>
 		hsort === 'win' ? pct(b.wins, b.games) - pct(a.wins, a.games) || b.games - a.games
-		: hsort === 'kda' ? hkda(b) - hkda(a)
+		: hsort === 'kdm' ? perG(b.kills, b.kdaGames) - perG(a.kills, a.kdaGames) || perG(b.minions, b.mGames) - perG(a.minions, a.mGames)
 		: hsort === 'gold' ? (b.coinGames ? b.coins / b.coinGames : -1) - (a.coinGames ? a.coins / a.coinGames : -1)
 		: hsort === 'impact' ? (b.impact ?? -999) - (a.impact ?? -999)
 		: hsort === 'name' ? heroName(a.hero).localeCompare(heroName(b.hero))
-		: b.games - a.games || b.wins - a.wins);
+		: b.games - a.games || b.wins - a.wins), hflip);
+	// each hero's best player: most games AND the best success (hallstats byMastery)
+	$: masters = allL ? heroPlayers(allL.games) : new Map();
 	$: maxPick = Math.max(1, ...(allL?.heroes ?? []).map((h) => h.games));
 	$: totalGames = allL?.games.length ?? 0;
 	// ── the matches ──
@@ -136,8 +143,8 @@
 <svelte:head><title>GoA2 · Hall of Records</title></svelte:head>
 <svelte:window on:keydown={(e) => { if (e.key === 'Escape' && !(e.target instanceof HTMLInputElement)) { if (heroSel) heroSel = null; else if (sel) sel = null; } }} />
 
-{#snippet th(label: string, key: string, cur: string, set: (k: string) => void, right = false)}
-	<th class="sortable" class:on={cur === key} class:rt={right} on:click={() => set(key)}>{label}</th>
+{#snippet th(label: string, key: string, cur: string, set: (k: string) => void, right = false, flipped = false)}
+	<th class="sortable" class:on={cur === key} class:flipped={cur === key && flipped} class:rt={right} on:click={() => set(key)} title="Sort (click again to reverse)">{label}</th>
 {/snippet}
 {#snippet winCell(w: number, g: number)}
 	{@const r = pct(w, g)}
@@ -193,27 +200,27 @@
 						<div class="scrollx">
 							<table class="tbl heroes">
 								<thead><tr>
-									{@render th('Hero', 'name', hsort, (k) => (hsort = k as typeof hsort))}
-									{@render th('Picks', 'picks', hsort, (k) => (hsort = k as typeof hsort))}
+									{@render th('Hero', 'name', hsort, sortH, false, hflip)}
+									{@render th('Picks', 'picks', hsort, sortH, false, hflip)}
 									<th>Pick rate</th>
-									{@render th('Win rate', 'win', hsort, (k) => (hsort = k as typeof hsort))}
-									{@render th('K / D / A', 'kda', hsort, (k) => (hsort = k as typeof hsort), true)}
-									{@render th('Gold', 'gold', hsort, (k) => (hsort = k as typeof hsort), true)}
-									{@render th('Impact', 'impact', hsort, (k) => (hsort = k as typeof hsort), true)}
-									<th>Top player</th>
+									{@render th('Win rate', 'win', hsort, sortH, false, hflip)}
+									{@render th('K / D / M', 'kdm', hsort, sortH, true, hflip)}
+									{@render th('Gold', 'gold', hsort, sortH, true, hflip)}
+									{@render th('Impact', 'impact', hsort, sortH, true, hflip)}
+									<th title="Most games with the best success on this hero">Top player</th>
 								</tr></thead>
 								<tbody>
 									{#each hlist as h (h.hero)}
-										{@const top1 = Object.entries(h.players).sort((a, b) => b[1] - a[1])[0]}
+										{@const top1 = masters.get(h.hero)?.[0]}
 										<tr on:click={() => openHero(h.hero)}>
 											<td><span class="hcell"><span class="face" style="--fs:38px; {portraitCss(h.hero)}"></span><span><b>{heroName(h.hero)}</b><small class="tr">{(heroById(h.hero)?.traits ?? []).map((t) => TRAIT_LABELS[t as Trait]).join(' · ')}</small></span></span></td>
 											<td class="rt">{h.games}</td>
 											<td class="barcell"><span class="bv"><b class="b">{f1(pct(h.games, totalGames))}%</b><span class="bar thin"><i style="--v:{h.games / maxPick}"></i></span></span></td>
 											{@render winCell(h.wins, h.games)}
-											<td class="rt">{h.kdaGames ? `${avg(h.kills, h.kdaGames)} / ${avg(h.deaths, h.kdaGames)} / ${avg(h.assists, h.kdaGames)}` : '–'}</td>
+											<td class="rt">{h.kdaGames ? `${avg(h.kills, h.kdaGames)} / ${avg(h.deaths, h.kdaGames)} / ${avg(h.minions, h.mGames)}` : '–'}</td>
 											<td class="rt au">{avg(h.coins, h.coinGames)}</td>
 											<td class="rt" class:up={(h.impact ?? 0) > 0} class:down={(h.impact ?? 0) < 0}>{h.impact == null ? '–' : `${h.impact > 0 ? '+' : ''}${h.impact}`}</td>
-											<td class="muted">{top1 ? `${top1[0]} · ${top1[1]}` : ''}</td>
+											<td>{#if top1}<button class="linky tp" on:click|stopPropagation={() => openPlayer(top1.key)}>{top1.name}</button> <small class="muted">{top1.wins}–{top1.games - top1.wins}</small>{/if}</td>
 										</tr>
 									{:else}<tr><td colspan="8" class="muted">No hero matches.</td></tr>{/each}
 								</tbody>
@@ -251,12 +258,12 @@
 							<table class="tbl board">
 								<thead><tr>
 									<th class="rt">#</th>
-									{@render th('Player', 'name', psort, (k) => (psort = k as typeof psort))}
-									{@render th('Rating', 'rating', psort, (k) => (psort = k as typeof psort), true)}
-									{@render th('Games', 'games', psort, (k) => (psort = k as typeof psort), true)}
-									{@render th('Win rate', 'win', psort, (k) => (psort = k as typeof psort))}
-									<th class="rt">K / D / A</th>
-									{@render th('K/D', 'kd', psort, (k) => (psort = k as typeof psort), true)}
+									{@render th('Player', 'name', psort, sortP, false, pflip)}
+									{@render th('Rating', 'rating', psort, sortP, true, pflip)}
+									{@render th('Games', 'games', psort, sortP, true, pflip)}
+									{@render th('Win rate', 'win', psort, sortP, false, pflip)}
+									{@render th('K / D / M', 'kdm', psort, sortP, true, pflip)}
+									{@render th('K/D', 'kd', psort, sortP, true, pflip)}
 									<th class="rt">Streak</th>
 									<th>Heroes</th>
 								</tr></thead>
@@ -269,7 +276,7 @@
 											<td class="rt"><b class="au">{p.rating}</b></td>
 											<td class="rt">{p.games}</td>
 											{@render winCell(p.wins, p.games)}
-											<td class="rt">{p.kdaGames ? `${avg(p.kills, p.kdaGames)} / ${avg(p.deaths, p.kdaGames)} / ${avg(p.assists, p.kdaGames)}` : '–'}</td>
+											<td class="rt">{p.kdaGames ? `${avg(p.kills, p.kdaGames)} / ${avg(p.deaths, p.kdaGames)} / ${avg(p.minions, p.kdaGames)}` : '–'}</td>
 											<td class="rt">{p.kdaGames ? (p.kills / Math.max(1, p.deaths)).toFixed(2) : '–'}</td>
 											<td class="rt" class:up={p.streak > 0} class:down={p.streak < 0}>{p.streak > 0 ? `W${p.streak}` : p.streak < 0 ? `L${-p.streak}` : '–'}</td>
 											<td><span class="hf">{#each favHeroes(p) as h (h)}<span class="face" style="--fs:28px; {portraitCss(h)}" title={heroName(h)}></span>{/each}</span></td>
@@ -385,7 +392,8 @@
 	.hcell > span:last-child { display: flex; flex-direction: column; gap: 4px; }
 	.hcell b { font-size: 14.5px; }
 	.tr { font-size: 12px; color: var(--mu); }
-	.heroes td:last-child { max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+	.heroes td:last-child { max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+	.tp { font-weight: 600; }
 	.rk { display: inline-grid; place-items: center; min-width: 24px; height: 24px; padding: 0 4px; border-radius: 6px; font-size: 12.5px; font-weight: 800; background: var(--p3); color: var(--tx2); }
 	.rk.g1 { background: var(--au); color: #241a00; } .rk.g2 { background: #c9d1dc; color: #10141a; } .rk.g3 { background: #cd8a4f; color: #1f1005; }
 	.pcell { display: inline-flex; align-items: center; gap: 9px; }

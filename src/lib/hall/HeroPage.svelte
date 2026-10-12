@@ -6,7 +6,7 @@
 	import { WIN_LABEL, WIN_TYPES } from '$lib/league';
 	import { heroById, heroSplash, splashFace, portraitCss, traitIcon, TRAIT_LABELS, type Trait } from '$lib/heroes';
 	import { heroCards } from '$lib/cards/deck';
-	import { heroTrend, matchups, heroSplits } from '$lib/hallstats';
+	import { heroTrend, matchups, heroSplits, byMastery } from '$lib/hallstats';
 	import Line from './Line.svelte';
 
 	export let h: HeroAgg;
@@ -56,7 +56,11 @@
 	}
 	$: typeTotal = WIN_TYPES.reduce((s, t) => s + h.byType[t].games, 0) + h.byType.other.games;
 	$: players = Object.entries(h.players).sort((a, b) => b[1] - a[1]);
-	$: who = sp.all.players;
+	// the players: by mastery (most games with the best success) — or by games / win rate / name, either way round
+	let ps: 'best' | 'games' | 'win' | 'name' = 'best', pflip = false;
+	const sortPl = (k: typeof ps) => { if (ps === k) pflip = !pflip; else { ps = k; pflip = false; } };
+	$: whoSorted = [...sp.all.players].sort((a, b) => ps === 'games' ? b.games - a.games || b.wins - a.wins : ps === 'win' ? pct(b.wins, b.games) - pct(a.wins, a.games) || b.games - a.games : ps === 'name' ? a.name.localeCompare(b.name) : byMastery(a, b));
+	$: who = pflip ? [...whoSorted].reverse() : whoSorted;
 </script>
 
 <div class="hp">
@@ -72,7 +76,7 @@
 			<div class="bk">
 				<div class="kv"><span>Games</span><b>{h.games}</b></div>
 				<div class="kv"><span>W – L</span><b>{h.wins}–{h.games - h.wins}</b></div>
-				<div class="kv"><span>K / D / A</span><b>{h.kdaGames ? `${f1(h.kills / h.kdaGames)} / ${f1(h.deaths / h.kdaGames)} / ${f1(h.assists / h.kdaGames)}` : '–'}</b></div>
+				<div class="kv"><span>K / D / M</span><b>{h.kdaGames ? `${f1(h.kills / h.kdaGames)} / ${f1(h.deaths / h.kdaGames)} / ${h.mGames ? f1(h.minions / h.mGames) : '–'}` : '–'}</b></div>
 				<div class="kv"><span>Gold / game</span><b>{h.coinGames ? f1(h.coins / h.coinGames) : '–'}</b></div>
 				<div class="kv"><span>Impact</span><b class:up={(h.impact ?? 0) > 0} class:down={(h.impact ?? 0) < 0}>{h.impact == null ? '–' : `${h.impact > 0 ? '+' : ''}${h.impact}`}</b></div>
 			</div>
@@ -119,7 +123,7 @@
 					<div class="bl"><b>{f1(s.share)}%</b><span class="bar"><i style="--v:{s.share / 100}"></i></span></div>
 					<div class="bl"><b>{f1(s.win)}%</b><span class="bar half" class:gr={s.win >= 50} class:rd={s.win < 50}><i style="--v:{s.win / 100}"></i></span></div>
 					<div class="st5">
-						<span><i class="up">K</i>{s.k ?? '–'}</span><span><i class="down">D</i>{s.d ?? '–'}</span><span><i class="b">A</i>{s.a ?? '–'}</span><span><i class="au">M</i>{s.minions ?? '–'}</span><span><i class="au">G</i>{s.gold ?? '–'}</span>
+						<span><i class="up">K</i>{s.k ?? '–'}</span><span><i class="down">D</i>{s.d ?? '–'}</span><span><i class="b">M</i>{s.minions ?? '–'}</span><span><i class="au">G</i>{s.gold ?? '–'}</span>
 					</div>
 					<div class="sub c">Played by</div>
 					<div class="pby">
@@ -164,9 +168,13 @@
 			{/if}
 		</section>
 		<section class="card">
-			<div class="ch">Players</div>
+			<div class="ch">Players{#if ps === 'best'}<small>best first: most games with the best success</small>{:else}<button class="r linky rs" on:click={() => { ps = 'best'; pflip = false; }}>Best first</button>{/if}</div>
 			<table class="tbl">
-				<thead><tr><th>Player</th><th class="rt">Games</th><th>Win %</th></tr></thead>
+				<thead><tr>
+					<th class="sortable" class:on={ps === 'name'} class:flipped={ps === 'name' && pflip} on:click={() => sortPl('name')}>Player</th>
+					<th class="sortable rt" class:on={ps === 'games'} class:flipped={ps === 'games' && pflip} on:click={() => sortPl('games')}>Games</th>
+					<th class="sortable" class:on={ps === 'win'} class:flipped={ps === 'win' && pflip} on:click={() => sortPl('win')}>Win %</th>
+				</tr></thead>
 				<tbody>
 					{#each who as p (p.key)}
 						<tr on:click={() => onPlayer(p.key)}><td>{p.name}</td><td class="rt">{p.games}</td><td class="barcell"><span class="bv"><b class:up={pct(p.wins, p.games) >= 50} class:down={pct(p.wins, p.games) < 50}>{Math.round(pct(p.wins, p.games))}%</b><span class="bar thin half" class:gr={pct(p.wins, p.games) >= 50} class:rd={pct(p.wins, p.games) < 50}><i style="--v:{p.wins / p.games}"></i></span></span></td></tr>
@@ -228,7 +236,7 @@
 	.mp { font-size: 13px; font-weight: 700; color: var(--bl); }
 	.bl { display: grid; grid-template-columns: 52px 1fr; align-items: center; gap: 10px; margin-bottom: 12px; }
 	.bl b { font-size: 14px; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
-	.st5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin: 4px 0 14px; text-align: center; }
+	.st5 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin: 4px 0 14px; text-align: center; }
 	.st5 span { display: flex; flex-direction: column; gap: 3px; font-size: 13.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
 	.st5 i { font-style: normal; font-size: 12px; font-weight: 800; }
 	.sub.c { text-align: center; }
@@ -249,6 +257,7 @@
 	.on em { margin-left: auto; font-style: normal; font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
 	.opt small { font-size: 12px; color: var(--mu); }
 	.sub.sp { margin-top: 20px; }
+	.rs { font-size: 12.5px; font-weight: 600; color: var(--bl); }
 	.types { display: flex; flex-direction: column; gap: 8px; }
 	.ty { display: grid; grid-template-columns: 100px 1fr 48px; align-items: center; gap: 10px; font-size: 13px; }
 	.ty span:first-child { color: var(--tx2); }

@@ -8,7 +8,7 @@
 	import { heroCards } from '$lib/cards/deck';
 	import { teamName } from '$lib/teams';
 	import { colorHex } from '$lib/match';
-	import { playerRoles, winTrend, peopleMatchups } from '$lib/hallstats';
+	import { playerRoles, winTrend, peopleMatchups, sideRecord } from '$lib/hallstats';
 	import Line from './Line.svelte';
 
 	export let p: PlayerAgg;
@@ -36,16 +36,29 @@
 	$: mu = peopleMatchups(p, mside);
 	$: roles = playerRoles(p).slice(0, 5);
 	$: heroes = (() => {
-		const m = new Map<string, { hero: string; games: number; wins: number; k: number; d: number; a: number; ev: number; coins: number; cg: number }>();
+		const m = new Map<string, { hero: string; games: number; wins: number; k: number; d: number; mn: number; ev: number; coins: number; cg: number }>();
 		for (const x of p.history) {
-			const r = m.get(x.hero) ?? { hero: x.hero, games: 0, wins: 0, k: 0, d: 0, a: 0, ev: 0, coins: 0, cg: 0 };
+			const r = m.get(x.hero) ?? { hero: x.hero, games: 0, wins: 0, k: 0, d: 0, mn: 0, ev: 0, coins: 0, cg: 0 };
 			r.games++; if (x.won) r.wins++;
-			if (x.k != null && x.d != null) { r.ev++; r.k += x.k; r.d += x.d; r.a += x.a ?? 0; }
+			if (x.k != null && x.d != null) { r.ev++; r.k += x.k; r.d += x.d; r.mn += x.minions ?? 0; }
 			if (x.coins != null) { r.coins += x.coins; r.cg++; }
 			m.set(x.hero, r);
 		}
-		return [...m.values()].sort((a, b) => b.games - a.games || b.wins - a.wins);
+		return [...m.values()];
 	})();
+	// the heroes table: sortable both ways (a click on the sorted column reverses it)
+	let hs: 'games' | 'win' | 'kdm' | 'gold' | 'name' = 'games', hflip = false;
+	const sortHs = (k: typeof hs) => { if (hs === k) hflip = !hflip; else { hs = k; hflip = false; } };
+	const per = (n: number, g: number) => (g ? n / g : -1);
+	$: heroesSorted = [...heroes].sort((a, b) => hs === 'win' ? pct(b.wins, b.games) - pct(a.wins, a.games) || b.games - a.games
+		: hs === 'kdm' ? per(b.k, b.ev) - per(a.k, a.ev) || per(b.mn, b.ev) - per(a.mn, a.ev)
+		: hs === 'gold' ? per(b.coins, b.cg) - per(a.coins, a.cg)
+		: hs === 'name' ? heroName(a.hero).localeCompare(heroName(b.hero))
+		: b.games - a.games || b.wins - a.wins);
+	$: heroRows = hflip ? [...heroesSorted].reverse() : heroesSorted;
+	// career totals and the side record
+	$: sides = sideRecord(p.history);
+	let allTitles = false;
 	// the table's averages per game ("vs the table")
 	$: table = (() => {
 		const ps = league.players;
@@ -89,7 +102,8 @@
 	let open: Record<string, boolean> = {};
 	let limit = 25;
 	const rt = (x: { r: number; t: number }) => (x.r ? `R${x.r}·T${x.t}` : '');
-	const kda = (x: { k: number | null; d: number | null; a: number | null }) => (x.k != null ? `${x.k}/${x.d}/${x.a ?? '–'}` : '–');
+	// K / D / M = kills / deaths / minions (the user's pick over K / D / A)
+	const kda = (x: { k: number | null; d: number | null; m?: number | null; minions?: number | null }) => (x.k != null ? `${x.k}/${x.d}/${x.m ?? x.minions ?? '–'}` : '–');
 	function badges(m: MatchLine) {
 		const x = m.x, b: string[] = [];
 		if (x?.firstBlood) b.push('First blood');
@@ -134,7 +148,7 @@
 				<span class="rkc" class:g1={rank === 1} class:g2={rank === 2} class:g3={rank === 3}>#{rank}</span>
 				<h2>{p.name}</h2>
 				<span class="bs">{p.games} games · since {day(p.firstAt)} · last {day(p.lastAt)}{#if p.minutes} · {hm(p.minutes)} played{/if}</span>
-				{#if titles.length}<span class="tt">{#each titles.slice(0, 6) as t (t.title)}<span class="chip au" title={t.blurb}>{t.title}</span>{/each}{#if titles.length > 6}<span class="chip">+{titles.length - 6}</span>{/if}</span>{/if}
+				{#if titles.length}<span class="tt">{#each allTitles ? titles : titles.slice(0, 6) as t (t.title)}<span class="chip au" title={t.blurb}>{t.title}</span>{/each}{#if titles.length > 6}<button class="chip more" on:click={() => (allTitles = !allTitles)} title={allTitles ? 'Show fewer' : 'Show every award they hold'}>{allTitles ? 'Less' : `+${titles.length - 6}`}</button>{/if}</span>{/if}
 			</div>
 			<div class="bk">
 				<div class="kv"><span>Rating</span><b>{p.rating}<small> peak {p.peak}</small></b></div>
@@ -165,6 +179,33 @@
 		</section>
 	</div>
 
+	<div class="row c21">
+		<section class="card">
+			<div class="ch">Career <small>every game on record{p.kdaGames < p.games ? ` · kills, deaths and minions from the ${p.kdaGames} games that kept them` : ''}</small></div>
+			<div class="career">
+				<div class="kv big"><span>Hero kills</span><b class="up">{p.kdaGames ? p.kills : '–'}</b></div>
+				<div class="kv big"><span>Deaths</span><b class="down">{p.kdaGames ? p.deaths : '–'}</b></div>
+				<div class="kv big"><span>Minions</span><b class="b">{p.kdaGames ? p.minions : '–'}</b></div>
+				<div class="kv big"><span>Gold collected</span><b class="au">{p.coinGames ? p.coins : '–'}</b></div>
+				<div class="kv big"><span>Ultimates</span><b class="vi">{p.ults}</b></div>
+				<div class="kv big"><span>Assists</span><b>{p.kdaGames ? p.assists : '–'}</b></div>
+			</div>
+		</section>
+		<section class="card">
+			<div class="ch">By side <small>do they win more as Atlanteans or Titans?</small></div>
+			{#each [['orange', 'Atlanteans'], ['blue', 'Titans']] as [t, label] (t)}
+				{@const r = sides[t === 'orange' ? 'orange' : 'blue']}
+				{@const w = pct(r.wins, r.games)}
+				<div class="sd">
+					<span class="sdn" class:team-o={t === 'orange'} class:team-b={t === 'blue'}>{label}</span>
+					<span class="bar half" class:gr={w >= 50} class:rd={w < 50}><i style="--v:{r.games ? r.wins / r.games : 0}"></i></span>
+					<b class:up={r.games > 0 && w >= 50} class:down={r.games > 0 && w < 50}>{r.games ? `${Math.round(w)}%` : '–'}</b>
+					<small>{r.wins}–{r.games - r.wins}</small>
+				</div>
+			{/each}
+		</section>
+	</div>
+
 	{#if roles.length}
 		<div class="row roles" style="grid-template-columns: repeat({roles.length}, minmax(0, 1fr))">
 			{#each roles as r, i (r.trait)}
@@ -183,15 +224,19 @@
 			<div class="ch">Heroes <small>{heroes.length} played</small></div>
 			<div class="scrollx">
 				<table class="tbl">
-					<thead><tr><th>Hero</th><th class="rt">Games</th><th>Win %</th><th class="rt">K / D / A</th><th class="rt">Gold</th></tr></thead>
+					<thead><tr>
+						{#each [['name', 'Hero', false], ['games', 'Games', true], ['win', 'Win %', false], ['kdm', 'K / D / M', true], ['gold', 'Gold', true]] as [k, l, rt] (k)}
+							<th class="sortable" class:rt={!!rt} class:on={hs === k} class:flipped={hs === k && hflip} on:click={() => sortHs(k as typeof hs)}>{l}</th>
+						{/each}
+					</tr></thead>
 					<tbody>
-						{#each heroes as h (h.hero)}
+						{#each heroRows as h (h.hero)}
 							{@const w = pct(h.wins, h.games)}
 							<tr on:click={() => onHero(h.hero)}>
 								<td><span class="hc"><span class="face" style="--fs:30px; {portraitCss(h.hero)}"></span>{heroName(h.hero)}</span></td>
 								<td class="rt">{h.games}</td>
 								<td class="barcell"><span class="bv"><b class:up={w >= 50} class:down={w < 50}>{Math.round(w)}%</b><span class="bar thin half" class:gr={w >= 50} class:rd={w < 50}><i style="--v:{h.wins / h.games}"></i></span></span></td>
-								<td class="rt">{h.ev ? `${avg(h.k, h.ev)} / ${avg(h.d, h.ev)} / ${avg(h.a, h.ev)}` : '–'}</td>
+								<td class="rt">{h.ev ? `${avg(h.k, h.ev)} / ${avg(h.d, h.ev)} / ${avg(h.mn, h.ev)}` : '–'}</td>
 								<td class="rt">{avg(h.coins, h.cg)}</td>
 							</tr>
 						{/each}
@@ -202,7 +247,7 @@
 		<section class="card">
 			<div class="ch">Combat <small>per game · ▲▼ vs the table</small></div>
 			{#if p.kdaGames}
-				<div class="kdab"><b class="up">{p.kills}</b><i>/</i><b class="down">{p.deaths}</b><i>/</i><b class="b">{p.assists}</b><span>K / D / A{p.kdaGames < p.games ? ` · ${p.kdaGames} of ${p.games} games` : ''}</span></div>
+				<div class="kdab"><b class="up">{p.kills}</b><i>/</i><b class="down">{p.deaths}</b><i>/</i><b class="b">{p.minions}</b><span>K / D / M{p.kdaGames < p.games ? ` · ${p.kdaGames} of ${p.games} games` : ''}</span></div>
 				<div class="cgrid">
 					{#each combat as c (c.k)}<div class="kv"><span>{c.k}</span><b>{c.v}<em class={c.c}>{c.c === 'up' ? '▲' : c.c === 'down' ? '▼' : ''}</em><small> {c.t}</small></b></div>{/each}
 				</div>
@@ -242,7 +287,7 @@
 						<span class="wl" class:w={m.won}>{m.won ? 'W' : 'L'}</span>
 						<span class="face" style="--fs:34px; {portraitCss(m.hero)}"></span>
 						<span class="hn"><b>{heroName(m.hero)}</b><small>{day(m.at)} · <span class:team-o={m.team === 'orange'} class:team-b={m.team === 'blue'}>{teamName(m.team)}</span></small></span>
-						<span class="hk"><small>K/D/A</small><b>{kda(m)}</b></span>
+						<span class="hk"><small>K/D/M</small><b>{kda(m)}</b></span>
 						<span class="hk hidem"><small>Gold</small><b>{m.coins ?? '–'}</b></span>
 						<span class="hk hidem"><small>{m.legacy ? 'Table' : WIN_LABEL[m.type]}</small><b>{m.legacy ? '—' : `R${m.rounds}`}</b></span>
 						<span class="hvs hidem"><small>with</small> {m.mates.map((x) => x.name).join(', ') || '—'}<br /><small>vs</small> {m.foes.map((x) => x.name).join(', ')}</span>
@@ -315,6 +360,17 @@
 	.rw span { display: flex; flex-direction: column; gap: 3px; font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
 	.rw i { font-style: normal; font-size: 12px; font-weight: 800; }
 	.hc { display: inline-flex; align-items: center; gap: 10px; font-weight: 600; }
+	.career { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 14px; }
+	.career .kv b { font-size: 26px; font-weight: 800; }
+	.vi { color: var(--vi); }
+	.sd { display: grid; grid-template-columns: 90px 1fr 46px 44px; align-items: center; gap: 12px; margin-bottom: 14px; }
+	.sd:last-child { margin-bottom: 0; }
+	.sdn { font-size: 14px; font-weight: 700; }
+	.sd b { text-align: right; font-size: 16px; font-variant-numeric: tabular-nums; }
+	.sd small { font-size: 12px; color: var(--mu); text-align: right; }
+	.chip.more { cursor: pointer; }
+	.chip.more:hover { border-color: var(--au); color: var(--tx); }
+	@media (max-width: 1100px) { .career { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 	.kdab { display: flex; align-items: baseline; gap: 6px; margin-bottom: 14px; font-variant-numeric: tabular-nums; }
 	.kdab b { font-size: 30px; font-weight: 800; }
 	.kdab i { font-style: normal; color: var(--mu2); font-size: 22px; }

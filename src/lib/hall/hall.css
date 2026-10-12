@@ -71,6 +71,7 @@
 .hall .tbl th.sortable { cursor: pointer; user-select: none; }
 .hall .tbl th.sortable:hover, .hall .tbl th.on { color: var(--tx); }
 .hall .tbl th.on::after { content: ' ▾'; color: var(--bl); }
+.hall .tbl th.on.flipped::after { content: ' ▴'; }
 .hall .tbl td { padding: 9px 10px; border-bottom: 1px solid rgba(255, 255, 255, 0.04); vertical-align: middle; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .hall .tbl tbody tr { cursor: pointer; }
 .hall .tbl tbody tr:hover td { background: rgba(255, 255, 255, 0.025); }

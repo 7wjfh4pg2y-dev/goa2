@@ -137,3 +137,28 @@ export function overview(L: League) {
 		first: g[0]?.at ?? 0, last: g[g.length - 1]?.at ?? 0
 	}
 }
+
+/** Mastery on a hero: games won, minus half the games lost — playing a lot AND winning a lot both count
+ *  (4–0 beats 5–5, 3–3 beats 1–0, 8–2 beats 3–0). */
+export const mastery = (wins: number, games: number) => wins - (games - wins) / 2
+export type HeroPlayer = { key: string; name: string; games: number; wins: number }
+/** Every hero's players (games + wins), from every game. */
+export function heroPlayers(games: LeagueGame[]): Map<string, HeroPlayer[]> {
+	const m = new Map<string, Map<string, HeroPlayer>>()
+	for (const g of games) for (const p of g.players) {
+		const h = m.get(p.hero) ?? new Map<string, HeroPlayer>()
+		const x = h.get(p.key) ?? { key: p.key, name: p.name, games: 0, wins: 0 }
+		x.games++; if (p.won) x.wins++; x.name = p.name
+		h.set(p.key, x); m.set(p.hero, h)
+	}
+	return new Map([...m].map(([hero, h]) => [hero, [...h.values()].sort(byMastery)]))
+}
+/** The best on a hero: the highest mastery, then the better win rate, then more games. */
+export const byMastery = (a: HeroPlayer, b: HeroPlayer) => mastery(b.wins, b.games) - mastery(a.wins, a.games) || b.wins / b.games - a.wins / a.games || b.games - a.games
+
+/** A player's record on each side of the board. */
+export function sideRecord(history: MatchLine[]): Record<Team, { games: number; wins: number }> {
+	const out: Record<Team, { games: number; wins: number }> = { orange: { games: 0, wins: 0 }, blue: { games: 0, wins: 0 } }
+	for (const m of history) { out[m.team].games++; if (m.won) out[m.team].wins++ }
+	return out
+}

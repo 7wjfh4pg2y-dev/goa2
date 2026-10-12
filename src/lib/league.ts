@@ -296,7 +296,7 @@ export type Foe = { key: string; name: string; games: number; wins: number; kill
 export type Mate = { key: string; name: string; games: number; wins: number }
 export type PathTally = { hero: string; path: Path; games: number; wins: number; by: string[] }
 /** Someone else at the table in one game, as the player's log shows them. */
-export type TableMate = { key: string; name: string; hero: string; level: number; k: number | null; d: number | null; a: number | null }
+export type TableMate = { key: string; name: string; hero: string; level: number; k: number | null; d: number | null; a: number | null; m?: number | null }
 /** One game from one player's side — everything the player log shows for it. */
 export type MatchLine = { id: string; at: number; startedAt: number; room: string; minutes: number; hero: string; team: Team; won: boolean; type: WinType; rounds: number; level: number
 	k: number | null; d: number | null; a: number | null; minions: number | null; mRoles: GamePlayer['mRoles']; coins: number | null; path: Path
@@ -360,8 +360,8 @@ export type PlayerAgg = {
 	fastUlt: number | null
 }
 export type HeroAgg = { hero: string; games: number; wins: number; players: Record<string, number>; paths: PathTally[]
-	/** K / D / A over the games recorded with events, coins over the games with a final card state */
-	kills: number; deaths: number; assists: number; kdaGames: number; coins: number; coinGames: number
+	/** K / D / A over the games recorded with events, coins over the games with a final card state, minions over the games that kept them */
+	kills: number; deaths: number; assists: number; kdaGames: number; coins: number; coinGames: number; minions: number; mGames: number
 	byType: Record<WinType, Tally>
 	/** other heroes: on its side (`mates`) / against it (`foes`), as games + this hero's wins */
 	mates: Record<string, Tally>; foes: Record<string, Tally>
@@ -467,7 +467,7 @@ export function leagueOf(list: LeagueGame[]): League {
 			addPath(p._paths, gp)
 			const nameOf = (k: string) => g.players.find((o) => o.key === k)?.name ?? k
 			const at = (x: { r: number; t: number }) => ({ r: x.r, t: x.t })
-			const mate = (o: GamePlayer): TableMate => ({ key: o.key, name: o.name, hero: o.hero, level: o.level, k: o.kills, d: o.deaths, a: o.assists })
+			const mate = (o: GamePlayer): TableMate => ({ key: o.key, name: o.name, hero: o.hero, level: o.level, k: o.kills, d: o.deaths, a: o.assists, m: o.minions })
 			p.history.push({ id: g.id, at: g.at, startedAt: g.startedAt, room: g.room, minutes: g.minutes, hero: gp.hero, team: gp.team, won: gp.won, type: g.type, rounds: g.rounds, level: gp.level,
 				k: gp.kills, d: gp.deaths, a: gp.assists, minions: gp.minions, mRoles: gp.mRoles, coins: gp.coins, path: gp.path,
 				mates: g.players.filter((o) => o.team === gp.team && o.key !== gp.key).map(mate),
@@ -479,11 +479,12 @@ export function leagueOf(list: LeagueGame[]): League {
 				rating: p.rating, delta, ...(g.legacy ? { legacy: true } : {}) })
 			// heroes
 			const h = H.get(gp.hero) ?? { hero: gp.hero, games: 0, wins: 0, players: {} as Record<string, number>, paths: [], _paths: new Map<string, PathTally>(),
-				kills: 0, deaths: 0, assists: 0, kdaGames: 0, coins: 0, coinGames: 0, byType: { throne: { games: 0, wins: 0 }, final: { games: 0, wins: 0 }, life: { games: 0, wins: 0 }, other: { games: 0, wins: 0 } },
+				kills: 0, deaths: 0, assists: 0, kdaGames: 0, coins: 0, coinGames: 0, minions: 0, mGames: 0, byType: { throne: { games: 0, wins: 0 }, final: { games: 0, wins: 0 }, life: { games: 0, wins: 0 }, other: { games: 0, wins: 0 } },
 				mates: {} as Record<string, Tally>, foes: {} as Record<string, Tally>, impact: null, impactN: 0 }
 			h.games++; if (gp.won) h.wins++
 			if (gp.kills != null && gp.deaths != null) { h.kills += gp.kills; h.deaths += gp.deaths; h.assists += gp.assists ?? 0; h.kdaGames++ }
 			if (gp.coins != null) { h.coins += gp.coins; h.coinGames++ }
+			if (gp.minions != null) { h.minions += gp.minions; h.mGames++ }
 			h.byType[g.type].games++; if (gp.won) h.byType[g.type].wins++
 			for (const o of g.players) {
 				if (o.key === gp.key || o.hero === gp.hero) continue
@@ -604,6 +605,8 @@ export function awardsOf(games: LeagueGame[], players: PlayerAgg[]): Award[] {
 	out.push({ id: 'speedrun', title: 'Speedrun', blurb: 'The quickest game (fewest rounds) — its winners', scope: 'game', holders: fast ? fast.players.filter((p) => p.won).map((p) => ({ key: p.key, name: p.name })) : [], value: fast ? `${plural(fast.rounds, 'round')} · ${hm(fast.minutes)}` : '', at: fast?.at })
 	const long = [...timed].sort((a, b) => b.rounds - a.rounds || b.minutes - a.minutes)[0]
 	out.push({ id: 'marathon', title: 'Marathon', blurb: 'The longest game — everyone who played it', scope: 'game', holders: long ? long.players.map((p) => ({ key: p.key, name: p.name })) : [], value: long ? `${plural(long.rounds, 'round')} · ${hm(long.minutes)}` : '', at: long?.at })
+	// the ultimate: few ever get there
+	career('ultimate', 'Transcendent', 'Unlocked their ultimate — the rarest feat in the game (most times)', (p) => p.ults, (n) => plural(n, 'ultimate'))
 	// gold
 	game('hoard', "Dragon's Hoard", 'Most gold earned in one game', (gp) => gp.coins, (n) => plural(n, 'coin'))
 	career('old-money', 'Old Money', 'Most gold earned, all time', (p) => (p.coinGames ? p.coins : null), (n) => plural(n, 'coin'))

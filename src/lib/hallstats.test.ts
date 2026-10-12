@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { buildLeague } from './league'
 import { sampleRows } from './league.sample'
-import { buckets, heroTrend, heroRanks, matchups, heroSplits, playerRoles, winTrend, peopleMatchups, overview } from './hallstats'
+import { buckets, heroTrend, heroRanks, matchups, heroSplits, playerRoles, winTrend, peopleMatchups, overview, heroPlayers } from './hallstats'
 
 describe('hall stats', () => {
 	const L = buildLeague(sampleRows(24, 5))
@@ -36,4 +36,15 @@ describe('hall stats', () => {
 		expect(o.games).toBe(L.games.length)
 		expect(o.sideWins.orange + o.sideWins.blue).toBe(o.games)
 	})
+	it('ranks a hero\'s players by mastery: games and success together', async () => {
+		const { mastery, byMastery } = await import('./hallstats')
+		expect(mastery(4, 4)).toBeGreaterThan(mastery(5, 10))
+		expect(mastery(3, 6)).toBeGreaterThan(mastery(1, 1))
+		expect(mastery(8, 10)).toBeGreaterThan(mastery(3, 3))
+		const ps = [{ key: 'a', name: 'Zara', games: 1, wins: 1 }, { key: 'b', name: 'Mo', games: 6, wins: 3 }, { key: 'c', name: 'Sam', games: 5, wins: 5 }]
+		expect([...ps].sort(byMastery).map((p) => p.name)).toEqual(['Sam', 'Mo', 'Zara'])
+		const top = heroPlayers(L.games).get(L.heroes[0].hero)!
+		expect(top.length).toBeGreaterThan(0)
+	})
 })
+
