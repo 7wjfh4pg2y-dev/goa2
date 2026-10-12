@@ -190,4 +190,36 @@ describe('reading the table', () => {
 		const r = rowOfSelect({ id: 'x', started_at: 'a', ended_at: 'b', winner: 'blue', reason: null, rounds: 2, d_seats: 4, d_ev: [], d_builds: null })
 		expect(r.data).toEqual({ seats: 4, ev: [] })
 	})
+
+	describe('legacy (table) games', () => {
+		const rep = (id: string, date: string, winner: 'red' | 'blue' | 'none', over: object = {}) => ({ id, date, match: 1, winner, condition: 'Last Push', winnerNote: '',
+			red: [{ name: 'Zara', hero: 'Trinket', k: 2, d: 0, a: 1, mk: 6, gold: 20, lv: 6 }, { name: 'Mo?!', hero: 'Brogan', k: 0, d: 1 }],
+			blue: [{ name: 'Priya', hero: 'Widget and Pyro', k: 1, d: 2 }, { name: 'Sam', hero: 'Arien' }], ...over })
+		it('turns a table report into a game: heroes by name, the score sheet numbers, cancelled / void ones left out', async () => {
+			const { gameOfReport, heroIdOfName } = await import('./league')
+			expect(heroIdOfName('NebKherr')).toBe('nebkher')
+			const g = gameOfReport(rep('irl:1', '2025-08-09', 'red'))!
+			expect(g.legacy).toBe(true)
+			expect(g.type).toBe('final')
+			expect(g.players.map((p) => [p.name, p.hero, p.won])).toEqual([['Zara', 'trinkets', true], ['Mo', 'brogan', true], ['Priya', 'widget', false], ['Sam', 'arien', false]])
+			expect(g.players[0]).toMatchObject({ kills: 2, deaths: 0, assists: 1, minions: 6, coins: 20, level: 6 })
+			expect(g.players[1]).toMatchObject({ kills: 0, deaths: 1, assists: null, level: 0 })
+			expect(g.players[3]).toMatchObject({ kills: null, deaths: null })
+			expect(gameOfReport(rep('irl:2', '2025-08-09', 'none'))).toBeNull()
+			expect(gameOfReport(rep('irl:3', '2025-08-09', 'red', { winnerNote: 'but it doesn’t count' }))).toBeNull()
+		})
+		it('keeps its own league, and the heroes add up across both', async () => {
+			const { gameOfReport, leagueOf } = await import('./league')
+			const online = buildLeague([row('g1', 1, ['Zara', 'Mo', 'Priya', 'Sam'], 'orange')])
+			const legacy = leagueOf([gameOfReport(rep('irl:1', '2025-08-09', 'red'))!])
+			const all = leagueOf([...online.games, ...legacy.games])
+			expect(legacy.players.find((p) => p.name === 'Zara')).toMatchObject({ games: 1, wins: 1, kills: 2, kdaGames: 1, levelGames: 1, levels: 6 })
+			expect(online.players.find((p) => p.name === 'Zara')?.games).toBe(1)
+			expect(all.heroes.find((h) => h.hero === 'brogan')).toMatchObject({ games: 2, wins: 2 })
+			expect(all.heroes.find((h) => h.hero === 'trinkets')).toMatchObject({ games: 1, kills: 2, kdaGames: 1 })
+			// no rounds / minutes: never the Speedrun
+			expect(legacy.awards.find((a) => a.id === 'speedrun')?.holders).toEqual([])
+		})
+	})
 })
+

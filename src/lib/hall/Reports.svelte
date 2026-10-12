@@ -2,7 +2,7 @@
 	// The Hall of Records' REPORTS: the group's weekly game report for every game — online games drafted by the app
 	// (from `goa2_games`), table games logged by hand — newest first. Copy puts the report on the clipboard for the
 	// group chat; Edit opens the editor (tactics, banter, anything the app can't see). Saved in `goa2_reports`.
-	// Table games are reports only: they never count for ratings, awards or any other number here.
+	// Table games (with a winner) count as LEGACY games in the Hall: their own player records and awards, and the hero stats.
 	import { onMount } from 'svelte';
 	import { supabase } from '$lib/supabase';
 	import type { GameRowIn } from '$lib/league';
@@ -139,7 +139,7 @@
 {:else if status === 'error'}
 	<p class="warn">Couldn't read the saved reports ({err}). The drafts below still work; saving may not.</p>
 {/if}
-<p class="fine">Table games are kept here as reports only: they don't count for ratings, awards or any other stats.</p>
+<p class="fine">Table games count in the Hall as <b>Legacy</b> games (their own player records and awards) and in the hero stats. A cancelled game, or one marked "doesn't count", is left out.</p>
 
 <div class="rlist">
 	{#each list as x (x.r.id)}

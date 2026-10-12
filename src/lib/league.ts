@@ -105,6 +105,9 @@ export type LeagueGame = {
 	/** hero defeats, by player key, with when (round / turn) */
 	defeats: { by: string; v: string; a: string[]; r: number; t: number }[]
 	events: boolean
+	/** a TABLE game (from a report): no rounds, minutes, builds or events — only who played what, who won, and
+	 *  whatever numbers the old score sheets kept */
+	legacy?: boolean
 }
 
 const tierOf = (hero: string, i: number) => heroCards(hero)[i]?.level ?? 0
@@ -251,6 +254,42 @@ export function gameOfRow(row: GameRowIn): LeagueGame | null {
 	return { id: row.id, room: row.room ?? '', side: Math.max(1, ...(['orange', 'blue'] as Team[]).map((t) => players.filter((p) => p.team === t).length)), clashes: (d.evv ?? 0) >= 2, startedAt: Date.parse(row.started_at) || at, at, minutes, rounds: row.rounds ?? d.final?.round ?? 0, winner, type: winType(row.reason ?? d.final?.wonBy?.reason), players, defeats, events: !!exact }
 }
 
+// ── table games (LEGACY): a report of a game played at the table → a game to count ───────────────────
+/** A table game's seat as the report keeps it: the player, the hero (by name), and the old score sheet's numbers. */
+export type LegacySeat = { name: string; hero: string; k?: number | null; d?: number | null; a?: number | null; mk?: number | null; gold?: number | null; lv?: number | null }
+export type LegacyIn = { id: string; date: string; red: LegacySeat[]; blue: LegacySeat[]; winner: 'red' | 'blue' | 'none'; winnerNote?: string; condition?: string; match?: number | null; deleted?: boolean }
+const HERO_ALIAS: Record<string, string> = { trinket: 'trinkets', 'widget and pyro': 'widget', xagartha: 'xargatha', nebkherr: 'nebkher', 'neb kher': 'nebkher', rowena: 'rowenna', tc: 'tigerclaw', 'silver arrow': 'silverarrow' }
+/** A hero by the name a report uses (case, spacing and the usual misspellings forgiven) → its id, or ''. */
+export function heroIdOfName(name: string): string {
+	const k = (name ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
+	const n = HERO_ALIAS[k] ?? k
+	return HEROES.find((h) => h.name.toLowerCase() === n || h.id === n)?.id ?? ''
+}
+const num = (x: unknown): number | null => (typeof x === 'number' && Number.isFinite(x) ? x : null)
+/** How a table game was won, in the league's words (Wave Push / Forfeit / anything else = other). */
+const legacyType = (c: string | undefined): WinType => /lane push|throne/i.test(c ?? '') ? 'throne' : /last push|final/i.test(c ?? '') ? 'final' : /life/i.test(c ?? '') ? 'life' : 'other'
+/** A table game that does not count: no winner (cancelled), or declared void ("doesn't count", DQ). */
+export const legacyVoid = (r: LegacyIn) => r.deleted || r.winner === 'none' || /doesn.?t count|not count|\bDQ\b|disqualif|void/i.test(r.winnerNote ?? '')
+/** One table game, ready to count — or null when it doesn't (see legacyVoid) or can't name two heroes. */
+export function gameOfReport(r: LegacyIn): LeagueGame | null {
+	if (!r?.id || legacyVoid(r)) return null
+	const winner: Team = r.winner === 'red' ? 'orange' : 'blue'
+	const day = Date.parse(`${r.date}T12:00:00Z`) || 0
+	const at = day + (r.match ?? 1) * 60000 // games of one day keep their order
+	const players: GamePlayer[] = []
+	for (const [side, team] of [['red', 'orange'], ['blue', 'blue']] as const) for (const st of r[side] ?? []) {
+		const hero = heroIdOfName(st.hero), name = (st.name ?? '').trim().replace(/[?!]+$/, '')
+		if (!hero || !name) continue
+		const k = num(st.k), d = num(st.d)
+		players.push({ key: playerKey(name), name, color: '', id: `${side}:${playerKey(name)}`, hero, team, won: team === winner, level: num(st.lv) ?? 0,
+			coins: num(st.gold), kills: k, deaths: d, assists: k != null && d != null ? num(st.a) : null, minions: num(st.mk), mRoles: null,
+			x: null, ultRound: null, brink: false, path: { cards: [], ult: false, ordered: false } })
+	}
+	if (players.length < 2) return null
+	const side = Math.max(1, ...(['orange', 'blue'] as Team[]).map((t) => players.filter((p) => p.team === t).length))
+	return { id: r.id, room: '', side, clashes: false, startedAt: at, at, minutes: 0, rounds: 0, winner, type: legacyType(r.condition), players, defeats: [], events: false, legacy: true }
+}
+
 // ── the league ────────────────────────────────────────────────────────────────────────────────
 type Tally = { games: number; wins: number }
 export type Foe = { key: string; name: string; games: number; wins: number; killed: number; killedBy: number }
@@ -265,7 +304,9 @@ export type MatchLine = { id: string; at: number; startedAt: number; room: strin
 	/** who they defeated / who defeated them / whose defeats they assisted — round and turn */
 	kills: { name: string; r: number; t: number }[]; deaths: { name: string; r: number; t: number }[]; assisted: { name: string; r: number; t: number }[]
 	x: Extras | null; ultRound: number | null; brink: boolean
-	rating: number; delta: number }
+	rating: number; delta: number
+	/** a table game */
+	legacy?: boolean }
 export type PlayerAgg = {
 	key: string
 	name: string
@@ -292,6 +333,8 @@ export type PlayerAgg = {
 	coins: number
 	coinGames: number
 	levels: number
+	/** games with a known level (table games may not have one) */
+	levelGames: number
 	heroes: Record<string, Tally>
 	roles: Record<string, number>
 	mates: Mate[]
@@ -335,8 +378,14 @@ const K = 32
 const ZERO_EX: Record<keyof Extras, number> = { firstBlood: 0, wipe: 0, shutdowns: 0, paybacks: 0, multis: 0, aces: 0, heavies: 0, bounty: 0, giants: 0, defends: 0, defDied: 0, noDefDied: 0, beatDefended: 0, relentless: 0 }
 const heroTraits = (id: string) => (HEROES.find((h) => h.id === id)?.traits ?? []) as Trait[]
 
-export function buildLeague(rows: GameRowIn[]): League {
-	const games = rows.map((r) => { try { return gameOfRow(r) } catch { return null } }).filter((g): g is LeagueGame => !!g).sort((a, b) => a.at - b.at)
+export function buildLeague(rows: GameRowIn[], extra: LeagueGame[] = []): League {
+	const online = rows.map((r) => { try { return gameOfRow(r) } catch { return null } }).filter((g): g is LeagueGame => !!g)
+	return leagueOf([...online, ...extra])
+}
+
+/** The league over any set of games (online, table or both). */
+export function leagueOf(list: LeagueGame[]): League {
+	const games = [...list].sort((a, b) => a.at - b.at)
 	const P = new Map<string, PlayerAgg & { _mates: Map<string, Mate>; _foes: Map<string, Foe>; _paths: Map<string, PathTally> }>()
 	const H = new Map<string, HeroAgg & { _paths: Map<string, PathTally> }>()
 	const get = (gp: GamePlayer) => {
@@ -344,7 +393,7 @@ export function buildLeague(rows: GameRowIn[]): League {
 		if (!p) {
 			p = { key: gp.key, name: gp.name, color: '', games: 0, wins: 0, losses: 0, rating: START_RATING, ratingHist: [START_RATING], streak: 0, bestStreak: 0, worstStreak: 0,
 				byType: { throne: { games: 0, wins: 0 }, final: { games: 0, wins: 0 }, life: { games: 0, wins: 0 }, other: { games: 0, wins: 0 } },
-				kills: 0, deaths: 0, assists: 0, kdaGames: 0, teamKills: 0, minions: 0, coins: 0, coinGames: 0, levels: 0, heroes: {}, roles: {},
+				kills: 0, deaths: 0, assists: 0, kdaGames: 0, teamKills: 0, minions: 0, coins: 0, coinGames: 0, levels: 0, levelGames: 0, heroes: {}, roles: {},
 				mates: [], foes: [], paths: [], history: [], firstAt: 0, lastAt: 0, peak: START_RATING, minutes: 0, rounds: 0, ults: 0, maxLevel: 0, mRoles: { melee: 0, ranged: 0, heavy: 0 },
 					ex: { ...ZERO_EX }, xGames: 0, clashGames: 0, flawless: 0, pacifist: 0, brinks: 0, fastUlt: null, _mates: new Map(), _foes: new Map(), _paths: new Map() }
 			P.set(gp.key, p)
@@ -380,9 +429,9 @@ export function buildLeague(rows: GameRowIn[]): League {
 			p.worstStreak = Math.min(p.worstStreak, p.streak)
 			p.byType[g.type].games++
 			if (gp.won) p.byType[g.type].wins++
-			if (gp.kills != null && gp.deaths != null && gp.assists != null) { p.kills += gp.kills; p.deaths += gp.deaths; p.assists += gp.assists; p.minions += gp.minions ?? 0; p.kdaGames++; p.teamKills += g.players.filter((o) => o.team === gp.team).reduce((n, o) => n + (o.kills ?? 0), 0) }
+			if (gp.kills != null && gp.deaths != null) { p.kills += gp.kills; p.deaths += gp.deaths; p.assists += gp.assists ?? 0; p.minions += gp.minions ?? 0; p.kdaGames++; p.teamKills += g.players.filter((o) => o.team === gp.team).reduce((n, o) => n + (o.kills ?? 0), 0) }
 			if (gp.coins != null) { p.coins += gp.coins; p.coinGames++ }
-			p.levels += gp.level
+			if (gp.level > 0) { p.levels += gp.level; p.levelGames++ }
 			p.heroes[gp.hero] = { games: (p.heroes[gp.hero]?.games ?? 0) + 1, wins: (p.heroes[gp.hero]?.wins ?? 0) + (gp.won ? 1 : 0) }
 			for (const t of heroTraits(gp.hero)) p.roles[t] = (p.roles[t] ?? 0) + 1
 			p.lastAt = Math.max(p.lastAt, g.at)
@@ -427,13 +476,13 @@ export function buildLeague(rows: GameRowIn[]): League {
 				deaths: g.defeats.filter((x) => x.v === gp.key).map((x) => ({ name: nameOf(x.by), ...at(x) })),
 				assisted: g.defeats.filter((x) => x.a.includes(gp.key)).map((x) => ({ name: nameOf(x.v), ...at(x) })),
 				x: gp.x, ultRound: gp.ultRound, brink: gp.brink,
-				rating: p.rating, delta })
+				rating: p.rating, delta, ...(g.legacy ? { legacy: true } : {}) })
 			// heroes
 			const h = H.get(gp.hero) ?? { hero: gp.hero, games: 0, wins: 0, players: {} as Record<string, number>, paths: [], _paths: new Map<string, PathTally>(),
 				kills: 0, deaths: 0, assists: 0, kdaGames: 0, coins: 0, coinGames: 0, byType: { throne: { games: 0, wins: 0 }, final: { games: 0, wins: 0 }, life: { games: 0, wins: 0 }, other: { games: 0, wins: 0 } },
 				mates: {} as Record<string, Tally>, foes: {} as Record<string, Tally>, impact: null, impactN: 0 }
 			h.games++; if (gp.won) h.wins++
-			if (gp.kills != null && gp.deaths != null && gp.assists != null) { h.kills += gp.kills; h.deaths += gp.deaths; h.assists += gp.assists; h.kdaGames++ }
+			if (gp.kills != null && gp.deaths != null) { h.kills += gp.kills; h.deaths += gp.deaths; h.assists += gp.assists ?? 0; h.kdaGames++ }
 			if (gp.coins != null) { h.coins += gp.coins; h.coinGames++ }
 			h.byType[g.type].games++; if (gp.won) h.byType[g.type].wins++
 			for (const o of g.players) {

@@ -5,8 +5,9 @@
 //
 // Two kinds: ONLINE (drafted from a game in `goa2_games` — teams, winner, how, waves, and highlights read off the
 // game's events — then editable) and IRL (a table game, typed in by a GM). Both live in the Supabase table
-// `goa2_reports` (one row per report, `data` = the Report). IRL games are reports ONLY: they never reach
-// `goa2_games`, so they never count for ratings, awards or any other number in the Hall of Records.
+// `goa2_reports` (one row per report, `data` = the Report). IRL games never reach
+// `goa2_games`; the Hall counts them as LEGACY games (league.ts gameOfReport): their own player records and
+// awards, and in the combined hero stats.
 // Pure: tested in reports.test.ts. Red = the Atlanteans (orange), Blue = the Titans (blue), as the group says it.
 import type { GameNote, Team } from './match'
 import type { BuildStep, GameEvent } from './recorder'
@@ -15,7 +16,9 @@ import { heroById } from './heroes'
 import { teamName, teamAdj, placeName } from './teams'
 import { story, namer, enemyTime, zoneTime, tokenCounts } from './playbyplay'
 
-export type ReportSeat = { name: string; hero: string }
+/** A seat: the player and the hero (by name). Table games imported from the old score sheets also carry
+ *  their numbers (kills, deaths, assists, minions, gold, level) — the Hall's LEGACY records count them. */
+export type ReportSeat = { name: string; hero: string; k?: number | null; d?: number | null; a?: number | null; mk?: number | null; gold?: number | null; lv?: number | null }
 export type ReportWinner = 'red' | 'blue' | 'none'
 export type Report = {
 	id: string
@@ -257,7 +260,12 @@ export function draftHighlights(row: GameRowIn): string[] {
 export function reportOfRow(row: any): Report | null {
 	const r = row?.data
 	if (!r || typeof r !== 'object' || !row.id) return null
-	const seats = (x: unknown): ReportSeat[] => (Array.isArray(x) ? x : []).map((s) => ({ name: String(s?.name ?? ''), hero: String(s?.hero ?? '') }))
+	const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : undefined)
+	const seats = (x: unknown): ReportSeat[] => (Array.isArray(x) ? x : []).map((s) => {
+		const out: ReportSeat = { name: String(s?.name ?? ''), hero: String(s?.hero ?? '') }
+		for (const k of ['k', 'd', 'a', 'mk', 'gold', 'lv'] as const) { const v = n(s?.[k]); if (v != null) out[k] = v }
+		return out
+	})
 	return {
 		id: String(row.id), kind: row.kind === 'online' ? 'online' : 'irl', gameId: row.game_id ?? r.gameId ?? undefined,
 		date: String(r.date ?? row.played_on ?? ''), match: typeof r.match === 'number' ? r.match : null,

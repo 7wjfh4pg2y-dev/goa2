@@ -1,5 +1,7 @@
 <script lang="ts">
-	// THE HALL OF RECORDS — every finished game in `goa2_games`, added up (league.ts): the table of players
+	// THE HALL OF RECORDS — every finished game, added up (league.ts). Two sets of player records: CURRENT (the
+	// online games in `goa2_games`) and LEGACY (the table games, from the reports in `goa2_reports`), with their own
+	// awards; the HEROES tab counts both. The table of players
 	// (rating, record, streaks, K/D/A, favourite heroes), each player's page (friends and foes, builds,
 	// match history), the heroes and their level-up paths, the silly records, and the PLAYER LOG (everyone who has
 	// played a recorded game, A–Z, each with their whole record and every match in full).
@@ -7,7 +9,7 @@
 	import { base } from '$app/paths';
 	import { supabase } from '$lib/supabase';
 	import {
-		buildLeague, titlesOf, nemesisOf, victimOf, rivalOf, bestMateOf, worstMateOf, rowOfSelect,
+		buildLeague, leagueOf, gameOfReport, titlesOf, nemesisOf, victimOf, rivalOf, bestMateOf, worstMateOf, rowOfSelect,
 		LEAGUE_SELECT, WIN_TYPES, WIN_LABEL, START_RATING,
 		type League, type PlayerAgg, type HeroAgg, type MatchLine, type PathTally, type GameRowIn, type LeagueGame, type Path, type Foe, type Mate
 	} from '$lib/league';
@@ -24,36 +26,56 @@
 	import AwardsHall from '$lib/hall/AwardsHall.svelte';
 	import Reports from '$lib/hall/Reports.svelte';
 	import { role } from '$lib/role';
+	import { REPORT_TABLE, reportOfRow, type Report } from '$lib/reports';
 
 	type Tab = 'players' | 'log' | 'awards' | 'heroes' | 'games' | 'reports';
 	// GMs only for now (the soft admin gate in role.ts; the link is in the GM tools)
 	let phase: 'loading' | 'ready' | 'empty' | 'error' | 'locked' = 'loading';
 	let errMsg = '';
-	let league: League | null = null;
+	let currentL: League | null = null; // the online games
+	let legacyL: League | null = null; // the table games (reports)
+	let allL: League | null = null; // both — the Heroes tab
 	let rows: GameRowIn[] = []; // the raw games (the reports are drafted from them)
-	let titles: Record<string, { title: string; blurb: string }[]> = {};
+	// which player records: Current (online) or Legacy (table games) — remembered per browser
+	type Scope = 'current' | 'legacy';
+	let scope: Scope = 'current';
+	try { if (localStorage.getItem('goa2-hall-scope') === 'legacy') scope = 'legacy'; } catch { /* ignore */ }
+	function setScope(x: Scope) { scope = x; sel = null; try { localStorage.setItem('goa2-hall-scope', x); } catch { /* ignore */ } }
+	$: league = scope === 'legacy' ? legacyL : currentL;
+	$: titles = league ? titlesOf(league) : ({} as Record<string, { title: string; blurb: string }[]>);
 	let tab: Tab = 'players';
 	let sel: string | null = null; // the player whose page is open
 	let heroSel: string | null = null; // the hero whose builds are open
 	let body: HTMLElement;
 
-	function use(got: GameRowIn[]) {
+	function use(got: GameRowIn[], table: Report[]) {
 		rows = got;
-		league = buildLeague(got);
-		titles = titlesOf(league);
-		phase = league.games.length ? 'ready' : 'empty';
+		currentL = buildLeague(got);
+		const legacy = table.filter((r) => r.kind === 'irl').map((r) => { try { return gameOfReport(r) } catch { return null } }).filter((g): g is LeagueGame => !!g);
+		legacyL = leagueOf(legacy);
+		allL = leagueOf([...currentL.games, ...legacy]);
+		phase = allL.games.length ? 'ready' : 'empty';
+	}
+	// the table games: every saved report of kind 'irl' (no table yet / no access → none)
+	async function loadTable(): Promise<Report[]> {
+		try {
+			const { data, error } = await supabase.from(REPORT_TABLE).select('id,kind,game_id,played_on,data,updated_at').eq('kind', 'irl');
+			if (error) return [];
+			return (data ?? []).map(reportOfRow).filter((r): r is Report => !!r && !r.deleted);
+		} catch { return []; }
 	}
 	async function load() {
 		if ($role !== 'admin') { phase = 'locked'; return; }
 		try {
 			const rows: GameRowIn[] = [];
+			const table = loadTable();
 			for (let from = 0; ; from += 1000) {
 				const { data, error } = await supabase.from('goa2_games').select(LEAGUE_SELECT).order('ended_at', { ascending: true }).range(from, from + 999);
 				if (error) throw error;
 				rows.push(...(data ?? []).map(rowOfSelect));
 				if (!data || data.length < 1000) break;
 			}
-			use(rows);
+			use(rows, await table);
 		} catch (e) {
 			errMsg = (e as { message?: string })?.message ?? String(e);
 			phase = 'error';
@@ -82,8 +104,8 @@
 	$: table = (() => {
 		const ps = league?.players ?? [];
 		const sum = (f: (p: PlayerAgg) => number) => ps.reduce((s, p) => s + f(p), 0);
-		const kg = sum((p) => p.kdaGames), cg = sum((p) => p.coinGames), g = sum((p) => p.games);
-		return { k: kg ? sum((p) => p.kills) / kg : 0, d: kg ? sum((p) => p.deaths) / kg : 0, a: kg ? sum((p) => p.assists) / kg : 0, m: kg ? sum((p) => p.minions) / kg : 0, c: cg ? sum((p) => p.coins) / cg : 0, lv: g ? sum((p) => p.levels) / g : 0 };
+		const kg = sum((p) => p.kdaGames), cg = sum((p) => p.coinGames);
+		return { k: kg ? sum((p) => p.kills) / kg : 0, d: kg ? sum((p) => p.deaths) / kg : 0, a: kg ? sum((p) => p.assists) / kg : 0, m: kg ? sum((p) => p.minions) / kg : 0, c: cg ? sum((p) => p.coins) / cg : 0, lv: sum((p) => p.levelGames) ? sum((p) => p.levels) / sum((p) => p.levelGames) : 0 };
 	})();
 	// above / below the table: ▲ / ▼ (low = fewer is better)
 	const cmp = (mine: number, theirs: number, low = false) => (Math.abs(mine - theirs) < 0.05 ? '' : mine > theirs !== low ? 'up' : 'down');
@@ -185,7 +207,7 @@
 		: psort === 'kd' ? kdOf(b) - kdOf(a)
 		: psort === 'name' ? a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
 		: b.rating - a.rating);
-	$: hlist = (league?.heroes ?? []).filter((h) => !hq.trim() || has(heroName(h.hero), hq) || (heroById(h.hero)?.traits ?? []).some((t) => has(TRAIT_LABELS[t as Trait], hq))).sort((a, b) =>
+	$: hlist = (allL?.heroes ?? []).filter((h) => !hq.trim() || has(heroName(h.hero), hq) || (heroById(h.hero)?.traits ?? []).some((t) => has(TRAIT_LABELS[t as Trait], hq))).sort((a, b) =>
 		hsort === 'win' ? b.wins / b.games - a.wins / a.games || b.games - a.games
 		: hsort === 'impact' ? (b.impact ?? -999) - (a.impact ?? -999)
 		: hsort === 'name' ? heroName(a.hero).localeCompare(heroName(b.hero))
@@ -274,7 +296,7 @@
 				<div class="lfacts">
 					<span><small>Result</small>{m.won ? 'Victory' : 'Defeat'} · {WIN_LABEL[m.type]}</span>
 					<span><small>Side</small><em class="t-{m.team}">{teamName(m.team)}</em></span>
-					<span><small>Length</small>{m.rounds} round{m.rounds === 1 ? '' : 's'} · {hm(m.minutes)}</span>
+					{#if !m.legacy}<span><small>Length</small>{m.rounds} round{m.rounds === 1 ? '' : 's'} · {hm(m.minutes)}</span>{/if}
 					<span><small>Rating</small>{m.rating - m.delta} → {m.rating}</span>
 					<span><small>Coins earned</small>{m.coins ?? '–'}</span>
 					<span><small>Defences</small>{#if m.x?.defends != null}{m.x.defends} held{#if m.x.defDied} · {m.x.defDied} fell{/if}{#if m.x.noDefDied} · {m.x.noDefDied} took the hit{/if}{:else}–{/if}</span>
@@ -309,6 +331,56 @@
 		{/each}
 	</span>
 {/snippet}
+{#snippet heroesTab()}
+	{@render toolbar(hq, (v) => (hq = v), 'Search heroes or roles…', [['picks', 'Picks'], ['win', 'Win %'], ['impact', 'Impact'], ['name', 'Name']], hsort, (v) => (hsort = v as typeof hsort))}
+		<div class="hgrid">
+			{#each hlist as h (h.hero)}<HeroCard {h} onBuilds={() => (heroSel = h.hero)} />{:else}<p class="note">No hero matches.</p>{/each}
+		</div>
+		{#if heroSel}
+			{@const h = allL?.heroes.find((x) => x.hero === heroSel)}
+			{#if h}
+				{@const cp = cardPicks(h)}
+				{@const pop = popular(h.paths)}
+				{@const win = winning(h.paths)}
+				<div class="scrim" role="presentation" on:click|self={() => (heroSel = null)}>
+					<div class="panel hdet" role="dialog" aria-modal="true" tabindex="-1" aria-label={heroName(h.hero)}>
+						<header class="hdh">{@render face(h.hero, 56)}<div><h2 class="pn">{heroName(h.hero)}</h2><span class="hs"><b>{h.games}</b> picks · <b>{wl(h)}</b> · {pct(h.wins, h.games)}% wins</span></div><button class="btn btn-ghost btn-icon x" on:click={() => (heroSel = null)} aria-label="Close"><Icon name="x" /></button></header>
+						<h3 class="t-label">Card picks <small>· taken · won with</small></h3>
+						<div class="picks">
+							{#each cp.rows as row (row.tier)}
+								<span class="tierlbl">{TIER[row.tier]}</span>
+								{#each row.cols as col (col.colour)}
+									<div class="pk c-{col.colour}">
+										{#each col.opts as o (o.i)}
+											{@const all = col.opts.reduce((s, x) => s + x.games, 0)}
+											<div class="opt" class:hot={all > 0 && o.games === Math.max(...col.opts.map((x) => x.games)) && o.games > 0}>
+												<span class="on">{o.name}</span>
+												<span class="ob">{all ? pct(o.games, all) : 0}% <small>· {o.games ? `${pct(o.wins, o.games)}% wins` : '—'}</small></span>
+											</div>
+										{/each}
+									</div>
+								{/each}
+							{/each}
+							<span class="tierlbl">IV</span>
+							<div class="pk c-purple ult"><div class="opt" class:hot={cp.ult.games > 0}><span class="on">{cp.ultName}</span><span class="ob">{cp.ult.games} game{cp.ult.games === 1 ? '' : 's'} <small>· {cp.ult.games ? `${pct(cp.ult.wins, cp.ult.games)}% wins` : '—'}</small></span></div></div>
+						</div>
+						<div class="cols tight">
+							{#if pop}<div class="best"><h4 class="sub">Most popular build <small>· {pop.games}× · {wl(pop)}</small></h4>{@render pathRow(h.hero, pop.path)}</div>{/if}
+							{#if win}<div class="best"><h4 class="sub">Most successful <small>· {pct(win.wins, win.games)}% of {win.games}</small></h4>{@render pathRow(h.hero, win.path)}</div>{/if}
+						</div>
+						<h3 class="t-label sp">Every build</h3>
+						<div class="builds">
+							{#each h.paths as b (b.path.cards.join('.') + b.path.ult)}
+								<div class="build"><div class="bcol"><span class="bh">{b.by.join(', ')} <small>{b.games > 1 ? `${b.games} games · ` : ''}{wl(b)}</small></span>{@render pathRow(h.hero, b.path)}</div></div>
+							{:else}
+								<p class="t-small c-muted">No level-ups on record.</p>
+							{/each}
+						</div>
+					</div>
+				</div>
+			{/if}
+		{/if}
+{/snippet}
 {#snippet who(name: string)}
 	{@const k = league?.players.find((p) => p.name === name)?.key}
 	{#if k}<button class="who" on:click={() => openPlayer(k)}>{name}</button>{:else}<span>{name}</span>{/if}
@@ -323,6 +395,13 @@
 				<button class="tab" class:on={tab === k && !(k === 'players' && sel)} class:crumb={tab === k && k === 'players' && !!sel} on:click={() => go(k as Tab)}>{l}</button>
 			{/each}
 		</nav>
+		{#if tab !== 'reports'}
+			{#if tab === 'heroes'}<span class="scopeall" title="Hero stats count every game: online and table">Current + legacy</span>
+			{:else}<div class="scope" role="group" aria-label="Player records">
+				<button class:on={scope === 'current'} on:click={() => setScope('current')} title="The games played on the app">Current</button>
+				<button class:on={scope === 'legacy'} on:click={() => setScope('legacy')} title="The table games (from the reports)">Legacy</button>
+			</div>{/if}
+		{/if}
 	</header>
 
 	<main class="body" bind:this={body}>
@@ -342,10 +421,18 @@
 				<h2 class="t-h2">The records are locked</h2>
 				<p class="t-body c-muted">Couldn't read the games table ({errMsg}).</p>
 			</section>
-		{:else if phase === 'empty' || !league}
+		{:else if tab === 'heroes' && allL && phase === 'ready'}
+			<!-- ── heroes: win rate, impact, how their games ended, who they win with / beat / lose to (online + table games) ── -->
+			{@render heroesTab()}
+		{:else if phase === 'empty' || !league || !league.games.length}
 			<section class="panel msg">
-				<h2 class="t-h2">No games on record yet</h2>
-				<p class="t-body c-muted">A game lands here when it is won, was played from the first turn, and had at least two people at the table.</p>
+				{#if scope === 'legacy' && phase !== 'empty'}
+					<h2 class="t-h2">No legacy games yet</h2>
+					<p class="t-body c-muted">Table games come from the Reports tab: every table game with a winner counts here (a cancelled or void one doesn't).</p>
+				{:else}
+					<h2 class="t-h2">No games on record yet</h2>
+					<p class="t-body c-muted">A game lands here when it is won, was played from the first turn, and had at least two people at the table.</p>
+				{/if}
 			</section>
 		{:else if tab === 'players' && player}
 			{@const p = player}
@@ -384,7 +471,7 @@
 							<div class="grid3">
 								<div class="st"><span>K/D</span><b>{kd(p)}</b></div>
 								<div class="st"><span>Kill share</span><b>{kp(p)}</b></div>
-								<div class="st"><span>Avg level</span><b>{avg(p.levels, p.games)}</b><i class={cmp(p.levels / p.games, table.lv)}></i></div>
+								<div class="st"><span>Avg level</span><b>{avg(p.levels, p.levelGames)}</b><i class={cmp(p.levels / Math.max(1, p.levelGames), table.lv)}></i></div>
 								<div class="st"><span>Kills / game</span><b>{avg(p.kills, p.kdaGames)}</b><i class={cmp(p.kills / p.kdaGames, table.k)}></i></div>
 								<div class="st"><span>Defeats / game</span><b>{avg(p.deaths, p.kdaGames)}</b><i class={cmp(p.deaths / p.kdaGames, table.d, true)}></i></div>
 								<div class="st"><span>Assists / game</span><b>{avg(p.assists, p.kdaGames)}</b><i class={cmp(p.assists / p.kdaGames, table.a)}></i></div>
@@ -486,7 +573,7 @@
 								{@render face(m.hero, 28)}
 								<span class="hn">{heroName(m.hero)} <small>Lv {m.level}</small></span>
 								<span class="kda3">{m.k != null ? `${m.k}/${m.d}/${m.a}` : '–'}</span>
-								<span class="ty2">{WIN_LABEL[m.type]} · R{m.rounds}</span>
+								<span class="ty2">{m.legacy ? 'Table game' : `${WIN_LABEL[m.type]} · R${m.rounds}`}</span>
 								<span class="vs"><small>with</small> {m.mates.map((x) => x.name).join(', ') || '—'} <small>vs</small> {m.foes.map((x) => x.name).join(', ')}</span>
 								<span class="dl" class:up={m.delta > 0} class:down={m.delta < 0}>{m.delta > 0 ? '+' : ''}{m.delta}</span>
 							</div>
@@ -546,7 +633,7 @@
 								<div class="st"><span>K/D · kill share</span><b>{kd(p)} <small>· {kp(p)}</small></b></div>
 								<div class="st"><span>Minions defeated</span><b>{p.kdaGames ? p.minions : '–'}</b>{#if p.kdaGames}<i class="mr">{roles.melee} melee · {roles.ranged} ranged · {roles.heavy} heavy</i>{/if}</div>
 								<div class="st"><span>Coins earned · per game</span><b>{p.coinGames ? p.coins : '–'} <small>· {avg(p.coins, p.coinGames)}</small></b></div>
-								<div class="st"><span>Level · avg · best</span><b>{avg(p.levels, p.games)} <small>· {p.maxLevel}</small></b></div>
+								<div class="st"><span>Level · avg · best</span><b>{avg(p.levels, p.levelGames)} <small>· {p.maxLevel}</small></b></div>
 								<div class="st"><span>Ultimates unlocked</span><b>{p.ults}</b></div>
 								{#each WIN_TYPES as t (t)}<div class="st"><span>{WIN_LABEL[t]} games · won</span><b>{p.byType[t].games} <small>· {p.byType[t].wins}</small></b></div>{/each}
 							</div>
@@ -587,56 +674,6 @@
 					</div>
 				{/if}
 			</div>
-		{:else if tab === 'heroes'}
-			<!-- ── heroes: win rate, impact, how their games ended, who they win with / beat / lose to ── -->
-			{@render toolbar(hq, (v) => (hq = v), 'Search heroes or roles…', [['picks', 'Picks'], ['win', 'Win %'], ['impact', 'Impact'], ['name', 'Name']], hsort, (v) => (hsort = v as typeof hsort))}
-			<div class="hgrid">
-				{#each hlist as h (h.hero)}<HeroCard {h} onBuilds={() => (heroSel = h.hero)} />{:else}<p class="note">No hero matches.</p>{/each}
-			</div>
-			{#if heroSel}
-				{@const h = league.heroes.find((x) => x.hero === heroSel)}
-				{#if h}
-					{@const cp = cardPicks(h)}
-					{@const pop = popular(h.paths)}
-					{@const win = winning(h.paths)}
-					<div class="scrim" role="presentation" on:click|self={() => (heroSel = null)}>
-						<div class="panel hdet" role="dialog" aria-modal="true" tabindex="-1" aria-label={heroName(h.hero)}>
-							<header class="hdh">{@render face(h.hero, 56)}<div><h2 class="pn">{heroName(h.hero)}</h2><span class="hs"><b>{h.games}</b> picks · <b>{wl(h)}</b> · {pct(h.wins, h.games)}% wins</span></div><button class="btn btn-ghost btn-icon x" on:click={() => (heroSel = null)} aria-label="Close"><Icon name="x" /></button></header>
-							<h3 class="t-label">Card picks <small>· taken · won with</small></h3>
-							<div class="picks">
-								{#each cp.rows as row (row.tier)}
-									<span class="tierlbl">{TIER[row.tier]}</span>
-									{#each row.cols as col (col.colour)}
-										<div class="pk c-{col.colour}">
-											{#each col.opts as o (o.i)}
-												{@const all = col.opts.reduce((s, x) => s + x.games, 0)}
-												<div class="opt" class:hot={all > 0 && o.games === Math.max(...col.opts.map((x) => x.games)) && o.games > 0}>
-													<span class="on">{o.name}</span>
-													<span class="ob">{all ? pct(o.games, all) : 0}% <small>· {o.games ? `${pct(o.wins, o.games)}% wins` : '—'}</small></span>
-												</div>
-											{/each}
-										</div>
-									{/each}
-								{/each}
-								<span class="tierlbl">IV</span>
-								<div class="pk c-purple ult"><div class="opt" class:hot={cp.ult.games > 0}><span class="on">{cp.ultName}</span><span class="ob">{cp.ult.games} game{cp.ult.games === 1 ? '' : 's'} <small>· {cp.ult.games ? `${pct(cp.ult.wins, cp.ult.games)}% wins` : '—'}</small></span></div></div>
-							</div>
-							<div class="cols tight">
-								{#if pop}<div class="best"><h4 class="sub">Most popular build <small>· {pop.games}× · {wl(pop)}</small></h4>{@render pathRow(h.hero, pop.path)}</div>{/if}
-								{#if win}<div class="best"><h4 class="sub">Most successful <small>· {pct(win.wins, win.games)}% of {win.games}</small></h4>{@render pathRow(h.hero, win.path)}</div>{/if}
-							</div>
-							<h3 class="t-label sp">Every build</h3>
-							<div class="builds">
-								{#each h.paths as b (b.path.cards.join('.') + b.path.ult)}
-									<div class="build"><div class="bcol"><span class="bh">{b.by.join(', ')} <small>{b.games > 1 ? `${b.games} games · ` : ''}{wl(b)}</small></span>{@render pathRow(h.hero, b.path)}</div></div>
-								{:else}
-									<p class="t-small c-muted">No level-ups on record.</p>
-								{/each}
-							</div>
-						</div>
-					</div>
-				{/if}
-			{/if}
 		{:else if tab === 'awards'}
 			<!-- ── the awards: the trophy hall ── -->
 			<AwardsHall {league} onOpen={openLog} />
@@ -733,6 +770,10 @@
 	.stats { position: fixed; inset: 0; display: flex; flex-direction: column; color: var(--ink); }
 	.top { flex: none; display: flex; align-items: center; gap: 14px; padding: 12px 20px; border-bottom: 1px solid var(--brass-line); background: rgba(3, 11, 21, 0.72); }
 	.ttl { margin: 0; font-size: 28px; font-weight: 400; letter-spacing: 0.04em; color: var(--brass-hi); white-space: nowrap; }
+	.scope { flex: none; display: flex; gap: 2px; padding: 3px; border-radius: 999px; background: var(--well); border: 1px solid var(--hair); }
+	.scope button { padding: 5px 12px; border-radius: 999px; border: 0; background: none; color: var(--ink-2); font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap; }
+	.scope button.on { color: var(--ink-dark); background: linear-gradient(180deg, var(--brass-hi), var(--brass)); }
+	.scopeall { flex: none; font-size: 12.5px; color: var(--ink-3); padding: 0 6px; white-space: nowrap; }
 	.tabs { margin-left: auto; display: flex; gap: 4px; padding: 3px; border-radius: 999px; background: var(--well); border: 1px solid var(--hair); }
 	.tab { white-space: nowrap; padding: 6px 16px; border-radius: 999px; font-size: 15px; color: var(--ink-2); background: none; border: 0; cursor: pointer; }
 	.tab:hover { color: var(--ink); }

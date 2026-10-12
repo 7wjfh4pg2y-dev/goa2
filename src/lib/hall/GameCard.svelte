@@ -41,7 +41,7 @@
 	<button class="band" on:click={() => (open = !open)} aria-expanded={open}>
 		<span class="crest"><Glyph name={g.winner === 'orange' ? 'gear' : 'star'} size={22} /></span>
 		<span class="tt"><b>{teamName(g.winner)} Victory</b><small>{when(g.at)}{g.room ? ` · room ${g.room}` : ''}</small></span>
-		<span class="tags"><span class="tag">{WIN_LABEL[g.type]}</span><span class="tag">{g.rounds} round{g.rounds === 1 ? '' : 's'}</span><span class="tag">{hm(g.minutes)}</span><span class="tag">{g.side} v {g.side}</span></span>
+		<span class="tags">{#if g.legacy}<span class="tag">Table game</span>{/if}{#if !g.legacy || g.type !== 'other'}<span class="tag">{WIN_LABEL[g.type]}</span>{/if}{#if g.rounds}<span class="tag">{g.rounds} round{g.rounds === 1 ? '' : 's'}</span>{/if}{#if g.minutes}<span class="tag">{hm(g.minutes)}</span>{/if}<span class="tag">{g.side} v {g.side}</span></span>
 		<span class="chev" class:up={open}><Glyph name="chev" size={18} /></span>
 	</button>
 	{#if open}
