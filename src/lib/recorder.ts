@@ -11,9 +11,10 @@
 // journal once to the Supabase table `goa2_games` (insert-only for the public key:
 // rows can be added from the app but never read back — read them in the
 // dashboard). The id is the same on every client, so duplicates are refused.
-import type { LogEntry, MatchState, Team } from './match'
+import { turnOrder, actingIdx, type GameNote, type LogEntry, type MatchState, type Team } from './match'
 import { supabase } from './supabase'
 import { heroCards } from './cards/deck'
+import { zoneTable } from './zones'
 
 export const REC_TABLE = 'goa2_games'
 const PREFIX = 'goa2-rec:'
@@ -33,13 +34,33 @@ type Snap = {
 /** What happened, as the STATE showed it (never read back out of the log's wording):
  *  a hero defeat = one `lastDefeat` news id; a minion defeat = a minion leaving the board in
  *  the same change that paid a player its coins. `r` / `t` = the round and turn it happened in. */
-export type GameEvent =
+export type GameEvent = SegIdx & (
 	| { k: 'hero'; id: string; r: number; t: number; by: string; v: string; a: string[]; c: number; ac: number; l: number; team: Team | null; kl?: number }
 	| { k: 'minion'; id: string; r: number; t: number; by: string; role: string; team: Team }
 	/** how an attack / forced discard ended (match.ts ClashNews; journals with `evv` ≥ 2) */
 	| { k: 'clash'; id: string; r: number; t: number; kind: 'attack' | 'force'; by: string; v: string; out: 'defended' | 'died' | 'none' | 'cancel'; disc: boolean }
 	/** an ACE: every hero of the other team down at the same time (`team` = the team that did it) */
 	| { k: 'ace'; id: string; r: number; t: number; team: Team }
+	/** a lingering card effect switched on (evv ≥ 3): whose, which card (index into heroCards), how long */
+	| { k: 'fx'; id: string; r: number; t: number; by: string; card: number; dur: string }
+	/** a card discarded (evv ≥ 3): `why` = it answered an attack / a forced discard, else '' (a card effect, by hand) */
+	| { k: 'disc'; id: string; r: number; t: number; by: string; card: number; why: 'attack' | 'force' | '' }
+)
+
+/** Every event above may also carry `i` (evv ≥ 3): the board segment it happened in (see BoardShot.i). */
+export type SegIdx = { i?: number }
+
+/** What a board piece is (kept once per piece id, evv ≥ 3): kind, team, a minion's role, a token's art,
+ *  who placed it, a hero's id. A hero piece's id is its player's id. */
+export type PieceTag = { k: 'hero' | 'minion' | 'token'; tm: string; ro?: string; tk?: string; o?: string; h?: string }
+
+/** The board at the END of one segment of a turn (evv ≥ 3): `i` = -1 planning (before the reveal), 0.. = the card
+ *  acting (its index in the turn order; the order's length = everyone has acted), 90 = the minion battle,
+ *  91 = the level-up step. `pid` / `card` = whose card acted (index into heroCards). `at` = when the segment
+ *  began (this browser's clock); `p` = every piece's hex. A play-by-play diffs one shot against the one before. */
+export type BoardShot = { r: number; t: number; i: number; pid: string | null; card: number | null; at: number; p: Record<string, string> }
+export const SEG_BATTLE = 90
+export const SEG_LEVEL = 91
 
 /** A player's BUILD at a moment: the upgrade cards they keep (indices into heroCards(hero), Tier II / III),
  *  the twins they turned into items (`up`), whether the ultimate is on, and their level. The journal keeps
@@ -69,9 +90,21 @@ export interface Journal {
 	builds?: Record<string, BuildStep[]>
 	/** what the event tracker saw last: the latest hero-defeat id, the minions on the board (id → "team|role"),
 	 *  the latest clash id and which teams were all down */
-	mark?: { d: string | null; m: Record<string, string>; c?: string | null; a?: Partial<Record<Team, boolean>> } | null
-	/** event version: 2 = clashes and aces are recorded too (a game without it says nothing about defences) */
+	mark?: { d: string | null; m: Record<string, string>; c?: string | null; a?: Partial<Record<Team, boolean>>
+		/** evv ≥ 3: discard pile sizes, the open attacks / forced discards, the effects seen */
+		ds?: Record<string, number>; ao?: string[]; fo?: string[]; fx?: string[] } | null
+	/** event version: 2 = clashes and aces are recorded too (a game without it says nothing about defences);
+	 *  3 = the board after every card (`shots`), effects, discards, segments on events, host notes */
 	evv?: number
+	/** every hex's zone name on this game's map (evv ≥ 3) */
+	zones?: Record<string, string>
+	/** what each piece id is (evv ≥ 3) */
+	pcs?: Record<string, PieceTag>
+	/** the board after each segment (evv ≥ 3); `bcur` = the segment still going */
+	shots?: BoardShot[]
+	bcur?: BoardShot | null
+	/** the host's notes (evv ≥ 3; merged by id, so a snapshot that lost one can't take it out of the journal) */
+	notes?: GameNote[]
 	done: boolean // won — ready to upload
 	uploaded: boolean
 	/** the state as the game ended (kept so a failed upload can be retried later) */
@@ -94,7 +127,8 @@ export function newJournal(room: string, s: MatchState): Journal {
 		v: 1, id: gameId(room, s), room, startedAt: Date.now(), lastAt: Date.now(),
 		fromStart: s.round === 1 && s.turn === 1 && !s.wonBy,
 		seats: s.seats, mapId: s.mapId, draftSystem: s.draftSystem, lifeMax: s.lifeMax, wavesMax: s.wavesMax,
-		players: {}, draft: null, turns: [], cur: null, log: [], ev: [], evv: 2, builds: {}, mark: null, done: false, uploaded: false
+		players: {}, draft: null, turns: [], cur: null, log: [], ev: [], evv: 3, builds: {}, mark: null, done: false, uploaded: false,
+		zones: {}, pcs: {}, shots: [], bcur: null, notes: []
 	}
 }
 
@@ -108,6 +142,18 @@ const sameKeys = (a: Record<string, string>, b: Record<string, string>) => {
 	return k.length === Object.keys(b).length && k.every((id) => id in b)
 }
 
+/** Which segment of the turn the state is in (see BoardShot.i), whose card acts, and which card. */
+export function segOf(s: MatchState): { r: number; t: number; i: number; pid: string | null; card: number | null } {
+	const r = s.round, t = s.turn
+	if (s.levelPhase) return { r, t, i: SEG_LEVEL, pid: null, card: null }
+	if (s.battlePhase) return { r, t, i: SEG_BATTLE, pid: null, card: null }
+	// before the reveal (cards still face down, or none committed): planning
+	const order = s.revealAt != null && Date.now() >= s.revealAt ? turnOrder(s) : []
+	if (!order.length) return { r, t, i: -1, pid: null, card: null }
+	const i = actingIdx(s), pid = order[i] ?? null
+	return { r, t, i, pid, card: pid ? s.cards?.[pid]?.pending ?? s.cards?.[pid]?.turns?.[t - 1] ?? null : null }
+}
+
 /** The structured events: compare this state with what the journal saw last (`j.mark`, and the
  *  coins in `j.cur`). The mark is saved with the journal, so a reload picks up where it left off.
  *  The host's Undo (this turn only) is followed: an undone defeat comes back off the list. */
@@ -118,8 +164,16 @@ function track(out: Journal, j: Journal, s: MatchState): boolean {
 	const mark = j.mark
 	// the first look: a baseline only (a defeat left over in the room's state is not this game's)
 	const lc = s.lastClash ?? null
-	if (!mark) { out.mark = { d: ld?.id ?? null, m: now, c: lc?.id ?? null, a: {} }; return true }
+	if (!mark) {
+		out.mark = { d: ld?.id ?? null, m: now, c: lc?.id ?? null, a: {} }
+		if ((j.evv ?? 0) >= 3) out.mark = { ...out.mark, ds: Object.fromEntries(Object.entries(s.cards ?? {}).map(([pid, c]) => [pid, (c.discard ?? []).length])),
+			ao: Object.keys(s.attacks ?? {}), fo: Object.keys(s.forced ?? {}), fx: (s.effects ?? []).map((f) => f.id) }
+		return true
+	}
 	const here = (e: GameEvent) => e.r === s.round && e.t === s.turn
+	// evv ≥ 3: every new event says which segment of the turn it happened in
+	let segI: SegIdx = {}
+	if ((j.evv ?? 0) >= 3) try { segI = { i: segOf(s).i } } catch { /* ignore */ }
 	let ev = j.ev
 	const paid: Record<string, number> = {} // hero-defeat coins that arrived with this very change
 	if ((ld?.id ?? null) !== mark.d) {
@@ -131,7 +185,7 @@ function track(out: Journal, j: Journal, s: MatchState): boolean {
 			const when = s.defeated?.[ld.victim]
 			const kl = s.cards?.[ld.by]?.level
 			ev = [...ev, { k: 'hero', id: ld.id, r: when?.round ?? s.round, t: when?.turn ?? s.turn, by: ld.by, v: ld.victim,
-				a: [...(ld.assists ?? [])], c: ld.coins ?? 0, ac: ld.assist ?? 0, l: ld.lives ?? 0, team: ld.team ?? null, ...(kl != null ? { kl } : {}) }]
+				a: [...(ld.assists ?? [])], c: ld.coins ?? 0, ac: ld.assist ?? 0, l: ld.lives ?? 0, team: ld.team ?? null, ...(kl != null ? { kl } : {}), ...segI }]
 			paid[ld.by] = ld.coins ?? 0
 			for (const a of ld.assists ?? []) paid[a] = (paid[a] ?? 0) + (ld.assist ?? 0)
 		}
@@ -158,7 +212,7 @@ function track(out: Journal, j: Journal, s: MatchState): boolean {
 				const m = (gain >= 4 ? take(true) : null) ?? take(false)
 				if (!m) break
 				gain -= m.role === 'heavy' ? 4 : 2
-				ev = [...ev, { k: 'minion', id: m.id, r: s.round, t: s.turn, by: pid, role: m.role, team: m.team }]
+				ev = [...ev, { k: 'minion', id: m.id, r: s.round, t: s.turn, by: pid, role: m.role, team: m.team, ...segI }]
 			}
 		}
 	}
@@ -168,7 +222,7 @@ function track(out: Journal, j: Journal, s: MatchState): boolean {
 	else if ((lc?.id ?? null) !== markC && j.evv) {
 		const at = lc ? ev.findIndex((e) => e.k === 'clash' && e.id === lc.id) : -1
 		if (!lc || at >= 0) ev = ev.filter((e, i) => !(e.k === 'clash' && i > at && here(e))) // undone
-		else ev = [...ev, { k: 'clash', id: lc.id, r: s.round, t: s.turn, kind: lc.kind, by: lc.by, v: lc.v, out: lc.out, disc: !!lc.disc }]
+		else ev = [...ev, { k: 'clash', id: lc.id, r: s.round, t: s.turn, kind: lc.kind, by: lc.by, v: lc.v, out: lc.out, disc: !!lc.disc, ...segI }]
 		markC = lc?.id ?? null
 	}
 	// aces: every hero of a team down (defeated, not just taken off) at the same moment
@@ -183,11 +237,31 @@ function track(out: Journal, j: Journal, s: MatchState): boolean {
 		else if (!down && aces[T]) ev = ev.filter((e) => !(e.k === 'ace' && here(e) && e.team !== T)) // undone this turn (a respawn comes later)
 		aces[T] = down
 	}
+	// evv ≥ 3: effects switched on, and cards discarded (why: an attack / forced discard open now or a moment ago)
+	let extra: Pick<NonNullable<Journal['mark']>, 'ds' | 'ao' | 'fo' | 'fx'> = {}
+	let extraMoved = false
+	if ((j.evv ?? 0) >= 3) {
+		const fxSeen = new Set(mark.fx ?? [])
+		const fxNow = (s.effects ?? []).map((f) => f.id)
+		if (mark.fx) for (const f of s.effects ?? []) if (!fxSeen.has(f.id)) ev = [...ev, { k: 'fx', id: f.id, r: f.round, t: f.turn, by: f.pid, card: f.idx, dur: f.dur, ...segI }]
+		const ao = Object.keys(s.attacks ?? {}), fo = Object.keys(s.forced ?? {})
+		const ds: Record<string, number> = {}
+		for (const [pid, c] of Object.entries(s.cards ?? {})) {
+			const pile = c.discard ?? []
+			ds[pid] = pile.length
+			const was = mark.ds?.[pid]
+			if (was == null || pile.length <= was) continue
+			const why = ao.includes(pid) || mark.ao?.includes(pid) ? 'attack' : fo.includes(pid) || mark.fo?.includes(pid) ? 'force' : ''
+			for (const card of pile.slice(was)) ev = [...ev, { k: 'disc', id: `d_${pid}_${s.round}_${s.turn}_${pile.length}_${card}`, r: s.round, t: s.turn, by: pid, card, why, ...segI }]
+		}
+		extra = { ds, ao, fo, fx: fxNow }
+		extraMoved = JSON.stringify(extra) !== JSON.stringify({ ds: mark.ds, ao: mark.ao, fo: mark.fo, fx: mark.fx })
+	}
 	const acesMoved = (['orange', 'blue'] as Team[]).some((T) => !!aces[T] !== !!mark.a?.[T])
-	const moved = (ld?.id ?? null) !== mark.d || !sameKeys(mark.m, now) || markC !== mark.c || acesMoved
+	const moved = (ld?.id ?? null) !== mark.d || !sameKeys(mark.m, now) || markC !== mark.c || acesMoved || extraMoved
 	if (ev === j.ev && !moved) return false
 	out.ev = ev
-	if (moved) out.mark = { d: ld?.id ?? null, m: now, c: markC, a: aces }
+	if (moved) out.mark = { d: ld?.id ?? null, m: now, c: markC, a: aces, ...extra }
 	return true
 }
 
@@ -215,6 +289,63 @@ function trackBuilds(out: Journal, j: Journal, s: MatchState): boolean {
 	return changed
 }
 
+/** The board (evv ≥ 3): one shot per segment of the turn, closed when the segment changes. An Undo that steps
+ *  back to an earlier segment of the same turn drops the shots taken after it. */
+function trackBoard(out: Journal, j: Journal, s: MatchState): boolean {
+	if (!j.shots) return false
+	let changed = false
+	if (!j.zones || !Object.keys(j.zones).length) {
+		const z = zoneTable(s.map)
+		if (Object.keys(z).length) { out.zones = { ...z }; changed = true }
+	}
+	const p: Record<string, string> = {}
+	let pcs = j.pcs ?? {}
+	for (const [id, x] of Object.entries(s.pieces ?? {})) {
+		if (!x?.hex) continue
+		p[id] = x.hex
+		if (!pcs[id]) {
+			const k = x.kind === 'hero' || x.kind === 'minion' ? x.kind : 'token'
+			const tag: PieceTag = { k, tm: x.team }
+			if (x.role) tag.ro = x.role
+			if (x.token) tag.tk = x.token === 'companion' ? `companion:${x.label ?? ''}` : x.token
+			if (x.owner) tag.o = x.owner
+			if (x.hero) tag.h = x.hero
+			pcs = { ...pcs, [id]: tag }
+		}
+	}
+	if (pcs !== j.pcs) { out.pcs = pcs; changed = true }
+	const seg = segOf(s)
+	const cur = j.bcur
+	const samePos = (a: Record<string, string>) => { const k = Object.keys(a); return k.length === Object.keys(p).length && k.every((id) => a[id] === p[id]) }
+	if (!cur) { out.bcur = { ...seg, at: Date.now(), p }; return true }
+	if (cur.r !== seg.r || cur.t !== seg.t || cur.i !== seg.i) {
+		const back = cur.r === seg.r && cur.t === seg.t && cur.i > seg.i // an undo stepped back inside the turn
+		let shots = j.shots.filter((x) => !(x.r === seg.r && x.t === seg.t && x.i >= seg.i))
+		if (!back) shots = [...shots, cur]
+		out.shots = shots
+		out.bcur = { ...seg, at: Date.now(), p }
+		return true
+	}
+	if (!samePos(cur.p) || (seg.pid && seg.pid !== cur.pid) || (seg.card != null && seg.card !== cur.card)) {
+		out.bcur = { ...cur, p, pid: seg.pid ?? cur.pid, card: seg.card ?? cur.card }
+		changed = true
+	}
+	return changed
+}
+
+/** The host's notes: merged by id (a newer copy of a note wins — e.g. deleted), never dropped. */
+function trackNotes(out: Journal, j: Journal, s: MatchState): boolean {
+	if (!j.notes || !s.notes?.length) return false
+	const have = new Map(j.notes.map((n) => [n.id, n]))
+	let changed = false
+	for (const n of s.notes) {
+		const was = have.get(n.id)
+		if (!was || was.text !== n.text || !!was.del !== !!n.del) { have.set(n.id, n); changed = true }
+	}
+	if (changed) out.notes = [...have.values()].sort((a, b) => a.at - b.at)
+	return changed
+}
+
 /** Fold the latest state into the journal (pure; returns the same object when nothing changed). */
 export function journalUpdate(j: Journal, s: MatchState): Journal {
 	if (j.done && s.wonBy) return j
@@ -239,6 +370,8 @@ export function journalUpdate(j: Journal, s: MatchState): Journal {
 	try { if (trackBuilds(out, j, s)) changed = true } catch { /* ignore */ }
 	// hero and minion defeats, from the state itself (never allowed to break the rest of the journal)
 	try { if (track(out, j, s)) changed = true } catch { /* ignore */ }
+	try { if (trackBoard(out, j, s)) changed = true } catch { /* ignore */ }
+	try { if (trackNotes(out, j, s)) changed = true } catch { /* ignore */ }
 	if (!out.draft && s.draft) {
 		out.draft = { picks: { ...(s.draft.picks ?? {}) }, bans: [...(s.draft.bans ?? [])], order: (s.draft.order ?? []).map((t) => ({ team: t.team, type: t.type, actor: t.actor })) }
 		changed = true
@@ -291,7 +424,8 @@ export function gameRow(j: Journal) {
 		players: Object.keys(j.players).length,
 		data: {
 			v: j.v, seats: j.seats, mapId: j.mapId, draftSystem: j.draftSystem, lifeMax: j.lifeMax, wavesMax: j.wavesMax,
-			players: j.players, draft: j.draft, turns, log: j.log, final: f ?? null, ev: j.ev ?? null, evv: j.evv ?? null, builds: j.builds ?? null
+			players: j.players, draft: j.draft, turns, log: j.log, final: f ?? null, ev: j.ev ?? null, evv: j.evv ?? null, builds: j.builds ?? null,
+			...(j.shots ? { zones: j.zones ?? {}, pcs: j.pcs ?? {}, shots: j.bcur ? [...j.shots, j.bcur] : j.shots, notes: j.notes ?? [] } : {})
 		}
 	}
 }

@@ -38,6 +38,8 @@
 	import Nameplate from '$lib/hud2/Nameplate.svelte';
 	import { portraitCss } from '$lib/heroes';
 	import YourTurn, { TURN_CUE_DEFAULT } from '$lib/YourTurn.svelte';
+	import HostNotes from '$lib/hud2/HostNotes.svelte';
+	import { segOf } from '$lib/recorder';
 	import { boardPrefs } from '$lib/boardPrefs';
 
 	export let session: MatchSession;
@@ -221,6 +223,19 @@
 	export let phoneStatus: { planning: boolean; countdown: boolean; dots: { pid?: string; color: string; ok: boolean }[]; order: { pid?: string; portrait: string; color: string; team: string }[]; acting: number } | null = null;
 	$: phoneStatus = phone2 ? { planning: !revealed || levelPhase, countdown: countdownActive, dots: h2dots, order: h2order.map((e) => ({ pid: e.pid, portrait: e.portrait, color: e.color, team: e.team })), acting: actAt } : null;
 	function endAct() { session.cardAction({ kind: 'endAct', pid: clientId }); }
+	// the host's notes for the match report (kept in the shared state, so the game record — and the next host — has them)
+	function addNote(text: string) {
+		if (!iAmHost) return;
+		let i: number | undefined;
+		try { i = segOf($ms).i; } catch { /* ignore */ }
+		const by = $players.find((q: Player) => q.id === clientId)?.name ?? '';
+		const n = { id: `n_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, r: $ms.round, t: $ms.turn, ...(i != null ? { i } : {}), at: Date.now(), text, by };
+		session.update({ notes: [...($ms.notes ?? []), n] });
+	}
+	function dropNote(id: string) {
+		if (!iAmHost) return;
+		session.update({ notes: ($ms.notes ?? []).map((n) => (n.id === id ? { ...n, del: true } : n)) });
+	}
 	function pointAct(k: number) { if (iAmHost) session.cardAction({ kind: 'setAct', pid: clientId, idx: k }); }
 	// a tap in the turn order LOADS a move onto the action ring, which confirms it: Nudge (another player — hurry up,
 	// nudge.ts limits) or, for the host, Skip to (another card becomes the one acting). The host's tap on the card
@@ -807,6 +822,10 @@
 	$: logRoom = canvasW / 2 - DASH_W / 2 - 14 - (myUltOpen ? 96 : 0) - 36;
 	$: logBeside = logRoom >= 220;
 	$: logW = logBeside ? Math.min(340, logRoom) : 300;
+	// the host's Notes box, bottom-right: the same rule, less the docked hand's rack (it slides the ring right; a full hand's width, so the box never moves)
+	$: notesRoom = canvasW / 2 - DASH_W / 2 - 14 - (dockHand ? 248 : 0) - 36;
+	$: notesBeside = notesRoom >= 220;
+	$: notesW = notesBeside ? Math.min(340, notesRoom) : 300;
 	// the card picked in your hand (armed to commit, or open to defend / discard): the action ring takes its colour
 	const CARD_HUE: Record<string, string> = { RED: '#b8322f', BLUE: '#2a64c4', GREEN: '#2b8a43', GOLD: '#c9982f', SILVER: '#8d99a8' };
 	$: ringCard = armed ?? (selected != null && previewSrc === 'hand' && mine?.hand.includes(selected) ? selected : null);
@@ -1162,6 +1181,11 @@
 			{#if cLog}
 				<div class="h2log" style="width:{logW}px; bottom:{logBeside ? 12 : 116}px">
 					<Chronicle compact log={$ms.log ?? []} who={chronWho} fx={chronFx} host={iAmHost} canUndo={$canUndoNow} team={viewTeam} onUndo={() => session.undo()} onRead={readFx} />
+				</div>
+			{/if}
+			{#if iAmHost}
+				<div class="h2notes" style="width:{notesW}px; bottom:{notesBeside ? 12 : 116}px">
+					<HostNotes notes={$ms.notes ?? []} round={$ms.round} turn={$ms.turn} onAdd={addNote} onDrop={dropNote} />
 				</div>
 			{/if}
 		</div>
@@ -1874,6 +1898,7 @@
 	.nprow.l { flex-direction: row; }
 	.h2col.np { gap: 10px; }
 	.h2log { position: absolute; left: 20px; z-index: 2; }
+	.h2notes { position: absolute; right: 20px; z-index: 2; }
 	.h2col { position: absolute; top: 194px; width: 344px; display: flex; flex-direction: column; gap: 24px; }
 	.h2col.tight { gap: 10px; }
 	.h2col.l { left: 20px; } .h2col.r { right: 20px; }

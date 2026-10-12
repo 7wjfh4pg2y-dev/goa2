@@ -69,16 +69,16 @@ describe('game recorder', () => {
 		expect(j.ev).toEqual([])
 		j = journalUpdate(j, base({ turn: 2, lastDefeat: news('d1'), defeated: { b: { round: 1, turn: 2, piece: {} } } } as unknown as Partial<MatchState>))
 		const same = journalUpdate(j, base({ turn: 2, lastDefeat: news('d1') } as Partial<MatchState>))
-		expect(same.ev).toEqual([{ k: 'hero', id: 'd1', r: 1, t: 2, by: 'a', v: 'b', a: [], c: 1, ac: 1, l: 1, team: 'blue', kl: 1 }])
+		expect(same.ev).toEqual([{ k: 'hero', id: 'd1', r: 1, t: 2, by: 'a', v: 'b', a: [], c: 1, ac: 1, l: 1, team: 'blue', kl: 1, i: -1 }])
 		expect(gameRow(same).data.ev).toHaveLength(1)
 	})
 	it('records how attacks end (defended / died / …) and an ACE when a whole team is down — and follows Undo', () => {
 		const clash = (id: string, out: string, disc = false) => ({ id, kind: 'attack', by: 'a', v: 'b', out, disc, at: 1 })
 		const kill = { lastDefeat: { id: 'd1', victim: 'b', by: 'a', coins: 1, assist: 0, assists: [], lives: 1, team: 'blue', at: 1 }, defeated: { b: { round: 1, turn: 2, piece: {} } } }
 		let j = journalUpdate(newJournal('ROOM', base()), base({ lastClash: clash('old', 'defended') } as unknown as Partial<MatchState>))
-		expect(j.evv).toBe(2)
+		expect(j.evv).toBe(3)
 		j = journalUpdate(j, base({ lastClash: clash('c1', 'defended', true) } as unknown as Partial<MatchState>))
-		expect(j.ev!.filter((e) => e.k === 'clash')).toEqual([{ k: 'clash', id: 'c1', r: 1, t: 1, kind: 'attack', by: 'a', v: 'b', out: 'defended', disc: true }])
+		expect(j.ev!.filter((e) => e.k === 'clash')).toEqual([{ k: 'clash', id: 'c1', r: 1, t: 1, kind: 'attack', by: 'a', v: 'b', out: 'defended', disc: true, i: -1 }])
 		// turn 2: a defended-and-still-died; B is Blue's only hero → an ace for Orange
 		j = journalUpdate(j, base({ turn: 2, lastClash: clash('c2', 'died', true), ...kill } as unknown as Partial<MatchState>))
 		expect(j.ev!.map((e) => e.k)).toEqual(['clash', 'hero', 'clash', 'ace'])
@@ -86,7 +86,7 @@ describe('game recorder', () => {
 		// the host undoes it: back to c1, nobody down
 		j = journalUpdate(j, base({ turn: 2, lastClash: clash('c1', 'defended', true) } as unknown as Partial<MatchState>))
 		expect(j.ev!.map((e) => e.id)).toEqual(['c1']) // the defeat, its clash and the ace all come off
-		expect(gameRow({ ...j, done: true }).data.evv).toBe(2)
+		expect(gameRow({ ...j, done: true }).data.evv).toBe(3)
 	})
 	it('joining mid-game, or playing alone, is a test run', () => {
 		const late = journalUpdate(newJournal('ROOM', base({ round: 2 })), base({ round: 3, wonBy: { team: 'orange', reason: 'x' } }))
@@ -94,5 +94,53 @@ describe('game recorder', () => {
 		const solo = base({ seatMap: { '0': { id: 'a', name: 'Zara' } } })
 		const alone = journalUpdate(journalUpdate(newJournal('ROOM', solo), solo), { ...solo, wonBy: { team: 'orange', reason: 'x' } })
 		expect(isFullGame(alone)).toBe(false)
+	})
+	it('records the board after every card (evv 3): moves per segment, piece tags, zones — and an undo back into the turn', () => {
+		const map = { cells: { '1_1': 'middle', '2_1': 'middle', '3_1': 'forest' } }
+		const hero = (id: string, hex: string, team: string) => ({ id, hex, team, kind: 'hero', hero: id === 'a' ? 'arien' : 'brogan' })
+		const c = base().cards!
+		// planning (nothing in play) → then both cards revealed: a (init higher?) acts first, whoever the order says
+		const plan = base({ map, pieces: { a: hero('a', '1_1', 'orange'), b: hero('b', '2_1', 'blue') } } as unknown as Partial<MatchState>)
+		let j = journalUpdate(newJournal('ROOM', plan), plan)
+		expect(j.zones?.['1_1']).toBe('Center')
+		expect(j.pcs?.a).toMatchObject({ k: 'hero', tm: 'orange', h: 'arien' })
+		expect(j.bcur).toMatchObject({ r: 1, t: 1, i: -1 })
+		const played = { ...c, a: { ...c.a, pending: 0, hand: [], upgrade: [] }, b: { ...c.b, pending: 0, hand: [], upgrade: [] } }
+		const at = (idx: number, pieces: object, extra: object = {}) => base({ map, cards: played, tieBreaker: 'orange', revealAt: 1, acting: { key: '1-1', idx }, pieces, ...extra } as unknown as Partial<MatchState>)
+		j = journalUpdate(j, at(0, { a: hero('a', '1_1', 'orange'), b: hero('b', '2_1', 'blue') }))
+		expect(j.shots).toHaveLength(1) // planning closed
+		const first = j.bcur!.pid!
+		// the first card moves its hero and drops a zombie
+		j = journalUpdate(j, at(0, { a: hero('a', '3_1', 'orange'), b: hero('b', '2_1', 'blue'), z1: { id: 'z1', hex: '1_1', team: 'orange', kind: 'token', token: 'token_zombie', owner: 'a' } }))
+		expect(j.bcur!.p).toMatchObject({ a: '3_1', z1: '1_1' })
+		expect(j.pcs?.z1).toMatchObject({ k: 'token', tk: 'token_zombie', o: 'a' })
+		j = journalUpdate(j, at(1, { a: hero('a', '3_1', 'orange'), b: hero('b', '2_1', 'blue'), z1: { id: 'z1', hex: '1_1', team: 'orange', kind: 'token', token: 'token_zombie', owner: 'a' } }))
+		expect(j.shots!.map((x) => [x.i, x.pid])).toEqual([[-1, null], [0, first]])
+		expect(j.shots![1].card).toBe(0)
+		// the host undoes the end of that card: back to segment 0 — the closed shot comes off and the segment goes on
+		j = journalUpdate(j, at(0, { a: hero('a', '3_1', 'orange'), b: hero('b', '2_1', 'blue') }))
+		expect(j.shots!.map((x) => x.i)).toEqual([-1])
+		expect(j.bcur).toMatchObject({ i: 0 })
+		// the row carries the board, still-open segment included
+		const row = gameRow(j)
+		expect(row.data.shots).toHaveLength(2)
+		expect(row.data.zones?.['3_1']).toBe('Orange Jungle')
+	})
+	it('records effects, discards (and why), and the host notes — merged by id, never dropped', () => {
+		const c = base().cards!
+		let j = journalUpdate(newJournal('ROOM', base()), base())
+		const fx = { id: 'f1', pid: 'a', hero: 'arien', idx: 5, name: 'X', dur: 'round', round: 1, turn: 1, endRound: 1, endTurn: 4 }
+		j = journalUpdate(j, base({ effects: [fx], attacks: { b: { by: 'a', defending: true, at: 1 } } } as unknown as Partial<MatchState>))
+		// b discards to defend; the attack closes in the same change
+		j = journalUpdate(j, base({ effects: [fx], cards: { ...c, b: { ...c.b, discard: [3] } } } as unknown as Partial<MatchState>))
+		expect(j.ev!.map((e) => e.k)).toEqual(['fx', 'disc'])
+		expect(j.ev![1]).toMatchObject({ by: 'b', card: 3, why: 'attack' })
+		const n1 = { id: 'n1', r: 1, t: 1, at: 5, text: 'Zara misread her card', by: 'Zara' }
+		j = journalUpdate(j, base({ notes: [n1] } as unknown as Partial<MatchState>))
+		j = journalUpdate(j, base({ notes: [] } as unknown as Partial<MatchState>)) // a snapshot that lost it
+		expect(j.notes!.map((n) => n.id)).toEqual(['n1'])
+		j = journalUpdate(j, base({ notes: [{ ...n1, del: true }] } as unknown as Partial<MatchState>))
+		expect(j.notes![0].del).toBe(true)
+		expect(gameRow(j).data.notes).toHaveLength(1)
 	})
 })

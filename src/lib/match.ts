@@ -340,6 +340,10 @@ export const PHASE_LABELS: Record<Phase, string> = {
 export interface Ping { id: string; by: string; hex: string; color: string; at: number }
 export const PING_MS = 3500
 
+/** A note the host jots during the game (the HUD's Notes box): kept with the game record for the match report.
+ *  `i` = the segment of the turn (recorder BoardShot.i); `del` = deleted (kept so every journal drops it too). */
+export interface GameNote { id: string; r: number; t: number; i?: number; at: number; text: string; by: string; del?: boolean }
+
 export interface LogEntry {
 	id: string
 	by: string // player name
@@ -418,6 +422,8 @@ export interface MatchState {
 	// lingering card effects (This turn / Next turn / This round), switched on per
 	// played card; they expire on their own as turns advance (see effects.ts)
 	effects?: Effect[]
+	/** the host's notes for the match report (never shown to the other players) */
+	notes?: GameNote[]
 	// durable seat ownership: seat index (as string) → the clientId + name that
 	// owns that seat's hero. Set at game start; survives a player dropping from
 	// presence, so a vacated seat can be identified and taken over.
@@ -1381,7 +1387,8 @@ export function joinMatch(
 		canUndo.set(undoStack.length > 0)
 		if (!snap) return
 		undoing = true // don't let this restore re-enter the history
-		update({ ...snap, host: local.host, hostEpoch: local.hostEpoch, creator: local.creator })
+		// notes are never undone (they aren't game moves)
+		update({ ...snap, host: local.host, hostEpoch: local.hostEpoch, creator: local.creator, notes: local.notes })
 		undoing = false
 	}
 

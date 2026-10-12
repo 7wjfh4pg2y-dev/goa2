@@ -8,11 +8,12 @@
 // `goa2_reports` (one row per report, `data` = the Report). IRL games are reports ONLY: they never reach
 // `goa2_games`, so they never count for ratings, awards or any other number in the Hall of Records.
 // Pure: tested in reports.test.ts. Red = the Atlanteans (orange), Blue = the Titans (blue), as the group says it.
-import type { Team } from './match'
+import type { GameNote, Team } from './match'
 import type { BuildStep, GameEvent } from './recorder'
 import type { GameRowIn } from './league'
 import { heroById } from './heroes'
 import { teamName, teamAdj, placeName } from './teams'
+import { story, namer, enemyTime, zoneTime, tokenCounts } from './playbyplay'
 
 export type ReportSeat = { name: string; hero: string }
 export type ReportWinner = 'red' | 'blue' | 'none'
@@ -132,6 +133,18 @@ export function draftHighlights(row: GameRowIn): string[] {
 	const teamOfId = (id: string): Team => players[id]?.team ?? ((players[id]?.seat ?? 0) < half ? 'orange' : 'blue')
 	const ev = (Array.isArray(d.ev) ? d.ev : []) as GameEvent[]
 	const out: string[] = []
+	// games recorded with the board (evv ≥ 3): where everyone went, tokens, swaps, conversions, the deciding play
+	const st = story(d)
+	const nm = st ? namer(st) : null
+	const snapsAll = (Array.isArray(d.turns) ? d.turns : []) as { round: number; turn: number; lane?: number }[]
+	if (st && nm && st.from === 1) {
+		const r1 = st.acts.filter((a) => a.r === 1 && a.t === 1 && a.i >= 0 && a.i < 90)
+		const end = r1[r1.length - 1]
+		if (end) {
+			const where = Object.keys(players).filter((id) => end.p[id]).map((id) => `${hero(id)} to the ${nm.zone(end.p[id])}`)
+			if (where.length) out.push(`Opening moves: ${where.join(', ')}.`)
+		}
+	}
 
 	// hero kills
 	const kills = ev.filter((e): e is Extract<GameEvent, { k: 'hero' }> => e.k === 'hero' && !!players[e.by] && !!players[e.v])
@@ -151,10 +164,33 @@ export function draftHighlights(row: GameRowIn): string[] {
 	}
 	for (const e of ev) if (e.k === 'ace') out.push(`ACE! The ${teamName(e.team)} had every enemy hero down at once in round ${e.r}.`)
 
-	// blocked attacks
+	// blocked attacks (and, with the board recorded, the card each block was made with)
 	if (clashes.length >= 2) {
 		const held = clashes.filter((c) => c.out === 'defended').length
 		if (held) out.push(`${held} of the ${clashes.length} attacks in the game were blocked.`)
+	}
+	if (nm) {
+		const blocks = new Map<string, string[]>()
+		for (const e of ev) if (e.k === 'disc' && e.why === 'attack' && players[e.by]) {
+			const n = nm.cardName(e.by, e.card)
+			if (n) blocks.set(e.by, [...(blocks.get(e.by) ?? []), n])
+		}
+		for (const [id, cards] of blocks) out.push(`${who(id)} defended with ${cards.map((c) => `"${c}"`).join(', ')}.`)
+	}
+	if (st && nm) {
+		// map control: deep in enemy ground, and holding the battle zone
+		const deep = enemyTime(st).filter((x) => x.n >= 3 && players[x.pid])
+		for (const x of deep.slice(0, 2)) out.push(`${who(x.pid)} spent ${plural(x.n, 'turn')} behind enemy lines, mostly in the ${placeName(x.top)}.`)
+		const held = zoneTime(st, snapsAll).filter((x) => players[x.pid])
+		if (held[0] && held[0].of >= 4 && held[0].n / held[0].of >= 0.5 && held[0].n !== held[1]?.n) out.push(`${who(held[0].pid)} held the battle zone for ${held[0].n} of ${held[0].of} card turns.`)
+		for (const [id, m] of tokenCounts(st)) if (players[id]) {
+			const list = [...m].filter(([, n]) => n >= 2).map(([t, n]) => `${n} ${t}${/s$/.test(t) ? '' : 's'}`)
+			if (list.length) out.push(`${who(id)} put down ${list.join(' and ')} over the game.`)
+		}
+		for (const a of st.acts) {
+			for (const [x, y] of a.swaps) out.push(`Round ${a.r}: ${who(x)} swapped places with ${who(y)}.`)
+			for (const c of a.converts) out.push(`Round ${a.r}: ${c.token.tag.o && players[c.token.tag.o] ? who(c.token.tag.o) : 'someone'} turned ${c.minion.tag.tm === 'orange' || c.minion.tag.tm === 'blue' ? `the ${teamAdj(c.minion.tag.tm)}` : 'a'} ${c.minion.tag.ro ?? 'melee'} minion into a ${nm.token(c.token.tag)}.`)
+		}
 	}
 
 	// the waves: a push shows as the waves dropping between snapshots (lane up = the Atlanteans won it)
@@ -198,7 +234,21 @@ export function draftHighlights(row: GameRowIn): string[] {
 		else if (c === 'Life Counters') out.push(`The ${teamName(lost)} ran out of Life Counters${inR}.`)
 		const mine = kills.filter((k) => teamOfId(k.by) === won).length, theirs = kills.filter((k) => teamOfId(k.by) === lost).length
 		if (theirs > mine && c !== 'Life Counters') out.push(`The ${teamName(lost)} won the fights, but the ${teamName(won)} won the minions.`)
+		// the deciding play: the last card that acted
+		const last = st?.acts.filter((a) => a.i >= 0 && a.i < 90 && a.pid && players[a.pid]).pop()
+		if (last && nm) { const n = nm.cardName(last.pid!, last.card); out.push(`The deciding play: ${who(last.pid!)}${n ? `'s "${n}"` : ''} in round ${last.r}, turn ${last.t}.`) }
 	}
+	// minions per team, round by round
+	const perRound = new Map<number, Record<Team, number>>()
+	for (const e of ev) if (e.k === 'minion' && players[e.by]) {
+		const t = teamOfId(e.by), m = perRound.get(e.r) ?? { orange: 0, blue: 0 }
+		m[t]++
+		perRound.set(e.r, m)
+	}
+	if (perRound.size >= 2) out.push(`Minions by round: ${[...perRound].sort((a, b) => a[0] - b[0]).map(([r, m]) => `R${r} ${m.orange}–${m.blue}`).join(' · ')} (Atlanteans–Titans).`)
+	// the host's notes, last, for the editor to work in
+	const notes = ((Array.isArray(d.notes) ? d.notes : []) as GameNote[]).filter((n) => !n.del && n.text?.trim()).sort((a, b) => a.at - b.at)
+	for (const n of notes) out.push(`Note (R${n.r} T${n.t}): ${n.text.trim()}`)
 	return out
 }
 
