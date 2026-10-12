@@ -33,14 +33,14 @@
 	let errMsg = '';
 	let currentL: League | null = null; // the online games
 	let legacyL: League | null = null; // the table games (reports)
-	let allL: League | null = null; // both — every hero number
+	let allL: League | null = null; // both (the Total scope)
 	let rows: GameRowIn[] = []; // the raw games (the reports are drafted from them)
-	// which player records: Current (online) or Legacy (table games) — remembered per browser
-	type Scope = 'current' | 'legacy';
+	// which records: Current (online), Legacy (table games) or Total (both) — remembered per browser
+	type Scope = 'current' | 'legacy' | 'total';
 	let scope: Scope = 'current';
-	try { if (localStorage.getItem('goa2-hall-scope') === 'legacy') scope = 'legacy'; } catch { /* ignore */ }
+	try { const v = localStorage.getItem('goa2-hall-scope'); if (v === 'legacy' || v === 'total') scope = v; } catch { /* ignore */ }
 	function setScope(x: Scope) { scope = x; sel = null; try { localStorage.setItem('goa2-hall-scope', x); } catch { /* ignore */ } }
-	$: league = scope === 'legacy' ? legacyL : currentL;
+	$: league = scope === 'legacy' ? legacyL : scope === 'total' ? allL : currentL;
 	$: titles = league ? titlesOf(league) : ({} as Record<string, { title: string; blurb: string }[]>);
 	let tab: Tab = 'overview';
 	let sel: string | null = null; // the player whose page is open
@@ -87,8 +87,8 @@
 	const openPlayer = (key: string) => { sel = key; heroSel = null; tab = 'players'; top(); };
 	const openHero = (id: string) => { heroSel = id; sel = null; tab = 'heroes'; top(); };
 	$: player = sel && league ? league.players.find((p) => p.key === sel) ?? null : null;
-	$: hero = heroSel && allL ? allL.heroes.find((h) => h.hero === heroSel) ?? null : null;
-	$: ranks = allL ? heroRanks(allL.heroes) : new Map();
+	$: hero = heroSel && league ? league.heroes.find((h) => h.hero === heroSel) ?? null : null;
+	$: ranks = league ? heroRanks(league.heroes) : new Map();
 	$: rankOf = (key: string) => (league?.players.findIndex((p) => p.key === key) ?? -1) + 1;
 
 	// ── formatters ──
@@ -118,9 +118,9 @@
 		: psort === 'kdm' ? perG(b.kills, b.kdaGames) - perG(a.kills, a.kdaGames) || perG(b.minions, b.kdaGames) - perG(a.minions, a.kdaGames)
 		: psort === 'name' ? a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
 		: b.rating - a.rating), pflip);
-	// ── the heroes: sortable table (every game) ──
+	// ── the heroes: sortable table (the scope's games) ──
 	let hq = '', hsort: 'picks' | 'win' | 'kdm' | 'gold' | 'impact' | 'name' = 'picks', hflip = false;
-	$: hlist = flip((allL?.heroes ?? []).filter((h) => !hq.trim() || has(heroName(h.hero), hq) || (heroById(h.hero)?.traits ?? []).some((t) => has(TRAIT_LABELS[t as Trait], hq))).sort((a, b) =>
+	$: hlist = flip((league?.heroes ?? []).filter((h) => !hq.trim() || has(heroName(h.hero), hq) || (heroById(h.hero)?.traits ?? []).some((t) => has(TRAIT_LABELS[t as Trait], hq))).sort((a, b) =>
 		hsort === 'win' ? pct(b.wins, b.games) - pct(a.wins, a.games) || b.games - a.games
 		: hsort === 'kdm' ? perG(b.kills, b.kdaGames) - perG(a.kills, a.kdaGames) || perG(b.minions, b.mGames) - perG(a.minions, a.mGames)
 		: hsort === 'gold' ? (b.coinGames ? b.coins / b.coinGames : -1) - (a.coinGames ? a.coins / a.coinGames : -1)
@@ -128,16 +128,16 @@
 		: hsort === 'name' ? heroName(a.hero).localeCompare(heroName(b.hero))
 		: b.games - a.games || b.wins - a.wins), hflip);
 	// each hero's best player: most games AND the best success (hallstats byMastery)
-	$: masters = allL ? heroPlayers(allL.games) : new Map();
-	$: maxPick = Math.max(1, ...(allL?.heroes ?? []).map((h) => h.games));
-	$: totalGames = allL?.games.length ?? 0;
+	$: masters = league ? heroPlayers(league.games) : new Map();
+	$: maxPick = Math.max(1, ...(league?.heroes ?? []).map((h) => h.games));
+	$: totalGames = league?.games.length ?? 0;
 	// ── the matches ──
 	let gq = '', glimit = 30;
 	$: glist = [...(league?.games ?? [])].reverse().filter((g) => !gq.trim() || g.players.some((p) => has(p.name, gq) || has(heroName(p.hero), gq)));
 	// ── the overview ──
 	$: ov = league ? overview(league) : null;
-	$: bestHeroes = [...(allL?.heroes ?? [])].filter((h) => h.games >= 3).sort((a, b) => pct(b.wins, b.games) - pct(a.wins, a.games) || b.games - a.games).slice(0, 5);
-	$: popHeroes = [...(allL?.heroes ?? [])].sort((a, b) => b.games - a.games || b.wins - a.wins).slice(0, 5);
+	$: bestHeroes = [...(league?.heroes ?? [])].filter((h) => h.games >= 3).sort((a, b) => pct(b.wins, b.games) - pct(a.wins, a.games) || b.games - a.games).slice(0, 5);
+	$: popHeroes = [...(league?.heroes ?? [])].sort((a, b) => b.games - a.games || b.wins - a.wins).slice(0, 5);
 </script>
 
 <svelte:head><title>GoA2 · Hall of Records</title></svelte:head>
@@ -167,12 +167,11 @@
 				{#each TABS as [k, l] (k)}<button class:on={tab === k} on:click={() => go(k)}>{l}</button>{/each}
 			</nav>
 			<span class="sp"></span>
-			{#if tab === 'heroes'}
-				<span class="allc" title="Hero stats count every game: online and table">Online + table games</span>
-			{:else if tab !== 'reports'}
+			{#if tab !== 'reports'}
 				<span class="seg" role="group" aria-label="Player records">
 					<button class:on={scope === 'current'} on:click={() => setScope('current')} title="The games played on the app">Current</button>
 					<button class:on={scope === 'legacy'} on:click={() => setScope('legacy')} title="The table games (from the reports)">Legacy</button>
+					<button class:on={scope === 'total'} on:click={() => setScope('total')} title="Every game: online and table">Total</button>
 				</span>
 			{/if}
 		</div>
@@ -188,9 +187,9 @@
 				<div class="legacyui"><Reports {rows} /></div>
 			{:else if phase === 'error'}
 				<section class="card msg"><h3>The records are locked</h3><p class="muted">Couldn't read the games table ({errMsg}).</p></section>
-			{:else if tab === 'heroes' && allL && phase === 'ready'}
+			{:else if tab === 'heroes' && league && league.games.length && phase === 'ready'}
 				{#if hero}
-					<HeroPage h={hero} games={allL.games} rank={ranks.get(hero.hero) ?? null} onPlayer={openPlayer} onHero={openHero} onBack={() => (heroSel = null)} />
+					<HeroPage h={hero} games={league.games} rank={ranks.get(hero.hero) ?? null} onPlayer={openPlayer} onHero={openHero} onBack={() => (heroSel = null)} />
 				{:else}
 					<div class="tbar">
 						<label class="search"><span>⌕</span><input placeholder="Search heroes or roles…" bind:value={hq} /></label>
@@ -370,7 +369,6 @@
 	.tabs button.on { color: var(--tx); }
 	.tabs button.on::after { content: ''; position: absolute; left: 10px; right: 10px; bottom: -1px; height: 2px; border-radius: 2px; background: var(--bl); }
 	.sp { flex: 1; }
-	.allc { font-size: 12.5px; color: var(--mu); white-space: nowrap; }
 	.hbody { flex: 1; min-height: 0; overflow-y: auto; scrollbar-color: #2a313c transparent; }
 	.wrap { max-width: 1400px; margin: 0 auto; padding: 22px 20px 60px; }
 	.note { text-align: center; color: var(--mu); margin-top: 20vh; }
