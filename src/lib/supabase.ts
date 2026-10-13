@@ -40,3 +40,27 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 		}
 	}
 }
+
+// Phones: a page that comes back from the background (another app opened, the screen off) can hold a socket
+// that still says "open" but is dead — the OS dropped it while the page was frozen. Nothing notices until the
+// next heartbeat fails (up to ~30 s later), and everything sent meanwhile is lost. So on waking we ping the
+// socket ourselves: no answer within `ms` → close it the way realtime's own heartbeat timeout does (its
+// channels error out and rejoin on a fresh socket). Resolves true when the socket answered (or can't be
+// checked: not open — realtime is already reconnecting it — or the internals changed), false when it was dead.
+type PhxSocket = { isConnected(): boolean; ping(cb: (ms: number) => void): boolean; pendingHeartbeatRef: string | null; heartbeatTimeout(): void }
+export function checkSocket(ms = 2500): Promise<boolean> {
+	return new Promise((done) => {
+		let sock: PhxSocket | undefined
+		try { sock = (supabase.realtime as unknown as { socketAdapter?: { getSocket?: () => PhxSocket } }).socketAdapter?.getSocket?.() } catch { /* ignore */ }
+		try {
+			if (!sock || typeof sock.ping !== 'function' || typeof sock.heartbeatTimeout !== 'function' || !sock.isConnected()) return done(true)
+			let answered = false
+			if (!sock.ping(() => { answered = true; done(true) })) return done(true)
+			setTimeout(() => {
+				if (answered) return
+				try { if (sock!.isConnected()) { sock!.pendingHeartbeatRef ||= 'wake'; sock!.heartbeatTimeout() } } catch { /* ignore */ }
+				done(false)
+			}, ms)
+		} catch { done(true) }
+	})
+}

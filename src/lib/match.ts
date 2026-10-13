@@ -19,7 +19,7 @@ import { tokenExpiry, sweepTokens, statusFrom, isTurret } from './tokens'
 import { expireEffects, type Effect } from './effects'
 import { startBattle, pushCheck, battleRemove, battleAuto, battleResult, laneNotes, heavyImmune, type Battle, type PushNews } from './battle'
 import { get, writable, type Readable } from 'svelte/store'
-import { supabase } from './supabase'
+import { supabase, checkSocket } from './supabase'
 import { tabClientId } from './identity'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import type { GameMap } from './maps'
@@ -82,6 +82,9 @@ export type CardReq =
 	| { kind: 'endAct'; pid: string } // the acting player (or the host, for someone away) ends their turn: the next card acts; after the last, the turn moves on
 	| { kind: 'setAct'; pid: string; idx: number } // host: say who is acting (a click on the order row)
 	| { kind: 'claim'; pid: string } // a tied player takes the card acting now from a teammate (the team's choice)
+
+/** a card request on the wire: who sent it and its place in their sequence (see hostApplyReq) */
+export type WireReq = CardReq & { from?: string; seq?: number }
 
 /** Minion battle (after turn 4 is revealed): lock the last cards in, then every
  *  card goes back to its owner's hand as if the round had ended — so players can
@@ -424,6 +427,8 @@ export interface MatchState {
 	effects?: Effect[]
 	/** the host's notes for the match report (never shown to the other players) */
 	notes?: GameNote[]
+	/** card requests: the highest `seq` the host has handled per sender, so a re-sent request is applied once */
+	reqAck?: Record<string, number>
 	// durable seat ownership: seat index (as string) → the clientId + name that
 	// owns that seat's hero. Set at game start; survives a player dropping from
 	// presence, so a vacated seat can be identified and taken over.
@@ -1058,6 +1063,8 @@ export function joinMatch(
 	let joinDeadline: ReturnType<typeof setTimeout> | null = null
 	let backoff = 1500
 	let left = false
+	let everJoined = false // a SUBSCRIBED after the first one is a reconnect
+	let heardAt = 0 // the last time anyone's state reached us (newer or not)
 	const JOIN_DEADLINE_MS = 8000
 
 	// the host's clock, as seen from here: timed things the host sets (the reveal
@@ -1110,7 +1117,7 @@ export function joinMatch(
 	}
 
 	const registerHandlers = (ch: RealtimeChannel) => {
-		ch.on('broadcast', { event: 'state' }, ({ payload }) => applyRemote(payload as MatchState))
+		ch.on('broadcast', { event: 'state' }, ({ payload }) => { heardAt = Date.now(); applyRemote(payload as MatchState) })
 			.on('broadcast', { event: 'hello' }, () => {
 				// a newcomer asked for the current state — anyone holding real state
 				// (not a placeholder) shares it, so joiners inherit the room settings
@@ -1136,7 +1143,11 @@ export function joinMatch(
 			.on('broadcast', { event: 'cardreq' }, ({ payload }) => {
 				// only the host is authoritative for the shared card map / resolved list
 				if (local.host !== clientId) return
-				hostApplyReq(payload as CardReq)
+				hostApplyReq(payload as WireReq)
+			})
+			.on('broadcast', { event: 'cardack' }, ({ payload }) => {
+				const a = payload as { to: string; seq: number }
+				if (a.to === clientId) ackReqs(a.seq)
 			})
 			.on('broadcast', { event: 'ping' }, ({ payload }) => addPing(payload as Ping))
 			.on('broadcast', { event: 'nudge' }, ({ payload }) => takeNudge(payload as Nudge))
@@ -1340,6 +1351,13 @@ export function joinMatch(
 			clearJoinDeadline()
 			trackNow() // (re-)announce presence, also after a reconnect
 			channel.send({ type: 'broadcast', event: 'hello', payload: { id: clientId } })
+			if (everJoined) {
+				// back after a drop: whatever we changed while the socket was dead never left this
+				// device — share it (LWW keeps whichever is newer), and send the card requests again
+				if (local.rev >= 0) broadcastState()
+				resendReqs()
+			}
+			everJoined = true
 			startProbe()
 			return
 		}
@@ -1388,7 +1406,7 @@ export function joinMatch(
 		if (!snap) return
 		undoing = true // don't let this restore re-enter the history
 		// notes are never undone (they aren't game moves)
-		update({ ...snap, host: local.host, hostEpoch: local.hostEpoch, creator: local.creator, notes: local.notes })
+		update({ ...snap, host: local.host, hostEpoch: local.hostEpoch, creator: local.creator, notes: local.notes, reqAck: local.reqAck })
 		undoing = false
 	}
 
@@ -1435,11 +1453,23 @@ export function joinMatch(
 	// players committing at once can't overwrite each other's card state.
 	// host applies a card instruction; a coins change is also written to the log,
 	// attributed to the player it belongs to (not the host who applied it)
-	const hostApplyReq = (req: CardReq) => {
+	// Card requests from other players carry `from` + `seq` (rising per sender) and are sent again until the
+	// host has handled them (a phone's dead socket swallows them). The host applies each seq once and in
+	// order: one at or below the sender's mark is a repeat (or was overtaken by a later one) and is dropped.
+	const handled: Record<string, number> = {} // host-side marks; Undo can't wind these back
+	const hostApplyReq = (wire: WireReq) => {
+		const { from, seq, ...req } = wire
+		const tracked = typeof from === 'string' && typeof seq === 'number'
+		if (tracked) {
+			if (seq <= Math.max(handled[from] ?? 0, local.reqAck?.[from] ?? 0)) { refuseReq(from, seq); return }
+			handled[from] = seq
+		}
+		const ack: Partial<MatchState> = tracked ? { reqAck: { ...local.reqAck, [from]: seq } } : {}
 		// a commit that arrives once the cards are revealed (a slow connection) would change a played card
-		if (req.kind === 'commit' && local.revealAt != null && Date.now() >= local.revealAt) return
-		const patch = applyCardReq(local, req)
-		if (!Object.keys(patch).length) return
+		if (req.kind === 'commit' && local.revealAt != null && Date.now() >= local.revealAt) { if (tracked) refuseReq(from, seq); return }
+		const patch = applyCardReq(local, req as CardReq)
+		if (!Object.keys(patch).length) { if (tracked) refuseReq(from, seq); return }
+		Object.assign(patch, ack)
 		// Maintain the synced 3-2-1 reveal countdown. When a card action leaves
 		// every seated player committed, anchor a reveal time (unless one is already
 		// running — don't restart while it holds); any non-committed state clears it,
@@ -1529,9 +1559,50 @@ export function joinMatch(
 		if (entries.length) update({ ...patch, log: [...local.log, ...entries].slice(-LOG_CAP) })
 		else update(patch)
 	}
+	// nothing changed (refused, or a repeat): tell the sender directly so it stops sending it again
+	const refuseReq = (to: string, seq: number) => {
+		if (to === clientId) return
+		try { channel.send({ type: 'broadcast', event: 'cardack', payload: { to, seq: Math.max(seq, handled[to] ?? 0) } }) } catch { /* ignore */ }
+	}
+	// requests not yet seen handled by the host, oldest first; sent again every REQ_RETRY_MS while connected
+	// and at once after a reconnect, given up after REQ_TTL_MS (a host away that long has handed over)
+	const REQ_RETRY_MS = 1500, REQ_TTL_MS = 20000
+	let outbox: { req: WireReq; at: number }[] = []
+	let lastSeq = 0
+	let retryTimer: ReturnType<typeof setTimeout> | null = null
+	const sendReq = (req: WireReq) => { try { channel.send({ type: 'broadcast', event: 'cardreq', payload: req }) } catch { /* ignore */ } }
+	const ackReqs = (upTo: number) => { if (outbox.length) outbox = outbox.filter((o) => (o.req.seq ?? 0) > upTo) }
+	const resendReqs = () => {
+		const now = Date.now()
+		outbox = outbox.filter((o) => now - o.at < REQ_TTL_MS)
+		if (local.host === clientId) {
+			// we became the host while they waited: apply them here
+			const mine = outbox; outbox = []
+			for (const o of mine) hostApplyReq(o.req)
+			return
+		}
+		if (get(conn) === 'connected') for (const o of outbox) sendReq(o.req)
+	}
+	const armRetry = () => {
+		if (retryTimer || left) return
+		retryTimer = setTimeout(() => {
+			retryTimer = null
+			resendReqs()
+			if (outbox.length) armRetry()
+		}, REQ_RETRY_MS)
+	}
+	// the host's snapshots carry how far it got with our requests
+	state.subscribe((v) => { const a = v.reqAck?.[clientId]; if (a != null) ackReqs(a) })
 	const cardAction = (req: CardReq) => {
-		if (local.host === clientId) hostApplyReq(req)
-		else try { channel.send({ type: 'broadcast', event: 'cardreq', payload: req }) } catch { /* ignore */ }
+		if (local.host === clientId) { hostApplyReq(req); return }
+		// a seq that keeps rising across reloads of this tab (the same clientId): the clock, never below the last
+		lastSeq = Math.max(lastSeq + 1, Date.now(), (local.reqAck?.[clientId] ?? 0) + 1)
+		const wire: WireReq = { ...req, from: clientId, seq: lastSeq }
+		outbox.push({ req: wire, at: Date.now() })
+		// anything older still unanswered goes again FIRST, so the host never meets a newer request before an
+		// older one (it would then drop the older as overtaken); a repeat the host already has costs nothing
+		if (get(conn) === 'connected') for (const o of outbox) sendReq(o.req)
+		armRetry()
 	}
 
 	// host asks a player to leave; the target client observes and leaves itself
@@ -1604,16 +1675,37 @@ export function joinMatch(
 	// Phones: a page coming back from the background (or a network that comes back) reconnects at once rather
 	// than waiting out the backoff; after more than a few seconds away the socket is presumed dead and rebuilt.
 	let hiddenAt = 0
+	let wakeSeq = 0
 	const wake = (hard: boolean) => {
 		if (left) return
-		if (hard || get(conn) !== 'connected') { backoff = 750; void hardReconnect() }
-		else { trackNow(); try { channel.send({ type: 'broadcast', event: 'hello', payload: { id: clientId } }) } catch { /* ignore */ } }
+		const n = ++wakeSeq
+		if (hard || get(conn) !== 'connected') {
+			backoff = 750
+			// a dead socket that still says "open" would swallow the rebuilt channel's join too: check it first
+			void checkSocket().then(() => { if (n === wakeSeq && !left) void hardReconnect() })
+			return
+		}
+		void checkSocket().then((alive) => {
+			if (n !== wakeSeq || left) return
+			if (!alive) { backoff = 750; return } // dead: realtime rebuilds the socket, our channel rejoins (or the watchdog rebuilds it)
+			trackNow()
+			const asked = Date.now()
+			try { channel.send({ type: 'broadcast', event: 'hello', payload: { id: clientId } }) } catch { /* ignore */ }
+			resendReqs()
+			// the socket answers, but does the ROOM? Anyone else holding the state replies to hello at once;
+			// silence while they are present = our channel is gone on the server's side → rebuild it
+			setTimeout(() => {
+				if (n !== wakeSeq || left || heardAt >= asked || local.rev < 0) return
+				const raw = channel.presenceState() as Record<string, Array<{ probing?: boolean }>>
+				if (Object.keys(raw).some((k) => k !== clientId && !raw[k][0]?.probing)) { backoff = 750; void hardReconnect() }
+			}, 3000)
+		})
 	}
 	const onVis = () => {
 		if (document.visibilityState === 'hidden') { hiddenAt = Date.now(); return }
 		const away = hiddenAt ? Date.now() - hiddenAt : 0
 		hiddenAt = 0
-		wake(away > 8000)
+		if (away > 1500) wake(false)
 	}
 	const onOnline = () => wake(true)
 	const onShow = (e: PageTransitionEvent) => { if (e.persisted) wake(true) }
@@ -1636,6 +1728,8 @@ export function joinMatch(
 		if (stateTimer) clearTimeout(stateTimer)
 		if (hostTimer) clearTimeout(hostTimer)
 		if (reclaimTimer) clearTimeout(reclaimTimer)
+		if (retryTimer) clearTimeout(retryTimer)
+		outbox = []
 		clearWatchdog()
 		clearJoinDeadline()
 		left = true

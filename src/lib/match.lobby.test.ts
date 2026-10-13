@@ -4,6 +4,8 @@ import { get } from 'svelte/store';
 // ---- in-memory mock of the Supabase realtime channel ----
 type Handler = { type: string; event: string; cb: (arg: any) => void };
 const buses: Record<string, { channels: any[]; presence: Record<string, any> }> = {};
+// clients whose messages vanish (a phone whose socket died in the background)
+const muted = new Set<string>();
 
 function makeChannel(topic: string, config: any) {
 	const bus = (buses[topic] ??= { channels: [], presence: {} });
@@ -21,6 +23,7 @@ function makeChannel(topic: string, config: any) {
 			return ch;
 		},
 		send(msg: any) {
+			if (muted.has(key)) return Promise.resolve('ok');
 			if (msg.type === 'broadcast') {
 				for (const other of bus.channels) {
 					if (other === ch) continue; // broadcast self:false
@@ -50,6 +53,7 @@ vi.mock('./supabase', () => ({
 }));
 
 const { joinMatch, initialMatchState, nextHost, LOG_CAP, closeRoom } = await import('./match');
+const { newPlayerCardState } = await import('./cards/cardstate');
 
 describe('lobby: second player picks a colour', () => {
 	it('does not kick or close the joiner', () => {
@@ -376,5 +380,59 @@ describe('host hand-over', () => {
 		// a new turn starts a fresh history
 		host.act('next turn', { turn: 3 });
 		expect(get(host.canUndo)).toBe(false);
+	});
+});
+
+describe('card requests survive a dead connection', () => {
+	it('a request that never reached the host is sent again, applied once, and nothing more is sent once it is', async () => {
+		vi.useFakeTimers();
+		const host = joinMatch('LOSSY', { name: 'Zara', color: 'spectator' }, { seed: initialMatchState({ players: 4 }) });
+		const phone = joinMatch('LOSSY', { name: 'Mo', color: 'spectator' }, {});
+		host.update({ cards: { [phone.clientId]: newPlayerCardState('arien') } });
+		const coins = () => get(host.state).cards![phone.clientId].coins;
+		let sent = 0;
+		const ch = buses['match:LOSSY'].channels.find((c: any) => c._key === phone.clientId);
+		const send = ch.send;
+		ch.send = (msg: any) => { if (msg.event === 'cardreq') sent++; return send(msg); };
+
+		muted.add(phone.clientId);
+		phone.cardAction({ kind: 'coins', pid: phone.clientId, delta: 2 });
+		await vi.advanceTimersByTimeAsync(200);
+		expect(coins()).toBe(0); // lost
+		muted.delete(phone.clientId);
+		await vi.advanceTimersByTimeAsync(1600);
+		expect(coins()).toBe(2); // the retry landed
+		await vi.advanceTimersByTimeAsync(400);
+		const after = sent;
+		await vi.advanceTimersByTimeAsync(6000);
+		expect(coins()).toBe(2); // never twice
+		expect(sent).toBe(after); // the host's snapshot said it was handled: no more retries
+		host.leave(); phone.leave();
+		vi.useRealTimers();
+	});
+
+	it('keeps the order: an older lost request goes out again before a newer one, and repeats are dropped', async () => {
+		vi.useFakeTimers();
+		const host = joinMatch('ORDER', { name: 'Priya', color: 'spectator' }, { seed: initialMatchState({ players: 4 }) });
+		const phone = joinMatch('ORDER', { name: 'Sam', color: 'spectator' }, {});
+		host.update({ cards: { [phone.clientId]: newPlayerCardState('brogan') } });
+		const coins = () => get(host.state).cards![phone.clientId].coins;
+		muted.add(phone.clientId);
+		phone.cardAction({ kind: 'coins', pid: phone.clientId, delta: 1 });
+		muted.delete(phone.clientId);
+		phone.cardAction({ kind: 'coins', pid: phone.clientId, delta: 5 }); // the +1 rides along first
+		expect(coins()).toBe(6);
+		// the same request arriving twice (a retry crossing the host's answer) counts once
+		const ch = buses['match:ORDER'].channels.find((c: any) => c._key === phone.clientId);
+		const seq = Date.now() + 10_000_000;
+		ch.send({ type: 'broadcast', event: 'cardreq', payload: { kind: 'coins', pid: phone.clientId, delta: 3, from: phone.clientId, seq } });
+		ch.send({ type: 'broadcast', event: 'cardreq', payload: { kind: 'coins', pid: phone.clientId, delta: 3, from: phone.clientId, seq } });
+		expect(coins()).toBe(9);
+		// …and an Undo on the host can't let it in again
+		host.undo();
+		ch.send({ type: 'broadcast', event: 'cardreq', payload: { kind: 'coins', pid: phone.clientId, delta: 3, from: phone.clientId, seq } });
+		expect(coins()).toBe(6);
+		host.leave(); phone.leave();
+		vi.useRealTimers();
 	});
 });
