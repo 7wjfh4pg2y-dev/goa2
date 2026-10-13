@@ -59,6 +59,14 @@ export function cardKey(heroId: string, card: HeroCardJson, extraSlotIndex: numb
 
 export type Master = ImageBitmap | HTMLCanvasElement
 
+// Phones / touch tablets keep SMALLER masters and fewer of them: iOS Safari caps the memory all canvases and
+// bitmaps may use together (a full master is ~8 MB; 32 of them blew the cap), and once it is hit — or the tab
+// comes back from the background with its graphics memory dropped — new canvases silently draw nothing and
+// cards came up blank (a friend's report, 2026-10-13).
+const SMALL = typeof matchMedia === 'function' && matchMedia('(max-width: 760px), (pointer: coarse)').matches
+const SCALE = SMALL ? 0.75 : 1
+const release = (c: unknown) => { if (c instanceof HTMLCanvasElement) c.width = c.height = 0 }
+
 async function paint(heroId: string, card: HeroCardJson, extraSlotIndex: number | null, showNumbers: boolean): Promise<Master> {
 	// frame parts + fonts, the ::emoji:: this card's text uses, and its art
 	const emoji = [...(card.description ?? '').matchAll(/::([a-z_]+)::/g)].map((m) => m[1])
@@ -89,20 +97,33 @@ async function paint(heroId: string, card: HeroCardJson, extraSlotIndex: number 
 		showNumbers,
 		heroStat(heroId, 0), heroStat(heroId, 1), heroStat(heroId, 2), heroStat(heroId, 3)
 	)
+	release(bg) // the cropped art's scratch canvas
+	// a context the browser took away (Android Chrome does this to background tabs) draws nothing: don't
+	// keep a blank face — fail, and the <Card> tries again a moment later
+	if ((ctx as CanvasRenderingContext2D & { isContextLost?: () => boolean }).isContextLost?.() || !alive(cv)) { release(cv); throw new Error('card painted blank') }
+	let out = cv
+	if (SCALE < 1) {
+		const sc = document.createElement('canvas')
+		sc.width = Math.round(CARD_W * SCALE)
+		sc.height = Math.round(CARD_H * SCALE)
+		const c2 = sc.getContext('2d')
+		if (c2) { c2.imageSmoothingQuality = 'high'; c2.drawImage(cv, 0, 0, sc.width, sc.height); release(cv); out = sc }
+	}
 	// keep it as a bitmap (no encode); fall back to the canvas itself where unsupported
 	if (typeof createImageBitmap === 'function') {
 		try {
-			const bmp = await createImageBitmap(cv)
-			cv.width = cv.height = 0 // release the scratch canvas
-			return bmp
+			const bmp = await createImageBitmap(out)
+			if (alive(bmp)) { release(out); return bmp } // the scratch canvas goes
+			bmp.close()
 		} catch { /* keep the canvas */ }
 	}
-	return cv
+	return out
 }
 
 // most-recently-used masters; evicted ones stay alive while a <Card> still holds them
-const MAX_MASTERS = 32
+const MAX_MASTERS = SMALL ? 16 : 32
 const masters = new Map<string, Promise<Master>>()
+const settled = new Map<string, Master>() // the painted ones, to check them after the tab comes back
 
 /** The full-resolution master for a card face, painted on first request and shared after that. */
 export function cardMaster(heroId: string, card: HeroCardJson, extraSlotIndex: number | null = null, showNumbers = true): Promise<Master> {
@@ -115,9 +136,41 @@ export function cardMaster(heroId: string, card: HeroCardJson, extraSlotIndex: n
 	}
 	p = paint(heroId, card, extraSlotIndex, showNumbers)
 	masters.set(k, p)
-	p.catch(() => masters.delete(k)) // let a later request retry
-	while (masters.size > MAX_MASTERS) masters.delete(masters.keys().next().value as string)
+	p.then((m) => settled.set(k, m), () => masters.delete(k)) // a failed paint: a later request retries
+	while (masters.size > MAX_MASTERS) { const old = masters.keys().next().value as string; masters.delete(old); settled.delete(old) }
 	return p
+}
+
+/** Is a painted master still there? A closed / dropped bitmap reports width 0, and one whose memory the
+ *  browser threw away draws nothing — so draw its middle into a 1×1 canvas and look. */
+function alive(m: Master): boolean {
+	try {
+		if (!m.width || !m.height) return false
+		const c = document.createElement('canvas')
+		c.width = c.height = 1
+		const x = c.getContext('2d', { willReadFrequently: true })
+		if (!x) return false
+		x.drawImage(m, m.width * 0.4, m.height * 0.4, m.width * 0.2, m.height * 0.2, 0, 0, 1, 1)
+		const a = x.getImageData(0, 0, 1, 1).data[3]
+		c.width = c.height = 0
+		return a > 0
+	} catch { return false }
+}
+
+/** After the tab was in the background: drop every master that didn't survive (so it is painted again), then
+ *  tell every <Card> to draw itself again (`goa2-cards-redraw`) — its own canvas may have been cleared too. */
+export function reviveCards() {
+	if (typeof document === 'undefined') return
+	for (const [k, m] of settled) if (!alive(m)) { settled.delete(k); masters.delete(k); try { (m as ImageBitmap).close?.() } catch { /* gone */ } }
+	window.dispatchEvent(new Event('goa2-cards-redraw'))
+}
+if (typeof document !== 'undefined') {
+	let hiddenAt = 0
+	document.addEventListener('visibilitychange', () => {
+		if (document.hidden) hiddenAt = Date.now()
+		else if (hiddenAt) { hiddenAt = 0; setTimeout(reviveCards, 60) }
+	})
+	window.addEventListener('pageshow', (e) => { if ((e as PageTransitionEvent).persisted) setTimeout(reviveCards, 60) })
 }
 
 /** Download a set of heroes' card art ahead of time (network only — cheap). */
