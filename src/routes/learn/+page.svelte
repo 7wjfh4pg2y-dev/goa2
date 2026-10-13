@@ -26,7 +26,11 @@
 	$: chapters = [...new Set(steps.map((s) => s.chapter))];
 	const thrones = (['orange', 'blue'] as const).map((t) => ({ hex: throneHex(LEARN_MAP, t), team: t })).filter((t): t is { hex: string; team: 'orange' | 'blue' } => !!t.hex);
 	// desktop: the island sits right of the text panel (and above the cards, when there are some)
-	$: inset = phone ? null : { t: 24, b: scene.cards ? Math.min(h * 0.42, 360) : 24, l: Math.min(560, w * 0.4) + 24, r: 24 };
+	$: inset = phone ? null : { t: 100, b: scene.cards ? Math.min(h * 0.42, 360) : 24, l: Math.min(560, w * 0.4) + 24, r: 24 };
+	// where this step sits in its chapter (desktop kicker: "The board · 2 / 2")
+	$: inChap = steps.filter((s) => s.chapter === step.chapter);
+	$: chapPos = inChap.indexOf(step) + 1;
+	$: chapIdx = chapters.indexOf(step.chapter);
 
 	function go(n: number) {
 		const k = Math.max(0, Math.min(steps.length - 1, n));
@@ -64,6 +68,24 @@
 {/snippet}
 
 <div class="learn tide" class:phone>
+	{#if !phone}
+		<!-- desktop: one bar across the top — home, the chapters as a stepper, the count -->
+		<header class="bar panel">
+			<a class="btn btn-ghost btn-sm home" href={base + '/'} aria-label="Home"><Icon name="back" /></a>
+			<span class="t-label brand">How to play</span>
+			<nav class="steps" aria-label="Chapters">
+				{#each chapters as c, n (c)}
+					{@const first = steps.findIndex((s) => s.chapter === c)}
+					{#if n > 0}<span class="ln" class:done={n <= chapIdx}></span>{/if}
+					<button class="st" class:on={n === chapIdx} class:done={n < chapIdx} on:click={() => go(first)} title={c}>
+						<span class="num">{#if n < chapIdx}<Icon name="check" />{:else}{n + 1}{/if}</span><span class="lbl">{c}</span>
+					</button>
+				{/each}
+			</nav>
+			<span class="cnt">{i + 1} / {steps.length}</span>
+			<div class="barprog"><i style="transform: scaleX({(i + 1) / steps.length})"></i></div>
+		</header>
+	{/if}
 	<div class="stage">
 		{#if ready}
 			<BoardCanvas bind:this={board} map={LEARN_MAP} look="island" pieces={scene.pieces} {thrones} glowZone={scene.zone} activeZone={scene.zone}
@@ -85,17 +107,18 @@
 	</div>
 
 	<section class="panel side">
-		<header class="sh">
-			<a class="btn btn-ghost btn-sm home" href={base + '/'} aria-label="Home"><Icon name="back" /></a>
-			{#if !phone}<span class="t-label">How to play</span>{/if}
-			{#if phone}{@render chapNav()}{/if}
-			<span class="cnt">{i + 1} / {steps.length}</span>
-		</header>
-		{#if !phone}{@render chapNav()}{/if}
-		<div class="prog"><i style="transform: scaleX({(i + 1) / steps.length})"></i></div>
+		{#if phone}
+			<header class="sh">
+				<a class="btn btn-ghost btn-sm home" href={base + '/'} aria-label="Home"><Icon name="back" /></a>
+				{@render chapNav()}
+				<span class="cnt">{i + 1} / {steps.length}</span>
+			</header>
+			<div class="prog"><i style="transform: scaleX({(i + 1) / steps.length})"></i></div>
+		{/if}
 		<div class="txt" bind:this={textEl}>
 			{#key step.id}
 				<div class="in">
+					{#if !phone}<span class="t-label kick">{step.chapter}{#if inChap.length > 1}<em>{chapPos} / {inChap.length}</em>{/if}</span>{/if}
 					<h1 class="t-h1">{step.title}</h1>
 					{#each step.blocks as b, k (k)}
 						{#if 'p' in b}<p>{@html md(b.p)}</p>
@@ -127,7 +150,6 @@
 	.stage { position: absolute; inset: 0; }
 	.side { position: absolute; left: 16px; top: 16px; bottom: 16px; width: min(540px, 40vw); display: flex; flex-direction: column; gap: 10px; padding: 16px 18px; }
 	.sh { display: flex; align-items: center; gap: 10px; }
-	.sh .t-label { flex: 1; }
 	.home { padding: 0 8px; }
 	.cnt { font-size: 13px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
 	.chap { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -173,6 +195,28 @@
 	.t-hand figcaption { border-color: rgba(53, 208, 122, 0.6); }
 	.t-item figcaption { border-color: var(--brass-line); color: var(--brass-hi); }
 	.ord { position: absolute; top: -12px; left: -8px; z-index: 1; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; font-size: 16px; color: var(--ink-dark); background: linear-gradient(180deg, var(--brass-hi), var(--brass)); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5); }
+
+	/* desktop: the top bar + the text panel under it */
+	.learn .bar { position: absolute; z-index: 2; left: 16px; right: 16px; top: 16px; height: 64px; display: flex; align-items: center; gap: 16px; padding: 0 16px; overflow: hidden; }
+	.bar .brand { flex: none; color: var(--brass-hi); }
+	.steps { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; }
+	.st { flex: none; display: flex; align-items: center; gap: 8px; padding: 6px 4px; border: 0; background: none; color: var(--ink-3); font: inherit; font-size: 13px; white-space: nowrap; cursor: pointer; }
+	.st:hover { color: var(--ink); }
+	.st.done { color: var(--ink-2); }
+	.st.on { color: var(--ink); }
+	.num { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--hair); font-size: 12px; font-variant-numeric: tabular-nums; }
+	.num :global(.ico) { width: 14px; height: 14px; }
+	.st.done .num { border-color: var(--brass-line); color: var(--brass-hi); }
+	.st.on .num { border-color: transparent; color: var(--ink-dark); background: linear-gradient(180deg, var(--brass-hi), var(--brass)); }
+	.ln { flex: 1 1 10px; min-width: 6px; max-width: 34px; height: 1px; margin: 0 6px; background: var(--hair); }
+	.ln.done { background: var(--brass-line); }
+	.barprog { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--brass-faint); }
+	.barprog i { display: block; height: 100%; background: var(--brass); transform-origin: left; transition: transform 0.3s; }
+	.learn:not(.phone) .side { top: 96px; padding: 20px 22px 18px; gap: 12px; }
+	.kick { display: flex; align-items: center; gap: 10px; color: var(--ink-3); }
+	.kick em { font-style: normal; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--hair); font-size: 11px; }
+	/* narrower windows: only the current chapter keeps its name */
+	@media (max-width: 1380px) { .st:not(.on) .lbl { display: none; } .ln { max-width: 22px; } }
 
 	/* phone: board on top, the text below, all on one screen */
 	.phone .stage { bottom: auto; height: 42dvh; }
