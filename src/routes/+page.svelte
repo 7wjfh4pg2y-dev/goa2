@@ -840,9 +840,9 @@
 									<span class="choice-txt"><span class="t-h2">Hall of Records</span><span class="t-body c-muted">Stats & reports</span></span>
 									<span class="choice-go"><Icon name="go" /></span>
 								</a>
-								<a class="choice card a" href={base + '/openings'}>
+								<a class="choice card a" href={base + '/heroes'}>
 									<span class="choice-ic"><Icon name="flag" /></span>
-									<span class="choice-txt"><span class="t-h2">Openings</span><span class="t-body c-muted">Work in progress</span></span>
+									<span class="choice-txt"><span class="t-h2">Heroes</span><span class="t-body c-muted">Work in progress</span></span>
 									<span class="choice-go"><Icon name="go" /></span>
 								</a>
 							</div>
