@@ -18,7 +18,7 @@
 	import { onSide, turnCards, CARD_HEX, LANES, SIZES, MINION_PREFS, GUIDE_TAGS, type Opening, type HeroGuide, type Side } from '$lib/openings';
 	import { guideFor } from './guide';
 	import type { HeroMatchups, Matchup } from '$lib/hallstats';
-	import { globalOf, GLOBAL_SOURCE, GLOBAL_AS_OF, type GlobalVs } from '$lib/globalstats';
+	import { globalOf, globalGames, globalWin, GLOBAL_SOURCE, GLOBAL_AS_OF, GLOBAL_TAG, type GlobalVs } from '$lib/globalstats';
 
 	export let heroId: string;
 	export let openings: Opening[] = [];
@@ -87,6 +87,27 @@
 
 <svelte:window on:keydown={key} />
 
+<!-- the community site's numbers for this hero (globalstats.ts), always tagged GLOBAL -->
+{#snippet globalBox(cls: string)}
+	{#if gl}
+		{@const n = globalGames(gl)}
+		{@const wr = globalWin(gl)}
+		{@const won = gl.won.reduce((a, b) => a + b, 0)}
+		<div class="gbox {cls}">
+			<div class="ghd"><span class="gtag" title="{GLOBAL_SOURCE}'s global stats, {GLOBAL_AS_OF} — not our games">Global</span><small>{GLOBAL_SOURCE}</small>{#if gl.tag}<span class="gt {gl.tag}">{GLOBAL_TAG[gl.tag]}</span>{/if}</div>
+			<div class="gl2"><span>Win rate</span><b class:up={wr >= 50} class:down={wr < 50}>{wr.toFixed(1)}%</b></div>
+			<span class="gsplit"><i style="--v:{n ? gl.wins / n : 0}"></i></span>
+			<div class="gsm"><span>{gl.wins} W · {gl.losses} L</span><span>{n} games</span></div>
+			<div class="gl2"><span>Hero impact</span><b class:up={gl.impact > 0} class:down={gl.impact < 0}>{gl.impact > 0 ? '+' : ''}{gl.impact}%</b></div>
+			<span class="gimp" title="ATE {gl.ate[0]}% (95% CI {gl.ate[1]}% to {gl.ate[2]}%)"><em style="--a:{(gl.ate[1] + 50) / 100}; --b:{(gl.ate[2] + 50) / 100}"></em><i style="--v:{(gl.impact + 50) / 100}"></i></span>
+			<div class="gl2"><span>Victory types</span><small>{gl.typed} of {n} games</small></div>
+			<div class="gstk" title="Games by win type">{#each [0, 1, 2] as k (k)}{#if gl.games[k]}<i class="w{k}" style="flex:{gl.games[k]}">{['♛', '⚑', '☠'][k]} {gl.games[k]}</i>{/if}{/each}</div>
+			{#if won}<div class="gstk" title="Wins by win type">{#each [0, 1, 2] as k (k)}{#if gl.won[k]}<i class="w{k}" style="flex:{gl.won[k]}">{['♛', '⚑', '☠'][k]} {gl.won[k]}</i>{/if}{/each}</div>{/if}
+			<div class="gsm"><span>Games{won ? ' · wins' : ''}</span><span>♛ Throne ⚑ Final push ☠ Life</span></div>
+		</div>
+	{/if}
+{/snippet}
+
 <div class="hpage tide">
 	<header class="bar">
 		<a class="ib" href={base + '/'} aria-label="Home"><Icon name="back" /></a>
@@ -126,6 +147,7 @@
 					</div>
 				{/if}
 			</div>
+			{@render globalBox('onart')}
 		{:else if op}
 			{#key op.id}
 				<OpeningBoard bind:this={board} {op} {step} {turned} uid="hp" inset={{ t: 56, b: 16, l: 12, r: 12 }} interactive />
@@ -202,6 +224,7 @@
 						{#each hand as i (i)}<button class="hc" class:on={shownCard === i} on:click={() => (preview = i)} aria-label={cards[i]?.name}><Card heroId={h.id} card={cards[i]} /></button>{/each}
 					</div>
 				</div>
+				{#if gl}<div class="col gcol">{@render globalBox('instrip')}</div>{/if}
 				<div class="col mu">
 					<h3>Matchups{#if muSrc === 'global'}<span class="gtag" title="{GLOBAL_SOURCE}'s global stats, {GLOBAL_AS_OF}">Global</span>{:else if muFromData && record}<span class="src">from {record.games} game{record.games === 1 ? '' : 's'}</span>{/if}
 						{#if gl}<span class="msw"><button class:on={muSrc === 'ours'} on:click={() => (muPick = 'ours')}>Ours</button><button class:on={muSrc === 'global'} on:click={() => (muPick = 'global')}>Global</button></span>{/if}</h3>
@@ -275,6 +298,34 @@
 	.pref b { font-weight: 400; color: var(--ink); }
 	.tag { padding: 3px 14px; font-size: 13px; color: #fff; background: #111318; clip-path: polygon(10px 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 10px 100%, 0 50%); }
 	.tag.later { background: #6b7280; }
+
+	/* overview: the GLOBAL panel (on the painting; on phones a block in the strip) */
+	.gbox { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border-radius: 12px; border: 1px solid rgba(64, 196, 186, 0.45); background: rgba(3, 10, 20, 0.86); font-size: 13px; color: var(--ink-2); }
+	.gbox.onart { position: absolute; right: 18px; bottom: 18px; width: clamp(230px, 24vw, 280px); }
+	.gcol { display: none; }
+	.ghd { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
+	.ghd small { font-size: 11px; color: var(--ink-3); }
+	.gtag { padding: 1px 6px; border-radius: 4px; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #071c1b; background: #40c4ba; }
+	.gt { margin-left: auto; padding: 1px 8px; border-radius: 999px; font-size: 11px; }
+	.gt.beginner { color: #6be39a; background: rgba(53, 208, 122, 0.14); }
+	.gt.skill { color: #c9a2ff; background: rgba(123, 69, 201, 0.25); }
+	.gl2 { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-top: 2px; }
+	.gl2 b { font-weight: 400; font-size: 18px; color: #fff; }
+	.gl2 b.up { color: #6be39a; }
+	.gl2 b.down { color: #ff7d73; }
+	.gl2 small { font-size: 11px; color: var(--ink-3); }
+	.gsplit { position: relative; height: 5px; border-radius: 3px; background: #d9434e; overflow: hidden; }
+	.gsplit i { position: absolute; inset: 0; background: #35d07a; transform-origin: left; transform: scaleX(var(--v)); }
+	.gimp { position: relative; height: 10px; border-radius: 5px; background: rgba(255, 255, 255, 0.08); }
+	.gimp::after { content: ''; position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: var(--ink-3); }
+	.gimp em { position: absolute; top: 0; bottom: 0; left: calc(var(--a) * 100%); right: calc((1 - var(--b)) * 100%); border-radius: 5px; background: rgba(255, 255, 255, 0.16); }
+	.gimp i { position: absolute; top: 2px; width: 6px; height: 6px; margin-left: -3px; left: calc(var(--v) * 100%); border-radius: 50%; background: #fff; }
+	.gsm { display: flex; justify-content: space-between; gap: 6px; font-size: 11px; color: var(--ink-3); }
+	.gstk { display: flex; height: 16px; border-radius: 4px; overflow: hidden; }
+	.gstk i { display: grid; place-items: center; min-width: 0; overflow: hidden; white-space: nowrap; font-style: normal; font-size: 10.5px; color: #fff; }
+	.gstk .w0 { background: #c99512; }
+	.gstk .w1 { background: #3a7fe0; }
+	.gstk .w2 { background: #d9434e; }
 
 	/* openings: the board and its controls */
 	.bctl { position: absolute; left: 12px; top: 12px; display: flex; gap: 8px; z-index: 2; }
@@ -374,5 +425,7 @@
 		.spread { --ch: 150px; overflow-x: auto; }
 		.olist { height: 240px; position: relative; --th: 160px; }
 		.id { left: 16px; top: 16px; width: calc(100% - 32px); }
+		.gbox.onart { display: none; }
+		.gcol { display: flex; }
 	}
 </style>
