@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount, onDestroy, type Snippet } from 'svelte';
 	import Ocean from '$lib/board/Ocean.svelte';
 	import { paintSea, seaPatterns } from '$lib/board/seaPaint';
 	import IslandLayer from '$lib/board/IslandLayer.svelte';
@@ -25,7 +25,7 @@
 	export let rotation = 0; // base orientation in degrees (e.g. 180 so your base sits at the bottom)
 
 	export let pieces: Array<{ id: string; hex: string; team: string; role?: string; label?: string; color?: string; token?: string; sym?: string; hero?: string; letter?: string;
-		attachTo?: string; mine?: 'down' | 'up'; peek?: string; immune?: boolean; locked?: boolean; name?: string; nameColor?: string }> = [];
+		attachTo?: string; mine?: 'down' | 'up'; peek?: string; immune?: boolean; locked?: boolean; name?: string; nameColor?: string; faded?: boolean }> = [];
 	// holding something to place (minion / token): every tap reports its hex, pieces
 	// aren't picked up, and a hex with a hero on it is still a valid target
 	export let placing = false;
@@ -76,6 +76,11 @@
 	export let zoomLock = false;
 	export let badges: Array<{ id: string; text: string; tone: 'up' | 'down' | 'even'; total?: boolean }> = [];
 	export let inset: { t: number; b: number; l?: number; r?: number } | null = null;
+	/** extra drawings in board units (the openings' marks): `under` the pieces, `over` them; never hit-tested.
+	 *  They get the hex centre function, the hex size and the board's turn (to keep text upright). */
+	type BoardCtx = { at: (hex: string) => { x: number; y: number }; size: number; rot: number };
+	export let under: Snippet<[BoardCtx]> | undefined = undefined;
+	export let over: Snippet<[BoardCtx]> | undefined = undefined;
 
 	const SQRT3 = Math.sqrt(3);
 	const tileSprites = import.meta.glob('./images/tiles/*.png', { eager: true, import: 'default' }) as Record<string, string>;
@@ -687,7 +692,7 @@
 				{@const base = centerOf(p.hex)}
 				{@const off = pieceOffset[p.id] ?? { x: 0, y: 0 }}
 				{@const d = size * 1.44 * fit.s}
-				<span class="rim" class:lifted={carryId === p.id && !!hoverHex}
+				<span class="rim" class:lifted={carryId === p.id && !!hoverHex} class:faded={p.faded}
 					style="left:{((base.x + off.x) * fit.s + fit.ox - d / 2).toFixed(2)}px; top:{((base.y + off.y) * fit.s + fit.oy - d / 2).toFixed(2)}px; width:{d.toFixed(2)}px; height:{d.toFixed(2)}px">
 					{#if look === 'island'}<i class="sh" style="translate:{rimShade.x.toFixed(1)}% {rimShade.y.toFixed(1)}%"></i>{/if}
 					<span class="turn" class:ccw={p.team === 'blue'}><svg viewBox="-100 -100 200 200"><use href={minionRef(p.team, p.role, 'rim')} /></svg></span>
@@ -754,12 +759,14 @@
 				</g>
 			{/each}
 
+			{#if under}<g pointer-events="none">{@render under({ at: centerOf, size, rot: rotEff })}</g>{/if}
+
 			{#each pieces.filter((q) => !q.attachTo) as p (p.id)}
 				{@const base = centerOf(p.hex)}
 				{@const off = pieceOffset[p.id] ?? { x: 0, y: 0 }}
 				{@const c = { x: base.x + off.x, y: base.y + off.y }}
 				{@const sel = selected === p.id || dragId === p.id}
-				<g class="piece" class:selectable={!!onMovePiece} class:selected={sel} class:lifted={carryId === p.id && !!hoverHex}
+				<g class="piece" class:selectable={!!onMovePiece} class:selected={sel} class:lifted={carryId === p.id && !!hoverHex} class:faded={p.faded}
 					role="button" tabindex="-1" data-piece={p.id}
 					aria-label={p.role ? `${p.team === "blue" ? "Titan" : "Atlantean"} ${p.role} minion` : (p.label ?? "piece")}
 					transform={rotEff ? `rotate(${-rotEff} ${c.x} ${c.y})` : undefined}
@@ -791,6 +798,8 @@
 					</g>
 				{/if}
 			{/each}
+
+			{#if over}<g pointer-events="none">{@render over({ at: centerOf, size, rot: rotEff })}</g>{/if}
 
 			<!-- pings: rings rippling out from the hex, in the pinger's colour -->
 			{#each pings as pg (pg.id)}
@@ -863,6 +872,7 @@
 	   piece dims while its ghost rides the cursor */
 	.board-wrap.holding, .board-wrap.holding :global(*) { cursor: grabbing !important; }
 	.piece.lifted { opacity: .7; }
+	.piece.faded, .rim.faded { opacity: .28; }
 	.piece.selected circle { filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.6)); }
 	.board-wrap.pinging, .board-wrap.pinging :global(*) { cursor: crosshair !important; }
 	.ping .pring { fill: none; stroke: var(--pc); transform-box: fill-box; transform-origin: center; animation: pring 1.1s ease-out 3; opacity: 0; }
