@@ -13,7 +13,8 @@
 	import { portraitCss } from '$lib/heroes';
 	import { levelOf, statDeltas, type PlayerCardState } from '$lib/cards/cardstate';
 
-	export let cs: PlayerCardState;
+	/** null = the host without a hero of their own: just a line saying so, and the action pill */
+	export let cs: PlayerCardState | null;
 	export let color = '#888';
 	export let team: 'orange' | 'blue' = 'orange';
 	export let turnIdx = 0;
@@ -41,14 +42,14 @@
 	export let onStyle: () => void = () => {};
 
 	const ROMAN = ['I', 'II', 'III', 'IV'];
-	$: lv = levelOf(cs);
+	$: lv = cs ? levelOf(cs) : 0;
 	const arc = (i: number, r = 21) => {
 		const a0 = ((i * 45 + 5) * Math.PI) / 180, a1 = ((i * 45 + 40) * Math.PI) / 180;
 		return `M ${(25 + r * Math.sin(a0)).toFixed(2)} ${(25 - r * Math.cos(a0)).toFixed(2)} A ${r} ${r} 0 0 1 ${(25 + r * Math.sin(a1)).toFixed(2)} ${(25 - r * Math.cos(a1)).toFixed(2)}`;
 	};
-	$: top = cs.discard.length ? cs.discard[cs.discard.length - 1] : null;
+	$: top = cs?.discard.length ? cs.discard[cs.discard.length - 1] : null;
 	let discOpen = false;
-	$: if (!cs.discard.length) discOpen = false;
+	$: if (!cs?.discard.length) discOpen = false;
 	// a ring that just changed ignores clicks for a moment: the second tap of a double-tap must not land on the NEXT
 	// action (saying No to an effect used to end the turn that way)
 	let ringKey = '', ringAt = 0;
@@ -57,6 +58,9 @@
 </script>
 
 <div class="pdash is-{team}">
+	{#if !cs}
+	<div class="r1 host"><b>Host</b><small>watching · you move the game on</small></div>
+	{:else}
 	<div class="r1">
 		<button class="me" on:click={onMe} aria-label="Your board">
 			<svg viewBox="0 0 50 50" aria-hidden="true">{#each Array(8) as _, i (i)}<path d={arc(i)} class:on={i < lv || (i === 7 && cs.ultimate)} class:ult={i === 7} />{/each}</svg>
@@ -82,7 +86,9 @@
 			</button>
 		</span>
 	</div>
+	{/if}
 	<div class="r2">
+		{#if cs}
 		<span class="tools">
 			<span class="ts">{#if tokens}{@render tokens()}{/if}</span>
 			<span class="ts">{#if radius}{@render radius()}{/if}</span>
@@ -92,6 +98,7 @@
 				<svg viewBox="0 0 24 24">{#if handStyle === 'banners'}<path d="M3 4.5h18v4H3zM3 10h18v4H3zM3 15.5h18v4H3z" class="cf" />{:else if handStyle === 'spread'}<rect x="1.5" y="6" width="6.2" height="10" rx="1.2" class="cf" /><rect x="8.9" y="6" width="6.2" height="10" rx="1.2" class="cf" /><rect x="16.3" y="6" width="6.2" height="10" rx="1.2" class="cf" />{:else}<rect x="8.5" y="4" width="7" height="11" rx="1.3" class="cf" transform="rotate(-22 12 21)" /><rect x="8.5" y="4" width="7" height="11" rx="1.3" class="cf" transform="rotate(22 12 21)" /><rect x="8.5" y="4" width="7" height="11" rx="1.3" class="cf" />{/if}</svg>
 			</button>
 		</span>
+		{/if}
 		{#if order.split}
 			<span class="act split"><button class="h l" on:click={() => fire(order.split?.left.run)}>{order.split.left.label}</button><button class="h r" on:click={() => fire(order.split?.right.run)}>{order.split.right.label}</button></span>
 		{:else if order.alt}
@@ -115,6 +122,9 @@
 		background: linear-gradient(180deg, var(--tg), transparent 60%), linear-gradient(180deg, rgba(16, 44, 72, 0.98), rgba(6, 21, 38, 0.99)); border-top: 2px solid var(--tc); }
 	.is-orange { --tc: #ef7d22; --tg: rgba(239, 125, 34, 0.16); } .is-blue { --tc: #2f7fe6; --tg: rgba(47, 127, 230, 0.18); }
 	button { font: inherit; color: inherit; padding: 0; cursor: pointer; }
+	.r1.host { justify-content: center; gap: 10px; text-transform: uppercase; letter-spacing: 0.08em; }
+	.r1.host b { font-weight: 400; font-size: 16px; color: var(--brass-hi); }
+	.r1.host small { font-size: 11px; color: #bccbd9; }
 	.r1 { flex: 1; min-height: 0; display: flex; align-items: center; gap: 5px; }
 	.me { position: relative; flex: none; width: 50px; height: 50px; border: 0; background: none; }
 	.me svg { position: absolute; inset: 0; width: 100%; height: 100%; }

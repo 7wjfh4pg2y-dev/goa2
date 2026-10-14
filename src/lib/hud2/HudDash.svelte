@@ -26,7 +26,8 @@
 	import { portraitCss, heroLogo } from '$lib/heroes';
 	import { levelOf, levelCost, type PlayerCardState } from '$lib/cards/cardstate';
 
-	export let cs: PlayerCardState;
+	/** null = the host without a hero of their own: only the action ring (they move the game on, nothing more) */
+	export let cs: PlayerCardState | null;
 	export let name = '';
 	export let color = '#888';
 	export let team: 'orange' | 'blue' = 'orange';
@@ -69,10 +70,10 @@
 	export let onPick: (i: number) => void = () => {};
 
 	const ROMAN = ['I', 'II', 'III', 'IV'];
-	$: lv = levelOf(cs);
+	$: lv = cs ? levelOf(cs) : 0;
 	// the ultimate's compartment: shut until the ultimate can be unlocked; then the level ring slides left (transform
 	// only) and the compartment opens out from under it — the card (read it) or Unlock [coin]
-	$: ultOpen = ultIdx >= 0 && (cs.ultimate || ultReady);
+	$: ultOpen = !!cs && ultIdx >= 0 && (cs.ultimate || ultReady);
 	let uslide = false;
 	let uslideT: ReturnType<typeof setTimeout> | null = null;
 	let wasUlt = ultOpen;
@@ -81,7 +82,7 @@
 		const a0 = ((i * 45 + 4) * Math.PI) / 180, a1 = ((i * 45 + 41) * Math.PI) / 180;
 		return `M ${(70 + r * Math.sin(a0)).toFixed(2)} ${(70 - r * Math.cos(a0)).toFixed(2)} A ${r} ${r} 0 0 1 ${(70 + r * Math.sin(a1)).toFixed(2)} ${(70 - r * Math.cos(a1)).toFixed(2)}`;
 	};
-	$: top = cs.discard.length ? cs.discard[cs.discard.length - 1] : null;
+	$: top = cs?.discard.length ? cs.discard[cs.discard.length - 1] : null;
 	// the ring's word(s): packed into 1–3 lines (whichever gives the biggest type), sized so the widest line fits across
 	// the ring and every line (plus the sub line) fits down it — nothing ever spills out of the circle
 	function packLabel(label: string, hasSub: boolean): { lines: string[]; fs: number } {
@@ -125,8 +126,9 @@
 	const fire = (fn?: () => void) => { if (Date.now() - ringAt < 450) return; fn?.(); };
 </script>
 
-<div class="mydash is-{team}" class:docked class:ulted={ultOpen} class:ascended={cs.ultimate} style="--dw:{dockW}px">
+<div class="mydash is-{team}" class:docked={docked && !!cs} class:ulted={ultOpen} class:ascended={cs?.ultimate} class:ringonly={!cs} style="--dw:{dockW}px">
 	<div class="dbody">
+		{#if cs}
 		<!-- the ultimate's compartment (opens out from under the level ring, which slides left) -->
 		<div class="uexw" class:open={ultOpen} class:sliding={uslide} aria-hidden={!ultOpen}>
 			<div class="uext">
@@ -213,6 +215,7 @@
 			</div>
 		</div>
 
+		{/if}
 		<div class="dgo">
 			{#if order.split}
 				<div class="cap gob split">
@@ -345,6 +348,9 @@
 	@keyframes bup { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 	@media (prefers-reduced-motion: reduce) { .bcell { animation: none; } }
 	/* the action cap */
+	/* the host without a hero: the ring alone, where the dash's right cap would be */
+	.ringonly .dbody { width: var(--cap); padding: 0; background: none; border: 0; box-shadow: none; }
+	.ringonly .dgo { right: 0; }
 	.dgo { position: absolute; z-index: 2; right: -14px; top: 50%; width: var(--cap); height: var(--cap); transform: translateY(-50%); transition: transform 0.42s cubic-bezier(0.2, 0.8, 0.2, 1); }
 	.docked .dgo { transform: translate(var(--dw), -50%); }
 	.gob { top: 0; left: 0; transform: none;

@@ -52,7 +52,7 @@ vi.mock('./supabase', () => ({
 	supabase: { channel: (topic: string, config: any) => makeChannel(topic, config) }
 }));
 
-const { joinMatch, initialMatchState, nextHost, LOG_CAP, closeRoom } = await import('./match');
+const { joinMatch, initialMatchState, nextHost, LOG_CAP, closeRoom, seatedPicks, playsIn } = await import('./match');
 const { newPlayerCardState } = await import('./cards/cardstate');
 
 describe('lobby: second player picks a colour', () => {
@@ -433,6 +433,41 @@ describe('card requests survive a dead connection', () => {
 		ch.send({ type: 'broadcast', event: 'cardreq', payload: { kind: 'coins', pid: phone.clientId, delta: 3, from: phone.clientId, seq } });
 		expect(coins()).toBe(6);
 		host.leave(); phone.leave();
+		vi.useRealTimers();
+	});
+});
+
+describe('watchers only watch', () => {
+	it('a watcher\'s draft pick never becomes a deck, and only players (or the host) play', () => {
+		const players = [
+			{ id: 'a', name: 'Zara', color: 'teal', ready: true, seat: 0 },
+			{ id: 'b', name: 'Mo', color: 'rose', ready: true, seat: 1 },
+			{ id: 'w', name: 'Quinn', color: 'spectator', ready: false, seat: -1 }
+		];
+		const s = { ...initialMatchState({ players: 2 }), draft: { picks: { a: 'arien', b: 'brogan', w: 'wasp' } } as any };
+		expect(seatedPicks(s, players)).toEqual({ a: 'arien', b: 'brogan' });
+		expect(playsIn(s, players, 'a')).toBe(true);
+		expect(playsIn(s, players, 'w')).toBe(false);
+		// a watcher handed a seat mid-game plays from then on (their seat / deck is theirs)
+		expect(playsIn({ ...s, seatMap: { '0': { id: 'w', name: 'Quinn' } } }, players, 'w')).toBe(true);
+	});
+
+	it('the host refuses card requests from a watcher', async () => {
+		vi.useFakeTimers();
+		const host = joinMatch('WATCH', { name: 'Avery', color: 'spectator' }, { seed: initialMatchState({ players: 4 }) });
+		const player = joinMatch('WATCH', { name: 'Harper', color: 'spectator' }, {});
+		player.setSelf({ seat: 0, color: 'teal' });
+		const watcher = joinMatch('WATCH', { name: 'Sam', color: 'spectator' }, {});
+		await vi.advanceTimersByTimeAsync(500);
+		host.update({ cards: { [player.clientId]: newPlayerCardState('arien') } });
+		const coins = () => get(host.state).cards![player.clientId].coins;
+		watcher.cardAction({ kind: 'coins', pid: player.clientId, delta: 3 });
+		await vi.advanceTimersByTimeAsync(500);
+		expect(coins()).toBe(0);
+		player.cardAction({ kind: 'coins', pid: player.clientId, delta: 1 });
+		await vi.advanceTimersByTimeAsync(500);
+		expect(coins()).toBe(1);
+		host.leave(); player.leave(); watcher.leave();
 		vi.useRealTimers();
 	});
 });

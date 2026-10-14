@@ -79,9 +79,9 @@
 				</div>
 			{/each}
 		</div>
-		{#if requests.length || watchers.length}
-			<div class="gspec">
-				<small>Watching</small>
+		<div class="gspec">
+				<small>Watching · {watchers.length}</small>
+				{#if !watchers.length}<span class="greq">Nobody is watching</span>{/if}
 				{#each watchers as w (w.id)}
 					{@const r = requests.find((q) => q.id === w.id)}
 					<span class="gp">
@@ -94,7 +94,6 @@
 					</span>
 				{/each}
 			</div>
-		{/if}
 		{#if phone}
 			<div class="glog">
 				<div class="glh"><small>Log</small>{#if host}<button class="gundo" disabled={!canUndo} on:click={onUndo}>↶ Undo</button>{/if}</div>

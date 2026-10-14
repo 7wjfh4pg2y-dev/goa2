@@ -27,6 +27,9 @@
 	$: rosters = teamRosters($players, seats);
 	$: seatedIds = [...rosters.orange, ...rosters.blue];
 	$: mySeat = $players.find((p) => p.id === clientId)?.seat ?? -1;
+	// a watcher (not in a seat) only watches the draft — never picks (the host may still start the game)
+	$: watching = !seatedIds.includes(clientId);
+	$: watchers = $players.filter((p) => !seatedIds.includes(p.id));
 	$: myTeam = teamForSeat(mySeat, seats);
 	// your team on the RIGHT, the enemy on the left (spectators watch as the Titans)
 	$: railSides = (myTeam === 'orange'
@@ -122,7 +125,7 @@
 
 	// can the active player lock `h` right now?
 	function canAct(h: string): boolean {
-		if (!d || complete || unavailable(h)) return false;
+		if (!d || complete || watching || unavailable(h)) return false;
 		if (d.system === 'all-random') return false;
 		if (d.system === 'all-pick') return !myPick;
 		if (!myTurn) return false;
@@ -141,7 +144,7 @@
 		}
 	}
 	// self-heal a rare all-pick clobber (two players locking at once)
-	$: if (d && d.system === 'all-pick' && myWant && d.picks[clientId] !== myWant) {
+	$: if (d && d.system === 'all-pick' && myWant && !watching && d.picks[clientId] !== myWant) {
 		session.update({ draft: draftSetPick(d, clientId, myWant, myTeam ?? undefined) });
 	}
 	function startGame() {
@@ -244,6 +247,7 @@
 	$: banner = (() => {
 		if (!d) return '';
 		if (complete) return 'Draft complete';
+		if (watching && d.system === 'all-pick') return 'Watching the draft';
 		if (d.system === 'all-pick') return myPick ? 'Waiting for the others…' : 'Choose your hero';
 		if (d.system === 'all-random') return 'Heroes assigned';
 		if (!turn) return '';
@@ -254,6 +258,7 @@
 	$: bannerShort = (() => {
 		if (!d) return '';
 		if (complete) return 'Complete';
+		if (watching && d.system === 'all-pick') return 'Watching';
 		if (d.system === 'all-pick') return myPick ? 'Waiting…' : DRAFT_LABELS[d.system];
 		if (d.system === 'all-random') return 'Assigned';
 		if (!turn) return '';
@@ -267,10 +272,11 @@
 	// canAct reads the draft, your pick, the turn and the pool inside the call, where `$:` can't see them:
 	// name them here so the button follows them (it used to stay lit after you had locked in)
 	let actionEnabled = false;
-	$: { d; myPick; myTurn; unavailable; actionEnabled = complete ? iAmHost : canAct(sel); }
+	$: { d; myPick; myTurn; unavailable; watching; actionEnabled = complete ? iAmHost : canAct(sel); }
 	$: actionLabel = (() => {
 		if (complete) return iAmHost ? 'Start game →' : 'Waiting for host…';
 		if (!d || !selHero) return '';
+		if (watching) return 'Watching';
 		if (d.system === 'all-random') return 'Heroes assigned';
 		if (d.system === 'all-pick') return myPick ? 'Locked ✓' : `Lock in ${selHero.name}`;
 		if (!myTurn) return 'Waiting…';
@@ -343,6 +349,7 @@
 					<span class="btxt short">{overtime ? 'Lock in!' : bannerShort}</span>
 					{#if countdown}<span class="sep"></span><span class="clock" class:urgent={secsLeft != null && secsLeft <= 10}>{countdown}</span>{/if}
 					{#if !complete}<span class="sep modesep"></span><span class="mode">{DRAFT_LABELS[d.system]}</span>{/if}
+					{#if watchers.length}<span class="sep"></span><span class="watchn" title="Watching: {watchers.map((w) => w.name).join(', ')}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></svg>{watchers.length}</span>{/if}
 					{#if countdown}<span class="left" style="--p:{timeFrac.toFixed(3)}"></span>{/if}
 				</div>
 			</div>
@@ -527,6 +534,8 @@
 	.btxt { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 	.btxt.long { font-size: 20px; letter-spacing: 0.04em; }
 	.btxt.short { display: none; }
+	.watchn { display: inline-flex; align-items: center; gap: 5px; flex: none; font-size: 15px; color: var(--ink-2, #bccbd9); }
+	.watchn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; }
 	.sep { flex: none; width: 1px; height: 24px; background: var(--brass-line); }
 	.clock { flex: none; font-size: 27px; color: var(--brass-hi); font-variant-numeric: tabular-nums; min-width: 2.3em; text-align: center; }
 	.mode, .modesep { display: none; } /* the pill is centred now; the draft system shows on the Create form and in the lobby */

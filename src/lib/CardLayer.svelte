@@ -908,6 +908,7 @@
 		if (myReady) return { label: 'Take back', sub: `${readyCount} of ${seatedWithCards.length} in`, kind: 'quiet', run: takeBack };
 		if (armed != null && armedKind === 'commit' && canCommit && mine) return { label: 'Commit', sub: heroCards(mine.hero)[armed]?.name, kind: 'go', pulse: true, run: commitArmed, cancel: () => (armed = null) };
 		if (mine && !mine.hand.length) return { label: 'Waiting', kind: 'wait' };
+		if (!mine) return { label: 'Watching', sub: `${readyCount} of ${seatedWithCards.length} in`, kind: 'wait' };
 		return { label: 'Commit', kind: 'off' };
 	})();
 	const markArt = (k: 'poison' | 'bounty') => icon(`marker_${k}`);
@@ -1841,6 +1842,13 @@
 				</div>
 			</div>
 		</div>
+	{:else if iAmHost}
+		<!-- the host without a hero (watching): no hand, coins or level-ups — only the action ring, to move the game on -->
+		{#if mobile}
+			<PhoneDash cs={null} order={order2} />
+		{:else}
+			<div class="h2dash"><HudDash cs={null} order={order2} /></div>
+		{/if}
 	{/if}
 
 	<!-- ───────── synced pre-reveal countdown (take back your card to cancel) ───────── -->

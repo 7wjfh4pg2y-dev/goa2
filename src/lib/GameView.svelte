@@ -48,8 +48,9 @@
 	const pingsS = session.pings ?? readable([]);
 	let pingArmed = false;
 	$: boardPings = $pingsS.map((p) => ({ id: p.id, hex: p.hex, color: colorHex(p.color) }));
-	function doPing(hex: string | null) { pingArmed = false; if (hex) session.ping?.(hex); }
+	function doPing(hex: string | null) { pingArmed = false; if (hex && !watcher) session.ping?.(hex); }
 	function pingButton() {
+		if (watcher) return;
 		if (!pingArmed) { pingArmed = true; return; }
 		const me = $ms.pieces?.[clientId];
 		pingArmed = false;
@@ -83,6 +84,7 @@
 
 	// Each token toggles independently: click a token to flip it full ↔ spent.
 	function toggleLife(team: Team, i: number) {
+		if (watcher) return;
 		const arr = [...($ms.lifeTok?.[team] ?? [])];
 		arr[i] = !arr[i];
 		const count = arr.filter(Boolean).length;
@@ -90,6 +92,7 @@
 			{ lifeTok: { ...$ms.lifeTok, [team]: arr }, life: { ...$ms.life, [team]: count } });
 	}
 	function toggleWave(i: number) {
+		if (watcher) return;
 		const arr = [...($ms.waveTok ?? [])];
 		arr[i] = !arr[i];
 		const count = arr.filter(Boolean).length;
@@ -122,6 +125,10 @@
 	// splashes are drawn from your side: your team on the right (spectators watch as blue)
 	$: viewTeam = (mySeat >= 0 && mySeat < $ms.seats ? myTeam : 'blue') as Team;
 	$: iAmHost = $ms.host === clientId;
+	// a WATCHER (no seat, not the host) only watches: they can look around the board, read cards and the log, and ask
+	// for a seat — but never move, remove, spawn or ping anything. A host without a seat keeps every host power.
+	$: watcher = !(mySeat >= 0 && mySeat < $ms.seats) && !iAmHost;
+	$: if (watcher) { selPieceId = null; pingArmed = false; }
 
 	// ── in-game manage menu: seats, spectators, kick, seat-takeover approvals ──
 	let manageOpen = false;
@@ -165,7 +172,7 @@
 		immune: p.role === 'heavy' && heavyImmune($ms, p.id) ? true : undefined,
 		// hover label (mouse): the same name the toolbar shows, heroes/minions in their team colour
 		name: labelOf(p), nameColor: teamText(p),
-		locked: clearing || (p.role === 'heavy' && !iAmHost && heavyImmune($ms, p.id)) ? true : undefined
+		locked: watcher || clearing || (p.role === 'heavy' && !iAmHost && heavyImmune($ms, p.id)) ? true : undefined
 	}));
 
 	let board: BoardCanvas;
@@ -415,6 +422,7 @@
 	].filter((t): t is { hex: string; team: string } => !!t.hex);
 
 	function move(id: string, hex: string) {
+		if (watcher) return;
 		const p = $ms.pieces[id];
 		if (heavyImmune($ms, id) && !iAmHost) return; // immune heavy: stays put
 		const label = p?.hero ? heroById(p.hero)?.name ?? 'a piece' : 'a piece';
@@ -477,6 +485,7 @@
 	function cancelPlace() { pendingSpawn = null; pendingToken = null; pendingRespawn = false; }
 	// board hex tapped while holding something: drop it right there
 	function onBoardHex(hex: string) {
+		if (watcher) return;
 		if (myStray && !pendingSpawn && !pendingToken && !pendingRespawn) {
 			const [id, opts] = myStray;
 			if (!opts.includes(hex)) return;
@@ -527,7 +536,7 @@
 			return;
 		}
 		if (placing) return;
-		selPieceId = pc ? id : null;
+		selPieceId = pc && !watcher ? id : null;
 	}
 	$: selPiece = selPieceId ? $ms.pieces[selPieceId] : null;
 	// Move: pick the selected piece up (a click only selects it; a drag still moves it straight away)
@@ -740,6 +749,7 @@
 	function advanceTurn() { session.cardAction({ kind: 'advance', pid: clientId }); }
 	let tieFlip = false;
 	function flipTie() {
+		if (watcher) return;
 		const next: Team = $ms.tieBreaker === 'orange' ? 'blue' : 'orange';
 		session.act(`Tie-breaker → ${teamName(next)}`, { tieBreaker: next });
 	}
@@ -783,7 +793,7 @@
 	$: myUltIdx = myCs ? ultimateIndex(myCs.hero) : -1;
 	// level 7 with all three Tier III and the coins: the top-bar button unlocks it
 	$: ultReady = !!myCs && myUltIdx >= 0 && allowedMoves(myCs, myUltIdx).includes('hand');
-	function coins(d: number) { session.cardAction({ kind: 'coins', pid: clientId, delta: d }); }
+	function coins(d: number) { if (watcher) return; session.cardAction({ kind: 'coins', pid: clientId, delta: d }); }
 	const FX_SHORT: Record<string, string> = { 'This turn': 'Turn', 'Next turn': 'Next', 'This round': 'Round' };
 	// "Active abilities" (☰ menu on phones, left HUD on desktop): one fixed row per hero (so the log never shifts),
 	// five card-colour pips — the colour of a card with a live effect lights up

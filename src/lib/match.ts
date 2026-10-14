@@ -729,6 +729,20 @@ export function teamRosters(players: Player[], seats: number): Record<Team, stri
 	}
 }
 
+/** The draft's picks of the SEATED players only — a watcher never gets a deck or a hero. */
+export function seatedPicks(s: Pick<MatchState, 'draft' | 'seats'>, players: Player[]): Record<string, string> {
+	const r = teamRosters(players, s.seats), picks = s.draft?.picks ?? {}, out: Record<string, string> = {}
+	for (const id of [...r.orange, ...r.blue]) if (picks[id]) out[id] = picks[id]
+	return out
+}
+
+/** Does this player take part in the game (a seat, or a hero of their own)? Watchers only watch; the host may also act. */
+export function playsIn(s: Pick<MatchState, 'cards' | 'seatMap' | 'seats'>, players: Player[], id: string): boolean {
+	if (s.cards?.[id]) return true
+	if (Object.values(s.seatMap ?? {}).some((o) => o.id === id)) return true
+	return players.some((p) => p.id === id && p.seat >= 0 && p.seat < s.seats)
+}
+
 /**
  * Build the draft at Begin. `startingTeam` comes from the tie-breaker flip.
  * Turn-based modes get a resolved `order` where each turn is owned by a
@@ -1463,6 +1477,8 @@ export function joinMatch(
 		if (tracked) {
 			if (seq <= Math.max(handled[from] ?? 0, local.reqAck?.[from] ?? 0)) { refuseReq(from, seq); return }
 			handled[from] = seq
+			// a watcher can't play: no coins, cards, moves or skips from someone without a seat (the host is exempt)
+			if (from !== clientId && from !== local.host && !playsIn(local, playerList, from)) { refuseReq(from, seq); return }
 		}
 		const ack: Partial<MatchState> = tracked ? { reqAck: { ...local.reqAck, [from]: seq } } : {}
 		// a commit that arrives once the cards are revealed (a slow connection) would change a played card

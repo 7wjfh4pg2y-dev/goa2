@@ -27,6 +27,7 @@
 		placeHeroes,
 		placeMinions,
 		buildSeatMap,
+		seatedPicks,
 		draftPoolMin,
 		DRAFT_SYSTEMS,
 		DRAFT_LABELS,
@@ -360,7 +361,8 @@
 		session.update({
 			pieces: placeMinions(s),
 			toSpawn: placeHeroes(s, get(players)),
-			cards: initCards(s.draft?.picks ?? {}),
+			// only the seated get a deck: a watcher never plays (an old draft may hold a watcher's pick)
+			cards: initCards(seatedPicks(s, get(players))),
 			// keep owners recorded at draft start (someone may be mid-reconnect)
 			seatMap: { ...(s.seatMap ?? {}), ...buildSeatMap(get(players), s.seats) }
 		});
