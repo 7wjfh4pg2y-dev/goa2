@@ -825,6 +825,7 @@
 	// the host's Notes box, bottom-right: the same rule, less the docked hand's rack (HudDash slides the ring right by the
 	// rack, which is as long as the hand) — it stays beside the dash and narrows to the room left, like the Chronicle;
 	// only when even a narrow box won't fit does it go above the dash's right end
+	let notesBig = false; // the notes' big writing window is open: it stands above the dash (the dash sits on a higher layer) and over the boards
 	$: dockRack = dockHand && mine ? Math.max(56, 32 + 27 * handOrdered.length) : 0;
 	$: notesRoom = canvasW / 2 - DASH_W / 2 - 14 - dockRack - 36;
 	$: notesBeside = notesRoom >= (dockRack ? 120 : 220);
@@ -1188,8 +1189,8 @@
 				</div>
 			{/if}
 			{#if iAmHost}
-				<div class="h2notes" style="width:{notesW}px; bottom:{notesBeside ? 12 : 116}px">
-					<HostNotes notes={$ms.notes ?? []} round={$ms.round} turn={$ms.turn} onAdd={addNote} onDrop={dropNote} />
+				<div class="h2notes" class:big={notesBig} style="width:{notesW}px; bottom:{notesBeside && !notesBig ? 12 : 116}px">
+					<HostNotes bind:big={notesBig} notes={$ms.notes ?? []} round={$ms.round} turn={$ms.turn} onAdd={addNote} onDrop={dropNote} />
 				</div>
 			{/if}
 		</div>
@@ -1910,6 +1911,7 @@
 	.h2col.np { gap: 10px; }
 	.h2log { position: absolute; left: 20px; z-index: 2; }
 	.h2notes { position: absolute; right: 20px; z-index: 2; }
+	.h2notes.big { z-index: 30; }
 	.h2col { position: absolute; top: 194px; width: 344px; display: flex; flex-direction: column; gap: 24px; }
 	.h2col.tight { gap: 10px; }
 	.h2col.l { left: 20px; } .h2col.r { right: 20px; }
