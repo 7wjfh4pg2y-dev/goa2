@@ -102,3 +102,13 @@ export const globalGames = (g: GlobalHero) => g.wins + g.losses
 export const globalWin = (g: GlobalHero) => (globalGames(g) ? (100 * g.wins) / globalGames(g) : 0)
 /** wins in a matchup entry (its % of its games, rounded) */
 export const vsWins = (v: GlobalVs) => Math.round((v[1] * v[2]) / 100)
+/** each count as a whole % of their sum (largest remainder, so the parts add up to 100) */
+export function sharePct(xs: number[]): number[] {
+	const t = xs.reduce((a, b) => a + b, 0)
+	if (!t) return xs.map(() => 0)
+	const raw = xs.map((x) => (100 * x) / t)
+	const out = raw.map(Math.floor)
+	let left = 100 - out.reduce((a, b) => a + b, 0)
+	for (const i of raw.map((r, i) => [r - Math.floor(r), i]).sort((a, b) => b[0] - a[0]).map((x) => x[1])) { if (left-- <= 0) break; out[i]++ }
+	return out
+}

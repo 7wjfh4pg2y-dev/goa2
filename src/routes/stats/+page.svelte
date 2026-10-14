@@ -24,7 +24,7 @@
 	import MatchRow from '$lib/hall/MatchRow.svelte';
 	import { role } from '$lib/role';
 	import { REPORT_TABLE, reportOfRow, type Report } from '$lib/reports';
-	import { globalOf, globalWin, globalGames, GLOBAL_SOURCE, GLOBAL_AS_OF } from '$lib/globalstats';
+	import { globalOf, globalWin, globalGames, GLOBAL_AS_OF } from '$lib/globalstats';
 	import '$lib/hall/hall.css';
 
 	type Tab = 'overview' | 'players' | 'heroes' | 'matches' | 'awards' | 'reports';
@@ -210,7 +210,7 @@
 									{@render th('K / D / M', 'kdm', hsort, sortH, true, hflip)}
 									{@render th('Gold', 'gold', hsort, sortH, true, hflip)}
 									{@render th('Impact', 'impact', hsort, sortH, true, hflip)}
-									<th class="sortable rt" class:on={hsort === 'global'} class:flipped={hsort === 'global' && hflip} on:click={() => sortH('global')} title="Win rate in {GLOBAL_SOURCE}'s global stats ({GLOBAL_AS_OF}) — not our games"><span class="gtag">GLOBAL</span> Win</th>
+									<th class="sortable rt" class:on={hsort === 'global'} class:flipped={hsort === 'global' && hflip} on:click={() => sortH('global')} title="Worldwide win rate ({GLOBAL_AS_OF}) — not our games"><span class="gtag">GLOBAL</span> Win</th>
 									<th title="Most games with the best success on this hero">Top player</th>
 								</tr></thead>
 								<tbody>

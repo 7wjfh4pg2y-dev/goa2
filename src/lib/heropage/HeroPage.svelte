@@ -18,7 +18,7 @@
 	import { onSide, turnCards, CARD_HEX, LANES, SIZES, MINION_PREFS, GUIDE_TAGS, type Opening, type HeroGuide, type Side } from '$lib/openings';
 	import { guideFor } from './guide';
 	import type { HeroMatchups, Matchup } from '$lib/hallstats';
-	import { globalOf, globalGames, globalWin, GLOBAL_SOURCE, GLOBAL_AS_OF, GLOBAL_TAG, type GlobalVs } from '$lib/globalstats';
+	import { globalOf, globalWin, sharePct, GLOBAL_AS_OF, GLOBAL_TAG, type GlobalVs } from '$lib/globalstats';
 
 	export let heroId: string;
 	export let openings: Opening[] = [];
@@ -36,7 +36,7 @@
 	let muPick: 'ours' | 'global' | '' = '';
 	$: gl = globalOf(h.id);
 	$: muSrc = gl && (muPick === 'global' || (!muPick && !muFromData)) ? 'global' : 'ours';
-	const glTip = (v: GlobalVs) => `${heroById(v[0])?.name ?? v[0]} — ${v[1]}% of ${v[2]} game${v[2] === 1 ? '' : 's'} (global)`;
+	const glTip = (v: GlobalVs) => `${heroById(v[0])?.name ?? v[0]} — ${v[1]}% win rate (global)`;
 	$: muRows = (muSrc === 'global' && gl
 		? [['Strong against', gl.beats], ['Struggles against', gl.countered], ['Best with', gl.mates]].map(([label, vs]) => ({ label, faces: (vs as GlobalVs[]).map((v) => ({ id: v[0], tip: glTip(v) })) }))
 		: muFromData && record
@@ -90,20 +90,21 @@
 <!-- the community site's numbers for this hero (globalstats.ts), always tagged GLOBAL -->
 {#snippet globalBox(cls: string)}
 	{#if gl}
-		{@const n = globalGames(gl)}
 		{@const wr = globalWin(gl)}
 		{@const won = gl.won.reduce((a, b) => a + b, 0)}
+		{@const gp = sharePct(gl.games)}
+		{@const wp = sharePct(gl.won)}
 		<div class="gbox {cls}">
-			<div class="ghd"><span class="gtag" title="{GLOBAL_SOURCE}'s global stats, {GLOBAL_AS_OF} — not our games">Global</span><small>{GLOBAL_SOURCE}</small>{#if gl.tag}<span class="gt {gl.tag}">{GLOBAL_TAG[gl.tag]}</span>{/if}</div>
+			<div class="ghd"><span class="gtag" title="Global stats ({GLOBAL_AS_OF}) — every recorded game, not just ours">Global</span><small>Worldwide</small>{#if gl.tag}<span class="gt {gl.tag}">{GLOBAL_TAG[gl.tag]}</span>{/if}</div>
 			<div class="gl2"><span>Win rate</span><b class:up={wr >= 50} class:down={wr < 50}>{wr.toFixed(1)}%</b></div>
-			<span class="gsplit"><i style="--v:{n ? gl.wins / n : 0}"></i></span>
-			<div class="gsm"><span>{gl.wins} W · {gl.losses} L</span><span>{n} games</span></div>
+			<span class="gsplit"><i style="--v:{wr / 100}"></i></span>
+			<div class="gsm"><span>{Math.round(wr)}% wins</span><span>{100 - Math.round(wr)}% losses</span></div>
 			<div class="gl2"><span>Hero impact</span><b class:up={gl.impact > 0} class:down={gl.impact < 0}>{gl.impact > 0 ? '+' : ''}{gl.impact}%</b></div>
 			<span class="gimp" title="ATE {gl.ate[0]}% (95% CI {gl.ate[1]}% to {gl.ate[2]}%)"><em style="--a:{(gl.ate[1] + 50) / 100}; --b:{(gl.ate[2] + 50) / 100}"></em><i style="--v:{(gl.impact + 50) / 100}"></i></span>
-			<div class="gl2"><span>Victory types</span><small>{gl.typed} of {n} games</small></div>
-			<div class="gstk" title="Games by win type">{#each [0, 1, 2] as k (k)}{#if gl.games[k]}<i class="w{k}" style="flex:{gl.games[k]}">{['♛', '⚑', '☠'][k]} {gl.games[k]}</i>{/if}{/each}</div>
-			{#if won}<div class="gstk" title="Wins by win type">{#each [0, 1, 2] as k (k)}{#if gl.won[k]}<i class="w{k}" style="flex:{gl.won[k]}">{['♛', '⚑', '☠'][k]} {gl.won[k]}</i>{/if}{/each}</div>{/if}
-			<div class="gsm"><span>Games{won ? ' · wins' : ''}</span><span>♛ Throne ⚑ Final push ☠ Life</span></div>
+			<div class="gl2"><span>Victory types</span><small>% of games · % of wins</small></div>
+			<div class="gstk" title="Games by win type">{#each [0, 1, 2] as k (k)}{#if gl.games[k]}<i class="w{k}" style="flex:{gl.games[k]}">{['♛', '⚑', '☠'][k]} {gp[k]}%</i>{/if}{/each}</div>
+			{#if won}<div class="gstk" title="Wins by win type">{#each [0, 1, 2] as k (k)}{#if gl.won[k]}<i class="w{k}" style="flex:{gl.won[k]}">{['♛', '⚑', '☠'][k]} {wp[k]}%</i>{/if}{/each}</div>{/if}
+			<div class="gsm"><span>{won ? 'Games · wins' : 'Games'}</span><span>♛ Throne ⚑ Final push ☠ Life</span></div>
 		</div>
 	{/if}
 {/snippet}
@@ -226,7 +227,7 @@
 				</div>
 				{#if gl}<div class="col gcol">{@render globalBox('instrip')}</div>{/if}
 				<div class="col mu">
-					<h3>Matchups{#if muSrc === 'global'}<span class="gtag" title="{GLOBAL_SOURCE}'s global stats, {GLOBAL_AS_OF}">Global</span>{:else if muFromData && record}<span class="src">from {record.games} game{record.games === 1 ? '' : 's'}</span>{/if}
+					<h3>Matchups{#if muSrc === 'global'}<span class="gtag" title="Global stats ({GLOBAL_AS_OF})">Global</span>{:else if muFromData && record}<span class="src">from {record.games} game{record.games === 1 ? '' : 's'}</span>{/if}
 						{#if gl}<span class="msw"><button class:on={muSrc === 'ours'} on:click={() => (muPick = 'ours')}>Ours</button><button class:on={muSrc === 'global'} on:click={() => (muPick = 'global')}>Global</button></span>{/if}</h3>
 					{#if muRows.length}
 						{#each muRows as r (r.label)}
@@ -302,7 +303,7 @@
 	/* overview: the GLOBAL panel (on the painting; on phones a block in the strip) */
 	.gbox { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border-radius: 12px; border: 1px solid rgba(64, 196, 186, 0.45); background: rgba(3, 10, 20, 0.86); font-size: 13px; color: var(--ink-2); }
 	.gbox.onart { position: absolute; right: 18px; bottom: 18px; width: clamp(230px, 24vw, 280px); }
-	.gcol { display: none; }
+	.col.gcol { display: none; }
 	.ghd { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
 	.ghd small { font-size: 11px; color: var(--ink-3); }
 	.gtag { padding: 1px 6px; border-radius: 4px; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #071c1b; background: #40c4ba; }
@@ -426,6 +427,6 @@
 		.olist { height: 240px; position: relative; --th: 160px; }
 		.id { left: 16px; top: 16px; width: calc(100% - 32px); }
 		.gbox.onart { display: none; }
-		.gcol { display: flex; }
+		.col.gcol { display: flex; }
 	}
 </style>

@@ -3,7 +3,7 @@
 	// win rate, hero impact (+ its 95% interval), the site's tag, how its games ended / were won, and its best
 	// teammates, best matchups and counters.
 	import { heroById, portraitCss } from '$lib/heroes';
-	import { GLOBAL_SOURCE, GLOBAL_AS_OF, GLOBAL_TAG, globalGames, globalWin, type GlobalHero, type GlobalVs } from '$lib/globalstats';
+	import { GLOBAL_AS_OF, GLOBAL_TAG, globalGames, globalWin, sharePct, type GlobalHero, type GlobalVs } from '$lib/globalstats';
 
 	export let g: GlobalHero;
 	export let onHero: (id: string) => void = () => {};
@@ -13,11 +13,13 @@
 	$: total = globalGames(g);
 	$: wr = globalWin(g);
 	$: wonAll = g.won.reduce((a, b) => a + b, 0);
+	$: gp = sharePct(g.games);
+	$: wp = sharePct(g.won);
 	$: groups = [['Best teammates', g.mates], ['Best against', g.beats], ['Countered by', g.countered]] as [string, GlobalVs[]][];
 </script>
 
 <section class="card gl">
-	<div class="ch">Global stats<span class="gtag" title="From {GLOBAL_SOURCE}'s global stats, {GLOBAL_AS_OF} — not our games">GLOBAL</span><small>{GLOBAL_SOURCE} · {GLOBAL_AS_OF}</small>{#if g.tag}<span class="r tg {g.tag}">{GLOBAL_TAG[g.tag]}</span>{/if}</div>
+	<div class="ch">Global stats<span class="gtag" title="Every recorded game worldwide — not just ours">GLOBAL</span><small>Worldwide · {GLOBAL_AS_OF}</small>{#if g.tag}<span class="r tg {g.tag}">{GLOBAL_TAG[g.tag]}</span>{/if}</div>
 	<div class="top">
 		<div class="blk">
 			<div class="kv2"><span>Win rate</span><b class:up={wr >= 50} class:down={wr < 50}>{wr.toFixed(1)}%</b></div>
@@ -30,9 +32,9 @@
 			<div class="sm"><span>−50</span><span>ATE {sgn(g.ate[0])}% (95% CI {g.ate[1]}% to {sgn(g.ate[2])}%)</span><span>+50</span></div>
 		</div>
 		<div class="blk">
-			<div class="kv2"><span>Victory types</span><small>{g.typed} of {total} games</small></div>
-			<div class="stk" title="Games by type">{#each TYPES as [k, l, ic], i (k)}{#if g.games[i]}<i class="t-{k}" style="flex:{g.games[i]}" title="{l}: {g.games[i]} games">{ic} {g.games[i]}</i>{/if}{/each}</div>
-			{#if wonAll}<div class="stk" title="Wins by type">{#each TYPES as [k, l, ic], i (k)}{#if g.won[i]}<i class="t-{k}" style="flex:{g.won[i]}" title="{l}: {g.won[i]} wins">{ic} {g.won[i]}</i>{/if}{/each}</div>{/if}
+			<div class="kv2"><span>Victory types</span><small>% of games · % of wins</small></div>
+			<div class="stk" title="Games by type">{#each TYPES as [k, l, ic], i (k)}{#if g.games[i]}<i class="t-{k}" style="flex:{g.games[i]}" title="{l}: {gp[i]}% of games">{ic} {gp[i]}%</i>{/if}{/each}</div>
+			{#if wonAll}<div class="stk" title="Wins by type">{#each TYPES as [k, l, ic], i (k)}{#if g.won[i]}<i class="t-{k}" style="flex:{g.won[i]}" title="{l}: {wp[i]}% of wins">{ic} {wp[i]}%</i>{/if}{/each}</div>{/if}
 			<div class="sm"><span>Games{wonAll ? ' · wins' : ''}</span><span>♛ Throne · ⚑ Final push · ☠ Life</span></div>
 		</div>
 	</div>

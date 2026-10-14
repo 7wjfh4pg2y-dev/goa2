@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { GLOBAL, globalWin, vsWins } from './globalstats'
+import { GLOBAL, globalWin, vsWins, sharePct } from './globalstats'
 import { HEROES } from './heroes'
 
 describe('global hero stats', () => {
@@ -19,5 +19,8 @@ describe('global hero stats', () => {
 		}
 		expect(globalWin(GLOBAL.tigerclaw)).toBeCloseTo(50.7, 1)
 		expect(vsWins(['x', 83, 6])).toBe(5)
+		expect(sharePct([10, 11, 10])).toEqual([32, 36, 32])
+		expect(sharePct([1, 1, 1]).reduce((a, b) => a + b, 0)).toBe(100)
+		expect(sharePct([0, 0, 0])).toEqual([0, 0, 0])
 	})
 })
