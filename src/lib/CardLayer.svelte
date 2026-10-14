@@ -822,9 +822,12 @@
 	$: logRoom = canvasW / 2 - DASH_W / 2 - 14 - (myUltOpen ? 96 : 0) - 36;
 	$: logBeside = logRoom >= 220;
 	$: logW = logBeside ? Math.min(340, logRoom) : 300;
-	// the host's Notes box, bottom-right: the same rule, less the docked hand's rack (it slides the ring right; a full hand's width, so the box never moves)
-	$: notesRoom = canvasW / 2 - DASH_W / 2 - 14 - (dockHand ? 248 : 0) - 36;
-	$: notesBeside = notesRoom >= 220;
+	// the host's Notes box, bottom-right: the same rule, less the docked hand's rack (HudDash slides the ring right by the
+	// rack, which is as long as the hand) — it stays beside the dash and narrows to the room left, like the Chronicle;
+	// only when even a narrow box won't fit does it go above the dash's right end
+	$: dockRack = dockHand && mine ? Math.max(56, 32 + 27 * handOrdered.length) : 0;
+	$: notesRoom = canvasW / 2 - DASH_W / 2 - 14 - dockRack - 36;
+	$: notesBeside = notesRoom >= (dockRack ? 120 : 220);
 	$: notesW = notesBeside ? Math.min(340, notesRoom) : 300;
 	// the card picked in your hand (armed to commit, or open to defend / discard): the action ring takes its colour
 	const CARD_HUE: Record<string, string> = { RED: '#b8322f', BLUE: '#2a64c4', GREEN: '#2b8a43', GOLD: '#c9982f', SILVER: '#8d99a8' };
