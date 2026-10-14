@@ -140,19 +140,21 @@
 	let preview = 0;
 	let bview: OpeningBoard | null = null;
 	let turned = false;
-	const TOOLS: { k: Tool; label: string; hint: string }[] = [
+	const TOOLS: { k: Tool; label: string; hint: string; unit?: 'enemy' | 'ally' }[] = [
 		{ k: 'step', label: 'Turn chip', hint: 'Tap a space: a chip for this turn in the card’s colour. Tap it again to take it off.' },
 		{ k: 'ring', label: 'Ring', hint: 'Ring a minion (the one you take) or a space. “Taken”: that minion fades from this turn on.' },
 		{ k: 'arrow', label: 'Arrow', hint: 'Tap where it starts, then where it goes.' },
 		{ k: 'area', label: 'Area', hint: 'Tap spaces to shade them; tap again to unshade. “New area” starts another.' },
-		{ k: 'unit', label: 'Hero', hint: 'An enemy (E) or ally (A) hero — a letter, or pick the hero for its token. Tap again to remove.' },
+		{ k: 'unit', unit: 'enemy', label: 'Enemy (E)', hint: 'An enemy hero — the E disc, or pick the hero for its token. Tap again to remove.' },
+		{ k: 'unit', unit: 'ally', label: 'Ally (A)', hint: 'An allied hero — the A disc, or pick the hero for its token. Tap again to remove.' },
 		{ k: 'label', label: 'Label', hint: 'Type the text, then tap a space (e.g. “Start”). Tap again to remove.' },
 		{ k: 'token', label: 'Token', hint: 'One of the hero’s own tokens.' },
 		{ k: 'start', label: 'Start', hint: 'Where the hero spawns (its token stands there before turn 1).' },
 		{ k: 'erase', label: 'Eraser', hint: 'Tap a space to clear everything on it.' },
 		{ k: 'pick', label: 'Pick', hint: 'Tap a space to pick a mark on it (again = the next one), then change or delete it.' }
 	];
-	$: toolHint = arrowFrom ? 'Now tap where the arrow goes (the same space cancels).' : TOOLS.find((t) => t.k === tool)?.hint ?? '';
+	$: toolHint = arrowFrom ? 'Now tap where the arrow goes (the same space cancels).' : TOOLS.find((t) => t.k === tool && (!t.unit || t.unit === unit))?.hint ?? '';
+	$: curIdx = cur ? heroOps.findIndex((o) => o.id === cur?.id) : -1;
 	$: kit = HERO_KIT[heroId] ?? [];
 	$: if (tool === 'token' && !kit.includes(token)) token = kit[0] ?? '';
 	$: if (tool !== 'arrow') arrowFrom = null;
@@ -273,14 +275,19 @@
 			<!-- ───── left: the hero's openings + the one being edited ───── -->
 			<aside class="left">
 				<div class="list">
-					<div class="lh"><b>{hname(heroId)}'s openings</b><button class="sm pri" on:click={() => newOpening()}><Icon name="plus" /> New</button></div>
-					{#each heroOps as o, k (o.id)}
-						<div class="li" class:on={cur?.id === o.id}>
-							<button class="lname" on:click={() => open(o)}>{o.name}{#if unsaved(o.id)}<i title="Not saved yet">●</i>{/if}</button>
-							<button class="mv" disabled={k === 0} on:click={() => move(o, -1)} aria-label="Up">▲</button>
-							<button class="mv" disabled={k === heroOps.length - 1} on:click={() => move(o, 1)} aria-label="Down">▼</button>
-						</div>
-					{:else}<p class="muted">None yet.</p>{/each}
+					<div class="lh"><b>{hname(heroId)}'s openings · {heroOps.length}</b><button class="sm pri" on:click={() => newOpening()}><Icon name="plus" /> New</button></div>
+					<!-- one dropdown, however many openings there are (the panel never grows) -->
+					<div class="pickrow">
+						<select value={cur?.id ?? ''} on:change={(e) => open(heroOps.find((o) => o.id === e.currentTarget.value) ?? null)} disabled={!heroOps.length}>
+							{#if !heroOps.length}<option value="">None yet</option>{/if}
+							{#if cur && !heroOps.some((o) => o.id === cur?.id)}<option value={cur.id}>{cur.name}</option>{/if}
+							{#each heroOps as o, k (o.id)}<option value={o.id}>{k + 1}. {o.name}{unsaved(o.id) ? '  ●' : ''}</option>{/each}
+						</select>
+						{#if cur && curIdx >= 0}
+							<button class="mv" disabled={curIdx === 0} on:click={() => cur && move(cur, -1)} aria-label="Move up the list" title="Earlier in the list">▲</button>
+							<button class="mv" disabled={curIdx === heroOps.length - 1} on:click={() => cur && move(cur, 1)} aria-label="Move down the list" title="Later in the list">▼</button>
+						{/if}
+					</div>
 					{#if otherOps.length}
 						<label class="copyfrom">Copy from another hero
 							<select value="" on:change={(e) => { const s = otherOps.find((o) => o.id === e.currentTarget.value); if (s) duplicate(s); e.currentTarget.value = ''; }}>
@@ -352,7 +359,7 @@
 			<!-- ───── right: the tools ───── -->
 			<aside class="right">
 				<div class="tools">
-					{#each TOOLS as t (t.k)}<button class:on={tool === t.k} disabled={t.k === 'token' && !kit.length} on:click={() => (tool = t.k)}>{t.label}</button>{/each}
+					{#each TOOLS as t (t.label)}<button class:on={tool === t.k && (!t.unit || t.unit === unit)} class:e={t.unit === 'enemy'} class:a={t.unit === 'ally'} disabled={t.k === 'token' && !kit.length} on:click={() => { tool = t.k; if (t.unit) unit = t.unit; }}>{t.label}</button>{/each}
 				</div>
 				{#if tool !== 'erase' && tool !== 'pick' && tool !== 'start'}
 					<div class="opt">
@@ -374,7 +381,6 @@
 					<button class="sm" on:click={() => (areaId = null)} disabled={!areaId}>New area</button>
 				{/if}
 				{#if tool === 'unit'}
-					<div class="opt"><span class="seg sm2"><button class:on={unit === 'enemy'} on:click={() => (unit = 'enemy')}>Enemy (E)</button><button class:on={unit === 'ally'} on:click={() => (unit = 'ally')}>Ally (A)</button></span></div>
 					<label class="opt">Token<select bind:value={unitHero}><option value="">Letter ({unit === 'enemy' ? 'E' : 'A'})</option>{#each HEROES_ALPHA as x (x.id)}<option value={x.id}>{x.name}</option>{/each}</select></label>
 				{/if}
 				{#if tool === 'label'}<label class="opt">Text <input bind:value={text} maxlength="18" placeholder="Start" /></label>{/if}
@@ -444,7 +450,6 @@
 	input:focus, textarea:focus { border-color: var(--brass); }
 	textarea { width: 100%; resize: vertical; line-height: 1.4; }
 	select option { color: #0b1220; }
-	.muted { color: var(--ink-3); margin: 4px 0; }
 	.fl { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--brass-hi); }
 	.fl small, label small { text-transform: none; letter-spacing: 0; color: var(--ink-3); font-size: 11px; }
 	.bar { grid-column: 1 / -1; display: flex; align-items: center; gap: 14px; padding: 0 14px; background: rgba(3, 10, 20, 0.92); border-bottom: 1px solid var(--brass-line); }
@@ -478,10 +483,8 @@
 	.list { display: flex; flex-direction: column; gap: 4px; }
 	.lh { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
 	.lh b { font-weight: 400; color: #fff; }
-	.li { display: flex; align-items: center; gap: 3px; border-radius: 8px; }
-	.li.on { background: var(--brass-faint); box-shadow: inset 0 0 0 1px var(--brass-line); }
-	.lname { flex: 1; min-width: 0; text-align: left; padding: 6px 8px; border: 0; background: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-	.lname i { font-style: normal; color: var(--orange-hi); margin-left: 6px; font-size: 10px; }
+	.pickrow { display: flex; align-items: center; gap: 4px; }
+	.pickrow select { flex: 1; min-width: 0; }
 	.mv { width: 22px; height: 22px; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--ink-3); font-size: 10px; }
 	.copyfrom { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; font-size: 12px; color: var(--ink-3); }
 	.form { display: flex; flex-direction: column; gap: 10px; padding-top: 10px; border-top: 1px solid var(--hair); }

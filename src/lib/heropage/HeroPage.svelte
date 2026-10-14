@@ -323,10 +323,12 @@
 
 	/* the strip: every opening */
 	.olist { position: absolute; inset: 0; display: flex; gap: 12px; padding: 12px; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
-	.ocard { flex: none; height: 100%; display: flex; flex-direction: column; gap: 5px; padding: 6px; border-radius: 13px; border: 1px solid var(--hair); background: rgba(255, 255, 255, 0.03); cursor: pointer; text-align: left; }
-	.ocard :global(.thumb) { flex: 1; min-height: 0; width: auto; height: 100%; }
+	/* each snapshot is an exact square sized from the strip's height (it used to stretch into whatever box was left) */
+	.olist { --th: calc(clamp(220px, 30vh, 300px) - 92px); }
+	.ocard { flex: none; width: calc(var(--th) + 14px); height: 100%; box-sizing: border-box; display: flex; flex-direction: column; gap: 5px; padding: 6px; border-radius: 13px; border: 1px solid var(--hair); background: rgba(255, 255, 255, 0.03); cursor: pointer; text-align: left; }
+	.ocard :global(.thumb) { flex: none; width: var(--th); height: var(--th); }
 	.ocard.on { border-color: var(--brass); box-shadow: 0 0 0 1px var(--brass); }
-	.oname { font-size: 14px; color: #fff; max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.oname { font-size: 14px; color: #fff; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 	.oflow { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--ink-3); }
 	.oflow em { font-style: normal; font-size: 10px; }
 	.oflow small { margin-left: 6px; }
@@ -347,7 +349,7 @@
 		.strip { grid-row: 4; min-height: 260px; }
 		.ov { position: relative; grid-template-columns: 1fr; }
 		.spread { --ch: 150px; overflow-x: auto; }
-		.olist { height: 240px; position: relative; }
+		.olist { height: 240px; position: relative; --th: 160px; }
 		.id { left: 16px; top: 16px; width: calc(100% - 32px); }
 	}
 </style>
