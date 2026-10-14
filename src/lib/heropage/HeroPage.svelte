@@ -18,6 +18,7 @@
 	import { onSide, turnCards, CARD_HEX, LANES, SIZES, MINION_PREFS, GUIDE_TAGS, type Opening, type HeroGuide, type Side } from '$lib/openings';
 	import { guideFor } from './guide';
 	import type { HeroMatchups, Matchup } from '$lib/hallstats';
+	import type { HeroAgg } from '$lib/league';
 	import { globalOf, globalWin, sharePct, GLOBAL_AS_OF, GLOBAL_TAG, type GlobalVs } from '$lib/globalstats';
 
 	export let heroId: string;
@@ -32,10 +33,18 @@
 	type MuRow = { label: string; faces: { id: string; tip: string }[] };
 	const tipOf = (m: Matchup, with_: boolean) => `${heroById(m.hero)?.name ?? m.hero} — ${m.wins}–${m.games - m.wins} ${with_ ? 'together' : 'against'}`;
 	$: muFromData = !!record && (record.strong.length + record.weak.length + record.partners.length) > 0;
-	// Ours (our records, else the guide) | Global (the community site's numbers, globalstats.ts)
-	let muPick: 'ours' | 'global' | '' = '';
+	/** our own record of this hero (the Hall's Total), for the Local side of the stats panel */
+	export let local: HeroAgg | null = null;
+	// ONE switch for the stats panel and Matchups: Local (our games, else the guide's lists) | Global (globalstats.ts)
+	let srcPick: 'local' | 'global' | '' = '';
 	$: gl = globalOf(h.id);
-	$: muSrc = gl && (muPick === 'global' || (!muPick && !muFromData)) ? 'global' : 'ours';
+	$: hasLocal = !!local && local.games > 0;
+	$: src = !gl ? 'local' : srcPick || (hasLocal || muFromData ? 'local' : 'global');
+	$: muSrc = src;
+	type StatView = { wr: number | null; impact: number | null; ci: [number, number, number] | null; won: number[] };
+	$: view = (src === 'global' && gl
+		? { wr: globalWin(gl), impact: gl.impact, ci: gl.ate, won: gl.won }
+		: { wr: hasLocal && local ? (100 * local.wins) / local.games : null, impact: local?.impact ?? null, ci: null, won: local ? [local.byType.throne.wins, local.byType.final.wins, local.byType.life.wins] : [0, 0, 0] }) as StatView;
 	const glTip = (v: GlobalVs) => `${heroById(v[0])?.name ?? v[0]} — ${v[1]}% win rate (global)`;
 	$: muRows = (muSrc === 'global' && gl
 		? [['Strong against', gl.beats], ['Struggles against', gl.countered], ['Best with', gl.mates]].map(([label, vs]) => ({ label, faces: (vs as GlobalVs[]).map((v) => ({ id: v[0], tip: glTip(v) })) }))
@@ -87,24 +96,26 @@
 
 <svelte:window on:keydown={key} />
 
-<!-- the community site's numbers for this hero (globalstats.ts), always tagged GLOBAL -->
+<!-- the hero's numbers: Local (our games) | Global (globalstats.ts) — the same switch as Matchups -->
 {#snippet globalBox(cls: string)}
-	{#if gl}
-		{@const wr = globalWin(gl)}
-		{@const won = gl.won.reduce((a, b) => a + b, 0)}
-		{@const gp = sharePct(gl.games)}
-		{@const wp = sharePct(gl.won)}
+	{#if gl || hasLocal}
+		{@const wr = view.wr}
+		{@const wonN = view.won.reduce((a, b) => a + b, 0)}
+		{@const wp = sharePct(view.won)}
 		<div class="gbox {cls}">
-			<div class="ghd"><span class="gtag" title="Global stats ({GLOBAL_AS_OF}) — every recorded game, not just ours">Global</span><small>Worldwide</small>{#if gl.tag}<span class="gt {gl.tag}">{GLOBAL_TAG[gl.tag]}</span>{/if}</div>
-			<div class="gl2"><span>Win rate</span><b class:up={wr >= 50} class:down={wr < 50}>{wr.toFixed(1)}%</b></div>
-			<span class="gsplit"><i style="--v:{wr / 100}"></i></span>
-			<div class="gsm"><span>{Math.round(wr)}% wins</span><span>{100 - Math.round(wr)}% losses</span></div>
-			<div class="gl2"><span>Hero impact</span><b class:up={gl.impact > 0} class:down={gl.impact < 0}>{gl.impact > 0 ? '+' : ''}{gl.impact}%</b></div>
-			<span class="gimp" title="ATE {gl.ate[0]}% (95% CI {gl.ate[1]}% to {gl.ate[2]}%)"><em style="--a:{(gl.ate[1] + 50) / 100}; --b:{(gl.ate[2] + 50) / 100}"></em><i style="--v:{(gl.impact + 50) / 100}"></i></span>
-			<div class="gl2"><span>Victory types</span><small>% of games · % of wins</small></div>
-			<div class="gstk" title="Games by win type">{#each [0, 1, 2] as k (k)}{#if gl.games[k]}<i class="w{k}" style="flex:{gl.games[k]}">{['♛', '⚑', '☠'][k]} {gp[k]}%</i>{/if}{/each}</div>
-			{#if won}<div class="gstk" title="Wins by win type">{#each [0, 1, 2] as k (k)}{#if gl.won[k]}<i class="w{k}" style="flex:{gl.won[k]}">{['♛', '⚑', '☠'][k]} {wp[k]}%</i>{/if}{/each}</div>{/if}
-			<div class="gsm"><span>{won ? 'Games · wins' : 'Games'}</span><span>♛ Throne ⚑ Final push ☠ Life</span></div>
+			<div class="ghd">
+				<button class="gsw" class:on={src === 'local'} on:click={() => (srcPick = 'local')} title="Our games">Local</button>
+				{#if gl}<button class="gsw" class:on={src === 'global'} on:click={() => (srcPick = 'global')} title="Global stats ({GLOBAL_AS_OF}) — every recorded game, not just ours">Global</button>{/if}
+				{#if src === 'global' && gl?.tag}<span class="gt {gl.tag}">{GLOBAL_TAG[gl.tag]}</span>{/if}
+			</div>
+			<div class="gl2"><span>Win rate</span><b class:up={wr != null && wr >= 50} class:down={wr != null && wr < 50}>{wr == null ? '—' : `${wr.toFixed(1)}%`}</b></div>
+			<span class="gsplit" class:none={wr == null}><i style="--v:{(wr ?? 0) / 100}"></i></span>
+			<div class="gsm"><span>{wr == null ? 'No games yet' : `${Math.round(wr)}% wins`}</span><span>{wr == null ? '' : `${100 - Math.round(wr)}% losses`}</span></div>
+			<div class="gl2"><span>Hero impact</span><b class:up={(view.impact ?? 0) > 0} class:down={(view.impact ?? 0) < 0}>{view.impact == null ? '—' : `${view.impact > 0 ? '+' : ''}${view.impact}%`}</b></div>
+			<span class="gimp" title={view.ci ? `ATE ${view.ci[0]}% (95% CI ${view.ci[1]}% to ${view.ci[2]}%)` : 'How much better its players do on it than they do overall'}>{#if view.ci}<em style="--a:{(view.ci[1] + 50) / 100}; --b:{(view.ci[2] + 50) / 100}"></em>{/if}{#if view.impact != null}<i style="--v:{(view.impact + 50) / 100}"></i>{/if}</span>
+			<div class="gl2"><span>Victory types</span><small>% of wins</small></div>
+			<div class="gstk" class:none={!wonN} title="Wins by win type">{#each [0, 1, 2] as k (k)}{#if view.won[k]}<i class="w{k}" style="flex:{view.won[k]}">{wp[k]}%</i>{/if}{/each}</div>
+			<div class="gleg"><span><i class="w0"></i>♛ Throne</span><span><i class="w1"></i>⚑ Final push</span><span><i class="w2"></i>☠ Life</span></div>
 		</div>
 	{/if}
 {/snippet}
@@ -227,8 +238,8 @@
 				</div>
 				{#if gl}<div class="col gcol">{@render globalBox('instrip')}</div>{/if}
 				<div class="col mu">
-					<h3>Matchups{#if muSrc === 'global'}<span class="gtag" title="Global stats ({GLOBAL_AS_OF})">Global</span>{:else if muFromData && record}<span class="src">from {record.games} game{record.games === 1 ? '' : 's'}</span>{/if}
-						{#if gl}<span class="msw"><button class:on={muSrc === 'ours'} on:click={() => (muPick = 'ours')}>Ours</button><button class:on={muSrc === 'global'} on:click={() => (muPick = 'global')}>Global</button></span>{/if}</h3>
+					<h3>Matchups
+						{#if gl}<span class="msw"><button class:on={src === 'local'} on:click={() => (srcPick = 'local')}>Local</button><button class:on={src === 'global'} on:click={() => (srcPick = 'global')}>Global</button></span>{/if}</h3>
 					{#if muRows.length}
 						{#each muRows as r (r.label)}
 							<div class="mrow"><small>{r.label}</small><span class="faces">{#each r.faces as f (f.id)}<span class="face" style={portraitCss(f.id)} title={f.tip}></span>{/each}</span></div>
@@ -304,10 +315,10 @@
 	.gbox { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border-radius: 12px; border: 1px solid rgba(64, 196, 186, 0.45); background: rgba(3, 10, 20, 0.86); font-size: 13px; color: var(--ink-2); }
 	.gbox.onart { position: absolute; right: 18px; bottom: 18px; width: clamp(230px, 24vw, 280px); }
 	.col.gcol { display: none; }
-	.ghd { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
-	.ghd small { font-size: 11px; color: var(--ink-3); }
-	.gtag { padding: 1px 6px; border-radius: 4px; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #071c1b; background: #40c4ba; }
-	.gt { margin-left: auto; padding: 1px 8px; border-radius: 999px; font-size: 11px; }
+	.ghd { display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; margin-bottom: 2px; min-width: 0; }
+	.gsw { flex: none; padding: 1px 7px; border-radius: 4px; border: 1px solid rgba(64, 196, 186, 0.55); background: none; color: #8fdcd5; font: inherit; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; }
+	.gsw.on { color: #071c1b; background: #40c4ba; border-color: #40c4ba; }
+	.gt { margin-left: auto; flex: none; padding: 1px 8px; border-radius: 999px; font-size: 10.5px; white-space: nowrap; }
 	.gt.beginner { color: #6be39a; background: rgba(53, 208, 122, 0.14); }
 	.gt.skill { color: #c9a2ff; background: rgba(123, 69, 201, 0.25); }
 	.gl2 { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-top: 2px; }
@@ -324,9 +335,13 @@
 	.gsm { display: flex; justify-content: space-between; gap: 6px; font-size: 11px; color: var(--ink-3); }
 	.gstk { display: flex; height: 16px; border-radius: 4px; overflow: hidden; }
 	.gstk i { display: grid; place-items: center; min-width: 0; overflow: hidden; white-space: nowrap; font-style: normal; font-size: 10.5px; color: #fff; }
-	.gstk .w0 { background: #c99512; }
-	.gstk .w1 { background: #3a7fe0; }
-	.gstk .w2 { background: #d9434e; }
+	.gstk .w0, .gleg .w0 { background: #c99512; }
+	.gstk .w1, .gleg .w1 { background: #3a7fe0; }
+	.gstk .w2, .gleg .w2 { background: #d9434e; }
+	.gstk.none, .gsplit.none { background: rgba(255, 255, 255, 0.08); }
+	.gleg { display: flex; justify-content: space-between; gap: 6px; font-size: 11px; color: var(--ink-3); }
+	.gleg span { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+	.gleg i { width: 8px; height: 8px; border-radius: 2px; }
 
 	/* openings: the board and its controls */
 	.bctl { position: absolute; left: 12px; top: 12px; display: flex; gap: 8px; z-index: 2; }
@@ -386,11 +401,9 @@
 	.hc:hover { transform: translateY(-3px); }
 	.hc.on { box-shadow: 0 0 0 3px var(--brass); }
 	.mu h3 { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 0; }
-	.mu h3 .gtag { margin-left: 8px; padding: 1px 6px; border-radius: 4px; font-size: 10px; letter-spacing: 0.08em; color: #071c1b; background: #40c4ba; }
 	.msw { margin-left: auto; display: inline-flex; border: 1px solid var(--brass-line); border-radius: 6px; overflow: hidden; }
 	.msw button { padding: 2px 8px; border: 0; background: none; color: var(--ink-3); font: inherit; font-size: 10.5px; letter-spacing: 0.06em; cursor: pointer; }
 	.msw button.on { background: var(--brass-line); color: var(--brass-hi); }
-	.mu h3 .src { margin-left: 8px; font-size: 11px; letter-spacing: 0; text-transform: none; color: var(--ink-3); }
 	.mrow { display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; }
 	.mrow small { font-size: 12px; color: var(--ink-3); }
 	.faces { display: flex; flex-wrap: wrap; gap: 6px; }

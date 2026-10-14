@@ -39,6 +39,7 @@
 	}
 	$: if (ready && $role === 'admin' && !leagueAsked) void loadLeague();
 	$: record = heroMatchups(league, heroId);
+	$: localHero = league?.heroes.find((x) => x.hero === heroId) ?? null;
 
 	let heroId = 'wasp';
 	let tab: 'overview' | 'openings' = 'overview';
@@ -75,7 +76,7 @@
 		<section class="panel lock"><h1 class="t-h1">Heroes</h1><p class="t-body c-muted">Coming soon.</p><a class="btn btn-ghost" href={base + '/'}><Icon name="back" /> Back</a></section>
 	</div>
 {:else if ready}
-	<HeroPage {heroId} bind:tab {openings} {guide} {status} {record} gm onHero={(id) => (heroId = id)} />
+	<HeroPage {heroId} bind:tab {openings} {guide} {status} {record} local={localHero} gm onHero={(id) => (heroId = id)} />
 {/if}
 
 <style>
