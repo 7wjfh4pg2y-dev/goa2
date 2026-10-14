@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { buildLeague } from './league'
 import { sampleRows } from './league.sample'
-import { buckets, heroTrend, heroRanks, matchups, heroSplits, playerRoles, winTrend, peopleMatchups, overview, heroPlayers } from './hallstats'
+import { buckets, heroTrend, heroRanks, matchups, heroMatchups, heroSplits, playerRoles, winTrend, peopleMatchups, overview, heroPlayers } from './hallstats'
 
 describe('hall stats', () => {
 	const L = buildLeague(sampleRows(24, 5))
@@ -20,6 +20,13 @@ describe('hall stats', () => {
 		expect(r.pick).toBe(1)
 		const m = matchups(h, 'against')
 		expect(m.best.every((x) => x.delta > 0) && m.worst.every((x) => x.delta < 0)).toBe(true)
+		const hm = heroMatchups(L, h.hero)!
+		expect(hm.games).toBe(h.games)
+		expect(hm.strong).toEqual(m.best)
+		expect(hm.weak).toEqual(m.worst)
+		expect(hm.partners).toEqual(matchups(h, 'with').best)
+		expect(heroMatchups(L, 'nobody')).toBeNull()
+		expect(heroMatchups(null, h.hero)).toBeNull()
 		const sp = heroSplits(L.games, h.hero)
 		expect(sp.all.games).toBe(h.games)
 		expect(sp.sizes.reduce((s, x) => s + x.games, 0)).toBe(h.games)

@@ -52,6 +52,16 @@ export function matchups(h: HeroAgg, side: 'against' | 'with'): { best: Matchup[
 	}
 }
 
+export type HeroMatchups = { games: number; strong: Matchup[]; weak: Matchup[]; partners: Matchup[] }
+/** The hero page's Matchups from the records: strong against / struggles against (its best and worst foes) and
+ *  best with (its best team-mates). Null when the hero has no recorded games. */
+export function heroMatchups(league: League | null, hero: string): HeroMatchups | null {
+	const h = league?.heroes.find((x) => x.hero === hero)
+	if (!h || !h.games) return null
+	const vs = matchups(h, 'against')
+	return { games: h.games, strong: vs.best, weak: vs.worst, partners: matchups(h, 'with').best }
+}
+
 export type Split = {
 	key: string; label: string; games: number; wins: number; share: number; win: number
 	/** per game, over the games that kept the numbers (null when none did) */

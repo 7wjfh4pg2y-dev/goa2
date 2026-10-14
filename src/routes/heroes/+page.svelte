@@ -10,6 +10,35 @@
 	import HeroPage from '$lib/heropage/HeroPage.svelte';
 	import { loadOpenings } from '$lib/openings/store';
 	import type { Opening, HeroGuide } from '$lib/openings';
+	import { supabase } from '$lib/supabase';
+	import { buildLeague, leagueOf, gameOfReport, rowOfSelect, LEAGUE_SELECT, type GameRowIn, type LeagueGame, type League } from '$lib/league';
+	import { REPORT_TABLE, reportOfRow, type Report } from '$lib/reports';
+	import { heroMatchups } from '$lib/hallstats';
+
+	// Matchups from the records: every online game plus the table games (the Hall's Total), read once.
+	let league: League | null = null;
+	let leagueAsked = false;
+	async function loadLeague() {
+		leagueAsked = true;
+		try {
+			const got: GameRowIn[] = [];
+			for (let from = 0; ; from += 1000) {
+				const { data, error } = await supabase.from('goa2_games').select(LEAGUE_SELECT).order('ended_at', { ascending: true }).range(from, from + 999);
+				if (error) throw error;
+				got.push(...(data ?? []).map(rowOfSelect));
+				if (!data || data.length < 1000) break;
+			}
+			let table: Report[] = [];
+			try {
+				const { data, error } = await supabase.from(REPORT_TABLE).select('id,kind,game_id,played_on,data,updated_at').eq('kind', 'irl');
+				if (!error) table = (data ?? []).map(reportOfRow).filter((r): r is Report => !!r && !r.deleted);
+			} catch { /* no table games */ }
+			const legacy = table.map((r) => { try { return gameOfReport(r); } catch { return null; } }).filter((g): g is LeagueGame => !!g);
+			league = leagueOf([...buildLeague(got).games, ...legacy]);
+		} catch { league = null; }
+	}
+	$: if (ready && $role === 'admin' && !leagueAsked) void loadLeague();
+	$: record = heroMatchups(league, heroId);
 
 	let heroId = 'wasp';
 	let tab: 'overview' | 'openings' = 'overview';
@@ -46,7 +75,7 @@
 		<section class="panel lock"><h1 class="t-h1">Heroes</h1><p class="t-body c-muted">Coming soon.</p><a class="btn btn-ghost" href={base + '/'}><Icon name="back" /> Back</a></section>
 	</div>
 {:else if ready}
-	<HeroPage {heroId} bind:tab {openings} {guide} {status} gm onHero={(id) => (heroId = id)} />
+	<HeroPage {heroId} bind:tab {openings} {guide} {status} {record} gm onHero={(id) => (heroId = id)} />
 {/if}
 
 <style>

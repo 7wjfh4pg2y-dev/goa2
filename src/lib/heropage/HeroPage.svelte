@@ -17,6 +17,7 @@
 	import { startingHand } from '$lib/cards/cardstate';
 	import { onSide, turnCards, CARD_HEX, LANES, SIZES, MINION_PREFS, GUIDE_TAGS, type Opening, type HeroGuide, type Side } from '$lib/openings';
 	import { guideFor } from './guide';
+	import type { HeroMatchups, Matchup } from '$lib/hallstats';
 
 	export let heroId: string;
 	export let openings: Opening[] = [];
@@ -25,6 +26,15 @@
 	export let gm = false;
 	export let tab: 'overview' | 'openings' = 'overview';
 	export let onHero: (id: string) => void = () => {};
+	/** matchups from the game records (null = none yet → the guide's hand-written lists) */
+	export let record: HeroMatchups | null = null;
+	type MuRow = { label: string; faces: { id: string; tip: string }[] };
+	const tipOf = (m: Matchup, with_: boolean) => `${heroById(m.hero)?.name ?? m.hero} — ${m.wins}–${m.games - m.wins} ${with_ ? 'together' : 'against'}`;
+	$: muFromData = !!record && (record.strong.length + record.weak.length + record.partners.length) > 0;
+	$: muRows = (muFromData && record
+		? [['Strong against', record.strong, false], ['Struggles against', record.weak, false], ['Best with', record.partners, true]].map(([label, ms, w]) => ({ label, faces: (ms as Matchup[]).map((m) => ({ id: m.hero, tip: tipOf(m, w as boolean) })) }))
+		: [['Strong against', g.strong], ['Struggles against', g.weak], ['Best with', g.partners]].map(([label, ids]) => ({ label, faces: (ids as string[]).map((id) => ({ id, tip: heroById(id)?.name ?? id })) }))
+	).filter((r) => r.faces.length) as MuRow[];
 
 	$: h = heroById(heroId) ?? HEROES_ALPHA[0];
 	$: face = splashFace(h.id);
@@ -185,14 +195,12 @@
 					</div>
 				</div>
 				<div class="col mu">
-					<h3>Matchups</h3>
-					{#if g.strong.length || g.weak.length || g.partners.length}
-						{#each [['Strong against', g.strong], ['Struggles against', g.weak], ['Best with', g.partners]] as [label, ids] (label)}
-							{#if ids.length}
-								<div class="mrow"><small>{label}</small><span class="faces">{#each ids as id (id)}<span class="face" style={portraitCss(id as string)} title={heroById(id as string)?.name}></span>{/each}</span></div>
-							{/if}
+					<h3>Matchups{#if muFromData && record}<span class="src">from {record.games} game{record.games === 1 ? '' : 's'}</span>{/if}</h3>
+					{#if muRows.length}
+						{#each muRows as r (r.label)}
+							<div class="mrow"><small>{r.label}</small><span class="faces">{#each r.faces as f (f.id)}<span class="face" style={portraitCss(f.id)} title={f.tip}></span>{/each}</span></div>
 						{/each}
-					{:else}<p class="muted">Not written yet.</p>{/if}
+					{:else}<p class="muted">Not enough games yet.</p>{/if}
 				</div>
 			</div>
 		{:else}
@@ -316,6 +324,7 @@
 	.hc :global(.card) { position: absolute; inset: 0; }
 	.hc:hover { transform: translateY(-3px); }
 	.hc.on { box-shadow: 0 0 0 3px var(--brass); }
+	.mu h3 .src { margin-left: 8px; font-size: 11px; letter-spacing: 0; text-transform: none; color: var(--ink-3); }
 	.mrow { display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; }
 	.mrow small { font-size: 12px; color: var(--ink-3); }
 	.faces { display: flex; flex-wrap: wrap; gap: 6px; }
