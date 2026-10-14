@@ -24,6 +24,7 @@
 	import MatchRow from '$lib/hall/MatchRow.svelte';
 	import { role } from '$lib/role';
 	import { REPORT_TABLE, reportOfRow, type Report } from '$lib/reports';
+	import { globalOf, globalWin, globalGames, GLOBAL_SOURCE, GLOBAL_AS_OF } from '$lib/globalstats';
 	import '$lib/hall/hall.css';
 
 	type Tab = 'overview' | 'players' | 'heroes' | 'matches' | 'awards' | 'reports';
@@ -119,12 +120,15 @@
 		: psort === 'name' ? a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
 		: b.rating - a.rating), pflip);
 	// ── the heroes: sortable table (the scope's games) ──
-	let hq = '', hsort: 'picks' | 'win' | 'kdm' | 'gold' | 'impact' | 'name' = 'picks', hflip = false;
+	let hq = '', hsort: 'picks' | 'win' | 'kdm' | 'gold' | 'impact' | 'global' | 'name' = 'picks', hflip = false;
+	// the community site's global win rate (globalstats.ts; shown with a GLOBAL tag), −1 = none
+	const gwr = (id: string) => { const g = globalOf(id); return g ? globalWin(g) : -1; };
 	$: hlist = flip((league?.heroes ?? []).filter((h) => !hq.trim() || has(heroName(h.hero), hq) || (heroById(h.hero)?.traits ?? []).some((t) => has(TRAIT_LABELS[t as Trait], hq))).sort((a, b) =>
 		hsort === 'win' ? pct(b.wins, b.games) - pct(a.wins, a.games) || b.games - a.games
 		: hsort === 'kdm' ? perG(b.kills, b.kdaGames) - perG(a.kills, a.kdaGames) || perG(b.minions, b.mGames) - perG(a.minions, a.mGames)
 		: hsort === 'gold' ? (b.coinGames ? b.coins / b.coinGames : -1) - (a.coinGames ? a.coins / a.coinGames : -1)
 		: hsort === 'impact' ? (b.impact ?? -999) - (a.impact ?? -999)
+		: hsort === 'global' ? gwr(b.hero) - gwr(a.hero)
 		: hsort === 'name' ? heroName(a.hero).localeCompare(heroName(b.hero))
 		: b.games - a.games || b.wins - a.wins), hflip);
 	// each hero's best player: most games AND the best success (hallstats byMastery)
@@ -206,11 +210,13 @@
 									{@render th('K / D / M', 'kdm', hsort, sortH, true, hflip)}
 									{@render th('Gold', 'gold', hsort, sortH, true, hflip)}
 									{@render th('Impact', 'impact', hsort, sortH, true, hflip)}
+									<th class="sortable rt" class:on={hsort === 'global'} class:flipped={hsort === 'global' && hflip} on:click={() => sortH('global')} title="Win rate in {GLOBAL_SOURCE}'s global stats ({GLOBAL_AS_OF}) — not our games"><span class="gtag">GLOBAL</span> Win</th>
 									<th title="Most games with the best success on this hero">Top player</th>
 								</tr></thead>
 								<tbody>
 									{#each hlist as h (h.hero)}
 										{@const top1 = masters.get(h.hero)?.[0]}
+										{@const gw = gwr(h.hero)}
 										<tr on:click={() => openHero(h.hero)}>
 											<td><span class="hcell"><span class="face" style="--fs:38px; {portraitCss(h.hero)}"></span><span><b>{heroName(h.hero)}</b><small class="tr">{(heroById(h.hero)?.traits ?? []).map((t) => TRAIT_LABELS[t as Trait]).join(' · ')}</small></span></span></td>
 											<td class="rt">{h.games}</td>
@@ -219,9 +225,10 @@
 											<td class="rt">{h.kdaGames ? `${avg(h.kills, h.kdaGames)} / ${avg(h.deaths, h.kdaGames)} / ${avg(h.minions, h.mGames)}` : '–'}</td>
 											<td class="rt au">{avg(h.coins, h.coinGames)}</td>
 											<td class="rt" class:up={(h.impact ?? 0) > 0} class:down={(h.impact ?? 0) < 0}>{h.impact == null ? '–' : `${h.impact > 0 ? '+' : ''}${h.impact}`}</td>
+											<td class="rt" class:up={gw >= 50} class:down={gw >= 0 && gw < 50} title={gw >= 0 ? `${globalGames(globalOf(h.hero)!)} games worldwide` : ''}>{gw >= 0 ? `${f1(gw)}%` : '–'}</td>
 											<td>{#if top1}<button class="linky tp" on:click|stopPropagation={() => openPlayer(top1.key)}>{top1.name}</button> <small class="muted">{top1.wins}–{top1.games - top1.wins}</small>{/if}</td>
 										</tr>
-									{:else}<tr><td colspan="8" class="muted">No hero matches.</td></tr>{/each}
+									{:else}<tr><td colspan="9" class="muted">No hero matches.</td></tr>{/each}
 								</tbody>
 							</table>
 						</div>

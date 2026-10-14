@@ -8,6 +8,8 @@
 	import { heroCards } from '$lib/cards/deck';
 	import { heroTrend, matchups, heroSplits, byMastery } from '$lib/hallstats';
 	import Line from './Line.svelte';
+	import GlobalCard from './GlobalCard.svelte';
+	import { globalOf } from '$lib/globalstats';
 
 	export let h: HeroAgg;
 	export let games: LeagueGame[] = [];
@@ -26,6 +28,7 @@
 	$: pickNow = games.length ? pct(h.games, games.length) : 0;
 	let mside: 'against' | 'with' = 'against';
 	$: mu = matchups(h, mside);
+	$: gl = globalOf(h.hero);
 	$: sp = heroSplits(games, h.hero);
 	$: cards = [...sp.sizes, ...sp.sides];
 	$: maxShare = Math.max(1, ...cards.map((c) => c.share));
@@ -114,6 +117,8 @@
 			<div class="mfoot"><span>Best {mside}</span><span class="dot"></span><span>Worst {mside}</span></div>
 		</section>
 	</div>
+
+	{#if gl}<GlobalCard g={gl} {onHero} />{/if}
 
 	{#if cards.length}
 		<div class="row splits" style="grid-template-columns: repeat({Math.min(5, cards.length)}, minmax(0, 1fr))">

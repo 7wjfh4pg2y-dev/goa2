@@ -18,6 +18,7 @@
 	import { onSide, turnCards, CARD_HEX, LANES, SIZES, MINION_PREFS, GUIDE_TAGS, type Opening, type HeroGuide, type Side } from '$lib/openings';
 	import { guideFor } from './guide';
 	import type { HeroMatchups, Matchup } from '$lib/hallstats';
+	import { globalOf, GLOBAL_SOURCE, GLOBAL_AS_OF, type GlobalVs } from '$lib/globalstats';
 
 	export let heroId: string;
 	export let openings: Opening[] = [];
@@ -31,7 +32,14 @@
 	type MuRow = { label: string; faces: { id: string; tip: string }[] };
 	const tipOf = (m: Matchup, with_: boolean) => `${heroById(m.hero)?.name ?? m.hero} — ${m.wins}–${m.games - m.wins} ${with_ ? 'together' : 'against'}`;
 	$: muFromData = !!record && (record.strong.length + record.weak.length + record.partners.length) > 0;
-	$: muRows = (muFromData && record
+	// Ours (our records, else the guide) | Global (the community site's numbers, globalstats.ts)
+	let muPick: 'ours' | 'global' | '' = '';
+	$: gl = globalOf(h.id);
+	$: muSrc = gl && (muPick === 'global' || (!muPick && !muFromData)) ? 'global' : 'ours';
+	const glTip = (v: GlobalVs) => `${heroById(v[0])?.name ?? v[0]} — ${v[1]}% of ${v[2]} game${v[2] === 1 ? '' : 's'} (global)`;
+	$: muRows = (muSrc === 'global' && gl
+		? [['Strong against', gl.beats], ['Struggles against', gl.countered], ['Best with', gl.mates]].map(([label, vs]) => ({ label, faces: (vs as GlobalVs[]).map((v) => ({ id: v[0], tip: glTip(v) })) }))
+		: muFromData && record
 		? [['Strong against', record.strong, false], ['Struggles against', record.weak, false], ['Best with', record.partners, true]].map(([label, ms, w]) => ({ label, faces: (ms as Matchup[]).map((m) => ({ id: m.hero, tip: tipOf(m, w as boolean) })) }))
 		: [['Strong against', g.strong], ['Struggles against', g.weak], ['Best with', g.partners]].map(([label, ids]) => ({ label, faces: (ids as string[]).map((id) => ({ id, tip: heroById(id)?.name ?? id })) }))
 	).filter((r) => r.faces.length) as MuRow[];
@@ -195,7 +203,8 @@
 					</div>
 				</div>
 				<div class="col mu">
-					<h3>Matchups{#if muFromData && record}<span class="src">from {record.games} game{record.games === 1 ? '' : 's'}</span>{/if}</h3>
+					<h3>Matchups{#if muSrc === 'global'}<span class="gtag" title="{GLOBAL_SOURCE}'s global stats, {GLOBAL_AS_OF}">Global</span>{:else if muFromData && record}<span class="src">from {record.games} game{record.games === 1 ? '' : 's'}</span>{/if}
+						{#if gl}<span class="msw"><button class:on={muSrc === 'ours'} on:click={() => (muPick = 'ours')}>Ours</button><button class:on={muSrc === 'global'} on:click={() => (muPick = 'global')}>Global</button></span>{/if}</h3>
 					{#if muRows.length}
 						{#each muRows as r (r.label)}
 							<div class="mrow"><small>{r.label}</small><span class="faces">{#each r.faces as f (f.id)}<span class="face" style={portraitCss(f.id)} title={f.tip}></span>{/each}</span></div>
@@ -324,6 +333,11 @@
 	.hc :global(.card) { position: absolute; inset: 0; }
 	.hc:hover { transform: translateY(-3px); }
 	.hc.on { box-shadow: 0 0 0 3px var(--brass); }
+	.mu h3 { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 0; }
+	.mu h3 .gtag { margin-left: 8px; padding: 1px 6px; border-radius: 4px; font-size: 10px; letter-spacing: 0.08em; color: #071c1b; background: #40c4ba; }
+	.msw { margin-left: auto; display: inline-flex; border: 1px solid var(--brass-line); border-radius: 6px; overflow: hidden; }
+	.msw button { padding: 2px 8px; border: 0; background: none; color: var(--ink-3); font: inherit; font-size: 10.5px; letter-spacing: 0.06em; cursor: pointer; }
+	.msw button.on { background: var(--brass-line); color: var(--brass-hi); }
 	.mu h3 .src { margin-left: 8px; font-size: 11px; letter-spacing: 0; text-transform: none; color: var(--ink-3); }
 	.mrow { display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; }
 	.mrow small { font-size: 12px; color: var(--ink-3); }

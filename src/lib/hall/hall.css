@@ -102,3 +102,6 @@
 .hall .btn2 { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px; border-radius: 8px; border: 1px solid var(--ln2); background: var(--p2); color: var(--tx); font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; text-decoration: none; }
 .hall .btn2:hover { border-color: var(--bl); }
 .hall .btn2.pri { background: var(--bl); border-color: transparent; color: #021426; }
+/* GLOBAL = the community site's numbers (globalstats.ts), never ours */
+.hall .gtag { display: inline-block; margin-left: 8px; padding: 2px 7px; border-radius: 5px; font-size: 10.5px; font-weight: 800; letter-spacing: 0.08em; line-height: 1.3; color: #071c1b; background: #40c4ba; vertical-align: middle; }
+.hall th .gtag { margin: 0 4px 0 0; font-size: 9.5px; }
