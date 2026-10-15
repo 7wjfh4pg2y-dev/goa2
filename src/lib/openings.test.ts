@@ -47,6 +47,9 @@ describe('openings', () => {
 		expect(heroHexAt(op, 1)).toBe('A')
 		expect(heroHexAt(op, 2)).toBe('C')
 		expect(heroHexAt({ ...op, marks: [] }, 3)).toBe('S')
+		// a 'stay' chip (an attack from where the hero stands) doesn't move it
+		const st = { ...op, marks: op.marks.map((m) => (m.kind === 'step' && m.turn === 2 ? { ...m, stay: true } : m)) }
+		expect(heroHexAt(st, 2)).toBe('A')
 		expect(marksAt(op, 1).map((m) => m.id)).toEqual(['1', '5'])
 		expect(marksAt(op, 0).length).toBe(5)
 		expect([...takenAt(op, 2)]).toEqual([])
@@ -71,9 +74,12 @@ describe('the builder tools', () => {
 		let r = applyTool(op0, 'step', '9_10', o)
 		expect(r.op.marks).toMatchObject([{ kind: 'step', hex: '9_10', turn: 2, color: 'blue' }])
 		r = applyTool(r.op, 'step', '9_10', { ...o, color: 'red' })
-		expect(r.op.marks.length).toBe(2)
+		expect(r.op.marks).toMatchObject([{ color: 'blue', color2: 'red' }]) // another colour = a hybrid chip
+		expect(markLabel(r.op.marks[0])).toBe('T2 chip · Blue or Red')
 		r = applyTool(r.op, 'step', '9_10', o)
-		expect(r.op.marks.map((m) => (m.kind === 'step' ? m.color : ''))).toEqual(['red'])
+		expect(r.op.marks.map((m) => (m.kind === 'step' ? [m.color, m.color2] : ''))).toEqual([['red', undefined]])
+		expect(applyTool(r.op, 'step', '9_10', { ...o, color: 'red' }).op.marks).toEqual([])
+		expect(applyTool(r.op, 'step', '9_10', { ...o, color: 'red', alt: true }).op.marks.length).toBe(2)
 		expect(applyTool(op0, 'step', 'x', { ...o, turn: 0, color: 'white' }).op.marks[0]).toMatchObject({ turn: 1, color: 'gold' })
 		const u = applyTool(op0, 'unit', 'a', { ...o, unitHero: 'misa' })
 		expect(u.op.marks[0]).toMatchObject({ kind: 'unit', unit: 'enemy', hero: 'misa' })

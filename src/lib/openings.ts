@@ -22,7 +22,9 @@ export const MARK_HEX: Record<string, string> = { ...CARD_HEX, white: '#f4f1e8',
 export type Turn = 0 | 1 | 2 | 3 | 4
 type Base = { id: string; turn: Turn; alt?: boolean }
 /** a turn chip ("T2") on a space, in the card's colour; alt = an alternative (dimmed) */
-export type StepMark = Base & { kind: 'step'; hex: string; color: CardColor; text?: string }
+/** `color2` = a hybrid chip: either card colour will do; `stay` = the hero acts from where it stands (an attack, a skill) —
+ *  the chip doesn't move the hero */
+export type StepMark = Base & { kind: 'step'; hex: string; color: CardColor; color2?: CardColor; stay?: boolean; text?: string }
 /** a ring round a space (the minion you take); taken = that minion is gone from this turn on */
 export type RingMark = Base & { kind: 'ring'; hex: string; color: string; taken?: boolean }
 export type ArrowMark = Base & { kind: 'arrow'; from: string; to: string; color: string }
@@ -106,10 +108,10 @@ export function onSide(op: Opening, side: Side, map: GameMap = OPENING_MAP): Ope
 
 // ── turn by turn ──
 export const marksAt = (op: Opening, step: number): Mark[] => (step <= 0 ? op.marks : op.marks.filter((m) => m.turn <= step))
-/** where the hero stands after turn `step` (0 = the whole round): the last plain (not alternative) chip of the latest turn so far, else its start */
+/** where the hero stands after turn `step` (0 = the whole round): the last plain (not alternative, not 'stay') of the latest turn so far, else its start */
 export function heroHexAt(op: Opening, step: number): string {
 	for (let t = step <= 0 ? 4 : Math.min(step, 4); t >= 1; t--) {
-		const s = op.marks.find((m): m is StepMark => m.kind === 'step' && m.turn === t && !m.alt)
+		const s = op.marks.find((m): m is StepMark => m.kind === 'step' && m.turn === t && !m.alt && !m.stay)
 		if (s) return s.hex
 	}
 	return op.start
@@ -213,7 +215,7 @@ export function spawnDirs(map: GameMap = OPENING_MAP): Record<string, number> {
 // ── the builder's tools: what a tap on a space does ──
 export type Tool = 'step' | 'ring' | 'arrow' | 'area' | 'unit' | 'label' | 'token' | 'start' | 'erase' | 'pick'
 export type ToolOpts = {
-	turn: Turn; color: string; alt: boolean; taken: boolean; areaStyle: AreaMark['style']
+	turn: Turn; color: string; alt: boolean; taken: boolean; stay?: boolean; areaStyle: AreaMark['style']
 	unit: 'enemy' | 'ally'; unitHero: string; text: string; token: string
 	/** the area being painted, the arrow's first space, the mark picked (carried between taps) */
 	areaId: string | null; arrowFrom: string | null; picked: string | null
@@ -234,10 +236,20 @@ export function applyTool(op: Opening, tool: Tool, hex: string, o: ToolOpts): To
 	switch (tool) {
 		case 'step': {
 			const color = (CARD_COLORS as string[]).includes(o.color) ? (o.color as CardColor) : 'gold'
-			const same = op.marks.find((m) => m.kind === 'step' && m.hex === hex && m.turn === t1 && m.color === color && !!m.alt === !!o.alt)
-			if (same) return res(op.marks.filter((m) => m !== same))
+			// one chip per space, turn and route: the same colour again takes it off (or one side of a hybrid);
+			// another colour makes it a hybrid (either card)
+			const same = op.marks.find((m): m is StepMark => m.kind === 'step' && m.hex === hex && m.turn === t1 && !!m.alt === !!o.alt)
+			if (same) {
+				const swap = (m: StepMark) => res(op.marks.map((x) => (x === same ? m : x)))
+				if (same.color2 === color) { const { color2: _, ...rest } = same; return swap(rest) }
+				if (same.color === color) {
+					if (!same.color2) return res(op.marks.filter((m) => m !== same))
+					const { color2, ...rest } = same; return swap({ ...rest, color: color2 })
+				}
+				return swap({ ...same, color2: color })
+			}
 			const text = o.text.trim() || undefined
-			return res([...op.marks, { id: newId('m'), kind: 'step', hex, turn: t1, color, alt, ...(text ? { text } : {}) }])
+			return res([...op.marks, { id: newId('m'), kind: 'step', hex, turn: t1, color, alt, ...(o.stay ? { stay: true } : {}), ...(text ? { text } : {}) }])
 		}
 		case 'ring': {
 			const same = op.marks.find((m) => m.kind === 'ring' && m.hex === hex && m.turn === o.turn)
@@ -300,7 +312,7 @@ export function markLabel(m: Mark, heroName: (id: string) => string = (id) => id
 	const t = m.turn ? `T${m.turn}` : 'Always'
 	const alt = m.alt ? ' · alt' : ''
 	switch (m.kind) {
-		case 'step': return `${m.text?.trim() || `T${m.turn}`} chip · ${CARD_NAME[m.color]}${alt}`
+		case 'step': return `${m.text?.trim() || `T${m.turn}`} chip · ${CARD_NAME[m.color]}${m.color2 ? ` or ${CARD_NAME[m.color2]}` : ''}${m.stay ? ' · stays' : ''}${alt}`
 		case 'ring': return `Ring · ${m.color}${m.taken ? ' · taken' : ''} · ${t}${alt}`
 		case 'arrow': return `Arrow · ${m.color} · ${t}${alt}`
 		case 'area': return `Area · ${m.hexes.length} ${m.hexes.length === 1 ? 'space' : 'spaces'} · ${t}${alt}`

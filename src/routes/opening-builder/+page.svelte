@@ -129,6 +129,7 @@
 	let color: string = 'green';
 	let alt = false;
 	let taken = false;
+	let stay = false;
 	let areaStyle: 'fill' | 'outline' | 'both' = 'both';
 	let unit: 'enemy' | 'ally' = 'enemy';
 	let unitHero = '';
@@ -141,7 +142,7 @@
 	let bview: OpeningBoard | null = null;
 	let turned = false;
 	const TOOLS: { k: Tool; label: string; hint: string; unit?: 'enemy' | 'ally' }[] = [
-		{ k: 'step', label: 'Turn chip', hint: 'Tap a space: a chip for this turn in the card’s colour. Tap it again to take it off.' },
+		{ k: 'step', label: 'Turn chip', hint: 'Tap a space: a chip for this turn in the card’s colour. Again = off; another colour = either card (hybrid).' },
 		{ k: 'ring', label: 'Ring', hint: 'Ring a minion (the one you take) or a space. “Taken”: that minion fades from this turn on.' },
 		{ k: 'arrow', label: 'Arrow', hint: 'Tap where it starts, then where it goes.' },
 		{ k: 'area', label: 'Area', hint: 'Tap spaces to shade them; tap again to unshade. “New area” starts another.' },
@@ -169,7 +170,7 @@
 	$: if (tool === 'step' && !(CARD_COLORS as string[]).includes(color)) color = 'green';
 	function onHex(hex: string) {
 		if (!cur) return;
-		const o: ToolOpts = { turn, color, alt, taken, areaStyle, unit, unitHero, text, token, areaId, arrowFrom, picked };
+		const o: ToolOpts = { turn, color, alt, taken, stay, areaStyle, unit, unitHero, text, token, areaId, arrowFrom, picked };
 		const r = applyTool(cur, tool, hex, o);
 		areaId = r.areaId; arrowFrom = r.arrowFrom; picked = r.picked;
 		if (r.changed) edit(r.op);
@@ -374,6 +375,9 @@
 					{/if}
 					<label class="opt chk"><input type="checkbox" bind:checked={alt} /> Alternative (dimmed)</label>
 				{/if}
+				{#if tool === 'step'}
+					<div class="opt"><span class="fl">Hero</span><span class="seg sm2"><button class:on={!stay} on:click={() => (stay = false)} title="The hero moves to this space">Moves here</button><button class:on={stay} on:click={() => (stay = true)} title="The hero stays where it is (an attack or a skill aimed here) — dashed rim">Stays</button></span></div>
+				{/if}
 				{#if tool === 'step'}<label class="opt">Chip text <input bind:value={text} maxlength="5" placeholder="T{turn || 1}" /></label>{/if}
 				{#if tool === 'ring'}<label class="opt chk"><input type="checkbox" bind:checked={taken} /> Taken (the minion fades from this turn)</label>{/if}
 				{#if tool === 'area'}
@@ -393,7 +397,9 @@
 						<b>{markLabel(pickedMark, hname)}</b>
 						<span class="seg sm2">{#if pickedMark.kind !== 'step'}<button class:on={pickedMark.turn === 0} on:click={() => pickedMark && changeMark(pickedMark.id, { turn: 0 })}>Always</button>{/if}{#each [1, 2, 3, 4] as s (s)}<button class:on={pickedMark.turn === s} on:click={() => pickedMark && changeMark(pickedMark.id, { turn: s as Turn })}>T{s}</button>{/each}</span>
 						{#if pickedMark.kind === 'step'}
-							<span class="sw">{#each CARD_COLORS as c (c)}<button class="cdot" class:on={pickedMark.color === c} style="--c:{CARD_HEX[c]}" title={c} on:click={() => pickedMark && changeMark(pickedMark.id, { color: c })}></button>{/each}</span>
+							<span class="sw">{#each CARD_COLORS as c (c)}<button class="cdot" class:on={pickedMark.color === c} style="--c:{CARD_HEX[c]}" title={c} on:click={() => pickedMark && changeMark(pickedMark.id, { color: c, ...(pickedMark.color2 === c ? { color2: undefined } : {}) })}></button>{/each}</span>
+							<span class="sw"><span class="fl">or</span><button class="cdot none" class:on={!pickedMark.color2} title="One colour" on:click={() => pickedMark && changeMark(pickedMark.id, { color2: undefined })}></button>{#each CARD_COLORS as c (c)}{#if c !== pickedMark.color}<button class="cdot" class:on={pickedMark.color2 === c} style="--c:{CARD_HEX[c]}" title="or {c}" on:click={() => pickedMark && changeMark(pickedMark.id, { color2: c })}></button>{/if}{/each}</span>
+							<span class="seg sm2"><button class:on={!pickedMark.stay} on:click={() => pickedMark && changeMark(pickedMark.id, { stay: undefined })}>Moves here</button><button class:on={!!pickedMark.stay} on:click={() => pickedMark && changeMark(pickedMark.id, { stay: true })}>Stays</button></span>
 						{:else if pickedMark.kind === 'ring' || pickedMark.kind === 'arrow' || pickedMark.kind === 'area'}
 							<span class="sw">{#each [...CARD_COLORS, 'white', 'black'] as c (c)}<button class="cdot" class:on={pickedMark.color === c} style="--c:{MARK_HEX[c]}" title={c} on:click={() => pickedMark && changeMark(pickedMark.id, { color: c })}></button>{/each}</span>
 						{/if}
@@ -497,6 +503,7 @@
 	.note { grid-column: 1 / -1; }
 	.cdot { width: 24px; height: 24px; padding: 0; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.25); background: var(--c); opacity: 0.45; font-size: 11px; color: #fff; text-shadow: 0 1px 2px #000; }
 	.cdot.on { opacity: 1; border-color: #fff; box-shadow: 0 0 0 2px var(--brass); }
+	.cdot.none { background: repeating-linear-gradient(45deg, #2a3242 0 4px, #1a2030 4px 8px); }
 	.acts { display: flex; flex-wrap: wrap; gap: 6px; }
 
 	.btop { position: absolute; left: 10px; top: 10px; right: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; z-index: 2; pointer-events: none; }

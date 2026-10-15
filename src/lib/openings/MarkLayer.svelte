@@ -3,7 +3,8 @@
 	// An opening's marks, drawn in board units inside any svg that shares the board's coordinates (BoardCanvas's
 	// `under` / `over` layers, or a snapshot's own svg). Upright whatever the board's turn: every chip, token and
 	// label is turned back by `rot` round its own centre, like the pieces. The compendium's look: turn chips in the
-	// card's colour ("T2"), dimmed for an alternative route; rings round the minion taken; arrows; shaded areas;
+	// card's colour ("T2"), dimmed for an alternative route, split in two for a hybrid (either card), a dashed rim when
+	// the hero acts from where it stands (no move); rings round the minion taken; arrows; shaded areas;
 	// E / A discs (or real hero tokens); labels. `step` > 0 = one turn of a walk-through: that turn's marks bright,
 	// earlier turns faded (later ones are already filtered out by the caller).
 	import HeroToken from '$lib/board/HeroToken.svelte';
@@ -131,8 +132,16 @@
 		<g opacity={fade(m)} pointer-events="none" transform={up(c.x, c.y)}>
 			{#if now && !m.alt}<circle cx={c.x} cy={c.y} r={size * 0.5} fill="none" stroke="#fff" stroke-opacity=".85" stroke-width={size * 0.06} />{/if}
 			<circle cx={c.x + size * 0.02} cy={c.y + size * 0.05} r={size * 0.37} fill="#000" fill-opacity=".35" />
-			<circle cx={c.x} cy={c.y} r={size * 0.36} fill={CARD_HEX[m.color]} stroke="#fff" stroke-opacity=".9" stroke-width={size * 0.045} />
-			<text x={c.x} y={c.y} dy=".36em" text-anchor="middle" font-size={size * (label(m).length > 2 ? 0.26 : 0.32)} fill={chipInk(m.color)} class="t chip">{label(m)}</text>
+			{#if m.color2}
+				<!-- a hybrid: either card -->
+				<path d="M{c.x} {c.y - size * 0.36}A{size * 0.36} {size * 0.36} 0 0 0 {c.x} {c.y + size * 0.36}Z" fill={CARD_HEX[m.color]} />
+				<path d="M{c.x} {c.y - size * 0.36}A{size * 0.36} {size * 0.36} 0 0 1 {c.x} {c.y + size * 0.36}Z" fill={CARD_HEX[m.color2]} />
+				<circle cx={c.x} cy={c.y} r={size * 0.36} fill="none" stroke="#fff" stroke-opacity=".9" stroke-width={size * 0.045} stroke-dasharray={m.stay ? `${size * 0.1} ${size * 0.07}` : undefined} />
+				<text x={c.x} y={c.y} dy=".36em" text-anchor="middle" font-size={size * (label(m).length > 2 ? 0.26 : 0.32)} fill="#fff" stroke="#000" stroke-opacity=".75" stroke-width={size * 0.05} class="t chip">{label(m)}</text>
+			{:else}
+				<circle cx={c.x} cy={c.y} r={size * 0.36} fill={CARD_HEX[m.color]} stroke="#fff" stroke-opacity=".9" stroke-width={size * 0.045} stroke-dasharray={m.stay ? `${size * 0.1} ${size * 0.07}` : undefined} />
+				<text x={c.x} y={c.y} dy=".36em" text-anchor="middle" font-size={size * (label(m).length > 2 ? 0.26 : 0.32)} fill={chipInk(m.color)} class="t chip">{label(m)}</text>
+			{/if}
 			{#if picked === m.id}<circle cx={c.x} cy={c.y} r={size * 0.5} fill="none" stroke="#fde047" stroke-width={size * 0.05} stroke-dasharray="{size * 0.16} {size * 0.12}" />{/if}
 		</g>
 	{/each}
