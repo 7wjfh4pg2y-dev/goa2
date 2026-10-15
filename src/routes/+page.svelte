@@ -851,6 +851,7 @@
 							<div class="row gmrow">
 								<a class="btn btn-ghost on-art" href={base + '/rooms'}><Icon name="eye" /> Open games</a>
 								<a class="btn btn-ghost on-art" href={base + '/opening-builder'}><Icon name="flag" /> Openings</a>
+								<a class="btn btn-ghost on-art" href={base + '/names'}>Names</a>
 								<button class="btn btn-ghost on-art" on:click={() => { signOut(); goHome(); }}>Sign out</button>
 							</div>
 						</div>
@@ -1354,7 +1355,9 @@
 		.choices :global(.choice) { min-height: 88px; padding: 12px 16px; gap: 14px; }
 		.choices :global(.choice-ic) { width: 52px; height: 52px; font-size: 24px; }
 		.choices.dense { gap: 8px; }
-		.step .gmrow .btn { padding: 0 10px; min-height: 40px; height: 40px; }
+		.step .gmrow { gap: 6px; }
+		.step .gmrow .btn { padding: 0 8px; min-height: 40px; height: 40px; font-size: 13px; }
+		.step .gmrow .btn :global(svg) { display: none; }
 		.choices.dense :global(.choice) { min-height: 62px; padding: 8px 14px; }
 		.choices.dense :global(.choice-ic) { width: 40px; height: 40px; }
 

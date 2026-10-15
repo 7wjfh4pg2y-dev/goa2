@@ -11,8 +11,9 @@
 	import { loadOpenings } from '$lib/openings/store';
 	import type { Opening, HeroGuide } from '$lib/openings';
 	import { supabase } from '$lib/supabase';
-	import { buildLeague, leagueOf, gameOfReport, rowOfSelect, LEAGUE_SELECT, type GameRowIn, type LeagueGame, type League } from '$lib/league';
+	import { buildLeague, useAliases, leagueOf, gameOfReport, rowOfSelect, LEAGUE_SELECT, type GameRowIn, type LeagueGame, type League } from '$lib/league';
 	import { REPORT_TABLE, reportOfRow, type Report } from '$lib/reports';
+	import { loadAliases, resolveAliases } from '$lib/aliases';
 	import { heroMatchups } from '$lib/hallstats';
 
 	// Matchups from the records: every online game plus the table games (the Hall's Total), read once.
@@ -33,6 +34,7 @@
 				const { data, error } = await supabase.from(REPORT_TABLE).select('id,kind,game_id,played_on,data,updated_at').eq('kind', 'irl');
 				if (!error) table = (data ?? []).map(reportOfRow).filter((r): r is Report => !!r && !r.deleted);
 			} catch { /* no table games */ }
+			useAliases(resolveAliases((await loadAliases()).rows)); // the GM tools' merged names
 			const legacy = table.map((r) => { try { return gameOfReport(r); } catch { return null; } }).filter((g): g is LeagueGame => !!g);
 			league = leagueOf([...buildLeague(got).games, ...legacy]);
 		} catch { league = null; }

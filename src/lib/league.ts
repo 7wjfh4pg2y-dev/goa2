@@ -40,6 +40,11 @@ export const winType = (reason: string | null | undefined): WinType =>
 
 /** The same person in every game: their name, trimmed, spacing and case ignored. */
 export const playerKey = (name: string) => (name ?? '').trim().replace(/\s+/g, ' ').toLowerCase()
+// the GM tools' name aliases (aliases.ts: spelling key → shown name), set by a page before it builds the league
+let NAMES: Record<string, string> = {}
+export function useAliases(map: Record<string, string>) { NAMES = map ?? {} }
+/** A typed name as one person: the alias when there is one, else the name as typed. */
+export const canonName = (name: string) => { const t = (name ?? '').trim().replace(/\s+/g, ' '); return NAMES[playerKey(t)] ?? t }
 
 /** A level-up path: the Tier II / III cards a hero took, in the order they were taken (indices into heroCards). */
 export type Path = { cards: number[]; ult: boolean; ordered: boolean }
@@ -231,10 +236,11 @@ export function gameOfRow(row: GameRowIn): LeagueGame | null {
 		const end = endCards[id]
 		const level = st?.level ?? (end ? 1 + (end.upgrade?.length ?? 0) + (end.ultimate ? 1 : 0) : 1)
 		const steps = (d.builds?.[id] ?? null) as BuildStep[] | null
-		const key = playerKey(p.name)
+		const shown = canonName(p.name)
+		const key = playerKey(shown)
 		keyOf.set(id, key)
 		players.push({
-			key, name: p.name.trim(), color: p.color ?? '', id, hero: p.hero, team, won: team === winner, level,
+			key, name: shown, color: p.color ?? '', id, hero: p.hero, team, won: team === winner, level,
 			coins: st?.coins ?? (end ? (end.coins ?? 0) + levelsPaid(level) : null),
 			kills: st?.kills ?? null, deaths: st?.deaths ?? null, assists: st?.assists ?? null, minions: st?.minions ?? null,
 			mRoles: exact ? minionRoles(d.ev, id) : null,
@@ -278,7 +284,7 @@ export function gameOfReport(r: LegacyIn): LeagueGame | null {
 	const at = day + (r.match ?? 1) * 60000 // games of one day keep their order
 	const players: GamePlayer[] = []
 	for (const [side, team] of [['red', 'orange'], ['blue', 'blue']] as const) for (const st of r[side] ?? []) {
-		const hero = heroIdOfName(st.hero), name = (st.name ?? '').trim().replace(/[?!]+$/, '')
+		const hero = heroIdOfName(st.hero), name = canonName((st.name ?? '').trim().replace(/[?!]+$/, ''))
 		if (!hero || !name) continue
 		const k = num(st.k), d = num(st.d)
 		players.push({ key: playerKey(name), name, color: '', id: `${side}:${playerKey(name)}`, hero, team, won: team === winner, level: num(st.lv) ?? 0,

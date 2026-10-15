@@ -9,7 +9,7 @@
 	import { base } from '$app/paths';
 	import { supabase } from '$lib/supabase';
 	import {
-		buildLeague, leagueOf, gameOfReport, titlesOf, rowOfSelect, LEAGUE_SELECT, WIN_LABEL,
+		buildLeague, useAliases, leagueOf, gameOfReport, titlesOf, rowOfSelect, LEAGUE_SELECT, WIN_LABEL,
 		type League, type PlayerAgg, type HeroAgg, type GameRowIn, type LeagueGame
 	} from '$lib/league';
 	import { heroById, portraitCss, TRAIT_LABELS, type Trait } from '$lib/heroes';
@@ -24,6 +24,7 @@
 	import MatchRow from '$lib/hall/MatchRow.svelte';
 	import { role } from '$lib/role';
 	import { REPORT_TABLE, reportOfRow, type Report } from '$lib/reports';
+	import { loadAliases, resolveAliases } from '$lib/aliases';
 	import { globalOf, globalWin, globalGames, GLOBAL_AS_OF } from '$lib/globalstats';
 	import '$lib/hall/hall.css';
 
@@ -48,8 +49,9 @@
 	let heroSel: string | null = null; // the hero whose page is open
 	let body: HTMLElement;
 
-	function use(got: GameRowIn[], table: Report[]) {
+	function use(got: GameRowIn[], table: Report[], names: Record<string, string>) {
 		rows = got;
+		useAliases(names); // the GM tools' merged names (aliases.ts)
 		currentL = buildLeague(got);
 		const legacy = table.filter((r) => r.kind === 'irl').map((r) => { try { return gameOfReport(r) } catch { return null } }).filter((g): g is LeagueGame => !!g);
 		legacyL = leagueOf(legacy);
@@ -75,7 +77,7 @@
 				got.push(...(data ?? []).map(rowOfSelect));
 				if (!data || data.length < 1000) break;
 			}
-			use(got, await table);
+			use(got, await table, resolveAliases((await loadAliases()).rows));
 		} catch (e) {
 			errMsg = (e as { message?: string })?.message ?? String(e);
 			phase = 'error';
