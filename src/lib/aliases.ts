@@ -6,15 +6,20 @@ import { supabase } from './supabase'
 import { playerKey } from './league'
 
 export const ALIAS_TABLE = 'goa2_aliases'
-export const ALIAS_SQL = `create table if not exists goa2_aliases (
-  alias text primary key,          -- a spelling, lower-case, spaces squeezed
-  name text not null,              -- the name it shows as
+export const ALIAS_SQL = `create table if not exists public.goa2_aliases (
+  alias text primary key,
+  name text not null,
   updated_at timestamptz not null default now()
 );
-alter table goa2_aliases enable row level security;
-create policy "aliases read" on goa2_aliases for select to anon using (true);
-create policy "aliases add" on goa2_aliases for insert to anon with check (true);
-create policy "aliases change" on goa2_aliases for update to anon using (true) with check (true);`
+alter table public.goa2_aliases enable row level security;
+grant select, insert, update on public.goa2_aliases to anon, authenticated;
+drop policy if exists "aliases read" on public.goa2_aliases;
+drop policy if exists "aliases add" on public.goa2_aliases;
+drop policy if exists "aliases change" on public.goa2_aliases;
+create policy "aliases read" on public.goa2_aliases for select to anon, authenticated using (true);
+create policy "aliases add" on public.goa2_aliases for insert to anon, authenticated with check (true);
+create policy "aliases change" on public.goa2_aliases for update to anon, authenticated using (true) with check (true);
+notify pgrst, 'reload schema';`
 
 export type AliasRow = { alias: string; name: string }
 
@@ -107,12 +112,12 @@ export const mergeRows = (people: Person[], name: string): AliasRow[] =>
 /** The row that splits one spelling back out under its own name. */
 export const splitRow = (s: Spelling): AliasRow => ({ alias: s.key, name: s.raw })
 
-export async function loadAliases(): Promise<{ status: 'ready' | 'missing' | 'error'; rows: AliasRow[] }> {
+export async function loadAliases(): Promise<{ status: 'ready' | 'missing' | 'error'; rows: AliasRow[]; message?: string }> {
 	try {
 		const { data, error } = await supabase.from(ALIAS_TABLE).select('alias,name')
-		if (error) return { status: /does not exist|relation|schema cache|not find/i.test(error.message) ? 'missing' : 'error', rows: [] }
+		if (error) return { status: /does not exist|relation|schema cache|not find/i.test(error.message) ? 'missing' : 'error', rows: [], message: error.message }
 		return { status: 'ready', rows: (data ?? []) as AliasRow[] }
-	} catch { return { status: 'error', rows: [] } }
+	} catch (e) { return { status: 'error', rows: [], message: String(e) } }
 }
 export async function saveAliases(rows: AliasRow[]): Promise<string | null> {
 	if (!rows.length) return null

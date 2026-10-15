@@ -27,6 +27,16 @@
 	let toastT: ReturnType<typeof setTimeout> | null = null;
 	let skip = new Set<string>();
 	let copied = false;
+	let aliasMsg = '';
+	let checking = false;
+	const LOCKED = 'Run the one-time setup above first';
+	async function recheck() {
+		checking = true;
+		const a = await loadAliases();
+		aliasStatus = a.status; aliasMsg = a.message ?? ''; rows = a.rows;
+		checking = false;
+		if (a.status === 'ready') say('Setup found — merging is on');
+	}
 
 	$: map = resolveAliases(rows);
 	$: people = peopleOf(seen, map);
@@ -59,6 +69,7 @@
 			seen = got;
 			const a = await loadAliases();
 			aliasStatus = a.status;
+			aliasMsg = a.message ?? '';
 			rows = a.rows;
 			phase = 'ready';
 		} catch (e) {
@@ -126,9 +137,13 @@
 				{#if aliasStatus !== 'ready'}
 					<section class="panel setup">
 						<h2>One-time setup</h2>
-						<p class="c-muted">Merged names are kept in a small table of their own. Run this once in Supabase → SQL Editor, then reload this page.</p>
+						<p class="c-muted">Merging is off until the names table can be read. Copy this, run it in Supabase → SQL Editor (safe to run again), then press Check again.</p>
+						{#if aliasMsg}<p class="why">Supabase says: {aliasMsg}</p>{/if}
 						<pre>{ALIAS_SQL}</pre>
-						<button class="btn btn-primary btn-sm" on:click={copySql}>{copied ? 'Copied' : 'Copy SQL'}</button>
+						<div class="sbtns">
+							<button class="btn btn-primary btn-sm" on:click={copySql}>{copied ? 'Copied' : 'Copy SQL'}</button>
+							<button class="btn btn-ghost btn-sm" disabled={checking} on:click={recheck}>{checking ? 'Checking…' : 'Check again'}</button>
+						</div>
 					</section>
 				{/if}
 
@@ -142,8 +157,8 @@
 									<span class="amp">&</span>
 									<span class="pn"><b>{b.name}</b><small>{b.games}</small></span>
 									<span class="pacts">
-										<button class="btn btn-primary btn-sm" disabled={busy || aliasStatus !== 'ready'} on:click={() => merge([a, b], a.name)}>As {a.name}</button>
-										<button class="btn btn-ghost btn-sm" disabled={busy || aliasStatus !== 'ready'} on:click={() => merge([a, b], b.name)}>As {b.name}</button>
+										<button class="btn btn-primary btn-sm" disabled={busy || aliasStatus !== 'ready'} title={aliasStatus !== 'ready' ? LOCKED : ''} on:click={() => merge([a, b], a.name)}>As {a.name}</button>
+										<button class="btn btn-ghost btn-sm" disabled={busy || aliasStatus !== 'ready'} title={aliasStatus !== 'ready' ? LOCKED : ''} on:click={() => merge([a, b], b.name)}>As {b.name}</button>
 										<button class="btn btn-ghost btn-sm" on:click={() => notSame(a, b)}>Different</button>
 									</span>
 								</div>
@@ -161,7 +176,7 @@
 						{#if chosen.length}
 							<span class="sel">{chosen.length} picked</span>
 							<input class="as" bind:value={asName} maxlength="40" placeholder="Name to show" />
-							<button class="btn btn-primary btn-sm" disabled={busy || !asName.trim() || aliasStatus !== 'ready'} on:click={() => merge(chosen, asName)}>{chosen.length > 1 ? 'Merge' : 'Rename'}</button>
+							<button class="btn btn-primary btn-sm" disabled={busy || !asName.trim() || aliasStatus !== 'ready'} title={aliasStatus !== 'ready' ? LOCKED : ''} on:click={() => merge(chosen, asName)}>{chosen.length > 1 ? 'Merge' : 'Rename'}</button>
 							<button class="btn btn-ghost btn-sm" on:click={() => (picked = new Set())}>Clear</button>
 						{:else}
 							<span class="hint">Tick two or more people to merge them, or one to rename.</span>
@@ -201,6 +216,8 @@
 	.msg { max-width: 420px; margin: 40px auto; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 24px; text-align: center; }
 	.panel { padding: 16px 18px; }
 	h2 { margin: 0 0 10px; font-weight: 400; font-size: 13px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--brass-hi); }
+	.setup .why { margin: 8px 0 0; font-size: 13px; color: #ff9b8f; }
+	.sbtns { display: flex; gap: 8px; }
 	.setup pre { margin: 10px 0; padding: 10px 12px; border-radius: 8px; background: rgba(0, 0, 0, 0.35); font-family: ui-monospace, monospace; font-size: 12px; color: var(--ink-2); white-space: pre-wrap; }
 	.pairs { display: flex; flex-direction: column; gap: 8px; }
 	.pair { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 10px; border-radius: 10px; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--hair); }
