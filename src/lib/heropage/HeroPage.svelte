@@ -314,9 +314,10 @@
 	.st { display: grid; grid-template-columns: 22px 86px 1fr; align-items: center; gap: 8px; font-size: 14px; color: var(--ink-2); }
 	.st img { width: 20px; height: 20px; }
 	.pips { display: flex; gap: 3px; }
-	.pips i { flex: 1; height: 8px; border-radius: 2px; background: rgba(255, 255, 255, 0.12); }
-	.pips i.on { background: linear-gradient(180deg, var(--brass-hi), var(--brass)); }
-	.pips i.up { background: rgba(216, 179, 106, 0.42); }
+	/* pips read on every painting: a dark rim round each, dark empty slots, bright white filled ones */
+	.pips i { flex: 1; height: 8px; border-radius: 2px; background: rgba(6, 10, 18, 0.72); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.85), inset 0 0 0 1px rgba(255, 255, 255, 0.14); }
+	.pips i.on { background: linear-gradient(180deg, #ffffff, #dfe7f2); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.9), 0 0 6px rgba(255, 255, 255, 0.35); }
+	.pips i.up { background: rgba(6, 10, 18, 0.72); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.9), inset 0 0 0 1.5px #ffd75e; }
 	.tags { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-top: 4px; }
 	.pref { font-size: 14px; color: var(--ink-2); margin-right: 6px; }
 	.pref b { font-weight: 400; color: var(--ink); }
