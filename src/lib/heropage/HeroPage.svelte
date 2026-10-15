@@ -212,7 +212,6 @@
 		{#if tab === 'overview'}
 			<div class="prev">
 				{#if shownCard != null && cards[shownCard]}<div class="pcard"><Card heroId={h.id} card={cards[shownCard]} /></div>{/if}
-				<small>Tap a card in the starting hand to read it</small>
 			</div>
 		{:else if op}
 			<div class="opinfo">
@@ -301,10 +300,10 @@
 	/* overview: the painting */
 	.art { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 	.shade { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(3, 10, 20, 0.92) 0%, rgba(3, 10, 20, 0.6) 36%, rgba(3, 10, 20, 0) 64%), linear-gradient(0deg, rgba(3, 10, 20, 0.7), transparent 40%); }
-	.id { position: absolute; left: 32px; top: 26px; bottom: 20px; width: min(560px, 54%); display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
+	.id { position: absolute; left: 32px; top: 26px; bottom: 20px; width: min(880px, 64%); display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
 	.logo { width: 68px; height: 68px; object-fit: contain; filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.6)); }
 	.name { margin: 0; font-size: clamp(40px, 5.4vw, 76px); line-height: 0.95; font-weight: inherit; color: #fff; text-shadow: 0 6px 30px rgba(0, 0, 0, 0.6); }
-	.name span { font-size: 0.42em; color: var(--brass-hi); letter-spacing: 0.04em; white-space: nowrap; }
+	.name span { display: block; margin-top: 0.06em; font-size: 0.42em; line-height: 1; color: var(--brass-hi); letter-spacing: 0.04em; white-space: nowrap; }
 	.meta { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
 	.stars { display: flex; gap: 2px; }
 	.stars img { width: 18px; height: 18px; }
@@ -373,9 +372,8 @@
 
 	/* the side: a card / the turns */
 	.prev { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 16px; }
-	.pcard { position: relative; height: calc(100% - 30px); max-width: 100%; aspect-ratio: 1192 / 1664; }
+	.pcard { position: relative; height: 100%; max-width: 100%; aspect-ratio: 1192 / 1664; }
 	.pcard :global(.card) { position: absolute; inset: 0; }
-	.prev small { font-size: 12px; color: var(--ink-3); }
 	.opinfo { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 10px; padding: 18px; overflow-y: auto; }
 	.opinfo h2 { margin: 0; font-weight: 400; font-size: 26px; color: #fff; line-height: 1.1; }
 	.ochips { display: flex; gap: 6px; }
@@ -406,6 +404,8 @@
 	.gcells { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 18px; }
 	.gcell { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 	.gcell.wide { grid-column: 1 / -1; }
+	/* narrower windows: the panel on the painting takes more of its width (room, not a scrollbar) */
+	@media (max-width: 1280px) and (min-width: 761px) { .stage .id { width: min(880px, 82%); } }
 	/* short windows: a tighter header on the painting so the guide below it fits without scrolling */
 	@media (max-height: 860px) and (min-width: 761px) {
 		.stage .id { top: 16px; bottom: 14px; gap: 7px; }
@@ -429,7 +429,7 @@
 	.col.gph { display: none; }
 	/* the guide on the painting: fills what is left under the stats, scrolls if long */
 	.guide { display: flex; flex-direction: column; gap: 6px; min-height: 0; }
-	.guide.onart { flex: 0 1 auto; margin-top: 8px; padding: 12px 14px; border-radius: 12px; background: rgba(3, 10, 20, 0.55); border: 1px solid var(--hair); overflow-y: auto; scrollbar-width: thin; max-width: 560px; }
+	.guide.onart { flex: 0 1 auto; margin-top: 8px; padding: 12px 14px; border-radius: 12px; background: rgba(3, 10, 20, 0.55); border: 1px solid var(--hair); overflow-y: auto; scrollbar-width: thin; max-width: none; }
 	.guide .sw { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 4px; }
 	.guide .over { display: flex; flex-direction: column; gap: 6px; }
 	.col { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 6px; overflow-y: auto; scrollbar-width: thin; }
