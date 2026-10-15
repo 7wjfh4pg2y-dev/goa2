@@ -51,7 +51,7 @@
 		: muFromData && record
 		? [['Strong against', record.strong, false], ['Struggles against', record.weak, false], ['Best with', record.partners, true]].map(([label, ms, w]) => ({ label, faces: (ms as Matchup[]).map((m) => ({ id: m.hero, tip: tipOf(m, w as boolean) })) }))
 		: [['Strong against', g.strong], ['Struggles against', g.weak], ['Best with', g.partners]].map(([label, ids]) => ({ label, faces: (ids as string[]).map((id) => ({ id, tip: heroById(id)?.name ?? id })) }))
-	).filter((r) => r.faces.length) as MuRow[];
+	) as MuRow[];
 
 	$: h = heroById(heroId) ?? HEROES_ALPHA[0];
 	$: face = splashFace(h.id);
@@ -95,6 +95,18 @@
 </script>
 
 <svelte:window on:keydown={key} />
+
+<!-- the guide: overview, then strengths / weaknesses side by side (on the painting; on phones in the strip) -->
+{#snippet guideBlock(cls: string)}
+	<div class="guide {cls}">
+		<h3>Overview</h3>
+		<div class="over">{#each g.overview.split(/\n+/).filter(Boolean) as para, k (k)}<p class:auto={g.auto.overview}>{para}</p>{/each}</div>
+		<div class="sw">
+			<div><h3>Strengths</h3><ul>{#each g.strengths as x, k (k)}<li class="good">{x}</li>{/each}</ul></div>
+			<div><h3>Weaknesses</h3><ul>{#each g.weaknesses as x, k (k)}<li class="bad">{x}</li>{/each}</ul></div>
+		</div>
+	</div>
+{/snippet}
 
 <!-- the hero's numbers: Local (our games) | Global (globalstats.ts) — the same switch as Matchups -->
 {#snippet globalBox(cls: string)}
@@ -158,8 +170,8 @@
 						{#each GUIDE_TAGS.filter((t) => g.tags[t]) as t (t)}<span class="tag" class:later={g.tags[t] === 2} title={g.tags[t] === 2 ? 'From round 2 or later' : 'From round 1'}>{t}</span>{/each}
 					</div>
 				{/if}
+				{@render guideBlock('onart')}
 			</div>
-			{@render globalBox('onart')}
 		{:else if op}
 			{#key op.id}
 				<OpeningBoard bind:this={board} {op} {step} {turned} uid="hp" inset={{ t: 56, b: 16, l: 12, r: 12 }} interactive />
@@ -220,32 +232,24 @@
 	<section class="strip">
 		{#if tab === 'overview'}
 			<div class="ov">
-				<div class="col over">
-					<h3>Overview</h3>
-					{#each g.overview.split(/\n+/).filter(Boolean) as para, k (k)}<p class:auto={g.auto.overview}>{para}</p>{/each}
-				</div>
-				<div class="col sw">
-					<h3>Strengths</h3>
-					<ul>{#each g.strengths as x, k (k)}<li class="good">{x}</li>{/each}</ul>
-					<h3>Weaknesses</h3>
-					<ul>{#each g.weaknesses as x, k (k)}<li class="bad">{x}</li>{/each}</ul>
-				</div>
+				<div class="col gph">{@render guideBlock('instrip')}</div>
 				<div class="col hand">
 					<h3>Starting hand</h3>
 					<div class="spread">
 						{#each hand as i (i)}<button class="hc" class:on={shownCard === i} on:click={() => (preview = i)} aria-label={cards[i]?.name}><Card heroId={h.id} card={cards[i]} /></button>{/each}
 					</div>
 				</div>
-				{#if gl}<div class="col gcol">{@render globalBox('instrip')}</div>{/if}
 				<div class="col mu">
 					<h3>Matchups
 						{#if gl}<span class="msw"><button class:on={src === 'local'} on:click={() => (srcPick = 'local')}>Local</button><button class:on={src === 'global'} on:click={() => (srcPick = 'global')}>Global</button></span>{/if}</h3>
-					{#if muRows.length}
+					<div class="mgrid">
 						{#each muRows as r (r.label)}
-							<div class="mrow"><small>{r.label}</small><span class="faces">{#each r.faces as f (f.id)}<span class="face" style={portraitCss(f.id)} title={f.tip}></span>{/each}</span></div>
+							<small>{r.label}</small>
+							{#each [0, 1, 2] as k (k)}{@const f = r.faces[k]}{#if f}<span class="face" style={portraitCss(f.id)} title={f.tip}></span>{:else}<span class="face empty"></span>{/if}{/each}
 						{/each}
-					{:else}<p class="muted">Not enough games yet.</p>{/if}
+					</div>
 				</div>
+				{#if gm && (gl || hasLocal)}<div class="col gcol">{@render globalBox('instrip')}</div>{/if}
 			</div>
 		{:else}
 			<div class="olist">
@@ -313,8 +317,6 @@
 
 	/* overview: the GLOBAL panel (on the painting; on phones a block in the strip) */
 	.gbox { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border-radius: 12px; border: 1px solid rgba(64, 196, 186, 0.45); background: rgba(3, 10, 20, 0.86); font-size: 13px; color: var(--ink-2); }
-	.gbox.onart { position: absolute; right: 18px; bottom: 18px; width: clamp(230px, 24vw, 280px); }
-	.col.gcol { display: none; }
 	.ghd { display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; margin-bottom: 2px; min-width: 0; }
 	.gsw { flex: none; padding: 1px 7px; border-radius: 4px; border: 1px solid rgba(64, 196, 186, 0.55); background: none; color: #8fdcd5; font: inherit; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; }
 	.gsw.on { color: #071c1b; background: #40c4ba; border-color: #40c4ba; }
@@ -382,7 +384,13 @@
 	.muted { color: var(--ink-3); }
 
 	/* the strip: the guide */
-	.ov { position: absolute; inset: 0; display: grid; grid-template-columns: minmax(200px, 1.2fr) minmax(150px, 0.8fr) auto minmax(180px, 1fr); gap: 18px; padding: 14px 18px; }
+	.ov { position: absolute; inset: 0; display: grid; grid-template-columns: auto minmax(250px, 1fr) minmax(240px, 300px); gap: 22px; padding: 14px 18px; }
+	.col.gph { display: none; }
+	/* the guide on the painting: fills what is left under the stats, scrolls if long */
+	.guide { display: flex; flex-direction: column; gap: 6px; min-height: 0; }
+	.guide.onart { flex: 1 1 auto; margin-top: 8px; padding: 12px 14px; border-radius: 12px; background: rgba(3, 10, 20, 0.55); border: 1px solid var(--hair); overflow-y: auto; scrollbar-width: thin; max-width: 560px; }
+	.guide .sw { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 4px; }
+	.guide .over { display: flex; flex-direction: column; gap: 6px; }
 	.col { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 6px; overflow-y: auto; scrollbar-width: thin; }
 	h3 { margin: 0; font-weight: 400; font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--brass-hi); }
 	.over p { margin: 0; font-size: 14px; line-height: 1.5; color: var(--ink); }
@@ -404,10 +412,10 @@
 	.msw { margin-left: auto; display: inline-flex; border: 1px solid var(--brass-line); border-radius: 6px; overflow: hidden; }
 	.msw button { padding: 2px 8px; border: 0; background: none; color: var(--ink-3); font: inherit; font-size: 10.5px; letter-spacing: 0.06em; cursor: pointer; }
 	.msw button.on { background: var(--brass-line); color: var(--brass-hi); }
-	.mrow { display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; }
-	.mrow small { font-size: 12px; color: var(--ink-3); }
-	.faces { display: flex; flex-wrap: wrap; gap: 6px; }
-	.face { width: 36px; height: 36px; border-radius: 50%; background-repeat: no-repeat; background-color: #0b101a; box-shadow: 0 0 0 2px var(--brass-line); }
+	.mgrid { display: grid; grid-template-columns: minmax(110px, 1fr) repeat(3, 42px); align-items: center; gap: 12px; margin-top: 8px; }
+	.mgrid small { font-size: 12px; color: var(--ink-3); white-space: nowrap; }
+	.face.empty { background: none; box-shadow: none; border: 1px dashed var(--hair); }
+	.face { width: 42px; height: 42px; border-radius: 50%; background-repeat: no-repeat; background-color: #0b101a; box-shadow: 0 0 0 2px var(--brass-line); }
 
 	/* the strip: every opening */
 	.olist { position: absolute; inset: 0; display: flex; gap: 12px; padding: 12px; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
@@ -439,7 +447,7 @@
 		.spread { --ch: 150px; overflow-x: auto; }
 		.olist { height: 240px; position: relative; --th: 160px; }
 		.id { left: 16px; top: 16px; width: calc(100% - 32px); }
-		.gbox.onart { display: none; }
-		.col.gcol { display: flex; }
+		.guide.onart { display: none; }
+		.col.gph { display: flex; }
 	}
 </style>
