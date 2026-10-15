@@ -120,14 +120,23 @@
 				{#if gl}<button class="gsw" class:on={src === 'global'} on:click={() => (srcPick = 'global')} title="Global stats ({GLOBAL_AS_OF}) — every recorded game, not just ours">Global</button>{/if}
 				{#if src === 'global' && gl?.tag}<span class="gt {gl.tag}">{GLOBAL_TAG[gl.tag]}</span>{/if}
 			</div>
-			<div class="gl2"><span>Win rate</span><b class:up={wr != null && wr >= 50} class:down={wr != null && wr < 50}>{wr == null ? '—' : `${wr.toFixed(1)}%`}</b></div>
-			<span class="gsplit" class:none={wr == null}><i style="--v:{(wr ?? 0) / 100}"></i></span>
-			<div class="gsm"><span>{wr == null ? 'No games yet' : `${Math.round(wr)}% wins`}</span><span>{wr == null ? '' : `${100 - Math.round(wr)}% losses`}</span></div>
-			<div class="gl2"><span>Hero impact</span><b class:up={(view.impact ?? 0) > 0} class:down={(view.impact ?? 0) < 0}>{view.impact == null ? '—' : `${view.impact > 0 ? '+' : ''}${view.impact}%`}</b></div>
-			<span class="gimp" title={view.ci ? `ATE ${view.ci[0]}% (95% CI ${view.ci[1]}% to ${view.ci[2]}%)` : 'How much better its players do on it than they do overall'}>{#if view.ci}<em style="--a:{(view.ci[1] + 50) / 100}; --b:{(view.ci[2] + 50) / 100}"></em>{/if}{#if view.impact != null}<i style="--v:{(view.impact + 50) / 100}"></i>{/if}</span>
-			<div class="gl2"><span>Victory types</span><small>% of wins</small></div>
-			<div class="gstk" class:none={!wonN} title="Wins by win type">{#each [0, 1, 2] as k (k)}{#if view.won[k]}<i class="w{k}" style="flex:{view.won[k]}">{wp[k]}%</i>{/if}{/each}</div>
-			<div class="gleg"><span><i class="w0"></i>♛ Throne</span><span><i class="w1"></i>⚑ Final push</span><span><i class="w2"></i>☠ Life</span></div>
+			<div class="gcells">
+				<div class="gcell">
+					<div class="gl2"><span>Win rate</span><b class:up={wr != null && wr >= 50} class:down={wr != null && wr < 50}>{wr == null ? '—' : `${wr.toFixed(1)}%`}</b></div>
+					<span class="gsplit" class:none={wr == null}><i style="--v:{(wr ?? 0) / 100}"></i></span>
+					<div class="gsm"><span>{wr == null ? 'No games yet' : `${Math.round(wr)}% wins`}</span><span>{wr == null ? '' : `${100 - Math.round(wr)}% losses`}</span></div>
+				</div>
+				<div class="gcell">
+					<div class="gl2"><span>Hero impact</span><b class:up={(view.impact ?? 0) > 0} class:down={(view.impact ?? 0) < 0}>{view.impact == null ? '—' : `${view.impact > 0 ? '+' : ''}${view.impact}%`}</b></div>
+					<span class="gimp" title={view.ci ? `ATE ${view.ci[0]}% (95% CI ${view.ci[1]}% to ${view.ci[2]}%)` : 'How much better its players do on it than they do overall'}>{#if view.ci}<em style="--a:{(view.ci[1] + 50) / 100}; --b:{(view.ci[2] + 50) / 100}"></em>{/if}{#if view.impact != null}<i style="--v:{(view.impact + 50) / 100}"></i>{/if}</span>
+					<div class="gsm"><span>−50</span><span>0</span><span>+50</span></div>
+				</div>
+				<div class="gcell wide">
+					<div class="gl2"><span>Victory types</span><small>% of wins</small></div>
+					<div class="gstk" class:none={!wonN} title="Wins by win type">{#each [0, 1, 2] as k (k)}{#if view.won[k]}<i class="w{k}" style="flex:{view.won[k]}">{wp[k]}%</i>{/if}{/each}</div>
+					<div class="gleg"><span><i class="w0"></i>♛ Throne</span><span><i class="w1"></i>⚑ Final push</span><span><i class="w2"></i>☠ Life</span></div>
+				</div>
+			</div>
 		</div>
 	{/if}
 {/snippet}
@@ -245,7 +254,7 @@
 					<div class="mgrid">
 						{#each muRows as r (r.label)}
 							<small>{r.label}</small>
-							{#each [0, 1, 2] as k (k)}{@const f = r.faces[k]}{#if f}<span class="face" style={portraitCss(f.id)} title={f.tip}></span>{:else}<span class="face empty"></span>{/if}{/each}
+							{#each [0, 1, 2] as k (k)}{@const f = r.faces[k]}{#if f}<span class="mface" style={portraitCss(f.id)} title={f.tip}></span>{:else}<span class="mface vac"></span>{/if}{/each}
 						{/each}
 					</div>
 				</div>
@@ -384,11 +393,43 @@
 	.muted { color: var(--ink-3); }
 
 	/* the strip: the guide */
-	.ov { position: absolute; inset: 0; display: grid; grid-template-columns: auto minmax(250px, 1fr) minmax(240px, 300px); gap: 22px; padding: 14px 18px; }
+	/* the strip: the hand takes whatever the other two leave; nothing in it scrolls */
+	.ov { position: absolute; inset: 0; display: grid; gap: 26px; padding: 14px 18px;
+		/* the hand's column is just as wide as five cards of the strip's full height (it shrinks when the window can't
+		   spare that); Matchups sits centred in what's left */
+		--hw: calc((clamp(220px, 30vh, 300px) - 58px) * 1192 / 1664 * 5 + 32px);
+		grid-template-columns: minmax(0, var(--hw)) minmax(330px, 1fr) auto; }
+	.col.mu { justify-self: center; width: min(100%, 400px); }
+	.col.hand, .col.mu, .col.gcol { overflow: hidden; }
+	.col.gcol { width: clamp(330px, 26vw, 420px); justify-content: center; }
+	.col.gcol .gbox { flex: 1; min-height: 0; justify-content: center; }
+	.gcells { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 18px; }
+	.gcell { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+	.gcell.wide { grid-column: 1 / -1; }
+	/* short windows: a tighter header on the painting so the guide below it fits without scrolling */
+	@media (max-height: 860px) and (min-width: 761px) {
+		.stage .id { top: 16px; bottom: 14px; gap: 7px; }
+		.id .logo { width: 46px; height: 46px; }
+		.id .name { font-size: clamp(34px, 7vh, 60px); }
+		.id .stats { gap: 4px 22px; margin-top: 2px; }
+		.id .guide.onart { margin-top: 4px; padding: 9px 12px; gap: 4px; }
+		.id .guide .over p, .id .guide .sw li { font-size: 13px; line-height: 1.4; }
+		.id .guide .sw ul { gap: 2px; }
+	}
+	/* narrower windows: the matchup labels go above their faces and the stats panel slims, so the hand keeps room */
+	@media (max-width: 1280px) and (min-width: 761px) {
+		.col.mu .mgrid { grid-template-columns: repeat(3, 34px); gap: 2px 8px; margin-top: 2px; }
+		.col.mu .mgrid small { grid-column: 1 / -1; padding: 4px 0 0; }
+		.col.mu .mgrid .mface { width: 34px; height: 34px; }
+		.ov .col.gcol { width: 300px; }
+		.strip .ov { gap: 18px; grid-template-columns: minmax(0, var(--hw)) minmax(190px, 1fr) auto; }
+		.col.mu h3 { flex-wrap: nowrap; letter-spacing: 0.1em; }
+		.col.mu .msw button { padding: 2px 6px; font-size: 9.5px; }
+	}
 	.col.gph { display: none; }
 	/* the guide on the painting: fills what is left under the stats, scrolls if long */
 	.guide { display: flex; flex-direction: column; gap: 6px; min-height: 0; }
-	.guide.onart { flex: 1 1 auto; margin-top: 8px; padding: 12px 14px; border-radius: 12px; background: rgba(3, 10, 20, 0.55); border: 1px solid var(--hair); overflow-y: auto; scrollbar-width: thin; max-width: 560px; }
+	.guide.onart { flex: 0 1 auto; margin-top: 8px; padding: 12px 14px; border-radius: 12px; background: rgba(3, 10, 20, 0.55); border: 1px solid var(--hair); overflow-y: auto; scrollbar-width: thin; max-width: 560px; }
 	.guide .sw { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 4px; }
 	.guide .over { display: flex; flex-direction: column; gap: 6px; }
 	.col { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 6px; overflow-y: auto; scrollbar-width: thin; }
@@ -403,7 +444,9 @@
 	.hand { overflow: visible; }
 	/* the hand's cards get a size from the strip's height (an aspect-ratio box sized by height alone has no width
 	   for the grid to measure, and the cards spilled over Matchups) */
-	.spread { --ch: min(196px, calc(clamp(220px, 30vh, 300px) - 62px)); display: flex; gap: 7px; }
+	/* the cards fill the column: as tall as the strip allows, unless five side by side would be too wide */
+	.col.hand { container-type: size; }
+	.spread { --ch: min(calc(100cqh - 30px), calc((100cqw - 32px) / 5 * 1664 / 1192)); display: flex; gap: 8px; }
 	.hc { position: relative; flex: none; height: var(--ch); width: calc(var(--ch) * 1192 / 1664); padding: 0; border: 0; border-radius: 8px; background: none; cursor: pointer; transition: transform 0.15s; }
 	.hc :global(.card) { position: absolute; inset: 0; }
 	.hc:hover { transform: translateY(-3px); }
@@ -412,10 +455,11 @@
 	.msw { margin-left: auto; display: inline-flex; border: 1px solid var(--brass-line); border-radius: 6px; overflow: hidden; }
 	.msw button { padding: 2px 8px; border: 0; background: none; color: var(--ink-3); font: inherit; font-size: 10.5px; letter-spacing: 0.06em; cursor: pointer; }
 	.msw button.on { background: var(--brass-line); color: var(--brass-hi); }
-	.mgrid { display: grid; grid-template-columns: minmax(110px, 1fr) repeat(3, 42px); align-items: center; gap: 12px; margin-top: 8px; }
+	.mgrid { display: grid; grid-template-columns: auto repeat(3, 46px); justify-content: start; align-items: center; gap: 12px 10px; margin-top: 10px; }
+	.mgrid small { padding-right: 8px; }
 	.mgrid small { font-size: 12px; color: var(--ink-3); white-space: nowrap; }
-	.face.empty { background: none; box-shadow: none; border: 1px dashed var(--hair); }
-	.face { width: 42px; height: 42px; border-radius: 50%; background-repeat: no-repeat; background-color: #0b101a; box-shadow: 0 0 0 2px var(--brass-line); }
+	.mface.vac { background: none; box-shadow: none; border: 1px dashed var(--hair); }
+	.mface { display: block; width: 46px; height: 46px; border-radius: 50%; background-repeat: no-repeat; background-color: #0b101a; box-shadow: 0 0 0 2px var(--brass-line); }
 
 	/* the strip: every opening */
 	.olist { position: absolute; inset: 0; display: flex; gap: 12px; padding: 12px; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
@@ -444,7 +488,9 @@
 		.side { grid-column: 1; grid-row: 3; min-height: 280px; }
 		.strip { grid-row: 4; min-height: 260px; }
 		.ov { position: relative; grid-template-columns: 1fr; }
+		.col.hand { container-type: normal; }
 		.spread { --ch: 150px; overflow-x: auto; }
+		.col.gcol { width: auto; }
 		.olist { height: 240px; position: relative; --th: 160px; }
 		.id { left: 16px; top: 16px; width: calc(100% - 32px); }
 		.guide.onart { display: none; }
