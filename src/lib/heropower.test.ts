@@ -23,35 +23,21 @@ function game(turns: (number | null)[] = [null, null, null, null], ult = false):
 const ctx = (s: MatchState): TurnCtx => ({ key: turnKey(s), round: s.round, turnIdx: s.turn - 1, order: turnOrder(s), at: actingIdx(s), tieBreaker: s.tieBreaker, revealed: true })
 const actingAs = (s: MatchState, pid: string) => ({ ...s, acting: { key: turnKey(s), idx: turnOrder(s).indexOf(pid) } }) as MatchState
 
-describe('Ignatia: Equilibrium (her silver) — both halves of her cards for the rest of the round', () => {
-	it('takes hold once her silver has acted, and lasts until the round ends — through the minion battle', () => {
-		// her silver in turn 1's slot: any card action now marks the round
-		let s = game([silver, red1, null, null])
-		const p = applyCardReq(s, { kind: 'coins', pid: 'I', delta: 1 })
-		expect(p.power?.I?.eq).toBe(1)
-		s = { ...s, ...p }
-		expect(equilibrium(s, 'I', 1)).toBe(true)
-		// the minion battle empties the slots; the mark stays for the round
-		s = { ...s, cards: { ...s.cards, I: { ...s.cards!.I, turns: [null, null, null, null], pending: null } } }
-		expect(equilibrium(s, 'I', 1)).toBe(true)
-		// a new round: over (the coin shows the real coin again)
-		expect(equilibrium({ ...s, round: 2 } as MatchState, 'I', 2)).toBe(false)
+describe('Ignatia: Equilibrium (her silver) — both halves of her cards while its effect is on', () => {
+	const fx = (idx: number, endRound = 1, endTurn = 4) => ({ id: 'e1', pid: 'I', hero: 'ignatia', idx, name: 'Equilibrium', dur: 'round' as const, round: 1, turn: 1, endRound, endTurn })
+	it('playing the silver alone does nothing: only switching its effect on (Activate effect) does', () => {
+		const s = game([silver, red1, null, null])
+		expect(equilibrium(s, 'I')).toBe(false)
+		expect(equilibrium({ ...s, effects: [fx(silver)] } as MatchState, 'I')).toBe(true)
+		// another of her cards' effects, or someone else's, doesn't count
+		expect(equilibrium({ ...s, effects: [fx(red1)] } as MatchState, 'I')).toBe(false)
+		expect(equilibrium({ ...s, effects: [{ ...fx(silver), pid: 'B' }] } as MatchState, 'I')).toBe(false)
 	})
-	it('this turn: only once revealed, and from the moment her card acts', () => {
-		let s = game([red1, silver, null, null])
-		expect(applyCardReq({ ...s, revealAt: null } as MatchState, { kind: 'coins', pid: 'I', delta: 1 }).power).toBeUndefined()
-		const order = turnOrder(s)
-		if (order[0] !== 'I') {
-			// B acts first: nothing yet
-			expect(applyCardReq(s, { kind: 'coins', pid: 'I', delta: 1 }).power).toBeUndefined()
-		}
-		s = actingAs(s, 'I')
-		expect(applyCardReq(s, { kind: 'coins', pid: 'I', delta: 1 }).power?.I?.eq).toBe(1)
-	})
-	it('no silver this round, nothing marked; heroes without a power never get one', () => {
-		expect(applyCardReq(game([red1, null, null, null]), { kind: 'coins', pid: 'I', delta: 1 }).power).toBeUndefined()
-		expect(hasPower('ignatia')).toBe(true)
-		expect(hasPower('arien')).toBe(false)
+	it('ends with the effect: a This round effect is gone once the round ends', () => {
+		const s = { ...game([silver, red1, null, null]), turn: 4, effects: [fx(silver)] } as MatchState
+		const next = { ...s, ...applyCardReq(s, { kind: 'advance', pid: 'I' }) } as MatchState
+		expect(next.round).toBe(2)
+		expect(equilibrium(next, 'I')).toBe(false)
 	})
 })
 

@@ -22,6 +22,7 @@
 	import CardBanner from '$lib/CardBanner.svelte';
 	import CardBack from '$lib/cards/CardBack.svelte';
 	import StatBubbles from './StatBubbles.svelte';
+	import { fitText } from './fitText';
 	import { heroCards, heroName } from '$lib/cards/deck';
 	import { portraitCss, heroLogo } from '$lib/heroes';
 	import { levelOf, levelCost, type PlayerCardState } from '$lib/cards/cardstate';
@@ -100,12 +101,15 @@
 			tryLines([ws.slice(0, i).join(' '), ws.slice(i).join(' ')]);
 			for (let j = i + 1; j < ws.length; j++) tryLines([ws.slice(0, i).join(' '), ws.slice(i, j).join(' '), ws.slice(j).join(' ')]);
 		}
+		// a single word too long for the ring even at small type: cut it with a hyphen (fitText's rules)
+		if (best.fs < 9) { const f = fitText(label, 70, 16, 0.62, hasSub ? 2 : 3, 9); return { lines: f.lines, fs: Math.min(f.fs, H / (f.lines.length * 1.05)) }; }
 		return best;
 	}
 	$: packed = packLabel(order.label, !!order.sub);
+	// the small line under it (a card's name): whole words first, a near-fit shrinks, a long word is hyphenated
+	$: subFit = fitText(order.sub ?? '', 66, 9, 0.68, 2, 6.5);
 	$: words = packed.lines;
 	$: labelFs = packed.fs;
-	$: subLong = (order.sub ?? '').length > 16;
 	// the kept-up banner row: as many a line as fit at a readable width (220+), centred, wrapping upward
 	$: fit = Math.max(1, Math.min(hand.length, Math.floor((rowMax + 8) / 228))); // the most a line can hold
 	$: perRow = Math.ceil(hand.length / Math.ceil(hand.length / fit)); // …spread evenly: 5 → 3 + 2, 4 → 2 + 2, 3 → 3
@@ -233,7 +237,7 @@
 					{#if order.kind === 'next' && !ringColor}<span class="lava" aria-hidden="true"><i class="lb"></i><i class="lo"></i><i class="lb2"></i><i class="lo2"></i></span>{/if}
 					<i></i>
 					<b style="font-size:{labelFs.toFixed(1)}px">{#each words as w, i (i)}{#if i}<br />{/if}{w}{/each}</b>
-					<span class="gsub">{#if order.sub}<small class:long={subLong}>{order.sub}</small>{/if}</span>
+					<span class="gsub">{#if order.sub}<small style="font-size:{subFit.fs.toFixed(1)}px">{#each subFit.lines as l, i (i)}{#if i}<br />{/if}{l}{/each}</small>{/if}</span>
 				</span>
 			</button>
 			{/if}
@@ -368,8 +372,7 @@
 		background: radial-gradient(circle at 50% 35%, #1d3d60, #0b1d33 70%, #06111f); box-shadow: inset 0 0 0 2px #0a1a2c, inset 0 6px 14px rgba(0, 0, 0, 0.6); color: var(--brass-hi); }
 	.gin b { font-weight: 400; line-height: 1.05; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; text-shadow: 0 1px 6px rgba(0, 0, 0, 0.7); }
 	.gsub { align-self: start; width: 66%; padding-top: 4px; }
-	.gin small { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; font-size: 9px; line-height: 1.2; letter-spacing: 0.05em; text-transform: uppercase; text-align: center; text-wrap: balance; overflow-wrap: anywhere; color: #bccbd9; }
-	.gin small.long { font-size: 8px; }
+	.gin small { display: block; white-space: nowrap; font-size: 9px; line-height: 1.2; letter-spacing: 0.05em; text-transform: uppercase; text-align: center; color: #bccbd9; }
 	/* silver: every action without a colour of its own (a card's colour or the team's takes over — see .tinted / .team) */
 	.gob.go .gin, .gob.quiet .gin { background: radial-gradient(circle at 50% 32%, #ffffff, #c9d1db 40%, #7c8796 80%, #55606e); color: #13202f; }
 	.gob.go .gin b, .gob.quiet .gin b { text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6); }

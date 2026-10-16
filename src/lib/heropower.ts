@@ -8,15 +8,13 @@ import type { PlayerCardState } from './cards/cardstate'
 export type Team = 'orange' | 'blue'
 /** one player's power state; each hero uses its own fields */
 export type PowerState = {
-	/** Ignatia: the round her Equilibrium (silver) took hold — it lasts the rest of that round */
-	eq?: number
 	/** Ignatia: the turn (round-turn key) she last flipped the tie-breaker with Chaos Incarnate (once a turn) */
 	flip?: string
 }
 export type PowerReq = { kind: 'power'; pid: string; op: 'ignatiaFlip' }
 /** what the engine knows about the turn in play */
 export type TurnCtx = { key: string; round: number; turnIdx: number; order: string[]; at: number; tieBreaker: Team; revealed: boolean }
-type S = { cards?: Record<string, PlayerCardState>; power?: Record<string, PowerState> }
+type S = { cards?: Record<string, PlayerCardState>; power?: Record<string, PowerState>; effects?: { pid: string; hero: string; idx: number }[] }
 
 /** heroes with their own dash button */
 export const POWER_HEROES = ['ignatia']
@@ -24,18 +22,13 @@ export const hasPower = (hero: string | undefined | null) => !!hero && POWER_HER
 
 // ── Ignatia ──
 const silverOf = (hero: string) => heroCards(hero).findIndex((c) => c.color === 'SILVER' && !c.handicapped)
-/** her silver has been played and has acted this round: an earlier turn's slot, or this turn's card (still
- *  `pending` until the turn ends) once the cards are revealed and its place in the order has come */
-export function equilibriumNow(cs: PlayerCardState | undefined, pid: string, ctx: TurnCtx): boolean {
-	if (!cs || cs.hero !== 'ignatia') return false
-	const silver = silverOf(cs.hero)
-	if (silver < 0) return false
-	if (cs.turns.some((c, t) => c === silver && t < ctx.turnIdx)) return true
-	const k = ctx.order.indexOf(pid)
-	return cs.pending === silver && ctx.revealed && k >= 0 && k <= ctx.at
+/** both halves of her cards apply: her silver's effect (Equilibrium) has been switched on — Activate effect on the
+ *  played card, confirmed — and hasn't run out yet (playing the silver alone doesn't count: she may hold her action).
+ *  It ends with the effect itself (This round = at the round's end). */
+export const equilibrium = (s: S, pid: string) => {
+	const silver = silverOf('ignatia')
+	return silver >= 0 && (s.effects ?? []).some((e) => e.pid === pid && e.hero === 'ignatia' && e.idx === silver)
 }
-/** both halves of her cards apply: Equilibrium is on this round */
-export const equilibrium = (s: S, pid: string, round: number) => s.power?.[pid]?.eq === round
 /** Chaos Incarnate: on her own acting turn, with the ultimate, once a turn */
 export function canFlip(s: S, pid: string, ctx: TurnCtx): boolean {
 	const cs = s.cards?.[pid]
@@ -58,15 +51,7 @@ export function applyPower(s: S & { tieTurn?: { key: string; coin: Team } | null
 	return {}
 }
 
-/** after any change: mark what took hold (Ignatia's Equilibrium this round). Returns the power map to write, or null */
-export function syncPowers(s: S, ctx: TurnCtx): Record<string, PowerState> | null {
-	let out: Record<string, PowerState> | null = null
-	for (const pid in s.cards ?? {}) {
-		const cs = s.cards![pid]
-		if (cs.hero === 'ignatia' && s.power?.[pid]?.eq !== ctx.round && equilibriumNow(cs, pid, ctx)) {
-			out ??= { ...s.power }
-			out[pid] = { ...out[pid], eq: ctx.round }
-		}
-	}
-	return out
+/** after any change: mark what took hold (no 4★ power needs it yet). Returns the power map to write, or null */
+export function syncPowers(_s: S, _ctx: TurnCtx): Record<string, PowerState> | null {
+	return null
 }

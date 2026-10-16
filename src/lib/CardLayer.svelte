@@ -9,7 +9,7 @@
 	import type { Readable } from 'svelte/store';
 	import type { MatchSession, MatchState, Player } from '$lib/match';
 	import { teamForSeat, colorHex, battlePatch, levelPatch, canRespawn, turnPlan, claimable, actingIdx, actorOf, turnOrder, turnKey as keyOfTurn } from '$lib/match';
-	import { hasPower, equilibrium, equilibriumNow, canFlip, flipUsed, type TurnCtx } from '$lib/heropower';
+	import { hasPower, equilibrium, canFlip, flipUsed, type TurnCtx } from '$lib/heropower';
 	import IgnatiaCoin from '$lib/hud2/IgnatiaCoin.svelte';
 	import { battleResult, battleText, laneNotes } from '$lib/battle';
 	import Card from '$lib/cards/Card.svelte';
@@ -215,8 +215,8 @@
 	// ── a 4★ hero's own dash button (heropower.ts): private to you, what it changes is public ──
 	$: myPower = mine && hasPower(mine.hero) ? mine.hero : null;
 	$: pctx = { key: keyOfTurn($ms), round: $ms.round, turnIdx: $ms.turn - 1, order: turnOrder($ms), at: actingIdx($ms), tieBreaker: $ms.tieBreaker, revealed } as TurnCtx;
-	// (live as her silver acts; the shared mark keeps it for the rest of the round)
-	$: igSplit = myPower === 'ignatia' && (equilibrium($ms, clientId, $ms.round) || equilibriumNow(mine ?? undefined, clientId, pctx));
+	// Equilibrium = her silver's effect switched on (Activate effect, confirmed); it ends with the effect
+	$: igSplit = myPower === 'ignatia' && equilibrium($ms, clientId);
 	$: igReady = myPower === 'ignatia' && canFlip($ms, clientId, pctx);
 	$: igUsed = myPower === 'ignatia' && flipUsed($ms, clientId, pctx);
 	// a power loaded onto the action ring, which confirms it (× drops it)
