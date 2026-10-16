@@ -7,6 +7,8 @@
 		card?: boolean; alt?: { label: string; run: () => void }; tint?: boolean;
 		/** something is loaded on the ring (an armed card, a board action): the small × unloads it */
 		cancel?: () => void;
+		/** a shorter word for the phone pill (it shares one line with the ×) */
+		short?: string;
 		split?: { left: { label: string; run: () => void }; right: { label: string; run: () => void } } };
 </script>
 

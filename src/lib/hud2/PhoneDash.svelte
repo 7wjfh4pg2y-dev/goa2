@@ -113,12 +113,12 @@
 		{:else if order.alt}
 			<!-- a second choice rides on the same pill: two thirds the main one (e.g. Waiting · hero), a third the other (Skip) -->
 			<span class="act joined {order.kind}">
-				<button class="m" disabled={!order.run} on:click={() => fire(order.run)}><b>{order.label}</b>{#if order.sub && !order.card}<small>{order.sub}</small>{/if}</button>
+				<button class="m" disabled={!order.run} on:click={() => fire(order.run)}><b>{order.short ?? order.label}</b>{#if order.sub && !order.card}<small>{order.sub}</small>{/if}</button>
 				<button class="o" on:click={() => fire(order.alt?.run)}>{order.alt.label}</button>
 			</span>
 		{:else}
-			<button class="act {order.kind}" class:tinted={!!ringColor && (order.kind !== 'bad' || !!order.tint)} style={ringColor ? `--rc:${ringColor}` : ''} class:pulse={order.pulse} disabled={!order.run} on:click={() => fire(order.run)}>
-				<b>{order.label}</b>{#if order.sub && !order.card}<small>{order.sub}</small>{/if}
+			<button class="act {order.kind}" class:tinted={!!ringColor && (order.kind !== 'bad' || !!order.tint)} style={ringColor ? `--rc:${ringColor}` : ''} class:pulse={order.pulse} class:snug={!!order.cancel && (order.short ?? order.label).length > 5} disabled={!order.run} on:click={() => fire(order.run)}>
+				<b>{order.short ?? order.label}</b>{#if order.sub && !order.card}<small>{order.sub}</small>{/if}
 			</button>
 		{/if}
 		{#if order.cancel}<button class="px" on:click={order.cancel} aria-label="Cancel"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17" /></svg></button>{/if}
@@ -181,6 +181,9 @@
 	/* the ONE action: brass when it's yours to press */
 	.act { position: relative; flex: 1; min-width: 0; height: 34px; border-radius: 999px; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 0 12px; overflow: hidden;
 		color: #8a9fb3; background: rgba(0, 0, 0, 0.35); border: 1px solid var(--line); }
+	/* a longer word beside the ×: a little smaller so it fits whole */
+	.act.snug { padding: 0 7px; }
+	.act.snug b { font-size: 12.5px; letter-spacing: 0.02em; }
 	.act b { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 400; font-size: 15px; letter-spacing: 0.06em; text-transform: uppercase; }
 	.act small { min-width: 0; font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0.85; }
 	.act.lvl { color: #fff; border-color: rgba(255, 255, 255, 0.5); text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7); background: linear-gradient(100deg, #c2412f, #8a3fb8 30%, #2f6fd0 55%, #2f9e72 80%, #b8902f); }

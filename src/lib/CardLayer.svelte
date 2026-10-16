@@ -9,7 +9,8 @@
 	import type { Readable } from 'svelte/store';
 	import type { MatchSession, MatchState, Player } from '$lib/match';
 	import { teamForSeat, colorHex, battlePatch, levelPatch, canRespawn, turnPlan, claimable, actingIdx, actorOf, turnOrder, teamOf, turnKey as keyOfTurn } from '$lib/match';
-	import { hasPower, equilibrium, canFlip, flipUsed, runesOf, secondRune, canInscribe, canSecond, RUNES, takaSwapKind, mateOffer, type Rune, type TurnCtx } from '$lib/heropower';
+	import { hasPower, equilibrium, canFlip, flipUsed, runesOf, secondRune, canInscribe, canSecond, RUNES, takaSwapKind, mateOffer, canReverse, nextTurnKey, reversedTurn, warpOffer, warpSlots, capsuleOffer, RE_REVERSE, RE_TEMPORAL, type Rune, type TurnCtx } from '$lib/heropower';
+	import EmmittClock from '$lib/hud2/EmmittClock.svelte';
 	import TakaGold from '$lib/hud2/TakaGold.svelte';
 	import IgnatiaCoin from '$lib/hud2/IgnatiaCoin.svelte';
 	import SnorriRunes from '$lib/hud2/SnorriRunes.svelte';
@@ -236,6 +237,33 @@
 	}
 	$: runeMap = runeSlots($ms, pctx, viewCards);
 	$: runeNow = Object.fromEntries(Object.entries(runeMap).map(([pid, r]) => [pid, r?.at[turnIdx] ?? null])) as Record<string, Rune | null>;
+	// (out to GameView: Emmitt's Rewind / Warp pills read the turn)
+	export let turnCtx: TurnCtx | null = null;
+	$: turnCtx = pctx;
+	// Emmitt: his gold acts → Reverse time on the ring (× = not this time); his clock: green while time is about to turn
+	// (his gold acting, or reversed for next turn), magenta while it runs backwards (the reversed turn, or a turn he bent)
+	$: emAtKey = `${pctx.key}:${pctx.at}`;
+	let emDeclined = '';
+	$: emAsk = myPower === 'emmitt' && canReverse($ms, clientId, pctx) && emDeclined !== emAtKey;
+	$: emPow = myPower === 'emmitt' ? $ms.power?.[clientId] : undefined;
+	$: emNext = nextTurnKey(pctx);
+	$: emMode = (emPow?.rev === pctx.key || emPow?.shen === pctx.key ? 'rev' : emAsk || (!!emNext && emPow?.rev === emNext) ? 'green' : 'idle') as 'idle' | 'green' | 'rev';
+	$: turnReversed = reversedTurn($ms, pctx.key);
+	// Time Capsule / Future Proof (his card acting): you, Emmitt or his friend, may take back this turn's discards
+	$: capBack = mine ? capsuleOffer($ms, clientId, pctx) : [];
+	let capDeclined = '';
+	$: capAsk = capBack.length > 0 && capDeclined !== emAtKey;
+	// Time Warp names you: pick one of your resolved turn slots to swap your card in play for
+	$: warpOff = mine ? warpOffer($ms, clientId, pctx) : null;
+	let warpPick: number | null = null;
+	$: if (!warpOff) warpPick = null;
+	// (plain functions, so the ring's reactive block never assigns these itself)
+	function declineEm() { emDeclined = emAtKey; }
+	function declineCap() { capDeclined = emAtKey; }
+	function dropWarpPick() { warpPick = null; }
+	function sendWarp(t: number) { session.cardAction({ kind: 'power', pid: clientId, op: 'warpSwap', idx: t }); warpPick = null; }
+	// Temporal Punch / Slam / Judgment coming at you: defend with Initiative
+	$: temporal = !!myAttack && RE_TEMPORAL.test(heroCards(cards[myAttack.by]?.hero ?? '')[cards[myAttack.by]?.pending ?? -1]?.description ?? '');
 	// a power loaded onto the action ring, which confirms it (× drops it)
 	// Takahide: a gold swap open now (his gold or Bushido acting); his teammates: a swap offered by his red card
 	$: tkKind = myPower === 'takahide' ? takaSwapKind($ms, clientId, pctx) : null;
@@ -481,6 +509,8 @@
 	// click a turn slot: a face-up card previews; anything else falls through to
 	// the container (a player row / your dash opens the full board)
 	function peekSlot(e: Event, cs: PlayerCardState, t: number) {
+		// Time Warp: a tap on one of your resolved slots picks it (the ring confirms the swap)
+		if (warpOff && mine && pidOf(cs) === clientId && warpSlots(mine, turnIdx).includes(t)) { e.stopPropagation(); warpPick = t; return; }
 		// your own face-down card can be read any time (no need to take it back); others' stay hidden
 		const own = pidOf(cs) === clientId && t === turnIdx && !revealed;
 		const i = cs.turns[t] ?? (t === turnIdx && (revealed || own) ? cs.pending : null);
@@ -535,7 +565,8 @@
 	$: myTurnCard = mine && revealed ? slotIdx(mine, turnIdx) : null;
 	$: myTurnDur = mine && myTurnCard != null ? detectDuration(heroCards(mine.hero)[myTurnCard]?.description) : null;
 	$: fxKey = `${$ms.round}-${$ms.turn}-${myTurnCard}`;
-	$: fxAsking = !!mine && myTurnCard != null && !!myTurnDur && !fxFor(clientId, myTurnCard) && !fxDecided.has(fxKey);
+	$: fxAsking = !!mine && myTurnCard != null && !!myTurnDur && !fxFor(clientId, myTurnCard) && !fxDecided.has(fxKey)
+		&& !(mine.hero === 'emmitt' && RE_REVERSE.test(heroCards('emmitt')[myTurnCard]?.description ?? '')); // his gold: the ring's Reverse time instead
 	$: if (!fxAsking) fxStage = 'ask';
 	function fxNo() { fxDecided = new Set(fxDecided).add(fxKey); fxStage = 'ask'; }
 	function fxPickDur(d: EffectDur) {
@@ -896,7 +927,7 @@
 	$: orderTop = cTop ? 62 : 100;
 	$: colTop = orderTop + (cOrder ? 30 : 60) + (cOrder ? 26 : 34);
 	// the Chronicle in the corner: beside the dash when there's room, else just above its left end
-	$: DASH_W = 900 + (myPower === 'takahide' ? 84 : myPower === 'snorri' ? 100 : myPower === 'ignatia' ? 92 : myPower ? 60 : 0); // the dash's width (design px) without the ultimate's compartment (+ a 4★ hero's button)
+	$: DASH_W = 900 + (myPower === 'takahide' ? 84 : myPower === 'snorri' ? 100 : myPower === 'emmitt' ? 104 : myPower === 'ignatia' ? 92 : myPower ? 60 : 0); // the dash's width (design px) without the ultimate's compartment (+ a 4★ hero's button)
 	$: myUltOpen = !!mine && myUlt >= 0 && (mine.ultimate || ultReady);
 	$: logRoom = canvasW / 2 - DASH_W / 2 - 14 - (myUltOpen ? 96 : 0) - 36;
 	$: logBeside = logRoom >= 220;
@@ -964,6 +995,11 @@
 			return { label: 'Nudge', sub: who, kind: 'go', pulse: true, run: () => { session.nudge(a.pid); drop(); }, cancel: drop };
 		}
 		if (powerArm) { const a = powerArm; return { label: a.label, sub: a.sub, kind: 'go', pulse: true, card: a.op === 'takaSwap' || a.op === 'mateSwap', run: () => { session.cardAction({ kind: 'power', pid: clientId, op: a.op, order: a.order, target: a.target, idx: a.idx, src: a.src }); powerArm = null; if (a.target) { runeFor = null; goldFor = null; } }, cancel: () => { powerArm = null; if (a.target) { runeFor = null; goldFor = null; } } }; }
+		// Time Warp names you: pick a resolved slot, then the ring swaps it in
+		if (warpOff && mine) {
+			if (warpPick != null) { const t = warpPick, i = mine.turns[t]; return { label: 'Swap in', sub: i != null ? heroCards(mine.hero)[i]?.name : '', card: true, kind: 'go', pulse: true, run: () => sendWarp(t), cancel: dropWarpPick }; }
+			return { label: 'Time Warp', sub: 'Pick a resolved card', kind: 'wait' };
+		}
 		// a card chosen in its preview to discard (any time — a defence, or an effect): the ring asks once more
 		if (armed != null && armedKind === 'discard' && mine) { const i = armed; return { label: 'Discard', sub: heroCards(mine.hero)[i]?.name, card: true, kind: 'bad', pulse: true, run: () => { defend(i); armed = null; }, cancel: () => (armed = null) }; }
 		if (iCanRespawn) return { label: 'Respawn', kind: 'team', pulse: true, run: onRespawn };
@@ -971,7 +1007,7 @@
 		// attacked: Defeated until you discard a card (your defence); then the ring splits — Defended | Defeated
 		if (myAttack) return myAttack.discarded
 			? { label: 'Defended', kind: 'team', split: { left: { label: 'Defended', run: () => answerAttack('defended') }, right: { label: 'Defeated', run: () => answerAttack('defeated') } } }
-			: { label: 'Defeated', kind: 'bad', run: () => answerAttack('defeated') };
+			: { label: 'Defeated', sub: temporal ? 'Defend with Initiative' : undefined, kind: 'bad', run: () => answerAttack('defeated') };
 		// forced to discard: pick a card (it arms Discard, above); "…or die" can also take the defeat
 		if (myForced) return myForced.die
 			? { label: 'Defeated', sub: 'or discard', kind: 'bad', run: () => forceAnswer(clientId, 'defeated') }
@@ -988,6 +1024,10 @@
 				: { label: 'All done', sub: 'Next round?', kind: 'go', run: () => askNext(true) };
 		}
 		if (revealed) {
+			// Emmitt's gold: Reverse time? (× = not this time)
+			if (emAsk && actor === clientId) return { label: 'Reverse time', short: 'Reverse', sub: 'Next turn', card: true /* the phone pill keeps just the label */, kind: 'go', tint: true, pulse: true, run: () => session.cardAction({ kind: 'power', pid: clientId, op: 'emReverse' }), cancel: declineEm };
+			// Time Capsule / Future Proof: take back this turn's discards? (× = no)
+			if (capAsk) { const n = capBack.length; return { label: 'Retrieve', sub: `${n} discarded card${n === 1 ? '' : 's'}`, kind: 'go', pulse: true, run: () => session.cardAction({ kind: 'power', pid: clientId, op: 'capsule' }), cancel: declineCap }; }
 			// your card names a lingering effect: on your turn the ring asks first (× = no effect), then End turn
 			if (fxAsking && actor === clientId && mine && myTurnCard != null) { const c = myTurnCard; const hero = mine.hero; return { label: 'Effect?', sub: heroCards(hero)[c]?.name, card: true, kind: 'go', tint: true, run: () => (examine = { hid: hero, idx: c, pid: clientId }), cancel: fxNo }; }
 			if (actor === clientId) return { label: 'End turn', kind: 'go', tint: true, pulse: true, run: endAct };
@@ -1020,6 +1060,8 @@
 		<IgnatiaCoin {size} phone={mobile} face={$ms.tieBreaker} split={igSplit} ult={!!mine?.ultimate} ready={igReady} used={igUsed} flames={$boardPrefs.dash} art={(t) => icon(`tiebreaker_${t}`)} onPress={armIgnatiaFlip} />
 	{:else if myPower === 'takahide' && mine}
 		<TakaGold {size} cs={mine} kind={tkKind} {turnIdx} fx={$boardPrefs.dash} phone={mobile} onPick={tkPick} />
+	{:else if myPower === 'emmitt'}
+		<EmmittClock {size} phone={mobile} mode={emMode} fx={$boardPrefs.dash} />
 	{:else if myPower === 'snorri'}
 		<SnorriRunes {size} runes={snRunes} {turnIdx} second={snSecond} ult={!!mine?.ultimate} canEdit={snEdit} canSecond={snCan2} fx={$boardPrefs.dash} phone={mobile} onDraft={snDraft} onSecond={snPickSecond} />
 	{/if}
@@ -1251,7 +1293,7 @@
 		<div class="h2helm">
 			<div class="h2order" style="top:{orderTop}px">
 				<HudOrder planning={!revealed || levelPhase} title={levelPhase ? 'Levelling' : 'Planning'} doneWord={levelPhase ? 'done' : 'ready'} countdown={countdownActive ? countdownLabel : ''} dots={h2dots} order={h2order} bonus={itemBonus} tieArt={icon(`tiebreaker_${$ms.tieBreaker}`)}
-					compact={cOrder} runeAt={runeNow} me={clientId} small={h2order.length > 4} acting={actAt} canPoint={iAmHost} onPoint={pickOrder} onNudge={armNudge} onRead={(pid, hid, idx) => (examine = { hid, idx, pid })} />
+					compact={cOrder} runeAt={runeNow} reversed={turnReversed} me={clientId} small={h2order.length > 4} acting={actAt} canPoint={iAmHost} onPoint={pickOrder} onNudge={armNudge} onRead={(pid, hid, idx) => (examine = { hid, idx, pid })} />
 			</div>
 			{#if platesTop}
 				<!-- nameplates either side of the compact top bar: the enemy on the left, your team on the right (you last) -->

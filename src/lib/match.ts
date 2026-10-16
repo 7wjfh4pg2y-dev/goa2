@@ -13,7 +13,7 @@
 // broken by `updatedAt`) wins. For a handful of players nudging a shared
 // tracker this is robust and easy to reason about.
 
-import { applyPower, syncPowers, takaHit, hasPower, runeLine, RUNE_NAME, type PowerReq, type PowerState, type TurnCtx } from './heropower'
+import { applyPower, syncPowers, takaHit, hasPower, runeLine, RUNE_NAME, reversedTurn, trackDiscards, type PowerReq, type PowerState, type TurnCtx } from './heropower'
 import { teamName, aMinion } from './teams'
 import { hexCube, cubeDist } from './zones'
 import { tokenExpiry, sweepTokens, statusFrom, isTurret } from './tokens'
@@ -119,10 +119,12 @@ export const turnKey = (s: Pick<MatchState, 'round' | 'turn'>) => `${s.round}-${
 export function turnPlan(s: MatchState): { order: string[]; flips: number[]; choice: string[][] } {
 	const cards = s.cards ?? {}
 	const key = turnKey(s)
+	const rev = reversedTurn(s, key)
 	const items = Object.keys(cards)
 		.filter((pid) => { const i = cards[pid].pending; return i != null && i >= 0 })
 		.map((pid) => ({ pid, ini: cardInitiative(s, pid) ?? 0, team: teamOf(s, pid) }))
-		.sort((a, b) => b.ini - a.ini || (a.pid < b.pid ? -1 : 1))
+		// Emmitt's Reverse Time / Tear in Time: this turn lower initiative acts first (ties as normal)
+		.sort((a, b) => (rev ? a.ini - b.ini : b.ini - a.ini) || (a.pid < b.pid ? -1 : 1))
 	let coin: Team = s.tieTurn?.key === key ? s.tieTurn.coin : s.tieBreaker
 	const done = s.acting?.key === key ? (s.acting.done ?? []) : []
 	const claims = s.tieClaims?.key === key ? s.tieClaims.order : []
@@ -178,7 +180,20 @@ export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 	const hit = takaHit(s, next, req, powerCtx(s))
 	const marked = hit ? { ...patch, power: hit } : patch
 	const sync = syncPowers({ ...next, ...marked }, powerCtx(next))
-	return sync ? { ...marked, ...sync } : marked
+	const out = sync ? { ...marked, ...sync } : marked
+	// Emmitt: where everyone stood as the turn began, and what was discarded this turn
+	if (Object.values(next.cards ?? {}).some((c) => c.hero === 'emmitt')) {
+		const fin = { ...s, ...out } as MatchState
+		const key = turnKey(fin)
+		if (!fin.turnStart || fin.turnStart.key !== key) {
+			const pos: Record<string, string> = {}
+			for (const p of Object.values(fin.pieces ?? {})) if (p.kind === 'hero' || p.kind === 'minion') pos[p.id] = p.hex
+			out.turnStart = { key, pos }
+		}
+		const disc = trackDiscards(s, fin, key)
+		if (disc !== undefined) out.turnDisc = disc
+	}
+	return out
 }
 function applyCardReqBase(s: MatchState, req: Exclude<CardReq, PowerReq>): Partial<MatchState> {
 	const cards = s.cards ?? {}
@@ -395,6 +410,10 @@ export interface MatchState {
 	tieBreaker: Team // team whose symbol is currently showing on the coin
 	/** 4★ hero powers, per player (heropower.ts) */
 	power?: Record<string, PowerState>
+	/** where every hero / minion stood as this turn began (Emmitt's Back to the Future), and the cards each player
+	 *  discarded this turn (his Time Capsule) — kept only while an Emmitt plays */
+	turnStart?: { key: string; pos: Record<string, string> } | null
+	turnDisc?: { key: string; by: Record<string, number[]> } | null
 	/** a GM's test room: 4★ heroes still in the lab can be drafted, and the game is never uploaded to the Hall */
 	draftLab?: boolean
 	waves: number // SHARED wave counters remaining; game ends when it hits 0
@@ -1571,6 +1590,10 @@ export function joinMatch(
 			const before = local.cards?.[req.pid], hero = before?.hero ?? ''
 			note(req.pid, `swapped ${heroCards(hero)[before?.pending ?? -1]?.name ?? 'their card'} for ${heroCards(hero)[req.idx]?.name ?? 'another'} (Takahide)`)
 		}
+		if (req.kind === 'power' && req.op === 'emReverse' && patch.power) note(req.pid, req.target && req.target !== req.pid ? (req.on === false ? `cancelled ${nameOf(req.target)}'s time reversal (host)` : `reversed time for next turn (host, for ${nameOf(req.target)})`) : 'reverses time — next turn, lower initiative acts first')
+		if (req.kind === 'power' && req.op === 'emWarp' && patch.power && req.target) note(req.pid, `warps time: ${nameOf(req.target)} swaps their card in play for a resolved one`)
+		if (req.kind === 'power' && req.op === 'warpSwap' && patch.cards && req.idx != null) { const b = local.cards?.[req.pid], h = b?.hero ?? ''; note(req.pid, `swapped ${heroCards(h)[b?.pending ?? -1]?.name ?? 'their card'} for ${heroCards(h)[b?.turns[req.idx] ?? -1]?.name ?? 'a resolved card'} (Time Warp)`) }
+		if (req.kind === 'power' && req.op === 'capsule' && patch.cards) { const n = (local.cards?.[req.pid]?.discard.length ?? 0) - (patch.cards[req.pid]?.discard.length ?? 0); note(req.pid, `took back ${n} discarded card${n === 1 ? '' : 's'} (Time Capsule)`) }
 		if (req.kind === 'power' && req.op === 'ignatiaFlip' && patch.tieBreaker) note(req.pid, `flips the tie-breaker coin to the ${teamName(patch.tieBreaker)} (Chaos Incarnate)`)
 		if (req.kind === 'removeHero' && patch.defeated) note(req.pid, 'took their hero off the board — back with their next card')
 		if (req.kind === 'clearAround' && patch.pieces) { const n = Object.keys(local.pieces ?? {}).length - Object.keys(patch.pieces).length; note(req.pid, `cleared ${n} token${n === 1 ? '' : 's'} next to them`) }

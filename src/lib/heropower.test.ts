@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { applyCardReq, turnOrder, turnKey, actingIdx, actorOf, type MatchState, type Piece } from './match'
 import { newPlayerCardState } from './cards/cardstate'
 import { heroCards } from './cards/deck'
-import { equilibrium, canFlip, flipUsed, hasPower, canInscribe, activeRune, runesOf, secondRune, heldGolds, deckGolds, takaSwapKind, mateOffer, type Rune, type TurnCtx } from './heropower'
+import { equilibrium, canFlip, flipUsed, hasPower, canInscribe, activeRune, runesOf, secondRune, heldGolds, deckGolds, takaSwapKind, mateOffer, canReverse, warpOffer, capsuleOffer, type Rune, type TurnCtx } from './heropower'
 import { goldsOf, isHidden, type PlayerCardState } from './cards/cardstate'
 import { draftable, isLabHero, FOUR_STAR_LAB, FOUR_STAR_LIVE, HEROES } from './heroes'
 import { isFullGame, type Journal } from './recorder'
@@ -284,5 +284,75 @@ describe('Takahide: gold card swaps, Bushido face down, teammates swap, Ready fo
 		const q = applyCardReq(off, { kind: 'coins', pid: 'T', delta: 1 })
 		expect(q.cards!.T.hand).toContain(silver)
 		expect(heldGolds(q.cards!.T)).toHaveLength(1)
+	})
+})
+
+describe('Emmitt: reversed turns, Time Warp, Time Capsule', () => {
+	const EC = heroCards('emmitt'), AC = heroCards('arien')
+	const named = (n: string) => EC.findIndex((c) => c.name === n)
+	const reverse = named('Reverse Time'), warp = named('Time Warp'), capsule = named('Time Capsule')
+	const tctx = (s: MatchState): TurnCtx => ({ ...ctx(s), teams: { E: 'orange', M: 'orange', B: 'blue' } })
+	const ini = (i: number) => AC[i].initiative ?? 0
+	// two Arien cards with different initiatives for M and B
+	const hiA = AC.reduce((a, _, i) => (!AC[i].handicapped && (AC[i].initiative ?? 0) > (AC[a].initiative ?? 0) ? i : a), 0)
+	const loA = AC.reduce((a, _, i) => (!AC[i].handicapped && AC[i].color !== 'PURPLE' && (AC[i].initiative ?? 99) < (AC[a].initiative ?? 99) ? i : a), 0)
+	function eg(ePending: number, mPending = hiA, bPending = loA, turn = 2, extra: Partial<MatchState> = {}): MatchState {
+		const e = { ...newPlayerCardState('emmitt'), pending: ePending }
+		const m = { ...newPlayerCardState('arien'), pending: mPending }
+		const b = { ...newPlayerCardState('arien'), pending: bPending }
+		return {
+			round: 1, turn, seats: 4, life: { orange: 6, blue: 6 }, tieBreaker: 'orange', revealAt: 0, host: 'H',
+			pieces: { E: { id: 'E', hex: '1_1', team: 'orange', kind: 'hero', hero: 'emmitt' }, M: { id: 'M', hex: '1_2', team: 'orange', kind: 'hero', hero: 'arien' }, B: { id: 'B', hex: '5_5', team: 'blue', kind: 'hero', hero: 'arien' } },
+			cards: { E: e, M: m, B: b }, ...extra
+		} as unknown as MatchState
+	}
+	const pw = (s: MatchState, pid: string, op: string, more: Record<string, unknown> = {}) => applyCardReq(s, { kind: 'power', pid, op, ...more } as never)
+	it('his gold acting: he may reverse the NEXT turn — then lower initiative acts first', () => {
+		const s = actingAs(eg(reverse), 'E')
+		expect(canReverse(s, 'E', tctx(s))).toBe(true)
+		const p = pw(s, 'E', 'emReverse')
+		expect(p.power?.E?.rev).toBe('1-3')
+		// next turn: M (high) and B (low) — B goes first now
+		const t3 = { ...eg(-1, hiA, loA, 3), power: p.power } as MatchState
+		expect(ini(hiA)).toBeGreaterThan(ini(loA))
+		expect(turnOrder(t3)).toEqual(['B', 'M'])
+		// any other turn: high first as ever
+		expect(turnOrder({ ...t3, turn: 4 } as MatchState)).toEqual(['M', 'B'])
+		// not on the 4th turn (a "next turn" effect ends with the round), and not someone else's card
+		const t4 = actingAs(eg(reverse, hiA, loA, 4), 'E')
+		expect(canReverse(t4, 'E', tctx(t4))).toBe(false)
+		expect(pw(actingAs(eg(reverse), 'M'), 'E', 'emReverse')).toEqual({})
+	})
+	it('Time Warp: Emmitt names an enemy whose card hasn\'t acted; they swap it for a resolved one; the order holds', () => {
+		const resolved = AC.findIndex((c, i) => i !== hiA && i !== loA && !c.handicapped && c.color !== 'PURPLE' && c.color !== 'GOLD')
+		const base = eg(warp, hiA, loA)
+		const b = { ...base.cards!.B, turns: [resolved, null, null, null], hand: base.cards!.B.hand.filter((i) => i !== resolved && i !== loA) }
+		const s0 = actingAs({ ...base, cards: { ...base.cards, B: b } } as MatchState, 'E')
+		// Emmitt acts first only if his initiative is the highest — find his place
+		const s = s0
+		const at = turnOrder(s).indexOf('E'), bAt = turnOrder(s).indexOf('B')
+		expect(bAt).toBeGreaterThan(at)
+		expect(pw(s, 'E', 'emWarp', { target: 'M' })).toEqual({}) // not a teammate
+		const w = { ...s, ...pw(s, 'E', 'emWarp', { target: 'B' }) } as MatchState
+		expect(warpOffer(w, 'B', tctx(w))).toEqual({ by: 'E' })
+		expect(w.power?.E?.shen).toBe(turnKey(w))
+		const after = { ...w, ...pw(w, 'B', 'warpSwap', { idx: 0 }) } as MatchState
+		expect(after.cards!.B.pending).toBe(resolved)
+		expect(after.cards!.B.turns[0]).toBe(loA)
+		expect(actorOf(after)).toBe('E')
+		expect(warpOffer(after, 'B', tctx(after))).toBe(null)
+	})
+	it('Time Capsule: he and his friends take back what they discarded this turn (once), enemies don\'t', () => {
+		const s0 = actingAs(eg(capsule), 'E')
+		const mHand = s0.cards!.M.hand
+		const s1 = { ...s0, ...applyCardReq(s0, { kind: 'defend', pid: 'M', idx: mHand[0] }) } as MatchState
+		expect(s1.turnDisc?.by.M).toEqual([mHand[0]])
+		expect(capsuleOffer(s1, 'M', tctx(s1))).toEqual([mHand[0]])
+		expect(capsuleOffer(s1, 'B', tctx(s1))).toEqual([])
+		const s2 = { ...s1, ...pw(s1, 'M', 'capsule') } as MatchState
+		expect(s2.cards!.M.hand).toContain(mHand[0])
+		expect(s2.cards!.M.discard).not.toContain(mHand[0])
+		expect(s2.power?.E?.shen).toBe(turnKey(s2))
+		expect(pw(s2, 'M', 'capsule')).toEqual({})
 	})
 })

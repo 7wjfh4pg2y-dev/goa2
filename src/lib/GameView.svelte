@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { hasPower } from '$lib/heropower';
+	import { hasPower, emActing, RE_REWIND, RE_WARP, RE_TEMPORAL, type TurnCtx } from '$lib/heropower';
 	import { afterUpdate, onDestroy } from 'svelte';
 	import { readable, type Readable } from 'svelte/store';
 	import BoardCanvas from '$lib/BoardCanvas.svelte';
@@ -30,8 +30,8 @@
 	import { uiLayout, layoutVars } from '$lib/layout';
 	import { placeToken, moveToken, effectiveHex, MINES, tokenName, tokensLeft, removalOptions, applyRemoval, removalLog, canRemove, type ArmToken, type RemovalOption } from '$lib/tokens';
 	import {
-		colorHex, movePiece, teamForSeat, throneHex, minionCoins, heroDefeatSummary, canRespawn, freeSpawns, teamOf, clearable, 
-		type MatchState, type Player, type MatchSession, type Team, type ConnStatus
+		colorHex, movePiece, teamForSeat, throneHex, minionCoins, heroDefeatSummary, canRespawn, freeSpawns, teamOf, clearable, turnKey, 
+		type MatchState, type Player, type MatchSession, type Team, type ConnStatus, type Piece
 	, minionDefense } from '$lib/match';
 
 	export let session: MatchSession;
@@ -213,15 +213,21 @@
 	} : null;
 	// a piece's pills ring its token: [immune] then the actions, clockwise from 12 o'clock
 	const CLOCK = [0, 90, 180, 270, 45, 135, 225, 315];
-	type Pill = { label: string; run?: () => void; kind?: 'go' | 'bad' | 'rem' | 'move' | 'imm' | 'force'; coin?: number; off?: boolean; title?: string };
+	type Pill = { label: string; run?: () => void; kind?: 'go' | 'bad' | 'rem' | 'move' | 'imm' | 'force' | 'swap' | 'time'; coin?: number; off?: boolean; title?: string };
 	$: if (!selPieceId) carryingSel = false;
-	$: pills = !hud2 || !selPiece || ringAsk || carryingSel ? [] : forceMenu ? ([
+	$: pills = !hud2 || !selPiece || ringAsk || carryingSel ? [] : swapFrom ? ([
+		{ label: 'Pick a piece', kind: 'swap', off: true, title: 'Tap the piece to swap places with' },
+		{ label: 'Cancel', run: () => (swapFrom = null) }
+	] as Pill[]) : forceMenu ? ([
 		{ label: 'Discard', kind: 'force', run: () => forceSel(false), title: 'They discard a card' },
 		{ label: 'Discard or die', kind: 'bad', coin: heroDefeatSummary($ms, clientId, selPiece.id).coins, run: () => forceSel(true), title: 'They discard a card — or are defeated (you take the rewards)' },
 		{ label: 'Back', run: () => (forceMenu = false) }
 	] as Pill[]) : ([
 		selImmune ? { label: 'Immune', kind: 'imm', title: 'Heavy minions can\'t be moved, defeated or removed while another minion of their team is in the battle zone' } : null,
 		selMovable ? { label: 'Move', kind: 'move', run: moveSel, title: 'Pick it up — click a hex to put it down (or drag the piece)' } : null,
+		selSwappable ? { label: 'Swap', kind: 'swap', run: startSwap, title: 'Swap places with another piece' } : null,
+		canRewindSel ? { label: 'Rewind', kind: 'time', run: rewindSel, title: 'Back to the Future: back to where they stood as the turn began' } : null,
+		canWarpSel ? { label: 'Warp', kind: 'time', run: warpSel, title: 'Time Warp: they swap their card in play for one of their resolved cards' } : null,
 		canFlip ? { label: selPiece.faceDown ? 'Flip — reveal' : 'Flip face down', run: flipMine } : null,
 		canDefeatSel && selPiece.kind === 'hero' ? { label: attacks[selPiece.id] ? 'Under attack…' : 'Attack', kind: 'go', off: !!attacks[selPiece.id], run: () => attackSel('attack') } : null,
 		canDefeatSel && selPiece.kind === 'hero' ? { label: 'Defeat', kind: 'bad', coin: heroDefeatSummary($ms, clientId, selPiece.id).coins, run: () => attackSel('defeat'), title: 'Not an attack: defeat them outright — same rewards' } : null,
@@ -531,6 +537,12 @@
 	let selPieceId: string | null = null;
 	let previewId: string | null = null; // clicking a hero token opens that player's board
 	function onSelectPiece(id: string | null) {
+		// Swap: the next piece tapped trades places with the first
+		if (swapFrom) {
+			const a = swapFrom;
+			swapFrom = null;
+			if (id && id !== a) { doSwap(a, id); queueMicrotask(() => board?.release()); selPieceId = null; return; }
+		}
 		const pc = id ? $ms.pieces[id] : null;
 		// tapping any piece (heroes included) just picks it up to move it — a
 		// player's board opens from the right-hand HUD instead. Minions / tokens
@@ -550,6 +562,43 @@
 	// Move picks it up: the pills step aside until it is put down
 	let carryingSel = false;
 	function moveSel() { if (selPiece) { board?.carry(selPiece.id); carryingSel = true; } }
+	// ── Swap (any player, any two pieces): the second piece tapped trades places with the first ──
+	let swapFrom: string | null = null;
+	$: if (swapFrom && (watcher || !$ms.pieces[swapFrom])) swapFrom = null;
+	$: selSwappable = selMovable && !watcher && !selPiece?.attachedTo;
+	function startSwap() { if (selPiece) swapFrom = selPiece.id; }
+	const pieceLabel = (p: Piece | undefined) => !p ? 'a piece' : p.kind === 'hero' ? heroById(p.hero ?? '')?.name ?? 'a hero' : p.kind === 'minion' ? aMinion(p.team as Team, p.role) : p.token ? tokenName(p.token) : 'a token';
+	// Emmitt's own time tricks wind his clock back for the rest of the turn
+	const emShen = (by: string | null) => (by && $ms.cards?.[by]?.hero === 'emmitt' ? { power: { ...$ms.power, [by]: { ...$ms.power?.[by], shen: turnKey($ms) } } } : {});
+	function doSwap(a: string, b: string) {
+		const pa = $ms.pieces[a], pb = $ms.pieces[b];
+		if (!pa || !pb || watcher || pa.attachedTo || pb.attachedTo) return;
+		if (!iAmHost && (heavyImmune($ms, a) || heavyImmune($ms, b))) return;
+		const pieces = { ...$ms.pieces, [a]: { ...pa, hex: pb.hex }, [b]: { ...pb, hex: pa.hex } };
+		session.act(`swapped ${pieceLabel(pa)} with ${pieceLabel(pb)}`, { pieces, ...emShen(clientId) });
+	}
+	// ── Emmitt's Back to the Future (Rewind) and Time Warp: while that card acts, he (or the host) picks an enemy hero ──
+	let turnCtx: TurnCtx | null = null;
+	$: rewindBy = turnCtx ? emActing($ms, turnCtx, RE_REWIND) : null;
+	$: warpBy = turnCtx ? emActing($ms, turnCtx, RE_WARP) : null;
+	const enemyHeroOf = (by: string | null) => !!by && (clientId === by || iAmHost) && !!selPiece && selPiece.kind === 'hero' && selPiece.team !== teamOf($ms, by);
+	$: startHex = selPiece && $ms.turnStart?.key === turnKey($ms) ? $ms.turnStart.pos[selPiece.id] : undefined;
+	$: canRewindSel = enemyHeroOf(rewindBy) && !!startHex && startHex !== selPiece?.hex;
+	$: canWarpSel = enemyHeroOf(warpBy) && !!turnCtx && !!selPiece && turnCtx.order.indexOf(selPiece.id) > turnCtx.at && $ms.power?.[warpBy ?? '']?.warp?.target !== selPiece.id;
+	function rewindSel() {
+		if (!selPiece || !startHex) return;
+		const p = selPiece, to = startHex;
+		if (Object.values($ms.pieces).some((q) => q.id !== p.id && q.hex === to && q.kind !== 'token')) return; // someone stands there now
+		board?.release();
+		session.act(`rewound ${pieceLabel(p)} to where they stood as the turn began (Back to the Future)`, { ...movePiece($ms, p.id, to), ...emShen(rewindBy) });
+	}
+	function warpSel() {
+		if (!selPiece) return;
+		const id = selPiece.id;
+		askRing(id, 'Warp', heroById(selPiece.hero ?? '')?.name ?? '', 'go', () => session.cardAction({ kind: 'power', pid: clientId, op: 'emWarp', target: id }));
+	}
+	// Temporal Punch / Slam / Judgment: the defender uses Initiative instead of Defense
+	$: temporalIn = !!incoming && RE_TEMPORAL.test(heroCards($ms.cards?.[incoming.by]?.hero ?? '')[$ms.cards?.[incoming.by]?.pending ?? -1]?.description ?? '');
 	// ── a board action waiting for its yes: the action ring (2.0 HUD, 2.0 phone) asks, with Cancel beside it ──
 	$: useRing = hud2 || phone2;
 	let ringAsk: Order | null = null;
@@ -927,7 +976,7 @@
 				</div>
 				<div class="aktitle"><i></i>Under attack<i></i></div>
 				<div class="akwho"><b>{heroOf(incoming.by)}</b><em>{playerName(incoming.by)}</em></div>
-				<div class="akhint">{incoming.discarded ? 'Defended or defeated?' : 'Discard to defend'}{#if myDefMods} · <span class:up={myDefMods > 0} class="akmods">Minions {myDefMods > 0 ? `+${myDefMods}` : `−${-myDefMods}`}</span>{/if}</div>
+				<div class="akhint">{incoming.discarded ? 'Defended or defeated?' : temporalIn ? 'Defend with Initiative' : 'Discard to defend'}{#if myDefMods} · <span class:up={myDefMods > 0} class="akmods">Minions {myDefMods > 0 ? `+${myDefMods}` : `−${-myDefMods}`}</span>{/if}</div>
 			</div>
 		</div>
 	{/if}
@@ -1001,7 +1050,7 @@
 	<BoardCanvas bind:this={board} map={$ms.map ?? {}} inset={boardInset} look={boardLook} {glowZone} activeZone={$ms.wonBy ? null : battleZone($ms)} effects={!deckCovered} sea={$boardPrefs.sea} rims={$boardPrefs.rims} rotation={orientation} interactive={true} {placing} {placeGhost} holdColor={myHoldColor} onCancelPlace={cancelPlace} {areas} marks={boardMarks} badges={defBadges} zoomLock={mobile && $boardPrefs.zoomLock} wisps={$boardPrefs.wisps} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} pings={boardPings} onPing={doPing} {pingArmed} />
 	</div>
 
-	<CardLayer bind:this={cardLayer} areaW={gvw} areaH={gvh} {mobile} {hud2} {phone2} {ringAsk} onResults={() => (victoryClosed = false)} compact={$boardPrefs.compact} cTop={$boardPrefs.cTop} cOrder={$boardPrefs.cOrder} cLog={$boardPrefs.cLog} bind:topW {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} bind:covered={deckCovered} bind:phoneStatus onRespawn={placeMyHero} onEnter={placeMyHero} onArmToken={armToken} holdingToken={!!pendingToken} {pingArmed} onPing={pingButton} bind:previewId />
+	<CardLayer bind:this={cardLayer} bind:turnCtx areaW={gvw} areaH={gvh} {mobile} {hud2} {phone2} {ringAsk} onResults={() => (victoryClosed = false)} compact={$boardPrefs.compact} cTop={$boardPrefs.cTop} cOrder={$boardPrefs.cOrder} cLog={$boardPrefs.cLog} bind:topW {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} bind:covered={deckCovered} bind:phoneStatus onRespawn={placeMyHero} onEnter={placeMyHero} onArmToken={armToken} holdingToken={!!pendingToken} {pingArmed} onPing={pingButton} bind:previewId />
 
 	<!-- selected minion/token: offer delete (heroes aren't deletable) -->
 	{#if hud2}
@@ -1028,7 +1077,12 @@
 	{:else if selPiece && !carryingSel}
 		<div class="pietool" class:anchored={!!tipPos} style={tipPos ? `left:${tipPos.x / lay.s}px; top:${tipPos.y / lay.s}px` : ''}>
 			<span class="pietxt" style:color={teamText(selPiece)}>{selLabel}</span>
+			{#if swapFrom}<span class="pietxt nc">Tap the piece to swap with</span><button class="piex" on:click={() => (swapFrom = null)} aria-label="Cancel">✕</button>
+			{:else}
 			{#if selMovable}<button class="pieflip" on:click={moveSel} title="Pick it up — tap a hex to put it down">Move</button>{/if}
+			{#if selSwappable}<button class="pieflip" on:click={startSwap} title="Swap places with another piece">Swap</button>{/if}
+			{#if canRewindSel}<button class="pieflip" on:click={rewindSel}>Rewind</button>{/if}
+			{#if canWarpSel}<button class="pieflip" on:click={warpSel}>Warp</button>{/if}
 			{#if canFlip}
 				<button class="pieflip" on:click={flipMine}>{selPiece.faceDown ? 'Flip — reveal' : 'Flip face down'}</button>
 			{/if}
@@ -1048,6 +1102,7 @@
 			{/if}
 			{#if canBattleSel}<button class="piedefeat" on:click={battleTakeSel}>Remove for the battle</button>{/if}
 			{#if canRemoveSel && selPiece.kind !== 'hero' && (!selImmune || iAmHost)}<button class="piedel" on:click={openRemove}>Remove</button>{/if}
+			{/if}
 		</div>
 	{/if}
 
@@ -1807,6 +1862,8 @@
 	/* Move = teal · Defeat = red · Remove = violet */
 	.pp.move { color: #c8fbf2; border-color: rgba(64, 214, 190, 0.75); background: rgba(10, 58, 56, 0.96); }
 	.pp.force { color: #ffe2b8; border-color: rgba(240, 160, 70, 0.75); background: rgba(70, 36, 8, 0.96); }
+	.pp.swap { color: #e3f0ff; border-color: rgba(140, 180, 255, 0.75); background: rgba(16, 36, 72, 0.96); }
+	.pp.time { color: #ffd8f4; border-color: rgba(224, 64, 192, 0.8); background: rgba(58, 12, 50, 0.96); }
 	.pp.rem { color: #e6d6ff; border-color: rgba(166, 120, 236, 0.75); background: rgba(44, 24, 78, 0.96); }
 	.pp.x { width: 32px; padding: 0; justify-content: center; color: #bccbd9; }
 	.pp.imm { cursor: default; color: #2a2f38; letter-spacing: .04em; text-shadow: 0 1px 0 rgba(255,255,255,.6); background: linear-gradient(180deg, #ffffff, #d4d9df 48%, #a3acb7); border: 2px solid #d9a845; box-shadow: 0 0 0 1px #6b4a10, 0 2px 6px rgba(0,0,0,.45), inset 0 1px 0 #fff; }

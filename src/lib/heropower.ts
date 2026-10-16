@@ -23,9 +23,17 @@ export type PowerState = {
 	swap?: string
 	/** Takahide: Ready for War has been applied (his silver traded for all three golds) */
 	war?: boolean
+	/** Emmitt: the turn (round-turn key) his gold reversed — lower initiative acts first */
+	rev?: string
+	/** Emmitt: the turn he bent time in (a swap, a rewind, a warp, a retrieve) — his clock runs backwards till it ends */
+	shen?: string
+	/** Emmitt's Time Warp: the enemy hero who must swap their unresolved card for a resolved one, for this acting card */
+	warp?: { key: string; at: number; target: string }
+	/** anyone: Emmitt's Time Capsule / Future Proof taken back (`key:at`) — once per card */
+	cap?: string
 }
-export type PowerReq = { kind: 'power'; pid: string; op: 'ignatiaFlip' | 'snorriInscribe' | 'snorriSecond' | 'takaSwap' | 'mateSwap';
-	/** takaSwap: the gold card from his deck to take; mateSwap: the hand / discard card to swap in */
+export type PowerReq = { kind: 'power'; pid: string; op: 'ignatiaFlip' | 'snorriInscribe' | 'snorriSecond' | 'takaSwap' | 'mateSwap' | 'emReverse' | 'emWarp' | 'warpSwap' | 'capsule';
+	/** takaSwap: the gold card from his deck to take; mateSwap: the hand / discard card to swap in; warpSwap: the turn slot (0–3) */
 	idx?: number
 	/** mateSwap: where the swapped-in card comes from */
 	src?: 'hand' | 'discard'
@@ -33,18 +41,21 @@ export type PowerReq = { kind: 'power'; pid: string; op: 'ignatiaFlip' | 'snorri
 	order?: Rune[]
 	/** snorriSecond: the second rune, or null to clear it */
 	rune?: Rune | null
-	/** the host fixing another player's runes / gold */
-	target?: string }
+	/** the host fixing another player's runes / gold; emWarp: the enemy hero */
+	target?: string
+	/** emReverse (host): switch the reversal on / off */
+	on?: boolean }
 /** what the engine knows about the turn in play */
 export type TurnCtx = { key: string; round: number; turnIdx: number; order: string[]; at: number; tieBreaker: Team; revealed: boolean
 	/** each player's team (for "a friendly hero") */
 	teams?: Record<string, Team | null> }
 type S = { cards?: Record<string, PlayerCardState>; power?: Record<string, PowerState>; effects?: { pid: string; hero: string; idx: number }[]; host?: string
 	lastClash?: { id: string; kind: string; by: string; out: string } | null; lastDefeat?: { id: string; by: string } | null
-	attacks?: Record<string, unknown>; forced?: Record<string, unknown> }
+	attacks?: Record<string, unknown>; forced?: Record<string, unknown>
+	turnDisc?: { key: string; by: Record<string, number[]> } | null }
 
 /** heroes with their own dash button */
-export const POWER_HEROES = ['ignatia', 'snorri', 'takahide']
+export const POWER_HEROES = ['ignatia', 'snorri', 'takahide', 'emmitt']
 export const hasPower = (hero: string | undefined | null) => !!hero && POWER_HEROES.includes(hero)
 
 // ── Ignatia ──
@@ -192,8 +203,110 @@ export function readyForWar(cs: PlayerCardState, applied: boolean): PlayerCardSt
 	return { ...x, basics: [keep, silver], hand: [...x.hand, silver].sort((a, b) => a - b) }
 }
 
+// ── Emmitt ──
+// Reverse Time / Tear in Time (his golds): "Next turn: heroes with lower initiative act before heroes with higher
+// initiative" — the engine turns the order round for that turn (ties as normal). Back to the Future (rewind a unit to
+// where it stood as the turn began) and the Swap are board moves (GameView). Time Warp: an enemy hero swaps their
+// unresolved card for one of their resolved ones (their pick). Time Capsule / Future Proof: he and his friends may take
+// back every card they discarded this turn. Temporal Punch / Slam / Judgment: the defender uses Initiative (a note).
+const EMM = 'emmitt'
+// (the card text, with the '>' line marks of its 'Choose one' options taken out)
+const cardText = (cs: PlayerCardState | undefined, idx: number | null | undefined) => (cs && idx != null && idx >= 0 ? (heroCards(cs.hero)[idx]?.description ?? '').replace(/>/g, ' ') : '')
+/** the card Emmitt has acting now, by what it says */
+export const emActing = (s: S, ctx: TurnCtx, re: RegExp): string | null => {
+	const by = ctx.order[ctx.at]
+	const cs = by ? s.cards?.[by] : undefined
+	return ctx.revealed && cs?.hero === EMM && re.test(cardText(cs, cs.pending)) ? by : null
+}
+export const RE_REVERSE = /lower\s+initiative\s+act\s+before/i
+export const RE_REWIND = /where\s+that\s+unit\s+was\s+at\s+the\s+start\s+of\s+this\s+turn/i
+export const RE_WARP = /swaps\s+their\s+unresolved\s+card\s+with\s+one\s+of\s+their\s+resolved/i
+export const RE_CAPSULE = /retrieve\s+all\s+cards\s+discarded\s+this\s+turn/i
+export const RE_TEMPORAL = /must\s+use\s+the\s+\S+\s*initiative/i
+/** the next turn's key (none after the 4th turn: a "next turn" effect ends with the round) */
+export const nextTurnKey = (ctx: TurnCtx) => (ctx.turnIdx < 3 ? `${ctx.round}-${ctx.turnIdx + 2}` : null)
+/** this turn's order runs low → high (an Emmitt reversed it) */
+export const reversedTurn = (s: S, key: string) => Object.values(s.power ?? {}).some((p) => p?.rev === key)
+/** his gold acts: he may turn the next turn round (not yet done) */
+export function canReverse(s: S, pid: string, ctx: TurnCtx): boolean {
+	const nk = nextTurnKey(ctx)
+	return !!nk && emActing(s, ctx, RE_REVERSE) === pid && s.power?.[pid]?.rev !== nk
+}
+/** the enemy hero Time Warp is waiting on: their swap, if it's `pid` (their card hasn't acted yet) */
+export function warpOffer(s: S, pid: string, ctx: TurnCtx): { by: string } | null {
+	const by = emActing(s, ctx, RE_WARP)
+	const w = by ? s.power?.[by]?.warp : undefined
+	if (!by || !w || w.key !== ctx.key || w.at !== ctx.at || w.target !== pid) return null
+	const k = ctx.order.indexOf(pid), cs = s.cards?.[pid]
+	if (k <= ctx.at || !cs || cs.pending == null || cs.pending < 0) return null
+	return { by }
+}
+/** the resolved cards Time Warp may swap in: this round's earlier turn slots */
+export const warpSlots = (cs: PlayerCardState | undefined, turnIdx: number) => (cs ? [0, 1, 2, 3].filter((t) => t < turnIdx && cs.turns[t] != null && cs.turns[t]! >= 0) : [])
+/** Time Capsule / Future Proof acting: the cards `pid` (Emmitt or a friend) discarded this turn and may take back */
+export function capsuleOffer(s: S, pid: string, ctx: TurnCtx): number[] {
+	const by = emActing(s, ctx, RE_CAPSULE)
+	if (!by || (pid !== by && (!ctx.teams?.[pid] || ctx.teams?.[pid] !== ctx.teams?.[by]))) return []
+	if (s.power?.[pid]?.cap === `${ctx.key}:${ctx.at}` || s.turnDisc?.key !== ctx.key) return []
+	const cs = s.cards?.[pid]
+	return (s.turnDisc.by[pid] ?? []).filter((i) => cs?.discard.includes(i))
+}
+/** after a change: the cards each player has newly discarded this turn (Time Capsule reads it) */
+export function trackDiscards(prev: S, next: S, key: string): S['turnDisc'] | undefined {
+	const base = next.turnDisc?.key === key ? next.turnDisc.by : {}
+	let by: Record<string, number[]> | null = null
+	for (const pid in next.cards ?? {}) {
+		const was = prev.cards?.[pid]?.discard ?? [], now = next.cards![pid].discard
+		const added = now.filter((i) => !was.includes(i) && !(base[pid] ?? []).includes(i))
+		if (added.length) { by = by ?? { ...base }; by[pid] = [...(base[pid] ?? []), ...added] }
+	}
+	if (by) return { key, by }
+	return next.turnDisc && next.turnDisc.key !== key ? null : undefined
+}
+
 /** the host applies a power request: the patch (empty = refused) */
 export function applyPower(s: S & { tieTurn?: { key: string; coin: Team } | null; acting?: { key: string; idx: number; done?: string[]; pin?: string[] } | null }, req: PowerReq, ctx: TurnCtx) {
+	if (req.op === 'emReverse') {
+		const who = req.target ?? req.pid
+		const byHost = req.pid === s.host && req.target != null
+		if (s.cards?.[who]?.hero !== EMM) return {}
+		const nk = nextTurnKey(ctx)
+		if (byHost) {
+			if (req.on === false) return s.power?.[who]?.rev ? { power: { ...s.power, [who]: { ...s.power?.[who], rev: undefined } } } : {}
+			return nk ? { power: { ...s.power, [who]: { ...s.power?.[who], rev: nk } } } : {}
+		}
+		if (who !== req.pid || !canReverse(s, who, ctx)) return {}
+		return { power: { ...s.power, [who]: { ...s.power?.[who], rev: nk! } } }
+	}
+	if (req.op === 'emWarp') {
+		const by = emActing(s, ctx, RE_WARP)
+		if (!by || !req.target || (req.pid !== by && req.pid !== s.host)) return {}
+		if (!ctx.teams?.[req.target] || ctx.teams[req.target] === ctx.teams[by]) return {}
+		const k = ctx.order.indexOf(req.target)
+		if (k <= ctx.at) return {}
+		return { power: { ...s.power, [by]: { ...s.power?.[by], warp: { key: ctx.key, at: ctx.at, target: req.target }, shen: ctx.key } } }
+	}
+	if (req.op === 'warpSwap') {
+		const off = warpOffer(s, req.pid, ctx), cs = s.cards?.[req.pid]
+		const t = req.idx
+		if (!off || !cs || t == null || !warpSlots(cs, ctx.turnIdx).includes(t)) return {}
+		const old = cs.pending as number, res = cs.turns[t] as number
+		const next: PlayerCardState = { ...cs, pending: res, turns: cs.turns.map((x, i) => (i === t ? old : x)) }
+		return {
+			cards: { ...s.cards, [req.pid]: next },
+			power: { ...s.power, [off.by]: { ...s.power?.[off.by], warp: undefined } },
+			acting: { key: ctx.key, idx: ctx.at, done: s.acting?.key === ctx.key ? s.acting.done : undefined, pin: ctx.order.slice(0, ctx.at + 1) }
+		}
+	}
+	if (req.op === 'capsule') {
+		const back = capsuleOffer(s, req.pid, ctx), cs = s.cards?.[req.pid]
+		const by = emActing(s, ctx, RE_CAPSULE)
+		if (!back.length || !cs || !by) return {}
+		const next: PlayerCardState = { ...cs, discard: cs.discard.filter((i) => !back.includes(i)), hand: [...cs.hand, ...back].sort((a, b) => a - b) }
+		const power = { ...s.power, [req.pid]: { ...s.power?.[req.pid], cap: `${ctx.key}:${ctx.at}` } }
+		power[by] = { ...power[by], shen: ctx.key }
+		return { cards: { ...s.cards, [req.pid]: next }, power }
+	}
 	if (req.op === 'takaSwap') {
 		const who = req.target ?? req.pid
 		const cs = s.cards?.[who]

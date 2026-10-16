@@ -34,6 +34,8 @@
 	export let onNudge: (pid: string) => void = () => {};
 	/** Snorri's active rune this turn, per player (shown on his banner) */
 	export let runeAt: Record<string, Rune | null> = {};
+	/** Emmitt reversed this turn: lower initiative acts first */
+	export let reversed = false;
 
 	const ui = import.meta.glob('$lib/cards/images/*.png', { eager: true, import: 'default' }) as Record<string, string>;
 	const ic = (n: string) => Object.entries(ui).find(([k]) => k.endsWith(`/${n}.png`))?.[1] ?? '';
@@ -65,7 +67,7 @@
 			<em class="ccount">{ready} of {dots.length} {doneWord === 'ready' ? 'in' : doneWord}</em>
 		{/if}
 	{:else}
-		<b class="ct">Initiative</b>
+		<b class="ct" class:rv={reversed}>{reversed ? '⟲ Reversed' : 'Initiative'}</b>
 		{#each order as e, k (e.pid)}
 			{#if k}{#if e.tied && (e.tieImg || tieArt)}<img class="ctie" src={e.tieImg ?? tieArt} alt="Tie" title="A tie: the coin's holders went first, then it flipped" />{:else}<i class="cchev">›</i>{/if}{/if}
 			<button class="ce is-{e.team}" class:done={k < acting} class:now={k === acting} on:click={() => click(k, e)} title={tip(k, e)}>
@@ -83,6 +85,7 @@
 			{:else}<b>{title}</b><span class="sdots">{#each dots as d, i (i)}<button class="sd" title={dotTip(d)} disabled={!d.pid || d.pid === me} on:click={() => d.pid && onNudge(d.pid)}><i class="t-{d.team}" class:ok={d.ok} style={d.color ? `--tc:${d.color}` : ''}></i></button>{/each}</span><em>{ready} of {dots.length} {doneWord}</em>{/if}
 		</div>
 	{:else}
+		{#if reversed}<span class="revtag" title="Time reversed: lower initiative acts first this turn">⟲ Reversed</span>{/if}
 		{#each order as e, k (e.pid)}
 			{@const c = heroCards(e.hero)[e.idx]}
 			{@const a = act(e)}
@@ -111,6 +114,8 @@
 	button.cf { padding: 0; font: inherit; color: inherit; cursor: pointer; }
 	.orow { --brass: #d8b36a; --brass-hi: #f4dfa8; --line: rgba(216, 179, 106, 0.4); display: flex; align-items: center; justify-content: center; gap: 12px; height: 60px; color: #f5f1e8; }
 	.orow.small { gap: 8px; }
+	.revtag { flex: none; padding: 4px 10px; border-radius: 999px; font-size: 13px; letter-spacing: 0.06em; color: #ffd8f4; background: rgba(58, 12, 50, 0.95); border: 1px solid rgba(224, 64, 192, 0.8); box-shadow: 0 0 10px rgba(224, 64, 192, 0.45); white-space: nowrap; }
+	.ct.rv { color: #ffa0e6; }
 	.status { display: flex; align-items: center; gap: 16px; height: 40px; padding: 0 24px; border-radius: 999px; pointer-events: auto;
 		background: linear-gradient(180deg, rgba(16, 44, 72, 0.97), rgba(6, 21, 38, 0.97)); border: 1px solid var(--line); box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45); font-size: 15px; }
 	.status b { font-weight: 400; font-size: 13px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--brass-hi); }
