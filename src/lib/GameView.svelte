@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { hasPower, emActing, RE_REWIND, RE_WARP, RE_TEMPORAL, type TurnCtx } from '$lib/heropower';
+	import { hasPower, emActing, warpSlots, RE_REWIND, RE_WARP, RE_TEMPORAL, type TurnCtx } from '$lib/heropower';
 	import { afterUpdate, onDestroy } from 'svelte';
 	import { readable, type Readable } from 'svelte/store';
 	import BoardCanvas from '$lib/BoardCanvas.svelte';
@@ -574,8 +574,10 @@
 		const pa = $ms.pieces[a], pb = $ms.pieces[b];
 		if (!pa || !pb || watcher || pa.attachedTo || pb.attachedTo) return;
 		if (!iAmHost && (heavyImmune($ms, a) || heavyImmune($ms, b))) return;
-		const pieces = { ...$ms.pieces, [a]: { ...pa, hex: pb.hex }, [b]: { ...pb, hex: pa.hex } };
-		session.act(`swapped ${pieceLabel(pa)} with ${pieceLabel(pb)}`, { pieces, ...emShen(clientId) });
+		let next: Partial<MatchState> = { pieces: { ...$ms.pieces, [a]: { ...pa, hex: pb.hex }, [b]: { ...pb, hex: pa.hex } } };
+		// a minion swapped out of the battle zone goes straight back in, like any move (rulebook p.18)
+		for (const id of [a, b]) if ($ms.pieces[id].kind === 'minion') next = { ...next, ...returnPatch({ ...$ms, ...next } as MatchState, id) };
+		session.act(`swapped ${pieceLabel(pa)} with ${pieceLabel(pb)}`, { ...next, ...emShen(clientId) });
 	}
 	// ── Emmitt's Back to the Future (Rewind) and Time Warp: while that card acts, he (or the host) picks an enemy hero ──
 	let turnCtx: TurnCtx | null = null;
@@ -584,7 +586,8 @@
 	const enemyHeroOf = (by: string | null) => !!by && (clientId === by || iAmHost) && !!selPiece && selPiece.kind === 'hero' && selPiece.team !== teamOf($ms, by);
 	$: startHex = selPiece && $ms.turnStart?.key === turnKey($ms) ? $ms.turnStart.pos[selPiece.id] : undefined;
 	$: canRewindSel = enemyHeroOf(rewindBy) && !!startHex && startHex !== selPiece?.hex;
-	$: canWarpSel = enemyHeroOf(warpBy) && !!turnCtx && !!selPiece && turnCtx.order.indexOf(selPiece.id) > turnCtx.at && $ms.power?.[warpBy ?? '']?.warp?.target !== selPiece.id;
+	$: canWarpSel = enemyHeroOf(warpBy) && !!turnCtx && !!selPiece && turnCtx.order.indexOf(selPiece.id) > turnCtx.at && $ms.power?.[warpBy ?? '']?.warp?.target !== selPiece.id
+		&& warpSlots($ms.cards?.[selPiece.id], $ms.turn - 1).length > 0; // they need a resolved card to swap for
 	function rewindSel() {
 		if (!selPiece || !startHex) return;
 		const p = selPiece, to = startHex;

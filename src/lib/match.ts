@@ -189,6 +189,10 @@ export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 			const pos: Record<string, string> = {}
 			for (const p of Object.values(fin.pieces ?? {})) if (p.kind === 'hero' || p.kind === 'minion') pos[p.id] = p.hex
 			out.turnStart = { key, pos }
+		} else {
+			// a unit that came onto the board during the turn (spawned, a new wave): its first space counts as its start
+			const fresh = Object.values(fin.pieces ?? {}).filter((p) => (p.kind === 'hero' || p.kind === 'minion') && !fin.turnStart!.pos[p.id])
+			if (fresh.length) out.turnStart = { key, pos: { ...fin.turnStart.pos, ...Object.fromEntries(fresh.map((p) => [p.id, p.hex])) } }
 		}
 		const disc = trackDiscards(s, fin, key)
 		if (disc !== undefined) out.turnDisc = disc

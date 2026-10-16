@@ -176,7 +176,9 @@ export function mateOffer(s: S, pid: string, ctx: TurnCtx): { by: string; from: 
  *  write (marking `hit`), or null */
 export function takaHit(prev: S, next: S, req: { kind: string; pid?: string }, ctx: TurnCtx): Record<string, PowerState> | null {
 	const by = ctx.order[ctx.at]
-	if (!by || !ctx.revealed || !offerOf(next.cards?.[by])) return null
+	const cs = by ? next.cards?.[by] : undefined
+	// Takahide's swap reds, and Emmitt's golds ("After the attack: next turn…")
+	if (!by || !ctx.revealed || !(offerOf(cs) || (cs?.hero === EMM && RE_REVERSE.test(cardText(cs, cs.pending))))) return null
 	const mark = `${ctx.key}:${ctx.at}`
 	if (next.power?.[by]?.hit === mark) return null
 	const c = next.lastClash, d = next.lastDefeat
@@ -227,10 +229,11 @@ export const RE_TEMPORAL = /must\s+use\s+the\s+\S+\s*initiative/i
 export const nextTurnKey = (ctx: TurnCtx) => (ctx.turnIdx < 3 ? `${ctx.round}-${ctx.turnIdx + 2}` : null)
 /** this turn's order runs low → high (an Emmitt reversed it) */
 export const reversedTurn = (s: S, key: string) => Object.values(s.power ?? {}).some((p) => p?.rev === key)
-/** his gold acts: he may turn the next turn round (not yet done) */
+/** his gold acts and its attack has landed ("After the attack": an attack on a hero ended, or he defeated a hero or a
+ *  minion — `hit`, as for Takahide): he may turn the next turn round (not yet done) */
 export function canReverse(s: S, pid: string, ctx: TurnCtx): boolean {
 	const nk = nextTurnKey(ctx)
-	return !!nk && emActing(s, ctx, RE_REVERSE) === pid && s.power?.[pid]?.rev !== nk
+	return !!nk && emActing(s, ctx, RE_REVERSE) === pid && s.power?.[pid]?.hit === `${ctx.key}:${ctx.at}` && s.power?.[pid]?.rev !== nk
 }
 /** the enemy hero Time Warp is waiting on: their swap, if it's `pid` (their card hasn't acted yet) */
 export function warpOffer(s: S, pid: string, ctx: TurnCtx): { by: string } | null {
@@ -238,7 +241,7 @@ export function warpOffer(s: S, pid: string, ctx: TurnCtx): { by: string } | nul
 	const w = by ? s.power?.[by]?.warp : undefined
 	if (!by || !w || w.key !== ctx.key || w.at !== ctx.at || w.target !== pid) return null
 	const k = ctx.order.indexOf(pid), cs = s.cards?.[pid]
-	if (k <= ctx.at || !cs || cs.pending == null || cs.pending < 0) return null
+	if (k <= ctx.at || !cs || cs.pending == null || cs.pending < 0 || !warpSlots(cs, ctx.turnIdx).length) return null
 	return { by }
 }
 /** the resolved cards Time Warp may swap in: this round's earlier turn slots */
@@ -283,7 +286,7 @@ export function applyPower(s: S & { tieTurn?: { key: string; coin: Team } | null
 		if (!by || !req.target || (req.pid !== by && req.pid !== s.host)) return {}
 		if (!ctx.teams?.[req.target] || ctx.teams[req.target] === ctx.teams[by]) return {}
 		const k = ctx.order.indexOf(req.target)
-		if (k <= ctx.at) return {}
+		if (k <= ctx.at || !warpSlots(s.cards?.[req.target], ctx.turnIdx).length) return {} // nothing resolved to swap for
 		return { power: { ...s.power, [by]: { ...s.power?.[by], warp: { key: ctx.key, at: ctx.at, target: req.target }, shen: ctx.key } } }
 	}
 	if (req.op === 'warpSwap') {

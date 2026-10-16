@@ -308,7 +308,12 @@ describe('Emmitt: reversed turns, Time Warp, Time Capsule', () => {
 	}
 	const pw = (s: MatchState, pid: string, op: string, more: Record<string, unknown> = {}) => applyCardReq(s, { kind: 'power', pid, op, ...more } as never)
 	it('his gold acting: he may reverse the NEXT turn — then lower initiative acts first', () => {
-		const s = actingAs(eg(reverse), 'E')
+		const s0 = actingAs(eg(reverse), 'E')
+		// "After the attack": nothing until his attack lands — he defeats a minion with it
+		expect(canReverse(s0, 'E', tctx(s0))).toBe(false)
+		const minion = { id: 'x', hex: '1_3', team: 'blue', kind: 'minion', role: 'melee' }
+		const sm = { ...s0, pieces: { ...s0.pieces, x: minion } } as unknown as MatchState
+		const s = { ...sm, ...applyCardReq(sm, { kind: 'defeatMinion', pid: 'E', piece: 'x' }) } as MatchState
 		expect(canReverse(s, 'E', tctx(s))).toBe(true)
 		const p = pw(s, 'E', 'emReverse')
 		expect(p.power?.E?.rev).toBe('1-3')
@@ -319,7 +324,8 @@ describe('Emmitt: reversed turns, Time Warp, Time Capsule', () => {
 		// any other turn: high first as ever
 		expect(turnOrder({ ...t3, turn: 4 } as MatchState)).toEqual(['M', 'B'])
 		// not on the 4th turn (a "next turn" effect ends with the round), and not someone else's card
-		const t4 = actingAs(eg(reverse, hiA, loA, 4), 'E')
+		const t40 = actingAs(eg(reverse, hiA, loA, 4), 'E')
+		const t4 = { ...t40, power: { E: { hit: `${turnKey(t40)}:${actingIdx(t40)}` } } } as MatchState
 		expect(canReverse(t4, 'E', tctx(t4))).toBe(false)
 		expect(pw(actingAs(eg(reverse), 'M'), 'E', 'emReverse')).toEqual({})
 	})
