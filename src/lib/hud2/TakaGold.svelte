@@ -1,7 +1,8 @@
 <script lang="ts">
-	// Takahide's dash button: a small fan of his three gold cards — the ones he holds lit, those in his deck dark. It
-	// glows when he may swap (a gold of his is the card acting, or Bushido is), with a violet rim once Ready for War is
-	// on. A tap opens the gold panel above it (the phone: a sheet over the dash): each gold tagged with where it lies;
+	// Takahide's dash button: a fan of his three gold cards — the ones he holds lit, those in his deck dark — on a
+	// sun-rayed halo (kōhai: 48 rays, every third longer, a beaded ring, a gold disc). While he may swap (a gold of his
+	// is the card acting, or Bushido is) the rays turn slowly and the glow breathes (the Dashboard switch); violet once
+	// Ready for War is on. A tap opens the gold panel above it (the phone: a sheet over the dash): each gold tagged with where it lies;
 	// while a swap is open, a tap on one in his deck hands it to the action ring, which confirms Swap.
 	import { onDestroy } from 'svelte';
 	import Card from '$lib/cards/Card.svelte';
@@ -50,13 +51,31 @@
 	function close() { if (modal) onClose(); else { open = false; pick = null; } }
 	const onKey = (e: KeyboardEvent) => { if (open && e.key === 'Escape') close(); };
 	onDestroy(() => onPick(null));
+
+	// the halo, drawn once (200-unit box, centre 100,100, angles clockwise from the top)
+	const pt = (a: number, r: number) => { const t = ((a - 90) * Math.PI) / 180; return [100 + r * Math.cos(t), 100 + r * Math.sin(t)]; };
+	const P = (a: number, r: number) => pt(a, r).map((v) => v.toFixed(2)).join(',');
+	const RAYS = Array.from({ length: 48 }, (_, i) => { const a = i * 7.5, long = i % 3 === 0; return { long, d: `M${P(a - 1.1, 62)} L${P(a, long ? 96 : 84)} L${P(a + 1.1, 62)} Z` }; });
+	const BEADS = Array.from({ length: 24 }, (_, i) => pt(i * 15, 66));
+	const uid = `tkh${Math.random().toString(36).slice(2, 8)}`;
 </script>
 
 <svelte:window on:keydown={onKey} />
 <span class="tg" class:modal style="--z:{size}px">
 	{#if !modal}
-		<button class="gb" class:ready={kind != null} class:ult={cs.ultimate} class:open on:click={toggle} title={kind ? 'Swap your gold card' : 'Your gold cards'} aria-label="Gold cards">
-			{#if kind && fx}<i class="glow"></i>{/if}
+		<button class="gb" class:ready={kind != null} class:ult={cs.ultimate} class:spin={kind != null && fx} class:open on:click={toggle} title={kind ? 'Swap your gold card' : 'Your gold cards'} aria-label="Gold cards">
+			<i class="glow"></i>
+			<svg class="rays" viewBox="0 0 200 200" aria-hidden="true">
+				{#each RAYS as r}<path class:long={r.long} d={r.d} />{/each}
+			</svg>
+			<svg class="disc" viewBox="0 0 200 200" aria-hidden="true">
+				<defs><radialGradient id="{uid}d"><stop offset="0" class="s1" /><stop offset=".6" class="s2" /><stop offset="1" class="s3" /></radialGradient></defs>
+				<circle cx="100" cy="100" r="62" fill="url(#{uid}d)" />
+				<circle class="rg" cx="100" cy="100" r="62" fill="none" stroke-width="2.4" />
+				{#each BEADS as [x, y]}<circle class="bd" cx={x} cy={y} r="1.7" />{/each}
+				<circle class="rh" cx="100" cy="100" r="54" fill="none" stroke-width="1" opacity=".6" />
+				<circle class="rh" cx="100" cy="100" r="46" fill="none" stroke-width=".7" opacity=".3" />
+			</svg>
 			<span class="fan">
 				{#each [golds[1], golds[0], golds[2]] as g (g)}
 					{#if g != null}<span class="mini" class:dim={!held.includes(g)}><Card heroId={H} card={heroCards(H)[g]} /></span>{/if}
@@ -81,22 +100,35 @@
 </span>
 
 <style>
-	.tg { position: relative; display: inline-grid; place-items: center; width: var(--z); height: var(--z); }
+	.tg { position: relative; display: inline-grid; place-items: center; width: calc(var(--z) * 1.5); height: var(--z); }
 	.tg.modal { width: auto; height: auto; }
-	.gb { position: relative; width: 100%; height: 100%; padding: 0; border: 0; border-radius: 50%; display: grid; place-items: center; cursor: pointer; pointer-events: auto;
-		background: radial-gradient(circle at 50% 40%, #1d3550, #08131f); box-shadow: inset 0 0 0 1.5px rgba(216, 179, 106, 0.55), 0 2px 6px rgba(0, 0, 0, 0.5); }
-	.gb.ult { box-shadow: inset 0 0 0 2px #a46be8, 0 2px 6px rgba(0, 0, 0, 0.5); }
-	.gb.ready { box-shadow: inset 0 0 0 2px #e3b341, 0 0 12px rgba(227, 179, 65, 0.6); }
-	.gb.open { box-shadow: inset 0 0 0 2px #f4dfa8; }
-	.glow { position: absolute; inset: -18%; border-radius: 50%; background: radial-gradient(closest-side, rgba(255, 214, 120, 0.55), transparent); animation: tgg 1.8s ease-in-out infinite; pointer-events: none; }
-	@keyframes tgg { 0%, 100% { opacity: 0.2; } 50% { opacity: 1; } }
-	.fan { position: relative; width: 78%; height: 74%; }
-	.mini { position: absolute; left: 50%; bottom: 0; width: 42%; transform-origin: 50% 110%; border-radius: 3px; overflow: hidden; box-shadow: 0 0 0 1px #e3b341, 0 2px 4px rgba(0, 0, 0, 0.6); }
+	.gb { --hi: #ffd76a; --mid: #d9962a; --deep: #7a4a10; position: relative; width: 100%; height: 100%; padding: 0; border: 0; background: none; cursor: pointer; pointer-events: auto; }
+	.gb.ult { --hi: #d6b4ff; --mid: #8a4fd8; --deep: #3a1a66; }
+	.rays, .disc, .glow { position: absolute; left: calc(50% - var(--z)); top: calc(50% - var(--z)); width: calc(var(--z) * 2); height: calc(var(--z) * 2); pointer-events: none; }
+	.rays path { fill: var(--mid); opacity: 0.7; }
+	.rays path.long { fill: var(--hi); opacity: 0.95; }
+	.s1 { stop-color: var(--hi); stop-opacity: 0.55; }
+	.s2 { stop-color: var(--mid); stop-opacity: 0.28; }
+	.s3 { stop-color: var(--deep); stop-opacity: 0; }
+	.rg { stroke: var(--mid); }
+	.rh { stroke: var(--hi); }
+	.bd { fill: var(--hi); }
+	.glow { border-radius: 50%; background: radial-gradient(closest-side, transparent 55%, color-mix(in srgb, var(--hi) 55%, transparent) 78%, transparent); opacity: 0; }
+	/* a swap is open: the rays turn and the glow breathes (transform / opacity only) */
+	.gb.spin .rays { animation: tkspin 40s linear infinite; }
+	.gb.spin .glow { animation: tkbr 2.2s ease-in-out infinite; }
+	.gb.ready:not(.spin) .glow { opacity: 0.6; }
+	@keyframes tkspin { to { transform: rotate(360deg); } }
+	@keyframes tkbr { 0%, 100% { opacity: 0.15; } 50% { opacity: 0.85; } }
+	.fan { position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
+	.mini { position: absolute; width: calc(var(--z) * 0.6); left: calc(var(--z) * -0.3); top: calc(var(--z) * -0.46); transform-origin: 50% 120%; border-radius: 3px; overflow: hidden; box-shadow: 0 0 0 1px #e3b341, 0 2px 5px rgba(0, 0, 0, 0.65); }
+	.gb.ult .mini { box-shadow: 0 0 0 1px #c9a2ff, 0 2px 5px rgba(0, 0, 0, 0.65); }
 	.mini :global(.cardface) { display: block; width: 100%; }
-	.mini:nth-child(1) { transform: translateX(-50%) rotate(-22deg); }
-	.mini:nth-child(2) { transform: translateX(-50%); z-index: 1; }
-	.mini:nth-child(3) { transform: translateX(-50%) rotate(22deg); }
+	.mini:nth-child(1) { transform: rotate(-24deg); }
+	.mini:nth-child(2) { z-index: 1; }
+	.mini:nth-child(3) { transform: rotate(24deg); }
 	.mini.dim { filter: grayscale(0.7) brightness(0.72); }
+	.gb.open .mini:nth-child(2) { box-shadow: 0 0 0 1.5px #f4dfa8, 0 2px 5px rgba(0, 0, 0, 0.65); }
 
 	.gp { position: absolute; bottom: calc(100% + 24px); left: 50%; transform: translateX(-50%); z-index: 30; width: 330px; box-sizing: border-box; padding: 10px 12px 12px; border-radius: 14px; pointer-events: auto; color: #f2ecdf; text-align: left;
 		background: linear-gradient(180deg, rgba(16, 40, 66, 0.99), rgba(6, 19, 34, 0.99)); border: 1px solid rgba(216, 179, 106, 0.45); box-shadow: 0 14px 34px rgba(0, 0, 0, 0.6); }

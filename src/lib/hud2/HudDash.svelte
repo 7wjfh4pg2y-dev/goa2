@@ -282,7 +282,7 @@
 	.dme { flex: none; display: flex; flex-direction: column; gap: 4px; width: 112px; }
 	/* a 4★ hero's button: the name block gives up a little room for it */
 	.haspow .dme { width: 100px; }
-	.dpow { flex: none; width: 52px; height: 52px; display: grid; place-items: center; }
+	.dpow { flex: none; min-width: 52px; height: 52px; display: grid; place-items: center; }
 	.dmn { padding: 0; border: 0; background: none; text-align: left; font-size: 19px; line-height: 1; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
 	.dmh { font-size: 11px; line-height: 1; color: var(--th); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 	.purse { align-self: flex-start; margin-top: 4px; display: inline-flex; align-items: center; gap: 4px; }
