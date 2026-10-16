@@ -896,7 +896,7 @@
 	$: orderTop = cTop ? 62 : 100;
 	$: colTop = orderTop + (cOrder ? 30 : 60) + (cOrder ? 26 : 34);
 	// the Chronicle in the corner: beside the dash when there's room, else just above its left end
-	$: DASH_W = 900 + (myPower === 'takahide' ? 84 : myPower === 'snorri' ? 100 : myPower ? 60 : 0); // the dash's width (design px) without the ultimate's compartment (+ a 4★ hero's button)
+	$: DASH_W = 900 + (myPower === 'takahide' ? 84 : myPower === 'snorri' ? 100 : myPower === 'ignatia' ? 92 : myPower ? 60 : 0); // the dash's width (design px) without the ultimate's compartment (+ a 4★ hero's button)
 	$: myUltOpen = !!mine && myUlt >= 0 && (mine.ultimate || ultReady);
 	$: logRoom = canvasW / 2 - DASH_W / 2 - 14 - (myUltOpen ? 96 : 0) - 36;
 	$: logBeside = logRoom >= 220;
@@ -1017,7 +1017,7 @@
 <!-- a 4★ hero's own button, at the size its dash gives it -->
 {#snippet powerBtn(size: number)}
 	{#if myPower === 'ignatia'}
-		<IgnatiaCoin {size} face={$ms.tieBreaker} split={igSplit} ult={!!mine?.ultimate} ready={igReady} used={igUsed} flames={$boardPrefs.dash} art={(t) => icon(`tiebreaker_${t}`)} onPress={armIgnatiaFlip} />
+		<IgnatiaCoin {size} phone={mobile} face={$ms.tieBreaker} split={igSplit} ult={!!mine?.ultimate} ready={igReady} used={igUsed} flames={$boardPrefs.dash} art={(t) => icon(`tiebreaker_${t}`)} onPress={armIgnatiaFlip} />
 	{:else if myPower === 'takahide' && mine}
 		<TakaGold {size} cs={mine} kind={tkKind} {turnIdx} fx={$boardPrefs.dash} phone={mobile} onPick={tkPick} />
 	{:else if myPower === 'snorri'}

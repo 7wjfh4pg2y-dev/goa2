@@ -1,12 +1,15 @@
 <script lang="ts">
 	// Ignatia's dash button: her own copy of the tie-breaker coin, so she always sees which half of her cards
 	// applies (the blue-symbol text while the coin shows the Titans, the orange one while it shows the Atlanteans).
-	// Equilibrium (her silver) = both halves for the rest of the round: a split coin, half Atlantean, half Titan, in
-	// a ring of ten tomoe commas, fire and water (their pulse = the Dashboard effect switch). When the round ends the split goes and the coin shows the
+	// A ring of ten tomoe commas is ALWAYS round the coin (the user, 2026-10-16), still and in the coin's colour: all
+	// fire while the coin shows the Atlanteans, all water while it shows the Titans. Equilibrium (her silver) = both
+	// halves for the rest of the round: a split coin, half Atlantean, half Titan, the ring fire on one side and water on
+	// the other, and it pulses (the Dashboard effect switch). With her ultimate the ring is purple, and pulses while she
+	// may flip the coin (and under Equilibrium). When the round ends the split goes and the coin shows the
 	// real coin again — flipping first if the real one changed meanwhile. With her ultimate (Chaos Incarnate) the coin
 	// has a purple rim and, on her own turn, can be pressed once to flip the real coin (the action ring confirms).
 	import { onDestroy } from 'svelte';
-	import { TOMOE, TOMOE_BODY, TOMOE_INK, TOMOE_MID, TOMOE_KEY } from './tomoe';
+	import { TOMOE, TOMOE_BODY, TOMOE_INK, TOMOE_MID, TOMOE_KEY, type Comma } from './tomoe';
 	type Team = 'orange' | 'blue';
 	export let face: Team = 'orange';
 	export let split = false;
@@ -15,6 +18,8 @@
 	export let used = false; // used this turn
 	export let flames = true; // the Dashboard effects switch
 	export let size = 46;
+	/** the phone's short tools row: a smaller coin, so the ring fits */
+	export let phone = false;
 	export let art: (t: Team) => string;
 	export let onPress: () => void = () => {};
 
@@ -34,25 +39,33 @@
 		timers.push(setTimeout(() => { flipping = false; }, wait + 360));
 	}
 	onDestroy(() => timers.forEach(clearTimeout));
+	// each comma's element: purple with the ultimate; else fire / water by its side under Equilibrium, or the coin's colour
+	type Kind = 'fire' | 'water' | 'ult';
+	const ULT = { ink: '#1d0838', body: '#8a4fd8', mid: '#e2c6ff' };
+	$: kindOf = (c: Comma): Kind => (ult ? 'ult' : split ? (c.fire ? 'fire' : 'water') : face === 'orange' ? 'fire' : 'water');
+	const ink = (k: Kind) => (k === 'ult' ? ULT.ink : TOMOE_INK[k]);
+	const body = (k: Kind) => (k === 'ult' ? ULT.body : TOMOE_BODY[k]);
+	const mid = (k: Kind) => (k === 'ult' ? ULT.mid : TOMOE_MID[k]);
+	$: moving = flames && (split || (ult && ready));
+	$: cs = phone ? size - 7 : size;
 	const NAME: Record<Team, string> = { orange: 'Atlanteans', blue: 'Titans' };
 	$: tip = split ? 'Equilibrium — either half of your cards applies this round'
 		: `Tie-breaker: the ${NAME[face]} — your ${face} text applies${ult ? (ready ? ' · tap to flip it (Chaos Incarnate)' : used ? ' · flipped this turn' : ' · flip it on your turn, after an action') : ''}`;
 </script>
 
-<button class="icoin" class:split class:ult class:ready class:used class:fx={flames} style="--s:{size}px" on:click={() => ready && onPress()} title={tip} aria-label={tip}>
-	{#if split}
-		<!-- the tomoe ring: ten commas all round, fire on the Atlantean half, water on the Titan half -->
-		<span class="ring" aria-hidden="true">
-			{#each TOMOE as c, k (k)}
-				<svg class="tm" viewBox="0 0 200 200" style="--k:{k}">
-					<path d={c.d} fill="none" stroke={TOMOE_KEY} stroke-width="5.5" stroke-linejoin="round" />
-					<path d={c.d} fill={c.fire ? TOMOE_BODY.fire : TOMOE_BODY.water} stroke={c.fire ? TOMOE_INK.fire : TOMOE_INK.water} stroke-width="2.4" stroke-linejoin="round" />
-					<circle cx={c.head[0]} cy={c.head[1]} r={c.r * 0.55} fill={c.fire ? TOMOE_MID.fire : TOMOE_MID.water} />
-					<path d={c.swirl} fill="none" stroke={c.fire ? TOMOE_INK.fire : TOMOE_INK.water} stroke-width="1.6" stroke-linecap="round" />
-				</svg>
-			{/each}
-		</span>
-	{/if}
+<button class="icoin" class:split class:ult class:ready class:used class:fx={moving} class:ph={phone} style="--s:{cs}px" on:click={() => ready && onPress()} title={tip} aria-label={tip}>
+	<!-- the tomoe ring: ten commas all round, in the coin's colour; fire / water halves under Equilibrium; purple with the ultimate -->
+	<span class="ring" aria-hidden="true">
+		{#each TOMOE as c, k (k)}
+			{@const e = kindOf(c)}
+			<svg class="tm" viewBox="0 0 200 200" style="--k:{k}">
+				<path d={c.d} fill="none" stroke={TOMOE_KEY} stroke-width="5.5" stroke-linejoin="round" />
+				<path d={c.d} fill={body(e)} stroke={ink(e)} stroke-width="2.4" stroke-linejoin="round" />
+				<circle cx={c.head[0]} cy={c.head[1]} r={c.r * 0.55} fill={mid(e)} />
+				<path d={c.swirl} fill="none" stroke={ink(e)} stroke-width="1.6" stroke-linecap="round" />
+			</svg>
+		{/each}
+	</span>
 	<span class="glow" aria-hidden="true"></span>
 	<span class="face" class:flip={flipping}><img src={art(base)} alt="" draggable="false" /></span>
 	<span class="halves" aria-hidden="true">
@@ -64,7 +77,8 @@
 </button>
 
 <style>
-	.icoin { position: relative; width: var(--s); height: var(--s); padding: 0; border: 0; border-radius: 50%; background: none; cursor: default; flex: none; }
+	/* room either side for the ring (it reaches 0.8 of the coin's size out from its centre) */
+	.icoin { position: relative; width: var(--s); height: var(--s); margin: 0 calc(var(--s) * 0.34); padding: 0; border: 0; border-radius: 50%; background: none; cursor: default; flex: none; }
 	.icoin.ready { cursor: pointer; }
 	.face, .halves, .glow, .rim, .ring { position: absolute; inset: 0; border-radius: 50%; }
 	.face img, .halves img { display: block; width: 100%; height: 100%; border-radius: 50%; }
@@ -81,7 +95,9 @@
 	/* a still two-coloured glow under the split coin (no motion: it shows with the flames off too) */
 	.glow { opacity: 0; transition: opacity 0.3s ease; box-shadow: -5px 0 12px 1px rgba(239, 125, 34, 0.45), 5px 0 12px 1px rgba(47, 127, 230, 0.45); }
 	.split .glow { opacity: 1; }
-	/* the tomoe ring: drawn in a box twice the coin, under it; a soft pulse runs round the ten commas (Dashboard switch) */
+	/* the tomoe ring: drawn in a box twice the coin, under it; at rest it is still and a little dim; while it matters a
+	   soft pulse runs round the ten commas (Dashboard switch) */
+	.tm { opacity: 0.8; }
 	.ring { inset: -50%; border-radius: 0; pointer-events: none; }
 	.tm { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; transform-origin: 50% 50%; }
 	.fx .tm { animation: tpulse 2s ease-in-out infinite; animation-delay: calc(var(--k) * -0.2s); }
