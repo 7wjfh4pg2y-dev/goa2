@@ -13,7 +13,7 @@
 // broken by `updatedAt`) wins. For a handful of players nudging a shared
 // tracker this is robust and easy to reason about.
 
-import { applyPower, syncPowers, hasPower, type PowerReq, type PowerState, type TurnCtx } from './heropower'
+import { applyPower, syncPowers, hasPower, runeLine, RUNE_NAME, type PowerReq, type PowerState, type TurnCtx } from './heropower'
 import { teamName, aMinion } from './teams'
 import { hexCube, cubeDist } from './zones'
 import { tokenExpiry, sweepTokens, statusFrom, isTurret } from './tokens'
@@ -1544,6 +1544,8 @@ export function joinMatch(
 		if (req.kind === 'endAct' && (patch.acting !== undefined || patch.turn)) { const who = actorOf(local); if (who) note(who, req.pid === who ? 'ends their turn' : 'turn skipped by the host') }
 		if (req.kind === 'endAct' && patch.tieBreaker) note(req.pid, `the tie-breaker coin flips to the ${teamName(patch.tieBreaker)}`)
 		if (req.kind === 'claim' && patch.tieClaims) note(req.pid, 'claims the tie — goes first')
+		if (req.kind === 'power' && req.op === 'snorriInscribe' && patch.power && req.order) note(req.pid, req.target && req.target !== req.pid ? `set ${nameOf(req.target)}'s runes: ${runeLine(req.order)} (host)` : `inscribed the runes: ${runeLine(req.order)}`)
+		if (req.kind === 'power' && req.op === 'snorriSecond' && patch.power) note(req.pid, req.rune ? `Rune Mastery: ${RUNE_NAME[req.rune]} is active too` : 'Rune Mastery: no second rune')
 		if (req.kind === 'power' && req.op === 'ignatiaFlip' && patch.tieBreaker) note(req.pid, `flips the tie-breaker coin to the ${teamName(patch.tieBreaker)} (Chaos Incarnate)`)
 		if (req.kind === 'removeHero' && patch.defeated) note(req.pid, 'took their hero off the board — back with their next card')
 		if (req.kind === 'clearAround' && patch.pieces) { const n = Object.keys(local.pieces ?? {}).length - Object.keys(patch.pieces).length; note(req.pid, `cleared ${n} token${n === 1 ? '' : 's'} next to them`) }

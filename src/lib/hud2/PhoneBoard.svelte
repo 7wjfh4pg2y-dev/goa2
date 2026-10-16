@@ -5,6 +5,8 @@
 	// and REMOVED (greyed, struck). A tap on any open card reads it, and the reader swipes through every card that's
 	// open information: played (revealed) cards, discards, removed cards — never a face-down card or an upgrade.
 	import TurnSlot from '$lib/cards/TurnSlot.svelte';
+	import RuneMark from './RuneMark.svelte';
+	import type { RuneSlots } from './runes';
 	import Card from '$lib/cards/Card.svelte';
 	import StatBubbles from './StatBubbles.svelte';
 	import { heroCards, heroName } from '$lib/cards/deck';
@@ -24,6 +26,10 @@
 	export let onSlot: (e: Event, t: number) => void = () => {};
 	export let onRead: (list: number[], at: number) => void = () => {};
 	export let onClose: () => void = () => {};
+	/** Snorri's runes under the slots (public), and whether the Dashboard effects run */
+	export let runes: RuneSlots | null = null;
+	export let runeFx = true;
+
 
 	const ROMAN = ['I', 'II', 'III', 'IV'];
 	$: lv = levelOf(cs);
@@ -58,7 +64,7 @@
 	<StatBubbles {cs} size={30} />
 	<div class="turns">
 		{#each [0, 1, 2, 3] as t (t)}
-			<span class="tw" class:now={t === turnIdx} class:glow={fxAt(t)}><TurnSlot heroId={cs.hero} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} label={ROMAN[t]} examinable on:click={(e) => onSlot(e, t)} /></span>
+			<span class="tw" class:now={t === turnIdx} class:glow={fxAt(t)}><TurnSlot heroId={cs.hero} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} label={ROMAN[t]} examinable on:click={(e) => onSlot(e, t)} />{#if runes}<span class="wr"><RuneMark rune={runes.at[t] ?? null} size={22} on={t === turnIdx && !!runes.at[t]} second={!!runes.second && runes.second === runes.at[t]} fx={runeFx} /></span>{/if}</span>
 		{/each}
 		<span class="dv"></span>
 		<button class="tw pile" disabled={top == null} on:click={() => top != null && read(top)} aria-label="Discard pile">
@@ -126,4 +132,5 @@
 	.sc.disc { box-shadow: 0 0 0 1.5px #d8a24a; }
 	.sc.rmv { filter: grayscale(1) brightness(0.6); }
 	.sc.rmv::after { content: ''; position: absolute; left: -2px; right: -2px; top: 50%; height: 2px; background: #e0533f; transform: rotate(-35deg); }
+	.wr { position: absolute; left: 50%; bottom: 0; transform: translate(-50%, 50%); z-index: 1; display: grid; pointer-events: none; }
 </style>

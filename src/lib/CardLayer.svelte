@@ -9,8 +9,12 @@
 	import type { Readable } from 'svelte/store';
 	import type { MatchSession, MatchState, Player } from '$lib/match';
 	import { teamForSeat, colorHex, battlePatch, levelPatch, canRespawn, turnPlan, claimable, actingIdx, actorOf, turnOrder, turnKey as keyOfTurn } from '$lib/match';
-	import { hasPower, equilibrium, canFlip, flipUsed, type TurnCtx } from '$lib/heropower';
+	import { hasPower, equilibrium, canFlip, flipUsed, runesOf, secondRune, canInscribe, canSecond, RUNES, type Rune, type TurnCtx } from '$lib/heropower';
 	import IgnatiaCoin from '$lib/hud2/IgnatiaCoin.svelte';
+	import SnorriRunes from '$lib/hud2/SnorriRunes.svelte';
+	import RunePanel from '$lib/hud2/RunePanel.svelte';
+	import RuneMark from '$lib/hud2/RuneMark.svelte';
+	import type { RuneSlots } from '$lib/hud2/runes';
 	import { battleResult, battleText, laneNotes } from '$lib/battle';
 	import Card from '$lib/cards/Card.svelte';
 	import CardBack from '$lib/cards/CardBack.svelte';
@@ -219,10 +223,36 @@
 	$: igSplit = myPower === 'ignatia' && equilibrium($ms, clientId);
 	$: igReady = myPower === 'ignatia' && canFlip($ms, clientId, pctx);
 	$: igUsed = myPower === 'ignatia' && flipUsed($ms, clientId, pctx);
+	// Snorri: his runes (public — every board shows them under his slots), Inscribe while his silver acts, Rune Mastery
+	$: snRunes = myPower === 'snorri' ? runesOf($ms, clientId) : null;
+	$: snSecond = myPower === 'snorri' ? secondRune($ms, clientId, pctx) : null;
+	$: snEdit = myPower === 'snorri' && canInscribe($ms, clientId, pctx);
+	$: snCan2 = myPower === 'snorri' && canSecond($ms, clientId, pctx);
+	/** the runes as a board shows them (null = not Snorri / nothing inscribed yet) */
+	function runeSlots(st: MatchState, ctx: TurnCtx, vc: Record<string, PlayerCardState>): Record<string, RuneSlots | null> {
+		return Object.fromEntries(Object.keys(vc).map((pid) => [pid, vc[pid]?.hero === 'snorri' ? { at: runesOf(st, pid) ?? [], second: secondRune(st, pid, ctx) } : null]));
+	}
+	$: runeMap = runeSlots($ms, pctx, viewCards);
+	$: runeNow = Object.fromEntries(Object.entries(runeMap).map(([pid, r]) => [pid, r?.at[turnIdx] ?? null])) as Record<string, Rune | null>;
 	// a power loaded onto the action ring, which confirms it (× drops it)
-	let powerArm: { op: 'ignatiaFlip'; label: string; sub?: string } | null = null;
-	$: if (powerArm && !igReady) powerArm = null;
+	let powerArm: { op: 'ignatiaFlip' | 'snorriInscribe'; label: string; sub?: string; order?: Rune[]; target?: string } | null = null;
+	$: if (powerArm && powerArm.op === 'ignatiaFlip' && !igReady) powerArm = null;
+	$: if (powerArm && powerArm.op === 'snorriInscribe' && !powerArm.target && !snEdit) powerArm = null;
 	function armIgnatiaFlip() { if (igReady) { powerArm = { op: 'ignatiaFlip', label: 'Flip coin', sub: 'Chaos Incarnate' }; armed = null; playedArm = null; orderArm = null; } }
+	// the rune panel hands over the arrangement to confirm (a stable function: the panel calls it reactively)
+	function snDraft(o: Rune[] | null) {
+		if (!o) { if (powerArm?.op === 'snorriInscribe' && !powerArm.target) powerArm = null; return; }
+		if (powerArm?.op === 'snorriInscribe' && powerArm.order?.join() === o.join()) return;
+		powerArm = { op: 'snorriInscribe', label: 'Inscribe', sub: 'the runes', order: [...o] }; armed = null; playedArm = null; orderArm = null;
+	}
+	function snPickSecond(r: Rune | null) { session.cardAction({ kind: 'power', pid: clientId, op: 'snorriSecond', rune: r }); }
+	// the host fixing a Snorri's runes from the Game lobby
+	let runeFor: string | null = null;
+	let runeDraft: Rune[] = [...RUNES];
+	export function openRunesFor(pid: string) { if ($ms.host !== clientId || cards[pid]?.hero !== 'snorri') return; runeFor = pid; runeDraft = [...(runesOf($ms, pid) ?? RUNES)]; }
+	$: if (runeFor) { const o = runeDraft, cur = runesOf($ms, runeFor); const same = !!cur && cur.join() === o.join();
+		if (same) { if (powerArm?.target) powerArm = null; } else if (powerArm?.order?.join() !== o.join() || powerArm?.target !== runeFor) powerArm = { op: 'snorriInscribe', label: 'Inscribe', sub: 'host', order: [...o], target: runeFor }; }
+	$: if (!runeFor && powerArm?.target) powerArm = null;
 	$: actAt = actingIdx($ms);
 	$: actor = revealed ? actorOf($ms) : null;
 	$: actorName = actor ? heroName(cards[actor]?.hero ?? '') : '';
@@ -889,7 +919,7 @@
 			if (nudgeLeft > 0) return { label: 'Nudge', sub: `in ${Math.ceil(nudgeLeft / 1000)} s`, kind: 'off', cancel: drop };
 			return { label: 'Nudge', sub: who, kind: 'go', pulse: true, run: () => { session.nudge(a.pid); drop(); }, cancel: drop };
 		}
-		if (powerArm) { const a = powerArm; return { label: a.label, sub: a.sub, kind: 'go', pulse: true, run: () => { session.cardAction({ kind: 'power', pid: clientId, op: a.op }); powerArm = null; }, cancel: () => (powerArm = null) }; }
+		if (powerArm) { const a = powerArm; return { label: a.label, sub: a.sub, kind: 'go', pulse: true, run: () => { session.cardAction({ kind: 'power', pid: clientId, op: a.op, order: a.order, target: a.target }); powerArm = null; if (a.target) runeFor = null; }, cancel: () => { powerArm = null; if (a.target) runeFor = null; } }; }
 		// a card chosen in its preview to discard (any time — a defence, or an effect): the ring asks once more
 		if (armed != null && armedKind === 'discard' && mine) { const i = armed; return { label: 'Discard', sub: heroCards(mine.hero)[i]?.name, card: true, kind: 'bad', pulse: true, run: () => { defend(i); armed = null; }, cancel: () => (armed = null) }; }
 		if (iCanRespawn) return { label: 'Respawn', kind: 'team', pulse: true, run: onRespawn };
@@ -937,13 +967,15 @@
 
 <!-- controls shared by the desktop dash and the phone dash -->
 {#snippet plate(p: Player, cs: PlayerCardState, w = npW)}
-	<Nameplate {cs} name={p.name} color={colorHex(p.color)} team={pTeam(p)} {turnIdx} {revealed} ready={isReady(cards[p.id] ?? cs)} me={p.id === clientId} width={w}
+	<Nameplate {cs} runes={runeMap[p.id]} runeFx={$boardPrefs.dash} name={p.name} color={colorHex(p.color)} team={pTeam(p)} {turnIdx} {revealed} ready={isReady(cards[p.id] ?? cs)} me={p.id === clientId} width={w}
 		fx={!!fxFor(p.id, slotIdx(cs, turnIdx))} onOpen={() => (overlayId = p.id)} onSlot={(e, t) => peekSlot(e, cs, t)} />
 {/snippet}
 <!-- a 4★ hero's own button, at the size its dash gives it -->
 {#snippet powerBtn(size: number)}
 	{#if myPower === 'ignatia'}
 		<IgnatiaCoin {size} face={$ms.tieBreaker} split={igSplit} ult={!!mine?.ultimate} ready={igReady} used={igUsed} flames={$boardPrefs.dash} art={(t) => icon(`tiebreaker_${t}`)} onPress={armIgnatiaFlip} />
+	{:else if myPower === 'snorri'}
+		<SnorriRunes {size} runes={snRunes} {turnIdx} second={snSecond} ult={!!mine?.ultimate} canEdit={snEdit} canSecond={snCan2} fx={$boardPrefs.dash} phone={mobile} onDraft={snDraft} onSecond={snPickSecond} />
 	{/if}
 {/snippet}
 {#snippet radiusCtl()}
@@ -1083,7 +1115,7 @@
 						<span class="mpic">{#if phone2}<svg class="lring" viewBox="0 0 50 50" aria-hidden="true">{#each Array(8) as _, i (i)}<path d={lvArc(i)} class:on={i < levelOf(cs) || (i === 7 && cs.ultimate)} class:ult={i === 7} />{/each}</svg>{/if}<PlayerIcon hero={cs.hero} team={pTeam(p)} color={colorHex(p.color)} size={phone2 ? '24px' : '28px'} ring={2} ult={cs.ultimate} /></span>
 						<span class="mpn"><b>{p.name}</b><small>{heroName(cs.hero)}</small></span>
 						<span class="mlv">{#if !phone2}<em>Lv {levelOf(cs)}</em>{/if}<i class="mini" class:off={ini == null}>{@html CLOCK}<b>{ini ?? '–'}</b></i></span>
-						<span class="mcard fxwrap" class:fx={!!cfx} style="--fxc:{colorOf(p.id)}"><TurnSlot heroId={cs.hero} played={cs.turns[turnIdx]} pending={cs.pending} isCurrent {revealed} peekable={p.id === clientId} examinable on:click={(e) => peekSlot(e, cs, turnIdx)} /></span>
+						<span class="mcard fxwrap" class:fx={!!cfx} style="--fxc:{colorOf(p.id)}"><TurnSlot heroId={cs.hero} played={cs.turns[turnIdx]} pending={cs.pending} isCurrent {revealed} peekable={p.id === clientId} examinable on:click={(e) => peekSlot(e, cs, turnIdx)} />{#if runeNow[p.id]}<span class="mrune"><RuneMark rune={runeNow[p.id]} size={13} on fx={false} /></span>{/if}</span>
 						{#if phone2}<span class="msb"><StatBubbles {cs} size={17} /></span>
 						{:else}<span class="msx">{#each allStats(cs) as r}<span class:up={r.delta > 0}>{#if r.delta > 0}<span class="pp">{#each Array(r.delta) as _}<i></i>{/each}</span>{/if}<img src={statImg(r.key)} alt={r.label} /></span>{/each}</span>{/if}
 					</div>
@@ -1122,7 +1154,7 @@
 						</span>
 						{#if cs && dense}
 							<span class="dslot">
-								<span class="fxwrap" class:fx={!!fxFor(p.id, slotIdx(cs, turnIdx))} style="--fxc:{colorOf(p.id)}"><TurnSlot heroId={cs.hero} played={cs.turns[turnIdx]} pending={cs.pending} isCurrent {revealed} peekable={p.id === clientId} examinable on:click={(e) => peekSlot(e, cs, turnIdx)} /></span>
+								<span class="fxwrap" class:fx={!!fxFor(p.id, slotIdx(cs, turnIdx))} style="--fxc:{colorOf(p.id)}"><TurnSlot heroId={cs.hero} played={cs.turns[turnIdx]} pending={cs.pending} isCurrent {revealed} peekable={p.id === clientId} examinable on:click={(e) => peekSlot(e, cs, turnIdx)} />{#if runeNow[p.id]}<span class="mrune"><RuneMark rune={runeNow[p.id]} size={13} on fx={false} /></span>{/if}</span>
 							</span>
 						{/if}
 						{#if cs && isSkipped(cs)}<span class="skiptag" title="No cards left — skipped this turn">skip</span>
@@ -1173,7 +1205,7 @@
 		<div class="h2helm">
 			<div class="h2order" style="top:{orderTop}px">
 				<HudOrder planning={!revealed || levelPhase} title={levelPhase ? 'Levelling' : 'Planning'} doneWord={levelPhase ? 'done' : 'ready'} countdown={countdownActive ? countdownLabel : ''} dots={h2dots} order={h2order} bonus={itemBonus} tieArt={icon(`tiebreaker_${$ms.tieBreaker}`)}
-					compact={cOrder} me={clientId} small={h2order.length > 4} acting={actAt} canPoint={iAmHost} onPoint={pickOrder} onNudge={armNudge} onRead={(pid, hid, idx) => (examine = { hid, idx, pid })} />
+					compact={cOrder} runeAt={runeNow} me={clientId} small={h2order.length > 4} acting={actAt} canPoint={iAmHost} onPoint={pickOrder} onNudge={armNudge} onRead={(pid, hid, idx) => (examine = { hid, idx, pid })} />
 			</div>
 			{#if platesTop}
 				<!-- nameplates either side of the compact top bar: the enemy on the left, your team on the right (you last) -->
@@ -1188,7 +1220,7 @@
 				{#if !platesTop}
 					{#each h2enemies as p (p.id)}
 						{@const cs = viewCards[p.id]}
-						{#if cs}{#if compact}{@render plate(p, cs, 344)}{:else}<HudBoard {cs} name={p.name} color={colorHex(p.color)} team={pTeam(p)} {turnIdx} {revealed} ready={isReady(cards[p.id] ?? cs)} compact={h2compact} small={h2tight}
+						{#if cs}{#if compact}{@render plate(p, cs, 344)}{:else}<HudBoard {cs} runes={runeMap[p.id]} runeFx={$boardPrefs.dash} name={p.name} color={colorHex(p.color)} team={pTeam(p)} {turnIdx} {revealed} ready={isReady(cards[p.id] ?? cs)} compact={h2compact} small={h2tight}
 							fxAt={(t) => !!fxFor(p.id, slotIdx(cs, t))} onOpen={() => (overlayId = p.id)} onSlot={(e, t) => peekSlot(e, cs, t)} />{/if}{/if}
 					{/each}
 				{/if}
@@ -1197,7 +1229,7 @@
 				{#if !platesTop}
 					{#each colRight as p (p.id)}
 						{@const cs = viewCards[p.id]}
-						{#if cs}{#if compact}{@render plate(p, cs, 344)}{:else}<HudBoard {cs} name={p.name} color={colorHex(p.color)} team={pTeam(p)} {turnIdx} {revealed} ready={isReady(cards[p.id] ?? cs)} compact={h2compact} small={h2tight}
+						{#if cs}{#if compact}{@render plate(p, cs, 344)}{:else}<HudBoard {cs} runes={runeMap[p.id]} runeFx={$boardPrefs.dash} name={p.name} color={colorHex(p.color)} team={pTeam(p)} {turnIdx} {revealed} ready={isReady(cards[p.id] ?? cs)} compact={h2compact} small={h2tight}
 							fxAt={(t) => !!fxFor(p.id, slotIdx(cs, t))} onOpen={() => (overlayId = p.id)} onSlot={(e, t) => peekSlot(e, cs, t)} />{/if}{/if}
 					{/each}
 				{/if}
@@ -1220,7 +1252,7 @@
 	{#if phone2 && overlayId && ovPlayer && viewCards[overlayId]}
 		{@const pcs = viewCards[overlayId]}
 		{@const pid = ovPlayer.id}
-		<PhoneBoard cs={pcs} name={ovPlayer.name} color={colorHex(ovPlayer.color)} team={pTeam(ovPlayer)} {turnIdx} {revealed} status={statusMap[pid] ?? EMPTY_STATUS} {markArt}
+		<PhoneBoard cs={pcs} runes={runeMap[pid]} runeFx={$boardPrefs.dash} name={ovPlayer.name} color={colorHex(ovPlayer.color)} team={pTeam(ovPlayer)} {turnIdx} {revealed} status={statusMap[pid] ?? EMPTY_STATUS} {markArt}
 			fxAt={(t) => !!fxFor(pid, slotIdx(pcs, t))} onStatus={(k) => toggleStatus(pid, k)} onSlot={(e, t) => peekSlot(e, pcs, t)}
 			onRead={(list, at) => (examine = { hid: pcs.hero, idx: list[at], pid, list: list.map((i) => ({ hid: pcs.hero, idx: i, pid })) })} onClose={() => (overlayId = null)} />
 	{:else if overlayId && ovPlayer && viewCards[overlayId]}
@@ -1357,6 +1389,13 @@
 			onTake={(i) => session.cardAction({ kind: 'take', pid: clientId, idx: i })}
 			onSwap={(i) => session.cardAction({ kind: 'swap', pid: clientId, idx: i })}
 			onPreview={(i) => mine && examineCard(mine.hero, i)} />
+	{/if}
+
+	<!-- the host setting a Snorri's runes (Game lobby → Runes): tap two to swap, the action ring confirms -->
+	{#if runeFor && cards[runeFor]}
+		<div class="runefix" class:dk={!mobile}>
+			<RunePanel variant="modal" title="{pidName(runeFor)}'s runes" runes={runesOf($ms, runeFor)} bind:draft={runeDraft} {turnIdx} canEdit fx={false} onClose={() => (runeFor = null)} />
+		</div>
 	{/if}
 
 	<!-- the host editing another player's deck (free moves, no coins) -->
@@ -1607,7 +1646,7 @@
 			</div>
 		{/if}
 		{#if phone2}
-			<PhoneDash cs={mine} power={myPower ? powerBtn : undefined} color={colorHex(myColor)} team={myTeam === 'blue' ? 'blue' : 'orange'} {turnIdx} {revealed} ini={myInit} fxAt={(t) => !!fxFor(clientId, slotIdx(mine, t))}
+			<PhoneDash cs={mine} runes={runeMap[clientId]} runeFx={$boardPrefs.dash} power={myPower ? powerBtn : undefined} color={colorHex(myColor)} team={myTeam === 'blue' ? 'blue' : 'orange'} {turnIdx} {revealed} ini={myInit} fxAt={(t) => !!fxFor(clientId, slotIdx(mine, t))}
 				deckCount={deckCards(mine).length} levelUp={iMustLevel} ultIdx={myUlt} {ultReady} order={order2} {ringColor} autoHide={autoRetract}
 				handStyle={bannerHand ? 'banners' : spreadHand ? 'spread' : 'fan'} {pingArmed} radius={radiusCtl} tokens={tokenCtl}
 				onMe={() => (overlayId = clientId)} onSlot={(e, t) => peekSlot(e, mine, t)} onDiscPick={(i) => openDiscard(mine.hero, i, true)}
@@ -1691,7 +1730,7 @@
 			</div>
 		{/if}
 		<div class="h2dash">
-			<HudDash cs={mine} power={myPower ? powerBtn : undefined} name={myName} color={colorHex(myColor)} team={myTeam === 'blue' ? 'blue' : 'orange'} {turnIdx} {revealed} ini={myInit} marks={statusMap[clientId] ?? EMPTY_STATUS} {markArt}
+			<HudDash cs={mine} runes={runeMap[clientId]} runeFx={$boardPrefs.dash} power={myPower ? powerBtn : undefined} name={myName} color={colorHex(myColor)} team={myTeam === 'blue' ? 'blue' : 'orange'} {turnIdx} {revealed} ini={myInit} marks={statusMap[clientId] ?? EMPTY_STATUS} {markArt}
 				ultIdx={myUlt} {ultReady} deckCount={deckCards(mine).length} levelUp={iMustLevel} order={order2} fxAt={(t) => !!fxFor(clientId, slotIdx(mine, t))}
 				autoHide={autoRetract} spread={spreadHand} docked={dockHand} hand={handOrdered} rowMax={h2rowMax} {ringColor} {armed} {pingArmed} discOpen={discOpen === 'dash'} radius={radiusCtl} tokens={tokenCtl}
 				onMe={() => (overlayId = clientId)} onCoins={changeCoins} onSlot={(e, t) => peekSlot(e, mine, t)}
@@ -2219,6 +2258,9 @@
 	.lvtake { flex: 2 1 auto; white-space: nowrap; }
 	.lvtake img { height: 1.1em; width: auto; max-width: 1.5em; flex: none; object-fit: contain; }
 	.lvwrap { position: fixed; inset: 0; z-index: 45; }
+	.runefix { position: fixed; left: 0; right: 0; top: 18%; z-index: 26; display: flex; justify-content: center; pointer-events: none; }
+	.runefix.dk { zoom: var(--uis, 1); }
+	.mrune { position: absolute; left: -4px; bottom: -3px; z-index: 1; display: grid; pointer-events: none; }
 	.lvwrap.dk { zoom: var(--uis, 1); } /* desktop: in design px, like the rest of the HUD */
 	/* upgrades lie upside down, like on the table (item symbol upright) */
 	.dkcard :global(.cardface) { transition: transform .5s cubic-bezier(.3,.7,.2,1); }
@@ -2556,7 +2598,7 @@
 	.mini :global(svg) { width: 8px; height: 8px; flex: none; }
 	.mini b { font-weight: normal; min-width: 1.2em; text-align: center; font-variant-numeric: tabular-nums; }
 	.mini.off { opacity: .5; }
-	.mcard { grid-column: 4; grid-row: 1 / 3; align-self: center; width: 40px; }
+	.mcard { position: relative; grid-column: 4; grid-row: 1 / 3; align-self: center; width: 40px; }
 	/* this player has a lingering effect running (maybe from an earlier turn's card): the whole card glows in their colour */
 	.mpc.fxon { border-color: var(--fxc); animation: mpcfx 2.6s ease-in-out infinite; }
 	@keyframes mpcfx { 0%, 100% { opacity: 1; } 50% { opacity: 0.72; } }

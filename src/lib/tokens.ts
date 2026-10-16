@@ -7,7 +7,6 @@ import type { Piece, Team } from './match'
 export const HERO_KIT: Record<string, string[]> = {
 	bain: ['marker_bounty'],
 	tigerclaw: ['marker_poison'],
-	snorri: ['rune_anvil_marker', 'rune_axe_marker', 'rune_bird_marker', 'rune_horn_marker'],
 	trinkets: ['token_barrier', 'companion'],
 	min: ['token_blast', 'token_dud', 'token_grenade', 'token_smoke_bomb'],
 	gydion: ['token_familiar'],

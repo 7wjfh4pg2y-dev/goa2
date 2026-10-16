@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { applyCardReq, turnOrder, turnKey, actingIdx, type MatchState, type Piece } from './match'
 import { newPlayerCardState } from './cards/cardstate'
 import { heroCards } from './cards/deck'
-import { equilibrium, canFlip, flipUsed, hasPower, type TurnCtx } from './heropower'
+import { equilibrium, canFlip, flipUsed, hasPower, canInscribe, activeRune, runesOf, secondRune, type Rune, type TurnCtx } from './heropower'
 import { draftable, isLabHero, FOUR_STAR_LAB, FOUR_STAR_LIVE, HEROES } from './heroes'
 import { isFullGame, type Journal } from './recorder'
 
@@ -81,5 +81,64 @@ describe('the 4★ lab', () => {
 		const j = { fromStart: true, done: true, players: { a: { name: 'Zara', seat: 0, hero: 'arien' }, b: { name: 'Mo', seat: 1, hero: 'ignatia' } } } as unknown as Journal
 		expect(isFullGame(j)).toBe(!isLabHero('ignatia'))
 		expect(isFullGame({ ...j, players: { ...j.players, b: { name: 'Mo', seat: 1, hero: 'brogan' } } } as Journal)).toBe(true)
+	})
+})
+
+describe('Snorri: Inscribe the Runes (his silver) — a rune under each turn slot', () => {
+	const sSilver = heroCards('snorri').findIndex((c) => c.color === 'SILVER' && !c.handicapped)
+	const sRed = heroCards('snorri').findIndex((c) => c.color === 'RED' && (c.level ?? 0) === 1)
+	// S = Snorri (orange) vs B (blue); turn 2, his card this turn is `pending`
+	function sg(pending: number, ult = false, power?: Record<string, unknown>): MatchState {
+		const sn = { ...newPlayerCardState('snorri'), turns: [sRed, null, null, null], pending, ultimate: ult }
+		const b = { ...newPlayerCardState('arien'), pending: 0 }
+		return {
+			round: 1, turn: 2, seats: 2, life: { orange: 6, blue: 6 }, tieBreaker: 'orange', revealAt: 0, host: 'B',
+			pieces: { S: hero('I', 'orange', 'snorri'), B: hero('B', 'blue', 'arien') },
+			cards: { S: sn, B: b }, power
+		} as unknown as MatchState
+	}
+	const order = ['horn', 'bird', 'anvil', 'axe'] as Rune[]
+	const inscribe = (s: MatchState, pid = 'S', o: Rune[] = order, target?: string) => applyCardReq(s, { kind: 'power', pid, op: 'snorriInscribe', order: o, target })
+	it('only while his silver is the card acting (his own turn, after the reveal)', () => {
+		const s = actingAs(sg(sSilver), 'S')
+		expect(canInscribe(s, 'S', ctx(s))).toBe(true)
+		const p = inscribe(s)
+		expect(p.power?.S?.runes).toEqual(order)
+		// another card, or someone else acting, or before the reveal: refused
+		const red = actingAs(sg(sRed === 0 ? 1 : 0), 'S')
+		expect(inscribe(red)).toEqual({})
+		const other = actingAs(sg(sSilver), 'B')
+		expect(inscribe(other)).toEqual({})
+		expect(canInscribe(s, 'S', { ...ctx(s), revealed: false })).toBe(false)
+		// not a full set of four different runes: refused
+		expect(inscribe(s, 'S', ['axe', 'axe', 'bird', 'horn'] as Rune[])).toEqual({})
+	})
+	it('the active rune is the one under this turn\'s slot; they stay through the round end', () => {
+		const s = { ...actingAs(sg(sSilver), 'S'), power: { S: { runes: order } } } as MatchState
+		expect(activeRune(s, 'S', 1)).toBe('bird')
+		expect(activeRune(s, 'S', 3)).toBe('axe')
+		expect(activeRune(sg(sSilver), 'S', 1)).toBe(null) // nothing before the first Inscribe
+		const end = { ...s, turn: 4 } as MatchState
+		const next = { ...end, ...applyCardReq(end, { kind: 'advance', pid: 'B' }) } as MatchState
+		expect(next.round).toBe(2)
+		expect(runesOf(next, 'S')).toEqual(order)
+	})
+	it('the host can fix them any time; nobody else can touch his', () => {
+		const s = sg(sRed)
+		expect(inscribe(s, 'B', order, 'S').power?.S?.runes).toEqual(order)
+		expect(inscribe({ ...s, host: 'X' } as MatchState, 'B', order, 'S')).toEqual({})
+	})
+	it('Rune Mastery: an inactive rune as a second, on his own acting turn, for this turn only', () => {
+		const base = { ...actingAs(sg(sRed, true), 'S'), power: { S: { runes: order } } } as MatchState
+		const second = (s: MatchState, rune: Rune | null) => applyCardReq(s, { kind: 'power', pid: 'S', op: 'snorriSecond', rune })
+		expect(second(base, 'bird')).toEqual({}) // bird is the active one
+		const p = second(base, 'horn')
+		const after = { ...base, ...p } as MatchState
+		expect(secondRune(after, 'S', ctx(after))).toBe('horn')
+		expect(secondRune({ ...after, turn: 3 } as MatchState, 'S', ctx({ ...after, turn: 3 } as MatchState))).toBe(null)
+		expect(secondRune({ ...after, ...second(after, null) } as MatchState, 'S', ctx(after))).toBe(null)
+		// no ultimate / not his turn: refused
+		expect(second({ ...base, cards: { ...base.cards, S: { ...base.cards!.S, ultimate: false } } } as MatchState, 'horn')).toEqual({})
+		expect(second(actingAs(base, 'B'), 'horn')).toEqual({})
 	})
 })

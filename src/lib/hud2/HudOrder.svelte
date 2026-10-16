@@ -10,6 +10,8 @@
 	// planning dot = Nudge them (hurry up; nudge.ts limits); the host: the acting banner = Nudge, any other = Skip to it.
 	// Your own banner reads your card.
 	import { heroCards, backgroundSlug } from '$lib/cards/deck';
+	import RuneMark from './RuneMark.svelte';
+	import type { Rune } from '$lib/heropower';
 
 	export let planning = true;
 	/** the status row's word: Planning, or Levelling during the level-up step (dots = done levelling) */
@@ -30,6 +32,8 @@
 	export let onPoint: (k: number) => void = () => {};
 	export let onRead: (pid: string, hero: string, idx: number) => void = () => {};
 	export let onNudge: (pid: string) => void = () => {};
+	/** Snorri's active rune this turn, per player (shown on his banner) */
+	export let runeAt: Record<string, Rune | null> = {};
 
 	const ui = import.meta.glob('$lib/cards/images/*.png', { eager: true, import: 'default' }) as Record<string, string>;
 	const ic = (n: string) => Object.entries(ui).find(([k]) => k.endsWith(`/${n}.png`))?.[1] ?? '';
@@ -66,7 +70,7 @@
 			{#if k}{#if e.tied && (e.tieImg || tieArt)}<img class="ctie" src={e.tieImg ?? tieArt} alt="Tie" title="A tie: the coin's holders went first, then it flipped" />{:else}<i class="cchev">›</i>{/if}{/if}
 			<button class="ce is-{e.team}" class:done={k < acting} class:now={k === acting} on:click={() => click(k, e)} title={tip(k, e)}>
 				<span class="cfc" style="--pc:{e.color}; {e.portrait}"></span>
-				<span class="ch">{e.heroName}</span><b class="ci">{e.ini}</b>{#if e.pid === me}<em class="cyou">you</em>{/if}
+				<span class="ch">{e.heroName}</span>{#if runeAt[e.pid]}<RuneMark rune={runeAt[e.pid]} size={14} on fx={false} />{/if}<b class="ci">{e.ini}</b>{#if e.pid === me}<em class="cyou">you</em>{/if}
 			</button>
 		{/each}
 	{/if}
@@ -85,6 +89,7 @@
 			{#if k}{#if e.tied}<img class="tiemark" src={e.tieImg ?? tieArt} alt="Tie" title="A tie: the coin's holders went first, then it flipped" />{:else}<i class="chev">›</i>{/if}{/if}
 			<button class="ban is-{e.team}" class:done={k < acting} class:now={k === acting} style="--c:{COL[c?.color ?? ''] ?? '#666'}; --art:url({artOf(e.hero, e.idx)})" on:click={() => click(k, e)} title={tip(k, e)}>
 				<span class="bini">{e.ini}</span>
+				{#if runeAt[e.pid]}<span class="brune"><RuneMark rune={runeAt[e.pid]} size={20} on fx={false} /></span>{/if}
 				<span class="bbody">
 					<span class="bname">{c?.name ?? ''}</span>
 					<span class="bline">
@@ -119,6 +124,7 @@
 		background: linear-gradient(90deg, rgba(8, 20, 34, 0.96) 35%, rgba(8, 20, 34, 0.72) 70%, rgba(8, 20, 34, 0.5)), var(--art) center / cover, #081420; border: 1px solid rgba(255, 255, 255, 0.14); border-bottom: 3px solid var(--tc); box-shadow: 0 8px 18px rgba(0, 0, 0, 0.5); }
 	.small .ban { width: 184px; gap: 10px; }
 	.ban.done { opacity: 0.6; }
+	.brune { position: absolute; left: -6px; bottom: -6px; z-index: 2; display: grid; pointer-events: none; }
 	.ban.now { box-shadow: 0 0 0 2px var(--brass-hi), 0 8px 20px rgba(0, 0, 0, 0.55); }
 	.bini { align-self: stretch; width: 48px; flex: none; display: grid; place-items: center; font-size: 28px; color: #fff; border-radius: 9px 0 0 7px; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
 		background: linear-gradient(180deg, color-mix(in srgb, var(--c) 80%, #fff 20%), var(--c) 60%, color-mix(in srgb, var(--c) 70%, #000)); }

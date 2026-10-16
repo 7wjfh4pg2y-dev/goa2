@@ -7,6 +7,8 @@
 	import TurnSlot from '$lib/cards/TurnSlot.svelte';
 	import Card from '$lib/cards/Card.svelte';
 	import StatBubbles from './StatBubbles.svelte';
+	import RuneMark from './RuneMark.svelte';
+	import type { RuneSlots } from './runes';
 	import { heroCards, heroName } from '$lib/cards/deck';
 	import { portraitCss, heroSplash, splashFace } from '$lib/heroes';
 	import { levelOf, statDeltas, PASS, type PlayerCardState } from '$lib/cards/cardstate';
@@ -22,6 +24,10 @@
 	export let small = false; // 3 to a column
 	export let fxAt: (t: number) => boolean = () => false; // a lingering effect on that slot's card
 	export let onOpen: () => void = () => {};
+	/** Snorri's runes under the slots (public), and whether the Dashboard effects run */
+	export let runes: RuneSlots | null = null;
+	export let runeFx = true;
+
 	export let onSlot: (e: Event, t: number) => void = () => {};
 
 	const COL: Record<string, string> = { GOLD: '#c9982f', SILVER: '#8d99a8', RED: '#b8322f', BLUE: '#2a64c4', GREEN: '#2b8a43', PURPLE: '#7a46bd' };
@@ -52,6 +58,7 @@
 		<span class="xname"><span class="hn">{heroName(cs.hero)}</span><span class="ph">{name} · Lv {lv}</span></span>
 		{#if compact}
 			<span class="wells">{#each [0, 1, 2, 3] as t (t)}{@const w = wellOf(t)}<i class="w {w.kind}" class:glow={fxAt(t)} style={w.col ? `--c:${w.col}` : ''}></i>{/each}</span>
+			{#if runes?.at[turnIdx]}<RuneMark rune={runes.at[turnIdx]} size={16} on fx={runeFx} />{/if}{#if runes?.second}<RuneMark rune={runes.second} size={16} second fx={false} />{/if}
 		{/if}
 		{#if !revealed}<i class="rdy" class:ok={ready} title={ready ? 'Ready' : 'Choosing'}></i>{/if}
 		<span class="hand" title="Cards in hand"><svg viewBox="0 0 24 24"><rect x="4" y="6" width="11" height="15" rx="2" /><path d="M9 3h9a2 2 0 0 1 2 2v13" /></svg>{cs.hand.length}</span>
@@ -61,6 +68,7 @@
 			{#each [0, 1, 2, 3] as t (t)}
 				<span class="ws" class:now={t === turnIdx} class:glow={fxAt(t)}>
 					<TurnSlot heroId={cs.hero} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} label={ROMAN[t]} examinable on:click={(e) => onSlot(e, t)} />
+					{#if runes}<span class="wr"><RuneMark rune={runes.at[t] ?? null} size={small ? 18 : 20} on={t === turnIdx && !!runes.at[t]} second={!!runes.second && runes.second === runes.at[t]} fx={runeFx} /></span>{/if}
 				</span>
 			{/each}
 			<span class="sdiv"></span>
@@ -107,6 +115,7 @@
 	.ws.now :global(.slot.blank) { border: 1.5px solid var(--brass); color: var(--brass-hi); }
 	.ws.now :global(.flip), .ws.now :global(.static) { box-shadow: 0 0 0 2px var(--brass-hi); border-radius: 6px; }
 	.ws.glow { box-shadow: 0 0 0 2px #fff, 0 0 12px 3px var(--tc); }
+	.wr { position: absolute; left: 50%; bottom: 0; transform: translate(-50%, 55%); z-index: 1; display: grid; pointer-events: none; }
 	.sdiv { align-self: stretch; margin: 6px 0; background: var(--line); }
 	.ws.disc { aspect-ratio: 1192 / 1664; display: grid; place-items: center; border: 1px solid rgba(255, 255, 255, 0.1); background: rgba(0, 0, 0, 0.22); box-sizing: border-box; }
 	.ws.disc :global(.card), .ws.disc :global(.cardface) { width: 100%; }

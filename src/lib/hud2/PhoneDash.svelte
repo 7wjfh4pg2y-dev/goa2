@@ -8,6 +8,8 @@
 	import Card from '$lib/cards/Card.svelte';
 	import CardBack from '$lib/cards/CardBack.svelte';
 	import StatBubbles from './StatBubbles.svelte';
+	import RuneMark from './RuneMark.svelte';
+	import type { RuneSlots } from './runes';
 	import type { Order } from './HudDash.svelte';
 	import { heroCards } from '$lib/cards/deck';
 	import { portraitCss } from '$lib/heroes';
@@ -33,6 +35,9 @@
 	export let radius: Snippet | undefined = undefined;
 	export let tokens: Snippet | undefined = undefined;
 	export let power: Snippet<[number]> | undefined = undefined; // a 4★ hero's own button
+	/** Snorri's runes under the slots (public), and whether the Dashboard effects run */
+	export let runes: RuneSlots | null = null;
+	export let runeFx = true;
 	export let onMe: () => void = () => {};
 	export let onSlot: (e: Event, t: number) => void = () => {};
 	export let onDiscPick: (i: number) => void = () => {};
@@ -71,7 +76,7 @@
 		<StatBubbles {cs} size={21} cols={3} />
 		<span class="wells">
 			{#each [0, 1, 2, 3] as t (t)}
-				<span class="w" class:now={t === turnIdx} class:glow={fxAt(t)}><TurnSlot heroId={cs.hero} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} label={ROMAN[t]} peekable examinable on:click={(e) => onSlot(e, t)} /></span>
+				<span class="w" class:now={t === turnIdx} class:glow={fxAt(t)}><TurnSlot heroId={cs.hero} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} label={ROMAN[t]} peekable examinable on:click={(e) => onSlot(e, t)} />{#if runes}<span class="wr"><RuneMark rune={runes.at[t] ?? null} size={13} on={t === turnIdx && !!runes.at[t]} second={!!runes.second && runes.second === runes.at[t]} fx={runeFx} /></span>{/if}</span>
 			{/each}
 			<span class="sep"></span>
 			<span class="w pile">
@@ -143,6 +148,7 @@
 	.w.now :global(.flip), .w.now :global(.static) { box-shadow: 0 0 0 1.5px var(--brass-hi); border-radius: 4px; }
 	.w.glow { box-shadow: 0 0 0 1.5px #fff, 0 0 8px 2px var(--tc); border-radius: 4px; }
 	.sep { flex: none; align-self: stretch; width: 1px; margin: 6px 1px; background: var(--line); }
+	.wr { position: absolute; left: 50%; bottom: 0; transform: translate(-50%, 50%); z-index: 1; display: grid; pointer-events: none; }
 	.wc { position: relative; display: grid; place-items: center; width: 100%; aspect-ratio: 1192 / 1664; border-radius: 4px; overflow: visible; border: 0; background: none; }
 	.wc :global(.card), .wc :global(.cardface), .wc :global(.cardback) { width: 100%; border-radius: 4px; }
 	.pile .wc { border: 1px solid rgba(255, 255, 255, 0.1); background: rgba(0, 0, 0, 0.22); box-sizing: border-box; }

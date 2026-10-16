@@ -155,6 +155,7 @@
 		hostArm = ''; passHost(id);
 	}
 	function openDeckFor(id: string) { if (iAmHost && id) cardLayer?.openDeckFor(id); }
+	function openRunesFor(id: string) { if (iAmHost && id) cardLayer?.openRunesFor(id); }
 
 	$: boardPieces = Object.values($ms.pieces).map((p) => ({
 		id: p.id, hex: effectiveHex($ms.pieces, p), team: p.team, role: p.role, token: p.token === 'companion' ? undefined : p.token,
@@ -1102,7 +1103,7 @@
 		{#if lobbyOpen}
 			<GameLobby {room} conn={connLabel($status)} connClass={$status} seats={seatRows} watchers={spectators} requests={seatRequests} host={iAmHost} {clientId} {mySeat} myRequest={myRequestSeat}
 				colorOf={(id) => colorHex($players.find((p) => p.id === id)?.color ?? '')}
-				onKick={kickSeat} onSit={requestSeat} onResolve={resolveSeat} onGive={giveSeat} hostId={$ms.host} onHost={passHost} onDeck={mobile ? null : openDeckFor} onLeave={() => { lobbyOpen = false; askLeave(); }} onEnd={endGame} onClose={() => (lobbyOpen = false)} />
+				onKick={kickSeat} onSit={requestSeat} onResolve={resolveSeat} onGive={giveSeat} hostId={$ms.host} onHost={passHost} onDeck={mobile ? null : openDeckFor} onRunes={openRunesFor} onLeave={() => { lobbyOpen = false; askLeave(); }} onEnd={endGame} onClose={() => (lobbyOpen = false)} />
 		{/if}
 	{/if}
 
@@ -1242,7 +1243,7 @@
 		{#if lobbyOpen}
 			<GameLobby phone {room} conn={connLabel($status)} connClass={$status} seats={seatRows} watchers={spectators} requests={seatRequests} host={iAmHost} {clientId} {mySeat} myRequest={myRequestSeat}
 				colorOf={(id) => colorHex($players.find((p) => p.id === id)?.color ?? '')} {log} canUndo={$canUndo} onUndo={() => session.undo()}
-				onKick={kickSeat} onSit={requestSeat} onResolve={resolveSeat} onGive={giveSeat} hostId={$ms.host} onHost={passHost} onDeck={mobile ? null : openDeckFor} onLeave={() => { lobbyOpen = false; askLeave(); }} onEnd={endGame} onClose={() => (lobbyOpen = false)} />
+				onKick={kickSeat} onSit={requestSeat} onResolve={resolveSeat} onGive={giveSeat} hostId={$ms.host} onHost={passHost} onDeck={mobile ? null : openDeckFor} onRunes={openRunesFor} onLeave={() => { lobbyOpen = false; askLeave(); }} onEnd={endGame} onClose={() => (lobbyOpen = false)} />
 		{/if}
 	{/if}
 	{#if mobile}
