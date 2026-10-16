@@ -178,11 +178,11 @@
 		{#if power}<div class="dpow">{@render power(48)}</div>{/if}
 		<StatBubbles {cs} size={27} cols={3} />
 
-		<div class="dwells">
+		<div class="dwells" class:rw={!!runes}>
 			{#each [0, 1, 2, 3] as t (t)}
 				<span class="dw" class:now={t === turnIdx} class:glow={fxAt(t)}>
 					<span class="dwc"><TurnSlot heroId={cs.hero} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} label={ROMAN[t]} peekable examinable on:click={(e) => onSlot(e, t)} /></span>
-					{#if runes}<small class="rn"><RuneMark rune={runes.at[t] ?? null} size={18} on={t === turnIdx && !!runes.at[t]} second={!!runes.second && runes.second === runes.at[t]} fx={runeFx} /></small>{:else}<small>{ROMAN[t]}</small>{/if}
+					{#if runes}<small class="rn"><RuneMark rune={runes.at[t] ?? null} size={22} on={t === turnIdx && !!runes.at[t]} second={!!runes.second && runes.second === runes.at[t]} fx={runeFx} /></small>{:else}<small>{ROMAN[t]}</small>{/if}
 				</span>
 			{/each}
 			<span class="dsep"></span>
@@ -296,7 +296,9 @@
 	.dw.now :global(.slot.blank) { border: 1.5px solid var(--brass); color: var(--brass-hi); }
 	.dw.now :global(.flip), .dw.now :global(.static) { box-shadow: 0 0 0 2px var(--brass-hi); border-radius: 6px; }
 	.dw.now small { color: var(--brass-hi); }
-	.dw small.rn { height: 9px; display: grid; place-items: center; overflow: visible; position: relative; z-index: 1; transform: translateY(-5px); }
+	/* Snorri: the wells sit 4 px higher so a bigger rune fits under them (the same 2 px over the card's foot) */
+	.dwells.rw { transform: translateY(-4px); }
+	.dw small.rn { height: 9px; display: grid; justify-items: center; align-items: start; overflow: visible; position: relative; z-index: 1; transform: translateY(-5px); }
 	.dw.glow .dwc { box-shadow: 0 0 0 2px #fff, 0 0 12px 3px var(--tc); border-radius: 6px; }
 	.dsep { align-self: stretch; width: 1px; margin: 3px 2px 14px; background: var(--line); }
 	.pile .dwc { border: 1px solid rgba(255, 255, 255, 0.1); background: rgba(0, 0, 0, 0.22); cursor: pointer; }

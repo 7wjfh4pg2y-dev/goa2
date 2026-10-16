@@ -21,9 +21,10 @@
 <style>
 	.rm { position: relative; flex: none; width: var(--s); height: var(--s); border-radius: 50%; display: inline-grid; place-items: center; box-sizing: border-box;
 		box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.7), 0 1px 3px rgba(0, 0, 0, 0.6); background: #0b1422; }
-	.rm img { width: 100%; height: 100%; border-radius: 50%; display: block; opacity: 0.42; filter: saturate(0.4); }
+	/* the painted runes are dark stone: lifted so they read on the navy HUD (still filters, never animated) */
+	.rm img { width: 100%; height: 100%; border-radius: 50%; display: block; opacity: 0.78; filter: brightness(1.3) saturate(0.7); }
 	.rm.empty { background: rgba(0, 0, 0, 0.3); box-shadow: inset 0 0 0 1px rgba(216, 179, 106, 0.35); border: 1px dashed rgba(216, 179, 106, 0.35); }
-	.rm.on img, .rm.second img { opacity: 1; filter: none; }
+	.rm.on img, .rm.second img { opacity: 1; filter: brightness(1.45) contrast(1.05); }
 	.rm.on { box-shadow: 0 0 0 1.5px #f4dfa8, 0 0 calc(var(--s) * 0.45) rgba(244, 223, 168, 0.55); }
 	.rm.second { box-shadow: 0 0 0 1.5px #b98af0, 0 0 calc(var(--s) * 0.45) rgba(164, 107, 232, 0.6); }
 	.halo { position: absolute; inset: -30%; border-radius: 50%; pointer-events: none; background: radial-gradient(closest-side, rgba(244, 223, 168, 0.5), transparent); animation: rmb 2.4s ease-in-out infinite; }

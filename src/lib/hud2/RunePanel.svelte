@@ -75,7 +75,7 @@
 	.cell:disabled { opacity: 1; }
 	.cell small { font-size: 11px; line-height: 1; color: #8a9fb3; letter-spacing: 0.08em; }
 	.cell em { font-style: normal; font-size: 11px; line-height: 1; color: #c9d4df; }
-	.cell.edit :global(.rm img) { opacity: 1; filter: none; }
+	.cell.edit :global(.rm img) { opacity: 1; filter: brightness(1.45) contrast(1.05); }
 	.sec { display: flex; align-items: center; gap: 6px; margin-top: 10px; padding-top: 9px; border-top: 1px solid rgba(216, 179, 106, 0.22); flex-wrap: wrap; }
 	.sl { font-size: 11px; color: #b98af0; letter-spacing: 0.04em; margin-right: 2px; }
 	.chip { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 9px 0 4px; border-radius: 13px; border: 1px solid rgba(185, 138, 240, 0.35); background: rgba(0, 0, 0, 0.25); color: #e6dcf5; font-size: 12px; cursor: pointer; }
