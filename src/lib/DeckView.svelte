@@ -24,7 +24,7 @@
 	import { heroSplash, HERO_BY_ID } from '$lib/heroes';
 	import ultGear from '$lib/images/ult_gear.png';
 	import {
-		levelOf, levelCost, ultimateIndex, tierIn, canPick, canAfford, mustLevel, swapSource, twinOf, allowedMoves, hostMoves, pickedThisRound,
+		levelOf, levelCost, ultimateIndex, tierIn, canPick, canAfford, mustLevel, basicsOf, swapSource, twinOf, allowedMoves, hostMoves, pickedThisRound,
 		type PlayerCardState, type CardZone
 	} from '$lib/cards/cardstate';
 
@@ -57,7 +57,13 @@
 		cards.map((c, i) => ({ c, i })).filter((x) => x.c.color === color && !x.c.handicapped && (level == null || (x.c.level ?? 1) === level)).map((x) => x.i);
 	$: tr = Object.fromEntries(COLS.map((c) => [c, { I: find(c, 1)[0], II: find(c, 2), III: find(c, 3) }])) as Record<string, { I: number; II: number[]; III: number[] }>;
 	$: ult = ultimateIndex(H);
-	$: basics = [find('GOLD')[0], find('SILVER')[0]].filter((i) => i != null && i >= 0);
+	// the gold he holds now (Takahide swaps golds; with Ready for War he holds all three — stacked, cycled by ⇄)
+	$: heldG = basicsOf(cs).filter((i) => cards[i]?.color === 'GOLD');
+	let gi = 0;
+	$: gShow = heldG.length ? heldG[gi % heldG.length] : find('GOLD')[0];
+	$: basics = [gShow, find('SILVER')[0]].filter((i) => i != null && i >= 0);
+	$: inPlay = basicsOf(cs);
+	function cycleGold() { const old = gShow; gi = (gi + 1) % heldG.length; const nw = heldG[gi]; if (sel === old) sel = nw; }
 	$: LV = levelOf(cs);
 	$: afford = canAfford(cs);
 	$: forced = !free && levelPhase && mustLevel(cs);
@@ -389,10 +395,16 @@
 			{/if}
 
 			<!-- the basics, in the top corners -->
+			{#if heldG.length > 1}
+				{#each heldG.filter((g) => g !== gShow) as g, k (g)}
+					<span class="bstk" style="left:{basX[0] + 7 * (k + 1)}px; top:{basY - 7 * (k + 1)}px; width:{BCW}px"><Card heroId={H} card={cards[g]} /></span>
+				{/each}
+				<button class="gcy" style="left:{basX[0] + BCW - 6}px; top:{basY - 22}px" on:click={cycleGold} title="Next gold card" aria-label="Next gold card">⇄ {(gi % heldG.length) + 1}/{heldG.length}</button>
+			{/if}
 			{#each basics as i, n (i)}
 				<button class="bth" class:sel={i === sel} class:foc={i === hov} style="--c:{COL[cards[i].color]}; left:{basX[n]}px; top:{basY}px; width:{BCW}px" on:click={() => pick(i)} on:dblclick={() => onPreview(i)} on:pointerenter={() => over(i)} on:pointerleave={out} title={cards[i].name}><Card heroId={H} card={cards[i]} /></button>
 				<!-- basics never leave the hand: the silver-and-gold 'untouchable' pill, like the immune heavy's -->
-				<span class="pill imm bpill" style="left:{basX[n] + BCW / 2}px; top:{Y1 + CH + 4}px">In hand</span>
+				{#if inPlay.includes(i)}<span class="pill imm bpill" style="left:{basX[n] + BCW / 2}px; top:{Y1 + CH + 4}px">In hand</span>{:else}<span class="pill i-rem bpill" style="left:{basX[n] + BCW / 2}px; top:{Y1 + CH + 4}px">Removed</span>{/if}
 			{/each}
 		</div>
 
@@ -601,6 +613,9 @@
 
 	/* the basics */
 	.bth { position: absolute; z-index: 2; padding: 0; border: 0; background: none; border-radius: 6px; cursor: pointer; transition: transform .14s ease-out; }
+	.bstk { position: absolute; z-index: 1; pointer-events: none; border-radius: 6px; overflow: hidden; filter: brightness(.6); box-shadow: 0 0 0 1.5px #e8b64a, 0 4px 10px rgba(0, 0, 0, .55); }
+	.bstk :global(.cardface) { display: block; width: 100%; }
+	.gcy { position: absolute; z-index: 3; transform: translateX(-50%); height: 24px; padding: 0 9px; border-radius: 12px; font: inherit; font-size: 12px; white-space: nowrap; cursor: pointer; color: #2a1c06; background: linear-gradient(180deg, #fff3cf, #e8b64a); border: 1px solid #f9ebc6; box-shadow: 0 2px 6px rgba(0, 0, 0, .5); }
 	.bth:hover, .bth.foc { transform: translateY(-3px); }
 	.bth :global(.cardface) { display: block; width: 100%; border-radius: 6px; box-shadow: 0 0 0 2px var(--c), 0 0 16px color-mix(in srgb, var(--c) 45%, transparent), 0 6px 14px rgba(0, 0, 0, .6); }
 	.bth.sel::before { content: ''; position: absolute; inset: -6px; border-radius: 10px; border: 2px solid #fff3cf; box-shadow: 0 0 16px rgba(244, 223, 168, .7); pointer-events: none; }

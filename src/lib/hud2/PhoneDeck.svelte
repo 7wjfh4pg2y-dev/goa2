@@ -15,7 +15,7 @@
 	import { heroSplash } from '$lib/heroes';
 	import ultGear from '$lib/images/ult_gear.png';
 	import {
-		levelOf, levelCost, ultimateIndex, tierIn, canPick, canAfford, swapSource, twinOf, allowedMoves,
+		levelOf, levelCost, ultimateIndex, tierIn, canPick, canAfford, basicsOf, swapSource, twinOf, allowedMoves,
 		type PlayerCardState, type CardZone
 	} from '$lib/cards/cardstate';
 
@@ -41,7 +41,13 @@
 	$: find = (color: string, level?: number) =>
 		cards.map((c, i) => ({ c, i })).filter((x) => x.c.color === color && !x.c.handicapped && (level == null || (x.c.level ?? 1) === level)).map((x) => x.i);
 	$: ult = ultimateIndex(H);
-	$: basics = [find('GOLD')[0], find('SILVER')[0]].filter((i) => i != null && i >= 0);
+	// the gold he holds now (Takahide: with Ready for War all three — one shown, ⇄ cycles)
+	$: heldG = basicsOf(cs).filter((i) => cards[i]?.color === 'GOLD');
+	let gi = 0;
+	$: gShow = heldG.length ? heldG[gi % heldG.length] : find('GOLD')[0];
+	$: basics = [gShow, find('SILVER')[0]].filter((i) => i != null && i >= 0);
+	$: inPlay = basicsOf(cs);
+	function cycleGold() { const old = gShow; gi = (gi + 1) % heldG.length; if (sel === old) sel = heldG[gi]; }
 	$: LV = levelOf(cs);
 	$: need = levelCost(LV);
 	$: heldSet = new Set<number>([...cs.hand, ...cs.discard, ...cs.turns.filter((x): x is number => x != null), ...(cs.pending != null && cs.pending >= 0 ? [cs.pending] : [])]);
@@ -108,14 +114,15 @@
 {#snippet face(i: number, w: number, foot: boolean)}
 	{@const s = state(i)}
 	{@const tw = twinOf(H, i)}
-	<div class="cd {s}" class:can={s === 'next' && canTake(i)} class:sel={sel === i} class:fresh={fresh.has(i)} class:unflip={unfresh.has(i)} style="--c:{COL[cards[i]?.color] ?? '#888'}; width:{w}px">
+	<div class="cd {s}" class:can={s === 'next' && canTake(i)} class:sel={sel === i} class:fresh={fresh.has(i)} class:unflip={unfresh.has(i)} class:stk={heldG.length > 1 && i === gShow && tab === 'hand'} style="--c:{COL[cards[i]?.color] ?? '#888'}; width:{w}px">
 		<button class="cb" on:click={() => tap(i)} aria-label={cards[i]?.name}>
 			<span class="fc"><Card heroId={H} card={cards[i]} /></span>
 			{#if s === 'item' && itemOf(i)}<span class="ib"><img src={ic(`item_${itemOf(i).toLowerCase()}`)} alt="" /><b>+1</b></span>{/if}
 		</button>
 		{#if foot}
 			<span class="ft">
-				{#if basics.includes(i)}<span class="pill imm">In hand</span>
+				{#if basics.includes(i) && inPlay.includes(i)}<span class="pill imm">In hand</span>{#if heldG.length > 1 && i === gShow}<button class="pill gcy" on:click={cycleGold} aria-label="Next gold card">⇄ {(gi % heldG.length) + 1}/{heldG.length}</button>{/if}
+				{:else if basics.includes(i)}<span class="pill past">Removed</span>
 				{:else if s === 'cur'}<span class="pill cur">In hand</span>
 				{:else if s === 'past'}<span class="pill past">Removed</span>
 				{:else if s === 'item' && canSwap(i)}<button class="pill swap" on:click={() => onAsk('swap', i)}>Swap</button>
@@ -269,7 +276,9 @@
 	.cd.fresh .ib { animation: ibin .5s cubic-bezier(.2, 1.5, .4, 1) .55s both; }
 	@keyframes flipin { from { transform: rotate(0deg); } to { transform: rotate(180deg); } }
 	@keyframes ibin { from { transform: scale(0); opacity: 0; } }
-	.ft { height: 26px; display: flex; align-items: center; }
+	.ft { height: 26px; display: flex; align-items: center; gap: 4px; }
+	.pill.gcy { cursor: pointer; font: inherit; font-size: 11px; color: #2a1c06; background: linear-gradient(180deg, #fff3cf, #e8b64a); border-color: #f9ebc6; }
+	.cd.stk .fc { box-shadow: 4px -4px 0 -1px #8a6a2c, 8px -8px 0 -2px #5b4618; }
 	.pill { display: inline-flex; align-items: center; gap: 3px; height: 21px; padding: 0 9px; border-radius: 999px; font-size: 12px; line-height: 1; white-space: nowrap; border: 1px solid transparent; box-sizing: border-box; }
 	.pill img { width: 16px; height: 12px; object-fit: contain; }
 	.pill.imm { cursor: default; color: #2a2f38; letter-spacing: .04em; text-shadow: 0 1px 0 rgba(255,255,255,.6); background: linear-gradient(180deg, #ffffff, #d4d9df 48%, #a3acb7); border: 2px solid #d9a845; box-shadow: 0 0 0 1px #6b4a10, 0 2px 6px rgba(0,0,0,.45), inset 0 1px 0 #fff; }
