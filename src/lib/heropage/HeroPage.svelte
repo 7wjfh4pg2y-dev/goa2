@@ -91,7 +91,14 @@
 		if (e.key === 'ArrowRight') step = Math.min(4, step + 1);
 		else if (e.key === 'ArrowLeft') step = Math.max(0, step - 1);
 	}
-	const firstCards = (o: Opening) => o.turns.map((t) => t.cards[0]).filter(Boolean);
+	// a turn's dot: its card colour, or split into every colour when the turn could be played with either
+	const turnsOf = (o: Opening) => o.turns.filter((t) => t.cards.length);
+	const dotBg = (cards: string[] = []) => {
+		const c = cards.length ? cards : ['silver'];
+		if (c.length === 1) return CARD_HEX[c[0] as keyof typeof CARD_HEX];
+		const w = 100 / c.length;
+		return `linear-gradient(90deg, ${c.map((x, i) => `${CARD_HEX[x as keyof typeof CARD_HEX]} ${(i * w).toFixed(1)}% ${((i + 1) * w).toFixed(1)}%`).join(', ')})`;
+	};
 	onMount(() => { void tick(); });
 </script>
 
@@ -195,7 +202,7 @@
 			</div>
 			<div class="stepbadge">
 				<button on:click={() => (step = Math.max(0, step - 1))} disabled={step <= 0} aria-label="Previous turn">‹</button>
-				{#if step > 0}<span class="sdot" style:background={CARD_HEX[op.turns[step - 1]?.cards[0] ?? 'silver']}></span><b>Turn {step}</b><em>{turnCards(op.turns[step - 1])}</em>{:else}<b>Whole round</b>{/if}
+				{#if step > 0}<span class="sdot" style:background={dotBg(op.turns[step - 1]?.cards)}></span><b>Turn {step}</b><em>{turnCards(op.turns[step - 1])}</em>{:else}<b>Whole round</b>{/if}
 				<button on:click={() => (step = Math.min(4, step + 1))} disabled={step >= 4} aria-label="Next turn">›</button>
 			</div>
 		{:else}
@@ -266,7 +273,7 @@
 					<button class="ocard" class:on={o.id === selId} on:click={() => pick(o.id)}>
 						<OpeningThumb op={o} {pic} {turned} uid="t{o.id}" />
 						<span class="oname">{o.name}</span>
-						<span class="oflow">{#each firstCards(o) as c, k (k)}{#if k}<em>→</em>{/if}<i style:background={CARD_HEX[c]} title={c}></i>{/each}{#if o.size !== 'any'}<small>{SIZES[o.size]}</small>{/if}</span>
+						<span class="oflow">{#each turnsOf(o) as t, k (k)}{#if k}<em>→</em>{/if}<i style:background={dotBg(t.cards)} title={turnCards(t)}></i>{/each}{#if o.size !== 'any'}<small>{SIZES[o.size]}</small>{/if}</span>
 					</button>
 				{/each}
 				{#if gm}<a class="ocard add" href="{base}/opening-builder?hero={h.id}&new=1"><Icon name="plus" /><span>New opening</span></a>{/if}
