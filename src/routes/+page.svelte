@@ -42,7 +42,7 @@
 		nameKey,
 		cachedRoom
 	} from '$lib/match';
-	import { HEROES } from '$lib/heroes';
+	import { HEROES, draftable, FOUR_STAR_LIVE } from '$lib/heroes';
 	import { initCards } from '$lib/cards/cardstate';
 	import HeroDraft from '$lib/HeroDraft.svelte';
 	import GameView from '$lib/GameView.svelte';
@@ -243,10 +243,14 @@
 	$: previewLife = ruleset === 'custom' ? customLife : lifeFor(ruleset, playerCount);
 	// draft pool sizing: eligible heroes must cover the chosen system for the seats
 	function toggleStar(s: number) {
-		if (s === 4) return; // 4★ heroes are disabled for now
+		if (s === 4 && !fourOpen) return; // 4★ heroes: GMs (the lab) until one is live
 		draftStars = draftStars.includes(s) ? draftStars.filter((x) => x !== s) : [...draftStars, s].sort();
 	}
-	$: eligibleCount = HEROES.filter((h) => draftStars.includes(h.stars)).length;
+	// 4★: open to everyone once a hero is live; a GM also gets the ones in the lab (a test room)
+	$: gmCreate = $role === 'admin';
+	$: fourOpen = gmCreate || FOUR_STAR_LIVE.length > 0;
+	$: if (!fourOpen && draftStars.includes(4)) draftStars = draftStars.filter((x) => x !== 4);
+	$: eligibleCount = HEROES.filter((h) => draftable(h, draftStars, gmCreate)).length;
 	$: poolNeed = draftPoolMin(draftSystem, playerCount);
 	$: poolShort = eligibleCount < poolNeed;
 	$: shareLink = browser && room ? `${location.origin}${base}/?room=${room}` : '';
@@ -576,7 +580,7 @@
 	}
 	// host builds the shared draft from the seed config; the tie-breaker winner drafts first
 	function startDraft(startingTeam: Team) {
-		const pool = HEROES.filter((hr) => $state.draftStars.includes(hr.stars)).map((hr) => hr.id);
+		const pool = HEROES.filter((hr) => draftable(hr, $state.draftStars, !!$state.draftLab)).map((hr) => hr.id);
 		const d = buildDraft($state.draftSystem, pool, $players, $state.seats, startingTeam);
 		session?.update({ draft: d, startFlip: null, seatMap: buildSeatMap($players, $state.seats), gameId: Date.now().toString(36) });
 	}
@@ -629,7 +633,8 @@
 			mapId: chosen?.id ?? '',
 			map: chosen?.data ?? null,
 			draftSystem,
-			draftStars
+			draftStars,
+			draftLab: gmCreate && draftStars.includes(4)
 		});
 		rememberRoom(room);
 		session = joinMatch(room, { name, color: 'spectator' }, { seed });
@@ -1025,9 +1030,10 @@
 									<span class="t-label">Hero complexity</span>
 									<div class="cxchips">
 										{#each [1, 2, 3, 4] as s (s)}
-											<button class="chip star" class:is-on={draftStars.includes(s)} class:is-soon={s === 4} class:locked={s === 4} disabled={s === 4}
-												title={s === 4 ? '4★ heroes coming soon' : ''} aria-label="{s} star{s > 1 ? 's' : ''}{s === 4 ? ', coming soon' : ''}" on:click={() => toggleStar(s)}>
-												<span class="stars">{#each Array(s) as _, k (k)}<Icon name="star" fill />{/each}</span>{#if s === 4}<span class="soon">soon</span>{/if}
+											{@const shut = s === 4 && !fourOpen}
+											<button class="chip star" class:is-on={draftStars.includes(s)} class:is-soon={shut} class:locked={shut} disabled={shut}
+												title={shut ? '4★ heroes coming soon' : s === 4 && gmCreate && !FOUR_STAR_LIVE.length ? '4★ lab: GM test games (not recorded)' : ''} aria-label="{s} star{s > 1 ? 's' : ''}{shut ? ', coming soon' : ''}" on:click={() => toggleStar(s)}>
+												<span class="stars">{#each Array(s) as _, k (k)}<Icon name="star" fill />{/each}</span>{#if shut}<span class="soon">soon</span>{:else if s === 4 && gmCreate && !FOUR_STAR_LIVE.length}<span class="lab">lab</span>{/if}
 											</button>
 										{/each}
 									</div>
@@ -1496,7 +1502,7 @@
 		.lbox .lactions { gap: clamp(5px, 0.9dvh, 8px); padding: clamp(6px, 1.1dvh, 10px) 12px clamp(8px, 1.4dvh, 12px); }
 		.lactions .lhint { white-space: nowrap; }
 		/* "soon" options: a dimmed style is enough on a phone (no extra line of text) */
-		.cform :global(.seg-opt .soon), .cxchips :global(.soon) { display: none; }
+		.cform :global(.seg-opt .soon), .cxchips :global(.soon), .cxchips .lab { display: none; }
 		.maprow { display: flex; align-items: center; gap: 8px; min-width: 0; }
 		.maprow .mapname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; }
 		.mapstep { flex: none; gap: 4px; white-space: nowrap; }
@@ -1522,4 +1528,5 @@
 		.tseats .seat, .tseats.many .seat { min-height: clamp(36px, 6dvh, 50px); }
 		.lblrow .hint { display: none; }
 	}
+	.cxchips .lab { margin-left: 6px; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #5eead4; }
 </style>

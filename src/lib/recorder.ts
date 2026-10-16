@@ -11,6 +11,7 @@
 // journal once to the Supabase table `goa2_games` (insert-only for the public key:
 // rows can be added from the app but never read back — read them in the
 // dashboard). The id is the same on every client, so duplicates are refused.
+import { isLabHero } from './heroes'
 import { turnOrder, actingIdx, type GameNote, type LogEntry, type MatchState, type Team } from './match'
 import { supabase } from './supabase'
 import { heroCards } from './cards/deck'
@@ -406,6 +407,8 @@ export function journalUpdate(j: Journal, s: MatchState): Journal {
 
 /** A real game: seen from the first turn, won, with at least two different people seated. */
 export function isFullGame(j: Journal): boolean {
+	// a 4★ hero still in the lab = a GM's test game: never reaches the Hall
+	if (Object.values(j.players).some((p) => isLabHero(p.hero))) return false
 	return j.fromStart && j.done && new Set(Object.keys(j.players)).size >= 2
 }
 

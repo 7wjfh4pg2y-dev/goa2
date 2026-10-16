@@ -44,6 +44,16 @@ export interface Hero {
 	stats: [number, number][];
 }
 
+/** 4★ heroes, brought in one at a time (each breaks a rule of the game, so each gets its own dash button):
+ *  LIVE = draftable by everyone; LAB = a GM can test them (Create → 4★ shows to GMs only, and the room's games never
+ *  reach the Hall). Any other 4★ hero stays "coming soon". */
+export const FOUR_STAR_LIVE: string[] = []
+export const FOUR_STAR_LAB: string[] = ['ignatia']
+export const isLabHero = (id: string) => FOUR_STAR_LAB.includes(id) && !FOUR_STAR_LIVE.includes(id)
+/** a hero the draft may offer: its complexity is picked, and a 4★ one is live (or in the lab, in a GM's room) */
+export const draftable = (h: { id: string; stars: number }, stars: number[], lab = false) =>
+	stars.includes(h.stars) && (h.stars < 4 || FOUR_STAR_LIVE.includes(h.id) || (lab && FOUR_STAR_LAB.includes(h.id)))
+
 export const HEROES: Hero[] = [
 	{ id: 'arien', name: 'Arien', title: 'the Tidemaster', stars: 1, pack: 'BASE', traits: ['tactician', 'disabler', 'durable', 'pusher'], stats: [[8, 8], [5, 6], [4, 4], [5, 6]] },
 	{ id: 'brogan', name: 'Brogan', title: 'the Destroyer', stars: 1, pack: 'BASE', traits: ['durable', 'disabler', 'pusher', 'farming'], stats: [[7, 7], [8, 8], [1, 1], [2, 4]] },

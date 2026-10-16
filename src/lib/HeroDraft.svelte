@@ -61,7 +61,9 @@
 	$: filterCount = HEROES_ALPHA.filter((h) => matches(h, viewFilter)).length;
 	$: inPool = d ? new Set(d.pool) : new Set<string>();
 	// pickable right now: in the pool, not taken/banned, not a 4★ "soon"
-	const pickable = (h: Hero) => inPool.has(h.id) && !blocked.has(h.id) && h.stars < 4;
+	// a 4★ hero not in this room's pool = 'coming soon' (in a GM's lab room the ones being tested are in it)
+	const soon4 = (h: Hero) => h.stars === 4 && !inPool.has(h.id);
+	const pickable = (h: Hero) => inPool.has(h.id) && !blocked.has(h.id);
 	const firstFor = (f: string) => HEROES_ALPHA.find((h) => matches(h, f) && pickable(h))?.id;
 	// choosing a tab (tap the active one again → All) jumps to its first available hero
 	function chooseFilter(f: string) {
@@ -73,7 +75,7 @@
 	// a hero is unavailable if it's outside the complexity pool, picked, or banned
 	$: unavailable = (h: string) => !inPool.has(h) || blocked.has(h);
 	// display only: how many heroes are still open, who took which hero (a ring in that player's colour), what is banned
-	$: openCount = HEROES_ALPHA.filter((h) => inPool.has(h.id) && !blocked.has(h.id) && h.stars < 4).length;
+	$: openCount = HEROES_ALPHA.filter((h) => inPool.has(h.id) && !blocked.has(h.id)).length;
 	$: takenBy = (() => {
 		const m: Record<string, { team: Team; name: string; color: string }> = {};
 		if (!d) return m;
@@ -96,7 +98,7 @@
 	let myWant = ''; // all-pick self-heal target
 	// initial highlight: first available hero (don't reset after every action —
 	// leave `sel` on what you just picked/banned)
-	$: if (d && !sel) sel = HEROES_ALPHA.find((h) => inPool.has(h.id) && !blocked.has(h.id) && h.stars < 4)?.id ?? HEROES_ALPHA[0].id;
+	$: if (d && !sel) sel = HEROES_ALPHA.find((h) => inPool.has(h.id) && !blocked.has(h.id))?.id ?? HEROES_ALPHA[0].id;
 	// when it BECOMES your turn, snap to a fresh valid option (once per step)
 	let snapStep = -1;
 	$: if (d && d.order.length && myTurn && d.step !== snapStep) {
@@ -396,16 +398,16 @@
 							{@const off = !matches(h, viewFilter)}
 							{@const viewLocked = lockedIn && h.id !== myPick}
 							{@const tk = takenBy[h.id]}
-							<button class="hero" class:on={sel === h.id} class:gone={unavailable(h.id) && h.id !== myPick} class:locked={h.stars === 4}
+							<button class="hero" class:on={sel === h.id} class:gone={unavailable(h.id) && h.id !== myPick} class:locked={soon4(h)}
 								class:dim={d.system === 'single-draft' && myTurn && inPool.has(h.id) && !d.offer.includes(h.id) && !blocked.has(h.id)}
 								class:filtered={off} class:viewlock={viewLocked}
-								disabled={!inPool.has(h.id) || h.stars === 4 || off || viewLocked}
-								title={h.stars === 4 ? `${h.name} — 4★ heroes coming soon` : tk ? `${h.name} — picked by ${tk.name}` : bannedSet.has(h.id) ? `${h.name} — banned` : h.name}
+								disabled={!inPool.has(h.id) || off || viewLocked}
+								title={soon4(h) ? `${h.name} — 4★ heroes coming soon` : tk ? `${h.name} — picked by ${tk.name}` : bannedSet.has(h.id) ? `${h.name} — banned` : h.name}
 								on:click={() => (sel = h.id)}>
 								<img src={heroAvatar(h.id)} alt={h.name} />
 								{#if tk}<span class="tk" style="--pc:{tk.color}"></span>{/if}
 								{#if bannedSet.has(h.id)}<span class="bx">✕</span>{/if}
-								{#if h.stars === 4}<span class="soon">soon</span>{/if}
+								{#if soon4(h)}<span class="soon">soon</span>{/if}
 							</button>
 						{/each}
 					</div>

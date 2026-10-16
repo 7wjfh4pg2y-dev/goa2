@@ -8,7 +8,9 @@
 	import { teamName } from '$lib/teams';
 	import type { Readable } from 'svelte/store';
 	import type { MatchSession, MatchState, Player } from '$lib/match';
-	import { teamForSeat, colorHex, battlePatch, levelPatch, canRespawn, turnPlan, claimable, actingIdx, actorOf } from '$lib/match';
+	import { teamForSeat, colorHex, battlePatch, levelPatch, canRespawn, turnPlan, claimable, actingIdx, actorOf, turnOrder, turnKey as keyOfTurn } from '$lib/match';
+	import { hasPower, equilibrium, equilibriumNow, canFlip, flipUsed, type TurnCtx } from '$lib/heropower';
+	import IgnatiaCoin from '$lib/hud2/IgnatiaCoin.svelte';
 	import { battleResult, battleText, laneNotes } from '$lib/battle';
 	import Card from '$lib/cards/Card.svelte';
 	import CardBack from '$lib/cards/CardBack.svelte';
@@ -210,6 +212,17 @@
 	// tied teammates choose who goes first: one of them claims the card acting now
 	$: canClaim = revealed && claimable($ms).includes(clientId);
 	const claimTie = () => session.cardAction({ kind: 'claim', pid: clientId });
+	// ── a 4★ hero's own dash button (heropower.ts): private to you, what it changes is public ──
+	$: myPower = mine && hasPower(mine.hero) ? mine.hero : null;
+	$: pctx = { key: keyOfTurn($ms), round: $ms.round, turnIdx: $ms.turn - 1, order: turnOrder($ms), at: actingIdx($ms), tieBreaker: $ms.tieBreaker, revealed } as TurnCtx;
+	// (live as her silver acts; the shared mark keeps it for the rest of the round)
+	$: igSplit = myPower === 'ignatia' && (equilibrium($ms, clientId, $ms.round) || equilibriumNow(mine ?? undefined, clientId, pctx));
+	$: igReady = myPower === 'ignatia' && canFlip($ms, clientId, pctx);
+	$: igUsed = myPower === 'ignatia' && flipUsed($ms, clientId, pctx);
+	// a power loaded onto the action ring, which confirms it (× drops it)
+	let powerArm: { op: 'ignatiaFlip'; label: string; sub?: string } | null = null;
+	$: if (powerArm && !igReady) powerArm = null;
+	function armIgnatiaFlip() { if (igReady) { powerArm = { op: 'ignatiaFlip', label: 'Flip coin', sub: 'Chaos Incarnate' }; armed = null; playedArm = null; orderArm = null; } }
 	$: actAt = actingIdx($ms);
 	$: actor = revealed ? actorOf($ms) : null;
 	$: actorName = actor ? heroName(cards[actor]?.hero ?? '') : '';
@@ -817,7 +830,7 @@
 	$: orderTop = cTop ? 62 : 100;
 	$: colTop = orderTop + (cOrder ? 30 : 60) + (cOrder ? 26 : 34);
 	// the Chronicle in the corner: beside the dash when there's room, else just above its left end
-	const DASH_W = 900; // the dash's width (design px) without the ultimate's compartment
+	$: DASH_W = 900 + (myPower ? 60 : 0); // the dash's width (design px) without the ultimate's compartment (+ a 4★ hero's button)
 	$: myUltOpen = !!mine && myUlt >= 0 && (mine.ultimate || ultReady);
 	$: logRoom = canvasW / 2 - DASH_W / 2 - 14 - (myUltOpen ? 96 : 0) - 36;
 	$: logBeside = logRoom >= 220;
@@ -876,6 +889,7 @@
 			if (nudgeLeft > 0) return { label: 'Nudge', sub: `in ${Math.ceil(nudgeLeft / 1000)} s`, kind: 'off', cancel: drop };
 			return { label: 'Nudge', sub: who, kind: 'go', pulse: true, run: () => { session.nudge(a.pid); drop(); }, cancel: drop };
 		}
+		if (powerArm) { const a = powerArm; return { label: a.label, sub: a.sub, kind: 'go', pulse: true, run: () => { session.cardAction({ kind: 'power', pid: clientId, op: a.op }); powerArm = null; }, cancel: () => (powerArm = null) }; }
 		// a card chosen in its preview to discard (any time — a defence, or an effect): the ring asks once more
 		if (armed != null && armedKind === 'discard' && mine) { const i = armed; return { label: 'Discard', sub: heroCards(mine.hero)[i]?.name, kind: 'bad', pulse: true, run: () => { defend(i); armed = null; }, cancel: () => (armed = null) }; }
 		if (iCanRespawn) return { label: 'Respawn', kind: 'team', pulse: true, run: onRespawn };
@@ -925,6 +939,12 @@
 {#snippet plate(p: Player, cs: PlayerCardState, w = npW)}
 	<Nameplate {cs} name={p.name} color={colorHex(p.color)} team={pTeam(p)} {turnIdx} {revealed} ready={isReady(cards[p.id] ?? cs)} me={p.id === clientId} width={w}
 		fx={!!fxFor(p.id, slotIdx(cs, turnIdx))} onOpen={() => (overlayId = p.id)} onSlot={(e, t) => peekSlot(e, cs, t)} />
+{/snippet}
+<!-- a 4★ hero's own button, at the size its dash gives it -->
+{#snippet powerBtn(size: number)}
+	{#if myPower === 'ignatia'}
+		<IgnatiaCoin {size} face={$ms.tieBreaker} split={igSplit} ult={!!mine?.ultimate} ready={igReady} used={igUsed} flames={$boardPrefs.dash} art={(t) => icon(`tiebreaker_${t}`)} onPress={armIgnatiaFlip} />
+	{/if}
 {/snippet}
 {#snippet radiusCtl()}
 	<span class="radwrap">
@@ -1587,7 +1607,7 @@
 			</div>
 		{/if}
 		{#if phone2}
-			<PhoneDash cs={mine} color={colorHex(myColor)} team={myTeam === 'blue' ? 'blue' : 'orange'} {turnIdx} {revealed} ini={myInit} fxAt={(t) => !!fxFor(clientId, slotIdx(mine, t))}
+			<PhoneDash cs={mine} power={myPower ? powerBtn : undefined} color={colorHex(myColor)} team={myTeam === 'blue' ? 'blue' : 'orange'} {turnIdx} {revealed} ini={myInit} fxAt={(t) => !!fxFor(clientId, slotIdx(mine, t))}
 				deckCount={deckCards(mine).length} levelUp={iMustLevel} ultIdx={myUlt} {ultReady} order={order2} {ringColor} autoHide={autoRetract}
 				handStyle={bannerHand ? 'banners' : spreadHand ? 'spread' : 'fan'} {pingArmed} radius={radiusCtl} tokens={tokenCtl}
 				onMe={() => (overlayId = clientId)} onSlot={(e, t) => peekSlot(e, mine, t)} onDiscPick={(i) => openDiscard(mine.hero, i, true)}
@@ -1671,7 +1691,7 @@
 			</div>
 		{/if}
 		<div class="h2dash">
-			<HudDash cs={mine} name={myName} color={colorHex(myColor)} team={myTeam === 'blue' ? 'blue' : 'orange'} {turnIdx} {revealed} ini={myInit} marks={statusMap[clientId] ?? EMPTY_STATUS} {markArt}
+			<HudDash cs={mine} power={myPower ? powerBtn : undefined} name={myName} color={colorHex(myColor)} team={myTeam === 'blue' ? 'blue' : 'orange'} {turnIdx} {revealed} ini={myInit} marks={statusMap[clientId] ?? EMPTY_STATUS} {markArt}
 				ultIdx={myUlt} {ultReady} deckCount={deckCards(mine).length} levelUp={iMustLevel} order={order2} fxAt={(t) => !!fxFor(clientId, slotIdx(mine, t))}
 				autoHide={autoRetract} spread={spreadHand} docked={dockHand} hand={handOrdered} rowMax={h2rowMax} {ringColor} {armed} {pingArmed} discOpen={discOpen === 'dash'} radius={radiusCtl} tokens={tokenCtl}
 				onMe={() => (overlayId = clientId)} onCoins={changeCoins} onSlot={(e, t) => peekSlot(e, mine, t)}

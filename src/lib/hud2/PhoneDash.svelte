@@ -32,6 +32,7 @@
 	export let pingArmed = false;
 	export let radius: Snippet | undefined = undefined;
 	export let tokens: Snippet | undefined = undefined;
+	export let power: Snippet<[number]> | undefined = undefined; // a 4★ hero's own button
 	export let onMe: () => void = () => {};
 	export let onSlot: (e: Event, t: number) => void = () => {};
 	export let onDiscPick: (i: number) => void = () => {};
@@ -90,6 +91,7 @@
 	<div class="r2">
 		{#if cs}
 		<span class="tools">
+			{#if power}<span class="ts pw">{@render power(30)}</span>{/if}
 			<span class="ts">{#if tokens}{@render tokens()}{/if}</span>
 			<span class="ts">{#if radius}{@render radius()}{/if}</span>
 			<button class="tl" class:on={pingArmed} on:click={onPing} aria-label="Ping"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.6" class="f" /><path d="M6.3 6.3a8 8 0 0 0 0 11.4M17.7 6.3a8 8 0 0 1 0 11.4" /></svg></button>

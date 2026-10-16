@@ -13,6 +13,7 @@
 // broken by `updatedAt`) wins. For a handful of players nudging a shared
 // tracker this is robust and easy to reason about.
 
+import { applyPower, syncPowers, hasPower, type PowerReq, type PowerState, type TurnCtx } from './heropower'
 import { teamName, aMinion } from './teams'
 import { hexCube, cubeDist } from './zones'
 import { tokenExpiry, sweepTokens, statusFrom, isTurret } from './tokens'
@@ -51,6 +52,7 @@ import { emptyBook, nudgeWait as waitOf, seeNudge, type Nudge } from './nudge'
 
 /** A per-player card instruction, applied authoritatively by the host. */
 export type CardReq =
+	| PowerReq // a 4★ hero's own button (heropower.ts)
 	| { kind: 'commit'; pid: string; idx: number }
 	| { kind: 'pass'; pid: string }
 	| { kind: 'uncommit'; pid: string }
@@ -155,7 +157,18 @@ export const actingIdx = (s: MatchState) => (s.acting?.key === turnKey(s) ? s.ac
 export const actorOf = (s: MatchState): string | null => turnOrder(s)[actingIdx(s)] ?? null
 
 /** Apply a card instruction to the shared state, returning the patch to broadcast. */
+// the turn facts a 4★ power needs (heropower.ts can't import this file)
+// (revealed: the host applies every request, and `revealAt` is in the host's clock)
+const powerCtx = (x: MatchState): TurnCtx => ({ key: turnKey(x), round: x.round, turnIdx: x.turn - 1, order: turnOrder(x), at: actingIdx(x), tieBreaker: x.tieBreaker, revealed: x.revealAt != null && Date.now() >= x.revealAt })
 export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
+	const patch = req.kind === 'power' ? (applyPower(s, req, powerCtx(s)) as Partial<MatchState>) : applyCardReqBase(s, req as Exclude<CardReq, PowerReq>)
+	if (!Object.keys(patch).length) return patch
+	const next = { ...s, ...patch }
+	if (!Object.values(next.cards ?? {}).some((c) => hasPower(c.hero))) return patch
+	const power = syncPowers(next, powerCtx(next))
+	return power ? { ...patch, power } : patch
+}
+function applyCardReqBase(s: MatchState, req: Exclude<CardReq, PowerReq>): Partial<MatchState> {
 	const cards = s.cards ?? {}
 	const turnIdx = s.turn - 1
 
@@ -367,6 +380,10 @@ export interface MatchState {
 	turn: number // 1..TURNS_PER_ROUND
 	phase: Phase
 	tieBreaker: Team // team whose symbol is currently showing on the coin
+	/** 4★ hero powers, per player (heropower.ts) */
+	power?: Record<string, PowerState>
+	/** a GM's test room: 4★ heroes still in the lab can be drafted, and the game is never uploaded to the Hall */
+	draftLab?: boolean
 	waves: number // SHARED wave counters remaining; game ends when it hits 0
 	lastPush: Team | null // team that won the most recent Push the Lane
 	life: Record<Team, number> // per-team Life counters remaining; 0 = that team loses
@@ -851,6 +868,7 @@ export function initialMatchState(
 		map?: GameMap | null
 		draftSystem?: DraftSystem
 		draftStars?: number[]
+		draftLab?: boolean
 	} = {}
 ): MatchState {
 	const length = opts.length ?? 'long'
@@ -884,6 +902,7 @@ export function initialMatchState(
 		host: '',
 		draftSystem: opts.draftSystem ?? 'all-pick',
 		draftStars: opts.draftStars ?? [1, 2, 3, 4],
+		...(opts.draftLab ? { draftLab: true } : {}),
 		draft: null,
 		started: false,
 		closed: false,
@@ -1525,6 +1544,7 @@ export function joinMatch(
 		if (req.kind === 'endAct' && (patch.acting !== undefined || patch.turn)) { const who = actorOf(local); if (who) note(who, req.pid === who ? 'ends their turn' : 'turn skipped by the host') }
 		if (req.kind === 'endAct' && patch.tieBreaker) note(req.pid, `the tie-breaker coin flips to the ${teamName(patch.tieBreaker)}`)
 		if (req.kind === 'claim' && patch.tieClaims) note(req.pid, 'claims the tie — goes first')
+		if (req.kind === 'power' && req.op === 'ignatiaFlip' && patch.tieBreaker) note(req.pid, `flips the tie-breaker coin to the ${teamName(patch.tieBreaker)} (Chaos Incarnate)`)
 		if (req.kind === 'removeHero' && patch.defeated) note(req.pid, 'took their hero off the board — back with their next card')
 		if (req.kind === 'clearAround' && patch.pieces) { const n = Object.keys(local.pieces ?? {}).length - Object.keys(patch.pieces).length; note(req.pid, `cleared ${n} token${n === 1 ? '' : 's'} next to them`) }
 		if (req.kind === 'spawn' && patch.pieces) note(req.pid, 'entered the battlefield')

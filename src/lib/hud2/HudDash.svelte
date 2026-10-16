@@ -56,6 +56,8 @@
 	export let discOpen = false;
 	export let radius: Snippet | undefined = undefined;
 	export let tokens: Snippet | undefined = undefined;
+	/** a 4★ hero's own button (between your name and the stats) */
+	export let power: Snippet<[number]> | undefined = undefined;
 	export let onMe: () => void = () => {};
 	export let onCoins: (d: number) => void = () => {};
 	export let onSlot: (e: Event, t: number) => void = () => {};
@@ -126,7 +128,7 @@
 	const fire = (fn?: () => void) => { if (Date.now() - ringAt < 450) return; fn?.(); };
 </script>
 
-<div class="mydash is-{team}" class:docked={docked && !!cs} class:ulted={ultOpen} class:ascended={cs?.ultimate} class:ringonly={!cs} style="--dw:{dockW}px">
+<div class="mydash is-{team}" class:haspow={!!power} class:docked={docked && !!cs} class:ulted={ultOpen} class:ascended={cs?.ultimate} class:ringonly={!cs} style="--dw:{dockW}px">
 	<div class="dbody">
 		{#if cs}
 		<!-- the ultimate's compartment (opens out from under the level ring, which slides left) -->
@@ -162,6 +164,7 @@
 				<button on:click={() => onCoins(1)} aria-label="Add a coin">+</button>
 			</span>
 		</div>
+		{#if power}<div class="dpow">{@render power(48)}</div>{/if}
 		<StatBubbles {cs} size={27} cols={3} />
 
 		<div class="dwells">
@@ -264,6 +267,9 @@
 	.mmk { position: absolute; left: -8px; bottom: -2px; display: flex; flex-direction: column; gap: 2px; }
 	.mmk img { width: 22px; height: 22px; border-radius: 50%; box-shadow: 0 0 0 2px #0a1a2c; }
 	.dme { flex: none; display: flex; flex-direction: column; gap: 4px; width: 112px; }
+	/* a 4★ hero's button: the name block gives up a little room for it */
+	.haspow .dme { width: 100px; }
+	.dpow { flex: none; width: 52px; height: 52px; display: grid; place-items: center; }
 	.dmn { padding: 0; border: 0; background: none; text-align: left; font-size: 19px; line-height: 1; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
 	.dmh { font-size: 11px; line-height: 1; color: var(--th); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 	.purse { align-self: flex-start; margin-top: 4px; display: inline-flex; align-items: center; gap: 4px; }
