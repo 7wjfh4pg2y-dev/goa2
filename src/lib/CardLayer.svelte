@@ -578,6 +578,13 @@
 		discTimer = setTimeout(() => { discOpen = null; discTimer = null; }, 260);
 	}
 	function discTap(key: string) { discOpen = discOpen === key ? null : key; }
+	// a pile someone else owns: a card lying face down there (Takahide's Bushido) is never opened for them
+	function pileTap(cs: PlayerCardState, hero: string, own: boolean, key: string) {
+		const vis = own ? cs.discard : cs.discard.filter((i) => !isHidden(cs, i));
+		if (!vis.length) return;
+		if (vis.length === 1 && cs.discard.length === 1) openDiscard(hero, vis[0], own);
+		else discTap(key);
+	}
 	function openDiscard(hero: string, idx: number, own: boolean) {
 		discOpen = null;
 		if (own && mateOff?.from === 'both' && !(powerArm?.op === 'mateSwap' && powerArm.idx === idx)) { armMateSwap(idx, 'discard'); return; }
@@ -1219,7 +1226,7 @@
 								<span class="pdisc" title="Discard pile">
 									<span class="trashw">{@html TRASH}</span>
 									{#if cs.discard.length}
-										<span class="pdcard"><Card heroId={cs.hero} card={heroCards(cs.hero)[cs.discard[cs.discard.length - 1]]} /></span>
+										<span class="pdcard">{#if p.id !== clientId && isHidden(cs, cs.discard[cs.discard.length - 1])}<CardBack hero={cs.hero} />{:else}<Card heroId={cs.hero} card={heroCards(cs.hero)[cs.discard[cs.discard.length - 1]]} />{/if}</span>
 										<span class="pdct">{cs.discard.length}</span>
 									{/if}
 								</span>
@@ -1351,7 +1358,7 @@
 							<span class="tbroman trash">{@html TRASH}</span>
 							{#if cs.discard.length}
 								<!-- one card: open it straight away; several: fan them out to choose -->
-								<button class="dstack" on:click={() => (cs.discard.length === 1 ? openDiscard(oh, cs.discard[0], own) : discTap(oid))} title={cs.discard.length === 1 ? 'Preview' : 'Show the discard pile'}>
+								<button class="dstack" on:click={() => pileTap(cs, oh, own, oid)} title={cs.discard.length === 1 ? 'Preview' : 'Show the discard pile'}>
 									{#each cs.discard.slice(-3) as i, di (i)}
 										<span class="dsk" style="--i:{di}; --n:{Math.min(3, cs.discard.length)}">{#if !own && isHidden(cs, i)}<span class="fdb" style="display:block; width:100%; aspect-ratio:1192 / 1664; border-radius:6%; overflow:hidden"><CardBack hero={oh} /></span>{:else}<Card heroId={oh} card={od[i]} />{/if}</span>
 									{/each}
