@@ -896,7 +896,7 @@
 	$: orderTop = cTop ? 62 : 100;
 	$: colTop = orderTop + (cOrder ? 30 : 60) + (cOrder ? 26 : 34);
 	// the Chronicle in the corner: beside the dash when there's room, else just above its left end
-	$: DASH_W = 900 + (myPower === 'takahide' ? 84 : myPower ? 60 : 0); // the dash's width (design px) without the ultimate's compartment (+ a 4★ hero's button)
+	$: DASH_W = 900 + (myPower === 'takahide' ? 84 : myPower === 'snorri' ? 100 : myPower ? 60 : 0); // the dash's width (design px) without the ultimate's compartment (+ a 4★ hero's button)
 	$: myUltOpen = !!mine && myUlt >= 0 && (mine.ultimate || ultReady);
 	$: logRoom = canvasW / 2 - DASH_W / 2 - 14 - (myUltOpen ? 96 : 0) - 36;
 	$: logBeside = logRoom >= 220;
