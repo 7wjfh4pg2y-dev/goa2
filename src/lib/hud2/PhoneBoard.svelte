@@ -132,5 +132,5 @@
 	.sc.disc { box-shadow: 0 0 0 1.5px #d8a24a; }
 	.sc.rmv { filter: grayscale(1) brightness(0.6); }
 	.sc.rmv::after { content: ''; position: absolute; left: -2px; right: -2px; top: 50%; height: 2px; background: #e0533f; transform: rotate(-35deg); }
-	.wr { position: absolute; left: 50%; bottom: 0; transform: translate(-50%, 50%); z-index: 1; display: grid; pointer-events: none; }
+	.wr { position: absolute; right: 0; bottom: 0; transform: translate(30%, 30%); z-index: 1; display: grid; pointer-events: none; }
 </style>
