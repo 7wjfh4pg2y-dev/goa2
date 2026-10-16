@@ -26,7 +26,7 @@
 	export let uid = 'mk';
 	/** a mark picked in the builder: drawn with a dashed halo */
 	export let picked: string | null = null;
-	/** spaces a board piece stands on (the wave's minions, the hero): marks there sit round its rim, small */
+	/** spaces a board piece stands on (the wave's minions, the hero): marks there sit round its rim, small (E / A units count too) */
 	export let occupied: Set<string> = new Set();
 
 	const col = (c: string) => MARK_HEX[c] ?? c;
@@ -54,8 +54,13 @@
 		const out: Record<string, Slot> = {};
 		const t = (-rot * Math.PI) / 180, cs = Math.cos(t), sn = Math.sin(t);
 		for (const hex in by) {
-			const c = at(hex), occ = occupied.has(hex);
-			const list = by[hex].sort((a, b) => ORDER[a.kind] - ORDER[b.kind] || a.turn - b.turn), n = list.length;
+			const c = at(hex);
+			let list = by[hex].sort((a, b) => ORDER[a.kind] - ORDER[b.kind] || a.turn - b.turn);
+			// an E / A unit stands on its space like a piece: full size in the middle, the rest round its rim
+			const unit = list.find((m) => m.kind === 'unit');
+			if (unit) { out[unit.id] = { ...c, s: 1 }; list = list.filter((m) => m !== unit); }
+			const occ = occupied.has(hex) || !!unit, n = list.length;
+			if (!n) continue;
 			if (n === 1 && !occ) { out[list[0].id] = { ...c, s: 1 }; continue; }
 			// round the rim of a piece: up to six places from the top right, clockwise; else a circle filling the space
 			const rr = occ ? 0.64 : n === 2 ? 0.42 : Math.min(0.52, 0.36 + 0.035 * n);
@@ -78,15 +83,8 @@
 		const t = (-rot * Math.PI) / 180, d = size * 0.6;
 		return { x: c.x - d * Math.sin(t), y: c.y + d * Math.cos(t), s: 0.75 };
 	};
-	// a ring goes round what stands on its space: a piece (centre), else an E / A unit wherever it sits
-	$: ringAt = (m: Mark & { hex: string }) => {
-		const c = at(m.hex);
-		if (occupied.has(m.hex)) return { ...c, r: size * 0.8 };
-		const u = marks.find((x) => x.kind === 'unit' && x.hex === m.hex);
-		if (!u || !slots[u.id] || slots[u.id].s === 1) return { ...c, r: size * 0.8 };
-		const sl = slots[u.id];
-		return { x: sl.x, y: sl.y, r: NATURAL(u) * sl.s * size * 1.32 };
-	};
+	// a ring circles its space, and so whatever stands there (a minion, the hero, an E / A unit), all kept in the middle
+	$: ringAt = (m: Mark & { hex: string }) => ({ ...at(m.hex), r: size * 0.8 });
 	function arrowGeo(from: string, to: string) {
 		const a = at(from), b = at(to), dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
 		const ux = dx / len, uy = dy / len, s0 = size * 0.42, s1 = size * 0.52;
