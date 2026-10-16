@@ -62,7 +62,7 @@
 	.rp.pop { position: absolute; bottom: calc(100% + 24px); left: 50%; transform: translateX(-50%); }
 	.rp.pop::after { content: ''; position: absolute; left: 50%; bottom: -7px; width: 12px; height: 12px; transform: translateX(-50%) rotate(45deg); background: rgb(6, 19, 34); border-right: 1px solid rgba(216, 179, 106, 0.45); border-bottom: 1px solid rgba(216, 179, 106, 0.45); }
 	.rp.sheet { position: fixed; left: 8px; right: 8px; width: auto; bottom: calc(108px + env(safe-area-inset-bottom, 0px)); }
-	.rp.modal { width: 340px; }
+	.rp.modal { width: 340px; max-width: calc(100vw - 16px); }
 	.rh { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 	.rh b { flex: 1; font-size: 15px; font-weight: normal; color: var(--brass-hi); letter-spacing: 0.02em; }
 	.rx { width: 24px; height: 24px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.18); background: rgba(0, 0, 0, 0.25); color: #c9d4df; font-size: 11px; cursor: pointer; }

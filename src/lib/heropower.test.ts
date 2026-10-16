@@ -141,6 +141,14 @@ describe('Snorri: Inscribe the Runes (his silver) — a rune under each turn slo
 		// no ultimate / not his turn: refused
 		expect(second({ ...base, cards: { ...base.cards, S: { ...base.cards!.S, ultimate: false } } } as MatchState, 'horn')).toEqual({})
 		expect(second(actingAs(base, 'B'), 'horn')).toEqual({})
+		// …but defending on someone else's turn is an action too (the Oaths read the runes)
+		const atk = { ...actingAs(base, 'B'), attacks: { S: { by: 'B', defending: false, at: 0 } } } as MatchState
+		expect(secondRune({ ...atk, ...second(atk, 'horn') } as MatchState, 'S', ctx(atk))).toBe('horn')
+		const forced = { ...actingAs(base, 'B'), forced: { S: { by: 'B', die: false, at: 0 } } } as MatchState
+		expect(second(forced, 'anvil')).not.toEqual({})
+		// the ultimate taken back: the second rune no longer counts
+		const noUlt = { ...after, cards: { ...after.cards, S: { ...after.cards!.S, ultimate: false } } } as MatchState
+		expect(secondRune(noUlt, 'S', ctx(noUlt))).toBe(null)
 	})
 })
 

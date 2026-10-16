@@ -40,7 +40,8 @@ export type TurnCtx = { key: string; round: number; turnIdx: number; order: stri
 	/** each player's team (for "a friendly hero") */
 	teams?: Record<string, Team | null> }
 type S = { cards?: Record<string, PlayerCardState>; power?: Record<string, PowerState>; effects?: { pid: string; hero: string; idx: number }[]; host?: string
-	lastClash?: { id: string; kind: string; by: string; out: string } | null; lastDefeat?: { id: string; by: string } | null }
+	lastClash?: { id: string; kind: string; by: string; out: string } | null; lastDefeat?: { id: string; by: string } | null
+	attacks?: Record<string, unknown>; forced?: Record<string, unknown> }
 
 /** heroes with their own dash button */
 export const POWER_HEROES = ['ignatia', 'snorri', 'takahide']
@@ -66,7 +67,8 @@ export const flipUsed = (s: S, pid: string, ctx: TurnCtx) => s.power?.[pid]?.fli
 // Inscribe the Runes (his silver): four rune markers, one under each turn slot; the rune under the slot of the turn in
 // play is ACTIVE. They stay through round ends and his defeat (the card says so), and move only when he plays the
 // silver again (or the host fixes them). Rune Mastery (ultimate): each action, one INACTIVE rune counts as a second
-// active rune — picked on his own acting turn, gone when the turn ends.
+// active rune — picked on his own acting turn, or while he answers an attack / a forced discard (his defence card is an
+// action too: the Oaths read the runes), gone when the turn ends.
 export const RUNES = ['axe', 'bird', 'anvil', 'horn'] as const
 export type Rune = (typeof RUNES)[number]
 export const RUNE_NAME: Record<Rune, string> = { axe: 'Axe', bird: 'Bird', anvil: 'Anvil', horn: 'Horn' }
@@ -77,16 +79,18 @@ export const runesOf = (s: S, pid: string): Rune[] | null => { const r = s.power
 /** the rune under the slot of this turn (null before the first Inscribe) */
 export const activeRune = (s: S, pid: string, turnIdx: number): Rune | null => runesOf(s, pid)?.[turnIdx] ?? null
 /** Rune Mastery's pick for this turn, if any */
-export const secondRune = (s: S, pid: string, ctx: TurnCtx): Rune | null => { const x = s.power?.[pid]?.second; return x && x.key === ctx.key ? x.rune : null }
+export const secondRune = (s: S, pid: string, ctx: TurnCtx): Rune | null => { const x = s.power?.[pid]?.second; return x && x.key === ctx.key && s.cards?.[pid]?.ultimate ? x.rune : null }
 /** he may (re)arrange the runes: his silver is the card acting now (his own acting turn, after the reveal) */
 export function canInscribe(s: S, pid: string, ctx: TurnCtx): boolean {
 	const cs = s.cards?.[pid]
 	return !!cs && cs.hero === 'snorri' && ctx.revealed && ctx.order[ctx.at] === pid && cs.pending != null && cs.pending === silverIdx('snorri')
 }
-/** Rune Mastery: the ultimate, runes inscribed, his own acting turn */
+/** Rune Mastery: the ultimate, runes inscribed, and an action of his now — his own acting turn, or defending (an open
+ *  attack on him, or a forced discard) */
 export function canSecond(s: S, pid: string, ctx: TurnCtx): boolean {
 	const cs = s.cards?.[pid]
-	return !!cs && cs.hero === 'snorri' && cs.ultimate && !!runesOf(s, pid) && ctx.revealed && ctx.order[ctx.at] === pid
+	if (!cs || cs.hero !== 'snorri' || !cs.ultimate || !runesOf(s, pid)) return false
+	return (ctx.revealed && ctx.order[ctx.at] === pid) || !!s.attacks?.[pid] || !!s.forced?.[pid]
 }
 /** the log's words for an arrangement */
 export const runeLine = (o: Rune[]) => o.map((r, i) => `${ROMAN[i]} ${RUNE_NAME[r]}`).join(' · ')
