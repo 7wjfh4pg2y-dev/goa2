@@ -1353,7 +1353,7 @@
 								<!-- one card: open it straight away; several: fan them out to choose -->
 								<button class="dstack" on:click={() => (cs.discard.length === 1 ? openDiscard(oh, cs.discard[0], own) : discTap(oid))} title={cs.discard.length === 1 ? 'Preview' : 'Show the discard pile'}>
 									{#each cs.discard.slice(-3) as i, di (i)}
-										<span class="dsk" style="--i:{di}; --n:{Math.min(3, cs.discard.length)}">{#if !own && isHidden(cs, i)}<CardBack hero={oh} />{:else}<Card heroId={oh} card={od[i]} />{/if}</span>
+										<span class="dsk" style="--i:{di}; --n:{Math.min(3, cs.discard.length)}">{#if !own && isHidden(cs, i)}<span class="fdb" style="display:block; width:100%; aspect-ratio:1192 / 1664; border-radius:6%; overflow:hidden"><CardBack hero={oh} /></span>{:else}<Card heroId={oh} card={od[i]} />{/if}</span>
 									{/each}
 								</button>
 								{#if discOpen === oid}

@@ -76,7 +76,7 @@
 			{/each}
 			<span class="sdiv"></span>
 			<span class="ws disc" title="Discard pile">
-				{#if top != null && !own && isHidden(cs, top)}<CardBack hero={cs.hero} /><em>{cs.discard.length}</em>
+				{#if top != null && !own && isHidden(cs, top)}<span class="fdb" style="display:block; width:100%; aspect-ratio:1192 / 1664; border-radius:6%; overflow:hidden"><CardBack hero={cs.hero} /></span><em>{cs.discard.length}</em>
 				{:else if top != null}<Card heroId={cs.hero} card={heroCards(cs.hero)[top]} /><em>{cs.discard.length}</em>
 				{:else}<svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4.5h6V7M6 7l1 13h10l1-13" /></svg>{/if}
 			</span>

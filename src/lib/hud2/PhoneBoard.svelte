@@ -72,14 +72,14 @@
 		{/each}
 		<span class="dv"></span>
 		<button class="tw pile" disabled={top == null} on:click={() => top != null && !down(top) && read(top)} aria-label="Discard pile">
-			{#if top != null && down(top)}<CardBack hero={cs.hero} />{:else if top != null}<Card heroId={cs.hero} card={heroCards(cs.hero)[top]} />{/if}
+			{#if top != null && down(top)}<span class="fdb" style="display:block; width:100%; aspect-ratio:1192 / 1664; border-radius:6%; overflow:hidden"><CardBack hero={cs.hero} /></span>{:else if top != null}<Card heroId={cs.hero} card={heroCards(cs.hero)[top]} />{/if}
 			<i class="tr"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4.5h6V7M6 7l1 13h10l1-13" /></svg></i>
 		</button>
 	</div>
 	<div class="strips">
 		<div class="strip">
 			<span class="sl"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4.5h6V7M6 7l1 13h10l1-13" /></svg>Discarded</span>
-			<span class="cards">{#each cs.discard as i (i)}{#if down(i)}<span class="sc disc"><CardBack hero={cs.hero} /></span>{:else}<button class="sc disc" on:click={() => read(i)}><Card heroId={cs.hero} card={heroCards(cs.hero)[i]} /></button>{/if}{:else}<em>—</em>{/each}</span>
+			<span class="cards">{#each cs.discard as i (i)}{#if down(i)}<span class="sc disc"><span class="fdb" style="display:block; width:100%; aspect-ratio:1192 / 1664; border-radius:6%; overflow:hidden"><CardBack hero={cs.hero} /></span></span>{:else}<button class="sc disc" on:click={() => read(i)}><Card heroId={cs.hero} card={heroCards(cs.hero)[i]} /></button>{/if}{:else}<em>—</em>{/each}</span>
 		</div>
 		<div class="strip">
 			<span class="sl rm"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" /><path d="M6.5 17.5l11-11" /></svg>Removed</span>
