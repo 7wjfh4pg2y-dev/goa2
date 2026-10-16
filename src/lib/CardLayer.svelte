@@ -247,7 +247,9 @@
 	$: emAsk = myPower === 'emmitt' && canReverse($ms, clientId, pctx) && emDeclined !== emAtKey;
 	$: emPow = myPower === 'emmitt' ? $ms.power?.[clientId] : undefined;
 	$: emNext = nextTurnKey(pctx);
-	$: emMode = (emPow?.rev === pctx.key || emPow?.shen === pctx.key ? 'rev' : emAsk || (!!emNext && emPow?.rev === emNext) ? 'green' : 'idle') as 'idle' | 'green' | 'rev';
+	// …and while his card is in play this turn (not reversed), the face just runs — time going on as normal
+	$: emRuns = !!mine && revealed && mine.pending != null && mine.pending >= 0;
+	$: emMode = (battlePhase ? 'idle' : emPow?.rev === pctx.key || emPow?.shen === pctx.key ? 'rev' : emAsk || (!!emNext && emPow?.rev === emNext) ? 'green' : emRuns ? 'run' : 'idle') as 'idle' | 'run' | 'green' | 'rev';
 	$: turnReversed = reversedTurn($ms, pctx.key);
 	// Time Capsule / Future Proof (his card acting): you, Emmitt or his friend, may take back this turn's discards
 	$: capBack = mine ? capsuleOffer($ms, clientId, pctx) : [];
@@ -392,6 +394,9 @@
 	$: if (!levelPhase || levelWaiting.length) nextAsk = false;
 	function nextRound() { nextAsk = false; onAdvanceTurn(); }
 	$: battlePhase = $ms.battlePhase ?? false;
+	// the 4★ dash effects (the Dashboard switch) rest once the minion battle starts — no motion through the battle and
+	// the level-up (the user: don't distract people)
+	$: dashFx = $boardPrefs.dash && !battlePhase;
 	$: levelPhase = $ms.levelPhase ?? false;
 	// the battle's removals come first; then the host opens the level-up step
 	function startLevelUp() { session.act('level up!', levelPatch($ms)); }
@@ -1051,19 +1056,19 @@
 
 <!-- controls shared by the desktop dash and the phone dash -->
 {#snippet plate(p: Player, cs: PlayerCardState, w = npW)}
-	<Nameplate {cs} runes={runeMap[p.id]} runeFx={$boardPrefs.dash} name={p.name} color={colorHex(p.color)} team={pTeam(p)} {turnIdx} {revealed} ready={isReady(cards[p.id] ?? cs)} me={p.id === clientId} width={w}
+	<Nameplate {cs} runes={runeMap[p.id]} runeFx={dashFx} name={p.name} color={colorHex(p.color)} team={pTeam(p)} {turnIdx} {revealed} ready={isReady(cards[p.id] ?? cs)} me={p.id === clientId} width={w}
 		fx={!!fxFor(p.id, slotIdx(cs, turnIdx))} onOpen={() => (overlayId = p.id)} onSlot={(e, t) => peekSlot(e, cs, t)} />
 {/snippet}
 <!-- a 4★ hero's own button, at the size its dash gives it -->
 {#snippet powerBtn(size: number)}
 	{#if myPower === 'ignatia'}
-		<IgnatiaCoin {size} phone={mobile} face={$ms.tieBreaker} split={igSplit} ult={!!mine?.ultimate} ready={igReady} used={igUsed} flames={$boardPrefs.dash} art={(t) => icon(`tiebreaker_${t}`)} onPress={armIgnatiaFlip} />
+		<IgnatiaCoin {size} phone={mobile} face={$ms.tieBreaker} split={igSplit} ult={!!mine?.ultimate} ready={igReady} used={igUsed} flames={dashFx} art={(t) => icon(`tiebreaker_${t}`)} onPress={armIgnatiaFlip} />
 	{:else if myPower === 'takahide' && mine}
-		<TakaGold {size} cs={mine} kind={tkKind} {turnIdx} fx={$boardPrefs.dash} phone={mobile} onPick={tkPick} />
+		<TakaGold {size} cs={mine} kind={tkKind} {turnIdx} fx={dashFx} phone={mobile} onPick={tkPick} />
 	{:else if myPower === 'emmitt'}
-		<EmmittClock {size} phone={mobile} mode={emMode} fx={$boardPrefs.dash} />
+		<EmmittClock {size} phone={mobile} mode={emMode} fx={dashFx} />
 	{:else if myPower === 'snorri'}
-		<SnorriRunes {size} runes={snRunes} {turnIdx} second={snSecond} ult={!!mine?.ultimate} canEdit={snEdit} canSecond={snCan2} fx={$boardPrefs.dash} phone={mobile} onDraft={snDraft} onSecond={snPickSecond} />
+		<SnorriRunes {size} runes={snRunes} {turnIdx} second={snSecond} ult={!!mine?.ultimate} canEdit={snEdit} canSecond={snCan2} fx={dashFx} phone={mobile} onDraft={snDraft} onSecond={snPickSecond} />
 	{/if}
 {/snippet}
 {#snippet radiusCtl()}
@@ -1308,7 +1313,7 @@
 				{#if !platesTop}
 					{#each h2enemies as p (p.id)}
 						{@const cs = viewCards[p.id]}
-						{#if cs}{#if compact}{@render plate(p, cs, 344)}{:else}<HudBoard {cs} own={p.id === clientId} runes={runeMap[p.id]} runeFx={$boardPrefs.dash} name={p.name} color={colorHex(p.color)} team={pTeam(p)} {turnIdx} {revealed} ready={isReady(cards[p.id] ?? cs)} compact={h2compact} small={h2tight}
+						{#if cs}{#if compact}{@render plate(p, cs, 344)}{:else}<HudBoard {cs} own={p.id === clientId} runes={runeMap[p.id]} runeFx={dashFx} name={p.name} color={colorHex(p.color)} team={pTeam(p)} {turnIdx} {revealed} ready={isReady(cards[p.id] ?? cs)} compact={h2compact} small={h2tight}
 							fxAt={(t) => !!fxFor(p.id, slotIdx(cs, t))} onOpen={() => (overlayId = p.id)} onSlot={(e, t) => peekSlot(e, cs, t)} />{/if}{/if}
 					{/each}
 				{/if}
@@ -1317,7 +1322,7 @@
 				{#if !platesTop}
 					{#each colRight as p (p.id)}
 						{@const cs = viewCards[p.id]}
-						{#if cs}{#if compact}{@render plate(p, cs, 344)}{:else}<HudBoard {cs} own={p.id === clientId} runes={runeMap[p.id]} runeFx={$boardPrefs.dash} name={p.name} color={colorHex(p.color)} team={pTeam(p)} {turnIdx} {revealed} ready={isReady(cards[p.id] ?? cs)} compact={h2compact} small={h2tight}
+						{#if cs}{#if compact}{@render plate(p, cs, 344)}{:else}<HudBoard {cs} own={p.id === clientId} runes={runeMap[p.id]} runeFx={dashFx} name={p.name} color={colorHex(p.color)} team={pTeam(p)} {turnIdx} {revealed} ready={isReady(cards[p.id] ?? cs)} compact={h2compact} small={h2tight}
 							fxAt={(t) => !!fxFor(p.id, slotIdx(cs, t))} onOpen={() => (overlayId = p.id)} onSlot={(e, t) => peekSlot(e, cs, t)} />{/if}{/if}
 					{/each}
 				{/if}
@@ -1340,7 +1345,7 @@
 	{#if phone2 && overlayId && ovPlayer && viewCards[overlayId]}
 		{@const pcs = viewCards[overlayId]}
 		{@const pid = ovPlayer.id}
-		<PhoneBoard cs={pcs} own={pid === clientId} runes={runeMap[pid]} runeFx={$boardPrefs.dash} name={ovPlayer.name} color={colorHex(ovPlayer.color)} team={pTeam(ovPlayer)} {turnIdx} {revealed} status={statusMap[pid] ?? EMPTY_STATUS} {markArt}
+		<PhoneBoard cs={pcs} own={pid === clientId} runes={runeMap[pid]} runeFx={dashFx} name={ovPlayer.name} color={colorHex(ovPlayer.color)} team={pTeam(ovPlayer)} {turnIdx} {revealed} status={statusMap[pid] ?? EMPTY_STATUS} {markArt}
 			fxAt={(t) => !!fxFor(pid, slotIdx(pcs, t))} onStatus={(k) => toggleStatus(pid, k)} onSlot={(e, t) => peekSlot(e, pcs, t)}
 			onRead={(list, at) => (examine = { hid: pcs.hero, idx: list[at], pid, list: list.map((i) => ({ hid: pcs.hero, idx: i, pid })) })} onClose={() => (overlayId = null)} />
 	{:else if overlayId && ovPlayer && viewCards[overlayId]}
@@ -1392,7 +1397,7 @@
 				<div class="turns">
 					{#each [0, 1, 2, 3] as t}
 						<div class="tbox" class:current={t === turnIdx} style="--tint:{teamTint(ovPlayer)}">
-							<div class="tlabel">Turn {t + 1}{#if runeMap[oid]}{@const rs = runeMap[oid]}{@const r = rs?.at[t] ?? null}<span class="tlrune"><RuneMark rune={r} size={24} on={t === turnIdx && !!r} second={!!r && rs?.second === r} fx={$boardPrefs.dash} /></span>{/if}</div>
+							<div class="tlabel">Turn {t + 1}{#if runeMap[oid]}{@const rs = runeMap[oid]}{@const r = rs?.at[t] ?? null}<span class="tlrune"><RuneMark rune={r} size={24} on={t === turnIdx && !!r} second={!!r && rs?.second === r} fx={dashFx} /></span>{/if}</div>
 							<div class="tslot">
 								<span class="tbroman">{ROMAN[t]}</span>
 								<span class="fxwrap" class:fx={!!fxFor(oid, slotIdx(cs, t))} style="--fxc:{colorOf(oid)}"><TurnSlot heroId={oh} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} back={!own && isHidden(cs, cs.turns[t])} veil={own && isHidden(cs, cs.turns[t])} peekable={oid === clientId} examinable on:click={(e) => peekSlot(e, cs, t)} /></span>
@@ -1742,7 +1747,7 @@
 			</div>
 		{/if}
 		{#if phone2}
-			<PhoneDash cs={mine} swapOffer={!!mateOff} runes={runeMap[clientId]} runeFx={$boardPrefs.dash} power={myPower ? powerBtn : undefined} color={colorHex(myColor)} team={myTeam === 'blue' ? 'blue' : 'orange'} {turnIdx} {revealed} ini={myInit} fxAt={(t) => !!fxFor(clientId, slotIdx(mine, t))}
+			<PhoneDash cs={mine} swapOffer={!!mateOff} runes={runeMap[clientId]} runeFx={dashFx} power={myPower ? powerBtn : undefined} color={colorHex(myColor)} team={myTeam === 'blue' ? 'blue' : 'orange'} {turnIdx} {revealed} ini={myInit} fxAt={(t) => !!fxFor(clientId, slotIdx(mine, t))}
 				deckCount={deckCards(mine).length} levelUp={iMustLevel} ultIdx={myUlt} {ultReady} order={order2} {ringColor} autoHide={autoRetract}
 				handStyle={bannerHand ? 'banners' : spreadHand ? 'spread' : 'fan'} {pingArmed} radius={radiusCtl} tokens={tokenCtl}
 				onMe={() => (overlayId = clientId)} onSlot={(e, t) => peekSlot(e, mine, t)} onDiscPick={(i) => openDiscard(mine.hero, i, true)}
@@ -1826,7 +1831,7 @@
 			</div>
 		{/if}
 		<div class="h2dash">
-			<HudDash cs={mine} swapOffer={!!mateOff} runes={runeMap[clientId]} runeFx={$boardPrefs.dash} power={myPower ? powerBtn : undefined} name={myName} color={colorHex(myColor)} team={myTeam === 'blue' ? 'blue' : 'orange'} {turnIdx} {revealed} ini={myInit} marks={statusMap[clientId] ?? EMPTY_STATUS} {markArt}
+			<HudDash cs={mine} swapOffer={!!mateOff} runes={runeMap[clientId]} runeFx={dashFx} power={myPower ? powerBtn : undefined} name={myName} color={colorHex(myColor)} team={myTeam === 'blue' ? 'blue' : 'orange'} {turnIdx} {revealed} ini={myInit} marks={statusMap[clientId] ?? EMPTY_STATUS} {markArt}
 				ultIdx={myUlt} {ultReady} deckCount={deckCards(mine).length} levelUp={iMustLevel} order={order2} fxAt={(t) => !!fxFor(clientId, slotIdx(mine, t))}
 				autoHide={autoRetract} spread={spreadHand} docked={dockHand} hand={handOrdered} rowMax={h2rowMax} {ringColor} {armed} {pingArmed} discOpen={discOpen === 'dash'} radius={radiusCtl} tokens={tokenCtl}
 				onMe={() => (overlayId = clientId)} onCoins={changeCoins} onSlot={(e, t) => peekSlot(e, mine, t)}

@@ -2,13 +2,14 @@
 	// Emmitt's dash button (the user's pick A, 2026-10-16, artifact 'Emmitt's Hourglass'): an hourglass in a CLOCK FACE —
 	// twelve numerals and a minute ring round the button. A real clock face reads backwards: turning ANTICLOCKWISE is
 	// time going on as normal, CLOCKWISE is time running back.
-	//   idle  = dim slate, still.
+	//   idle  = dim slate, still (also all through the minion battle and the level-up).
+	//   run   = his card is in play this turn and time runs normally: the face creeps anticlockwise, no glow.
 	//   green = his gold acts (he may turn the next turn round) or he has: card-green, the face creeping anticlockwise
 	//           (slow) until the reversed turn begins.
 	//   rev   = the reversed turn, or a turn he bent time in (a swap, a rewind, a warp, a retrieve): magenta, the face
 	//           spinning clockwise (fast), and the hourglass alone flips over; at the turn's end it flips back.
 	// Motion = the Dashboard switch (transform / opacity only).
-	export let mode: 'idle' | 'green' | 'rev' = 'idle';
+	export let mode: 'idle' | 'run' | 'green' | 'rev' = 'idle';
 	export let fx = true;
 	export let size = 48;
 	export let phone = false;
@@ -50,11 +51,12 @@
 		--c: #5d7088; --c2: #3d5068; --g: transparent; font-family: 'Modesto Poster', serif; }
 	.em.ph { width: calc(var(--z) * 1.95); margin-left: -7px; }
 	.em.ready { cursor: pointer; }
+	.em.run { --c: #9fb3c8; --c2: #5d7088; }
 	.em.green { --c: #8ff0a4; --c2: #41ae59; --g: #41ae59; }
 	.em.rev { --c: #ffa0e6; --c2: #d04cb4; --g: #e040c0; }
 	.lay { position: absolute; left: calc(50% - var(--z)); top: calc(50% - var(--z)); width: calc(var(--z) * 2); height: calc(var(--z) * 2); pointer-events: none; overflow: visible; }
 	.face { opacity: 0.75; }
-	.green .face, .rev .face { opacity: 1; }
+	.run .face, .green .face, .rev .face { opacity: 1; }
 	.glow { opacity: 0; }
 	.disc { position: absolute; left: 50%; top: 50%; width: var(--z); height: var(--z); margin: calc(var(--z) * -0.5) 0 0 calc(var(--z) * -0.5); border-radius: 50%;
 		background: radial-gradient(circle at 50% 40%, #1d3550, #08131f); box-shadow: inset 0 0 0 1.5px rgba(216, 179, 106, 0.55), 0 2px 6px rgba(0, 0, 0, 0.5); }
@@ -63,10 +65,11 @@
 	/* time reversing: the hourglass alone turns over (and back when the turn ends) */
 	.rev .glass svg { transform: rotate(180deg); }
 	/* normal time = anticlockwise, slow; reversed time = clockwise, noticeably faster */
-	.fx.green .face { animation: emspin 60s linear infinite reverse; }
+	.fx.run .face, .fx.green .face { animation: emspin 60s linear infinite reverse; }
 	.fx.rev .face { animation: emspin 9s linear infinite; }
-	.fx .glow { animation: embr 2.4s ease-in-out infinite; }
+	.fx.green .glow, .fx.rev .glow { animation: embr 2.4s ease-in-out infinite; }
 	.fx .stream { animation: emst 0.5s linear infinite; }
+	.run .glow { opacity: 0 !important; }
 	.green:not(.fx) .glow, .rev:not(.fx) .glow { opacity: 0.6; }
 	@keyframes emspin { to { transform: rotate(360deg); } }
 	@keyframes embr { 0%, 100% { opacity: 0.35; } 50% { opacity: 0.95; } }
