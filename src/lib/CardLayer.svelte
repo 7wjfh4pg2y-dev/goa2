@@ -1350,11 +1350,11 @@
 				<div class="turns">
 					{#each [0, 1, 2, 3] as t}
 						<div class="tbox" class:current={t === turnIdx} style="--tint:{teamTint(ovPlayer)}">
-							<div class="tlabel">Turn {t + 1}</div>
+							<div class="tlabel">Turn {t + 1}{#if runeMap[oid]}{@const rs = runeMap[oid]}{@const r = rs?.at[t] ?? null}<span class="tlrune"><RuneMark rune={r} size={24} on={t === turnIdx && !!r} second={!!r && rs?.second === r} fx={$boardPrefs.dash} /></span>{/if}</div>
 							<div class="tslot">
 								<span class="tbroman">{ROMAN[t]}</span>
 								<span class="fxwrap" class:fx={!!fxFor(oid, slotIdx(cs, t))} style="--fxc:{colorOf(oid)}"><TurnSlot heroId={oh} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} back={!own && isHidden(cs, cs.turns[t])} veil={own && isHidden(cs, cs.turns[t])} peekable={oid === clientId} examinable on:click={(e) => peekSlot(e, cs, t)} /></span>
-								{#if runeMap[oid]}{@const rs = runeMap[oid]}{@const r = rs?.at[t] ?? null}<span class="tbrune"><RuneMark rune={r} size={40} on={t === turnIdx && !!r} second={!!r && rs?.second === r} fx={$boardPrefs.dash} /></span>{/if}
+								
 							</div>
 						</div>
 					{/each}
@@ -2153,7 +2153,8 @@
 	.tlabel { text-align: center; font-family: 'Modesto Poster', serif; font-size: .78rem; letter-spacing: .04em; color: #f6ead2; }
 	.tslot { position: relative; }
 	.tbroman { position: absolute; inset: 0; display: grid; place-items: center; font-family: 'Modesto Poster', serif; font-size: 3.4rem; line-height: 1; color: rgba(255,255,255,.07); pointer-events: none; z-index: 0; }
-	.tbrune { position: absolute; right: 0; top: 0; transform: translate(30%, -30%); z-index: 2; display: grid; pointer-events: none; }
+	/* Snorri's rune for that turn, after 'Turn n' (pulled into the line so the label row keeps its height) */
+	.tlrune { display: inline-grid; vertical-align: middle; margin: -6px 0 -6px 6px; pointer-events: none; }
 	.tbroman.trash { padding: 22%; color: rgba(255,255,255,.08); }
 	.tbroman.trash :global(svg) { width: 100%; height: 100%; }
 	.tslot :global(.slot) { position: relative; z-index: 1; }

@@ -2,7 +2,7 @@
 	// Snorri's dash button: the rune active this turn, large, with the turn's numeral on a small tab (a dark, blank rune
 	// before his first Inscribe), inside a RUNE CIRCLE (the user's pick A, 2026-10-16: the 24 Elder Futhark between two
 	// thin circles). The circle rests dim and still; it lights ice-blue and turns while he can (re)inscribe — his silver
-	// is the card acting — and violet while Rune Mastery wants a second rune (the turning + breathing glow = the
+	// is the card acting — and violet all through his acting turn once Rune Mastery is his (second rune picked or not) (the turning + breathing glow = the
 	// Dashboard switch). The second rune rides as a violet badge. A tap opens the rune panel (the phone: a bottom sheet).
 	import { onDestroy } from 'svelte'
 	import { RUNES, type Rune } from '$lib/heropower'
@@ -34,7 +34,7 @@
 	let draft: Rune[] = [...(runes ?? RUNES)]
 	$: active = runes?.[turnIdx] ?? null
 	// the circle lights: ice while he may inscribe, violet while Rune Mastery waits for a second rune
-	$: lit = canEdit ? 'ice' : canSecond && !second ? 'vio' : null
+	$: lit = canEdit ? 'ice' : canSecond ? 'vio' : null
 	// a new arrangement is offered to the ring only when it differs from what's inscribed (or nothing is yet)
 	$: pending = open && canEdit && (!runes || draft.some((r, i) => r !== runes![i])) ? draft : null
 	$: onDraft(pending)
