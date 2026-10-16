@@ -43,7 +43,7 @@
 	$: record = heroMatchups(league, heroId);
 	$: localHero = league?.heroes.find((x) => x.hero === heroId) ?? null;
 
-	let heroId = 'wasp';
+	let heroId = 'arien'; // the default hero (first alphabetically)
 	let tab: 'overview' | 'openings' = 'overview';
 	let ready = false;
 	let status: 'loading' | 'ready' | 'missing' | 'error' = 'loading';
