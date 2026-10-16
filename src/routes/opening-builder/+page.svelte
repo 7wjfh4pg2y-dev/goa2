@@ -7,6 +7,7 @@
 	// until it is saved to Supabase, so nothing is lost. ?hero=id&id=openingId&new=1
 	import { onMount } from 'svelte';
 	import { base } from '$app/paths';
+	import { goBack } from '$lib/nav';
 	import { role } from '$lib/role';
 	import Icon from '$lib/ui/Icon.svelte';
 	import OpeningBoard from '$lib/openings/OpeningBoard.svelte';
@@ -253,7 +254,7 @@
 		<section class="lock"><h1>Opening builder</h1><p>GMs only.</p><a href={base + '/'}>Back</a></section>
 	{:else}
 		<header class="bar">
-			<a class="ib" href={base + '/'} aria-label="Home"><Icon name="back" /></a>
+			<a class="ib" href={base + '/?at=adminhub'} on:click|preventDefault={() => goBack('adminhub')} aria-label="Back"><Icon name="back" /></a>
 			<span class="ttl">Opening builder</span>
 			<label class="pick"><span class="face" style={portraitCss(heroId)}></span>
 				<select value={heroId} on:change={(e) => setHero(e.currentTarget.value)}>{#each HEROES_ALPHA as x (x.id)}<option value={x.id}>{x.name}</option>{/each}</select>

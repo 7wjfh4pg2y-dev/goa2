@@ -3,6 +3,8 @@
 	import { teamName, aTeam } from '$lib/teams';
 	import { sweepJournals } from '$lib/recorder';
 	import { onMount, onDestroy, tick } from 'svelte';
+	import { replaceState } from '$app/navigation';
+	import { page } from '$app/stores';
 	import { browser } from '$app/environment';
 	import { base } from '$app/paths';
 	import { writable, get, type Readable } from 'svelte/store';
@@ -164,6 +166,14 @@
 	let h: Record<string, number> = {};
 	$: stageH = h[mode] ?? 0;
 
+	// keep the screen in this history entry, so Back from another page lands here again
+	let homeReady = false;
+	let keptAt = '';
+	$: if (homeReady && mode !== keptAt && (mode === 'landing' || mode === 'choose' || mode === 'adminhub' || mode === 'menu' || mode === 'learn')) {
+		keptAt = mode;
+		try { replaceState(base + '/', { home: mode }); } catch { /* router not ready */ }
+	}
+
 	function randomRoom() { room = Math.random().toString(36).slice(2, 6).toUpperCase(); }
 	function ensureLoaded() {
 		if (!maps.length) { maps = availableMaps(); mapId = maps[0]?.id ?? ''; }
@@ -175,6 +185,14 @@
 		ensureLoaded(); // the maps: the backdrop shows the island from the first screen on
 		// shareable link ?room=CODE → jump straight to Join, prefilled
 		const q = new URLSearchParams(location.search).get('room');
+		// coming BACK from a GM / learn page: reopen the screen we left (kept in this history entry, or ?at=)
+		const at = ($page.state as { home?: string })?.home ?? new URLSearchParams(location.search).get('at');
+		if (!q && (at === 'adminhub' || at === 'learn' || at === 'menu' || at === 'choose')) {
+			if (at === 'adminhub' && !gmActive()) mode = 'choose';
+			else { if (at !== 'choose') enterAsPlayer(); mode = at; }
+			ensureLoaded();
+		}
+		homeReady = true;
 		if (q) {
 			enterAsPlayer();
 			ensureLoaded();

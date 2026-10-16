@@ -68,7 +68,7 @@
 
 <div class="hp">
 	<header class="ban" style="--img:url({heroSplash(h.hero)}); --fx:{fx * 100}%; --fy:{fy * 100}%">
-		<button class="btn2 back" on:click={onBack}>← All heroes</button>
+		<button class="btn2 back" on:click={onBack}>← Back</button>
 		<div class="bt">
 			<span class="face big" style="--fs:84px; {portraitCss(h.hero)}"></span>
 			<div class="bn">

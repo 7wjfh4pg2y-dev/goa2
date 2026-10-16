@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { base } from '$app/paths';
+	import { goBack } from '$lib/nav';
 	import { role } from '$lib/role';
 	import boardUrl from '$lib/images/board/forgotten_island.webp';
 	import { SCATTER, SCATTER_BY_KEY } from '$lib/board/scatter';
@@ -217,7 +218,7 @@
 	<div class="locked">
 		<h2>Map editor</h2>
 		<p>This is a GM-only tool. Unlock Admin from the menu first.</p>
-		<a class="back" href={base + '/'}>← Back</a>
+		<a class="back" href={base + '/?at=adminhub'} on:click|preventDefault={() => goBack('adminhub')}>← Back</a>
 	</div>
 {:else}
 <div class="page">
@@ -270,7 +271,7 @@
 	</div>
 
 	<div class="panel">
-		<div class="phead"><h3>Map editor</h3><a class="back" href={base + '/'}>← Exit</a></div>
+		<div class="phead"><h3>Map editor</h3><a class="back" href={base + '/?at=adminhub'} on:click|preventDefault={() => goBack('adminhub')}>← Exit</a></div>
 		<p class="sub">Paint hexes, then set spawn minion types and mark the starting battle zone.</p>
 
 		<div class="palette">

@@ -141,7 +141,7 @@
 
 <div class="pp">
 	<header class="ban" style="--img:url({main ? heroSplash(main) : ''}); --fx:{fx * 100}%; --fy:{fy * 100}%; --pc:{pc}">
-		<div class="btop"><button class="btn2" on:click={onBack}>← All players</button><button class="btn2" on:click={downloadCsv} title="Every game as a spreadsheet">Download CSV</button></div>
+		<div class="btop"><button class="btn2" on:click={onBack}>← Back</button><button class="btn2" on:click={downloadCsv} title="Every game as a spreadsheet">Download CSV</button></div>
 		<div class="bt">
 			{#if main}<span class="face big" style="--fs:84px; {portraitCss(main)}"></span>{/if}
 			<div class="bn">

@@ -8,6 +8,7 @@
 	// every opening of the hero as a snapshot. No tier, win rate or pick rate (the user's call: nothing to sway a pick).
 	import { onMount, tick } from 'svelte';
 	import { base } from '$app/paths';
+	import { goBack } from '$lib/nav';
 	import Card from '$lib/cards/Card.svelte';
 	import Icon from '$lib/ui/Icon.svelte';
 	import OpeningBoard from '$lib/openings/OpeningBoard.svelte';
@@ -143,7 +144,7 @@
 
 <div class="hpage tide">
 	<header class="bar">
-		<a class="ib" href={base + '/'} aria-label="Home"><Icon name="back" /></a>
+		<a class="ib" href={base + '/'} on:click|preventDefault={() => goBack()} aria-label="Back"><Icon name="back" /></a>
 		<span class="ttl">Heroes</span>
 		<label class="pick"><span class="sr">Hero</span>
 			<select value={h.id} on:change={(e) => onHero(e.currentTarget.value)}>{#each HEROES_ALPHA as x (x.id)}<option value={x.id}>{x.name}</option>{/each}</select>

@@ -4,6 +4,7 @@
 	// room as a watcher and closes it for everyone, match.ts closeRoom). GMs only (the soft gate in role.ts).
 	import { onMount, onDestroy } from 'svelte';
 	import { base } from '$app/paths';
+	import { goBack } from '$lib/nav';
 	import { browseRooms, type RoomInfo } from '$lib/lobby';
 	import { closeRoom } from '$lib/match';
 	import { role } from '$lib/role';
@@ -49,7 +50,7 @@
 
 <div class="rooms tide">
 	<header class="top">
-		<a class="btn btn-ghost btn-sm" href={base + '/'}><Icon name="back" /> <span class="hidem">Home</span></a>
+		<a class="btn btn-ghost btn-sm" href={base + '/?at=adminhub'} on:click|preventDefault={() => goBack('adminhub')}><Icon name="back" /> <span class="hidem">Back</span></a>
 		<h1 class="ttl">Open games</h1>
 		{#if $role === 'admin'}<span class="count">{rooms.length} {rooms.length === 1 ? 'room' : 'rooms'}{#if live} · {live} playing{/if}</span>{/if}
 	</header>

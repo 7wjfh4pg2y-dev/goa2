@@ -7,6 +7,9 @@
 	// a hero's page) · Matches · Awards · Reports.
 	import { onMount } from 'svelte';
 	import { base } from '$app/paths';
+	import { pushState } from '$app/navigation';
+	import { page } from '$app/stores';
+	import { goBack } from '$lib/nav';
 	import { supabase } from '$lib/supabase';
 	import {
 		buildLeague, useAliases, leagueOf, gameOfReport, titlesOf, rowOfSelect, LEAGUE_SELECT, WIN_LABEL,
@@ -86,9 +89,26 @@
 	onMount(load);
 
 	const top = () => body?.scrollTo(0, 0);
-	const go = (t: Tab) => { tab = t; sel = null; heroSel = null; top(); };
-	const openPlayer = (key: string) => { sel = key; heroSel = null; tab = 'players'; top(); };
-	const openHero = (id: string) => { heroSel = id; sel = null; tab = 'heroes'; top(); };
+	// every view (tab, player page, hero page) is its own history step: Back — the browser's or the pages' — goes one view back
+	type View = { tab: Tab; sel: string | null; heroSel: string | null };
+	const FIRST: View = { tab: 'overview', sel: null, heroSel: null };
+	function show(v: View) {
+		if (v.tab === tab && v.sel === sel && v.heroSel === heroSel) return;
+		({ tab, sel, heroSel } = v);
+		top();
+		try { pushState('', { hall: v }); } catch { /* router not ready */ }
+	}
+	function seen(v: View | undefined) {
+		const w = v ?? FIRST;
+		if (w.tab === tab && w.sel === sel && w.heroSel === heroSel) return;
+		({ tab, sel, heroSel } = w);
+		top();
+	}
+	$: seen(($page.state as { hall?: View }).hall);
+	const back = () => history.back();
+	const go = (t: Tab) => show({ tab: t, sel: null, heroSel: null });
+	const openPlayer = (key: string) => show({ tab: 'players', sel: key, heroSel: null });
+	const openHero = (id: string) => show({ tab: 'heroes', sel: null, heroSel: id });
 	$: player = sel && league ? league.players.find((p) => p.key === sel) ?? null : null;
 	$: hero = heroSel && league ? league.heroes.find((h) => h.hero === heroSel) ?? null : null;
 	$: ranks = league ? heroRanks(league.heroes) : new Map();
@@ -147,7 +167,7 @@
 </script>
 
 <svelte:head><title>GoA2 · Hall of Records</title></svelte:head>
-<svelte:window on:keydown={(e) => { if (e.key === 'Escape' && !(e.target instanceof HTMLInputElement)) { if (heroSel) heroSel = null; else if (sel) sel = null; } }} />
+<svelte:window on:keydown={(e) => { if (e.key === 'Escape' && !(e.target instanceof HTMLInputElement)) { if (heroSel || sel) back(); } }} />
 
 {#snippet th(label: string, key: string, cur: string, set: (k: string) => void, right = false, flipped = false)}
 	<th class="sortable" class:on={cur === key} class:flipped={cur === key && flipped} class:rt={right} on:click={() => set(key)} title="Sort (click again to reverse)">{label}</th>
@@ -167,7 +187,7 @@
 <div class="hall tide">
 	<header class="hh">
 		<div class="hbar">
-			<a class="home" href={base + '/'} title="Home">←</a>
+			<a class="home" href={base + '/?at=adminhub'} on:click|preventDefault={() => goBack('adminhub')} title="Back">←</a>
 			<span class="brand"><span class="logo">◆</span><b>Hall of Records</b><small>Guards of Atlantis II</small></span>
 			<nav class="tabs" aria-label="Sections">
 				{#each TABS as [k, l] (k)}<button class:on={tab === k} on:click={() => go(k)}>{l}</button>{/each}
@@ -195,7 +215,7 @@
 				<section class="card msg"><h3>The records are locked</h3><p class="muted">Couldn't read the games table ({errMsg}).</p></section>
 			{:else if tab === 'heroes' && league && league.games.length && phase === 'ready'}
 				{#if hero}
-					<HeroPage h={hero} games={league.games} rank={ranks.get(hero.hero) ?? null} onPlayer={openPlayer} onHero={openHero} onBack={() => (heroSel = null)} />
+					<HeroPage h={hero} games={league.games} rank={ranks.get(hero.hero) ?? null} onPlayer={openPlayer} onHero={openHero} onBack={back} />
 				{:else}
 					<div class="tbar">
 						<label class="search"><span>⌕</span><input placeholder="Search heroes or roles…" bind:value={hq} /></label>
@@ -246,7 +266,7 @@
 					{/if}
 				</section>
 			{:else if tab === 'players' && player}
-				<PlayerPage p={player} {league} rank={rankOf(player.key)} titles={titles[player.key] ?? []} onPlayer={openPlayer} onHero={openHero} onBack={() => (sel = null)} />
+				<PlayerPage p={player} {league} rank={rankOf(player.key)} titles={titles[player.key] ?? []} onPlayer={openPlayer} onHero={openHero} onBack={back} />
 			{:else if tab === 'players'}
 				<div class="tbar">
 					<span class="seg">

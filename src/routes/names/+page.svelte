@@ -6,6 +6,7 @@
 	// and the newest action can be undone. GMs only (the soft gate in role.ts).
 	import { onMount } from 'svelte';
 	import { base } from '$app/paths';
+	import { goBack } from '$lib/nav';
 	import { role } from '$lib/role';
 	import { supabase } from '$lib/supabase';
 	import Icon from '$lib/ui/Icon.svelte';
@@ -120,7 +121,7 @@
 
 <div class="names tide">
 	<header class="top">
-		<a class="btn btn-ghost btn-sm" href={base + '/'}><Icon name="back" /> <span class="hidem">Home</span></a>
+		<a class="btn btn-ghost btn-sm" href={base + '/?at=adminhub'} on:click|preventDefault={() => goBack('adminhub')}><Icon name="back" /> <span class="hidem">Back</span></a>
 		<h1 class="ttl">Player names</h1>
 		{#if phase === 'ready'}<span class="count">{people.length} people · {new Set(seen.map((s) => playerKey(s.raw))).size} spellings</span>{/if}
 	</header>

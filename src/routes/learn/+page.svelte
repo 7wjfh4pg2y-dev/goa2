@@ -3,6 +3,7 @@
 	// the right / on top, staged per step (learn.ts). Read-only: pan and zoom, nothing moves.
 	import { onMount, tick } from 'svelte';
 	import { base } from '$app/paths';
+	import { goBack } from '$lib/nav';
 	import BoardCanvas from '$lib/BoardCanvas.svelte';
 	import Card from '$lib/cards/Card.svelte';
 	import Icon from '$lib/ui/Icon.svelte';
@@ -71,7 +72,7 @@
 	{#if !phone}
 		<!-- desktop: one bar across the top — home, the chapters as a stepper, the count -->
 		<header class="bar panel">
-			<a class="btn btn-ghost btn-sm home" href={base + '/'} aria-label="Home"><Icon name="back" /></a>
+			<a class="btn btn-ghost btn-sm home" href={base + '/?at=learn'} on:click|preventDefault={() => goBack('learn')} aria-label="Back"><Icon name="back" /></a>
 			<span class="t-label brand">How to play</span>
 			<nav class="steps" aria-label="Chapters">
 				{#each chapters as c, n (c)}
@@ -109,7 +110,7 @@
 	<section class="panel side">
 		{#if phone}
 			<header class="sh">
-				<a class="btn btn-ghost btn-sm home" href={base + '/'} aria-label="Home"><Icon name="back" /></a>
+				<a class="btn btn-ghost btn-sm home" href={base + '/?at=learn'} on:click|preventDefault={() => goBack('learn')} aria-label="Back"><Icon name="back" /></a>
 				{@render chapNav()}
 				<span class="cnt">{i + 1} / {steps.length}</span>
 			</header>

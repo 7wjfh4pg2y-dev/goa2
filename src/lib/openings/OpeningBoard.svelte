@@ -15,7 +15,7 @@
 	export let placing = false;
 	export let picked: string | null = null;
 	export let inset: { t: number; b: number; l?: number; r?: number } | null = null;
-	export let effects = true;
+	export let effects = false; // a still sea and still minion rims: moving effects distract from the plan (the user, 2026-10-16)
 	export let onHex: ((hex: string) => void) | null = null;
 	export let onMovePiece: ((id: string, hex: string) => void) | null = null;
 	export let uid = 'ob';

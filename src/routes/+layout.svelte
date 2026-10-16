@@ -4,6 +4,9 @@
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
 	import { updated } from '$app/stores';
+	import { trackNav } from '$lib/nav';
+
+	trackNav();
 
 	// When SvelteKit detects a new deploy (via version polling), reload so players
 	// always run the latest build — no manual hard refresh / cache clearing.
