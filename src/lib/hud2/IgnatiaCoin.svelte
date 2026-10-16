@@ -6,7 +6,7 @@
 	// real coin again — flipping first if the real one changed meanwhile. With her ultimate (Chaos Incarnate) the coin
 	// has a purple rim and, on her own turn, can be pressed once to flip the real coin (the action ring confirms).
 	import { onDestroy } from 'svelte';
-	import { TOMOE, TOMOE_BODY, TOMOE_INK, TOMOE_MID } from './tomoe';
+	import { TOMOE, TOMOE_BODY, TOMOE_INK, TOMOE_MID, TOMOE_KEY } from './tomoe';
 	type Team = 'orange' | 'blue';
 	export let face: Team = 'orange';
 	export let split = false;
@@ -45,6 +45,7 @@
 		<span class="ring" aria-hidden="true">
 			{#each TOMOE as c, k (k)}
 				<svg class="tm" viewBox="0 0 200 200" style="--k:{k}">
+					<path d={c.d} fill="none" stroke={TOMOE_KEY} stroke-width="5.5" stroke-linejoin="round" />
 					<path d={c.d} fill={c.fire ? TOMOE_BODY.fire : TOMOE_BODY.water} stroke={c.fire ? TOMOE_INK.fire : TOMOE_INK.water} stroke-width="2.4" stroke-linejoin="round" />
 					<circle cx={c.head[0]} cy={c.head[1]} r={c.r * 0.55} fill={c.fire ? TOMOE_MID.fire : TOMOE_MID.water} />
 					<path d={c.swirl} fill="none" stroke={c.fire ? TOMOE_INK.fire : TOMOE_INK.water} stroke-width="1.6" stroke-linecap="round" />
