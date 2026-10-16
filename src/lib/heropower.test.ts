@@ -212,7 +212,13 @@ describe('Takahide: gold card swaps, Bushido face down, teammates swap, Ready fo
 	it('a teammate swaps their unresolved card once while Set an Example acts; the order keeps the acted cards first', () => {
 		const arien = heroCards('arien')
 		const low = arien.findIndex((c) => c.color === 'GREEN' && (c.level ?? 0) === 1)
-		const s = actingAs(tg(setEx, low), 'T')
+		const s0 = actingAs(tg(setEx, low), 'T')
+		// nothing before his attack lands
+		expect(mateOffer(s0, 'M', tctx(s0))).toBe(null)
+		// he defeats a minion with it: the swap opens
+		const minion = { id: 'x', hex: '1_3', team: 'blue', kind: 'minion', role: 'melee' }
+		const sm = { ...s0, pieces: { ...s0.pieces, x: minion } } as unknown as MatchState
+		const s = { ...sm, ...applyCardReq(sm, { kind: 'defeatMinion', pid: 'T', piece: 'x' }) } as MatchState
 		expect(mateOffer(s, 'M', tctx(s))).toEqual({ by: 'T', from: 'hand' })
 		expect(mateOffer(s, 'B', tctx(s))).toBe(null)
 		const high = s.cards!.M.hand.reduce((a, b) => ((arien[b].initiative ?? 0) > (arien[a].initiative ?? 0) ? b : a))
@@ -223,7 +229,8 @@ describe('Takahide: gold card swaps, Bushido face down, teammates swap, Ready fo
 		expect(actorOf(after)).toBe('T')
 		expect(mateOffer(after, 'M', tctx(after))).toBe(null)
 		expect(applyCardReq(s, { kind: 'power', pid: 'M', op: 'mateSwap', idx: high, src: 'discard' })).toEqual({})
-		const sk = actingAs(tg(sake, low), 'T')
+		const sk0 = actingAs(tg(sake, low), 'T')
+		const sk = { ...sk0, power: { T: { hit: `${turnKey(sk0)}:0` } } } as MatchState
 		expect(mateOffer(sk, 'M', tctx(sk))?.from).toBe('both')
 		const ended = { ...after, ...applyCardReq(after, { kind: 'endAct', pid: 'T' }) } as MatchState
 		expect(turnOrder(ended)[0]).toBe('T')

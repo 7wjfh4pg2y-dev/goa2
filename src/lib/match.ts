@@ -13,7 +13,7 @@
 // broken by `updatedAt`) wins. For a handful of players nudging a shared
 // tracker this is robust and easy to reason about.
 
-import { applyPower, syncPowers, hasPower, runeLine, RUNE_NAME, type PowerReq, type PowerState, type TurnCtx } from './heropower'
+import { applyPower, syncPowers, takaHit, hasPower, runeLine, RUNE_NAME, type PowerReq, type PowerState, type TurnCtx } from './heropower'
 import { teamName, aMinion } from './teams'
 import { hexCube, cubeDist } from './zones'
 import { tokenExpiry, sweepTokens, statusFrom, isTurret } from './tokens'
@@ -174,8 +174,11 @@ export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 	if (!Object.keys(patch).length) return patch
 	const next = { ...s, ...patch }
 	if (!Object.values(next.cards ?? {}).some((c) => hasPower(c.hero))) return patch
-	const sync = syncPowers(next, powerCtx(next))
-	return sync ? { ...patch, ...sync } : patch
+	// Takahide's "after the attack" swap opens once his acting card has hit
+	const hit = takaHit(s, next, req, powerCtx(s))
+	const marked = hit ? { ...patch, power: hit } : patch
+	const sync = syncPowers({ ...next, ...marked }, powerCtx(next))
+	return sync ? { ...marked, ...sync } : marked
 }
 function applyCardReqBase(s: MatchState, req: Exclude<CardReq, PowerReq>): Partial<MatchState> {
 	const cards = s.cards ?? {}

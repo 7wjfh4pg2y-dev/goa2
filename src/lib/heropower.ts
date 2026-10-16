@@ -16,6 +16,9 @@ export type PowerState = {
 	second?: { key: string; rune: Rune }
 	/** Takahide: his teammates' swap chance for this acting card (`key:at`) has been used */
 	mate?: string
+	/** Takahide: his acting card (`key:at`) has hit — an attack on a hero ended, or he defeated a hero / a minion —
+	 *  so its "after the attack" swap is open to his teammates */
+	hit?: string
 	/** Takahide: Ready for War has been applied (his silver traded for all three golds) */
 	war?: boolean
 }
@@ -34,7 +37,8 @@ export type PowerReq = { kind: 'power'; pid: string; op: 'ignatiaFlip' | 'snorri
 export type TurnCtx = { key: string; round: number; turnIdx: number; order: string[]; at: number; tieBreaker: Team; revealed: boolean
 	/** each player's team (for "a friendly hero") */
 	teams?: Record<string, Team | null> }
-type S = { cards?: Record<string, PlayerCardState>; power?: Record<string, PowerState>; effects?: { pid: string; hero: string; idx: number }[]; host?: string }
+type S = { cards?: Record<string, PlayerCardState>; power?: Record<string, PowerState>; effects?: { pid: string; hero: string; idx: number }[]; host?: string
+	lastClash?: { id: string; kind: string; by: string; out: string } | null; lastDefeat?: { id: string; by: string } | null }
 
 /** heroes with their own dash button */
 export const POWER_HEROES = ['ignatia', 'snorri', 'takahide']
@@ -139,7 +143,8 @@ export function mateOffer(s: S, pid: string, ctx: TurnCtx): { by: string; from: 
 	const by = ctx.order[ctx.at]
 	if (!by || by === pid) return null
 	const from = offerOf(s.cards?.[by])
-	if (!from || s.power?.[by]?.mate === `${ctx.key}:${ctx.at}`) return null
+	// only AFTER the attack: once his card has hit (takaHit), and once only
+	if (!from || s.power?.[by]?.hit !== `${ctx.key}:${ctx.at}` || s.power?.[by]?.mate === `${ctx.key}:${ctx.at}`) return null
 	const team = ctx.teams?.[pid]
 	if (!team || ctx.teams?.[by] !== team) return null
 	// their card is face up in this turn's order and hasn't acted yet
@@ -147,6 +152,20 @@ export function mateOffer(s: S, pid: string, ctx: TurnCtx): { by: string; from: 
 	const mine = s.cards?.[pid]?.pending
 	if (k <= ctx.at || mine == null || mine === PASS) return null
 	return { by, from }
+}
+/** after any change: did Takahide's acting swap card just hit? (an attack he made on a hero ended — defended or
+ *  defeated —, or he defeated a hero or a minion). `ctx` = the turn as it was before the change. The power map to
+ *  write (marking `hit`), or null */
+export function takaHit(prev: S, next: S, req: { kind: string; pid?: string }, ctx: TurnCtx): Record<string, PowerState> | null {
+	const by = ctx.order[ctx.at]
+	if (!by || !ctx.revealed || !offerOf(next.cards?.[by])) return null
+	const mark = `${ctx.key}:${ctx.at}`
+	if (next.power?.[by]?.hit === mark) return null
+	const c = next.lastClash, d = next.lastDefeat
+	const hit = (req.kind === 'defeatMinion' && req.pid === by)
+		|| (!!c && c.id !== prev.lastClash?.id && c.by === by && c.kind === 'attack' && (c.out === 'defended' || c.out === 'died'))
+		|| (!!d && d.id !== prev.lastDefeat?.id && d.by === by)
+	return hit ? { ...next.power, [by]: { ...next.power?.[by], hit: mark } } : null
 }
 /** Ready for War: once his ultimate is on, the silver goes back to the deck and every gold comes into his hand (and the
  *  other way round if the ultimate is taken back). The new card state, or null when nothing changes. */
