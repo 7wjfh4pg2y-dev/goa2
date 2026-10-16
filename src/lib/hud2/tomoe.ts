@@ -2,10 +2,9 @@
 // five of fire on the Atlantean (left) half and five of water on the Titan (right) half, in the woodblock look — inked
 // outline over a pale keyline, flat colour, a swirl in each head. Drawn once in a 200 × 200 box with the coin
 // (radius 50) in the middle; each comma is its own small svg so its pulse runs on the GPU.
-// The geometry makes a TRUE circle: every comma's inner edge lies on one circle just outside the coin's brass rim
-// (the rim reaches ~57 at dash size), the heads sit on a circle a head's radius further out, and each tail tapers along
-// the inner circle back to the comma behind it, its tip tucked just under that head — so the ring's inner edge is a
-// clean circle and its outer edge is scalloped evenly by the ten heads.
+// The rigging: the heads sit evenly on one circle, 36° apart; each comma is a pointed flame tongue — its tail narrows
+// to a point while curving back (anticlockwise) and in towards the coin, ending just under the head of the comma behind
+// it; the tip stays outside the coin's brass rim (~57 at dash size), so nothing hides under the coin.
 export type Comma = { d: string; head: [number, number]; r: number; swirl: string; fire: boolean }
 export const TOMOE_N = 10
 export const TOMOE_INK = { fire: '#2a0d06', water: '#061232' }
@@ -13,13 +12,12 @@ export const TOMOE_BODY = { fire: '#e2452b', water: '#2e6fd6' }
 export const TOMOE_MID = { fire: '#ffc35a', water: '#9cd0ff' }
 /** a pale keyline under the ink, so both halves read on the dark dash */
 export const TOMOE_KEY = 'rgba(255, 246, 228, 0.32)'
-export const TOMOE_RIN = 59
-export const TOMOE_HEAD = 11
-
+export const TOMOE_HEAD = 11.5
 const C = 100
-const RC = TOMOE_RIN + TOMOE_HEAD // the heads' circle
+const RH = 69 // the heads' circle
+const RT = 61 // where the tails end (just outside the brass rim)
 const SPACING = 360 / TOMOE_N
-const SWEEP = SPACING - 7 // the tail ends just tucked under the next head
+const SWEEP = SPACING // each tail reaches back to the next head, tucked under it
 const rad = (d: number) => (d * Math.PI) / 180
 const f = (n: number) => n.toFixed(1)
 /** a point at angle a (degrees, 0 = up, clockwise) and radius r round (cx, cy) */
@@ -30,20 +28,19 @@ function spiral(cx: number, cy: number, r: number, turns: number, a0: number) {
 	for (let i = 0; i <= 32; i++) { const t = i / 32; pts.push(pt(at(a0 + t * turns * 360, r * (1 - t * 0.9), cx, cy))) }
 	return 'M' + pts.join(' L')
 }
-/** one comma: a round head at angle a leading clockwise, its tail trailing back (anticlockwise) along the ring */
+/** one comma: a round head at angle a leading clockwise; the tail, a flame's point, sweeping back and in */
 function comma(a: number, fire: boolean): Comma {
-	const H = TOMOE_HEAD, N = 28
-	const outer: string[] = [], inner: string[] = []
-	for (let i = 0; i <= N; i++) {
-		const t = i / N, ang = a - t * SWEEP
-		// full near the head, tapering to a point on the inner circle (the tomoe's tail)
-		outer.push(pt(at(ang, TOMOE_RIN + 2 * H * Math.pow(1 - Math.pow(t, 1.25), 1.15))))
-		inner.push(pt(at(ang, TOMOE_RIN)))
-	}
-	// the outer edge from the head back to the tip, the inner circle forward again, then the head's leading half-circle
-	const d = `M${outer.join(' L')} L${inner.reverse().join(' L')} A${H} ${H} 0 1 0 ${outer[0]} Z`
-	const head = at(a, RC)
-	return { d, head, r: H, swirl: spiral(head[0], head[1], H * 0.55, 1.35, a), fire }
+	const H = TOMOE_HEAD, N = 26
+	const mid = Array.from({ length: N + 1 }, (_, i) => { const t = i / N; return { p: at(a - t * SWEEP, RH - t * (RH - RT)), w: H * Math.pow(1 - t, 1.25) } })
+	const side = (s: number) => mid.map((q, i) => {
+		const n = mid[Math.min(i + 1, N)].p, pv = mid[Math.max(i - 1, 0)].p
+		const dx = n[0] - pv[0], dy = n[1] - pv[1], l = Math.hypot(dx, dy) || 1
+		return [q.p[0] - (dy / l) * q.w * s, q.p[1] + (dx / l) * q.w * s] as [number, number]
+	})
+	const A = side(1), B = side(-1).reverse()
+	const d = `M${A.map(pt).join(' L')} L${B.map(pt).join(' L')} A${H} ${H} 0 1 0 ${pt(A[0])} Z`
+	const head = mid[0].p
+	return { d, head, r: H, swirl: spiral(head[0], head[1], H * 0.5, 1.3, a), fire }
 }
 /** evenly round the whole coin: none on the seam (top / bottom), half each side */
 export const TOMOE: Comma[] = Array.from({ length: TOMOE_N }, (_, k) => {
