@@ -1308,6 +1308,7 @@
 							<div class="tslot">
 								<span class="tbroman">{ROMAN[t]}</span>
 								<span class="fxwrap" class:fx={!!fxFor(oid, slotIdx(cs, t))} style="--fxc:{colorOf(oid)}"><TurnSlot heroId={oh} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} peekable={oid === clientId} examinable on:click={(e) => peekSlot(e, cs, t)} /></span>
+								{#if runeMap[oid]}{@const rs = runeMap[oid]}{@const r = rs?.at[t] ?? null}<span class="tbrune"><RuneMark rune={r} size={46} on={t === turnIdx && !!r} second={!!r && rs?.second === r} fx={$boardPrefs.dash} /></span>{/if}
 							</div>
 						</div>
 					{/each}
@@ -2099,6 +2100,7 @@
 	.tlabel { text-align: center; font-family: 'Modesto Poster', serif; font-size: .78rem; letter-spacing: .04em; color: #f6ead2; }
 	.tslot { position: relative; }
 	.tbroman { position: absolute; inset: 0; display: grid; place-items: center; font-family: 'Modesto Poster', serif; font-size: 3.4rem; line-height: 1; color: rgba(255,255,255,.07); pointer-events: none; z-index: 0; }
+	.tbrune { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); z-index: 2; display: grid; pointer-events: none; }
 	.tbroman.trash { padding: 22%; color: rgba(255,255,255,.08); }
 	.tbroman.trash :global(svg) { width: 100%; height: 100%; }
 	.tslot :global(.slot) { position: relative; z-index: 1; }
