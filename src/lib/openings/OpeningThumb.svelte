@@ -17,6 +17,7 @@
 	const ref = (team: string, role: string) => `#mn-token-${team === 'blue' ? 'blue' : 'orange'}-${role === 'ranged' || role === 'heavy' ? role : 'melee'}`;
 	$: rot = (op.side === 'orange' ? 180 : 0) + (turned ? 180 : 0);
 	$: gone = takenAt(op, 0);
+	const occupied = new Set(wave.map((m) => m.hex));
 	// the frame: every space in play, a hex and a half round it, made square
 	$: frame = (() => {
 		const hexes = [...wave.map((m) => m.hex), ...op.marks.flatMap(marksOn), ...(op.start ? [op.start] : [])].filter(Boolean);
@@ -33,12 +34,12 @@
 		<rect x={frame.x} y={frame.y} width={frame.s} height={frame.s} fill="#0b2a44" />
 		<g transform={rot % 360 ? `rotate(${rot} ${frame.cx} ${frame.cy})` : undefined}>
 			{#if pic}<image href={pic} x={box.x} y={box.y} width={box.w} height={box.h} preserveAspectRatio="none" />{/if}
-			<MarkLayer layer="under" marks={op.marks} size={box.size} {at} {rot} side={op.side} hero={op.hero} uid="{uid}u" />
+			<MarkLayer layer="under" marks={op.marks} {occupied} size={box.size} {at} {rot} side={op.side} hero={op.hero} uid="{uid}u" />
 			{#each wave as m (m.id)}
 				{@const c = at(m.hex)}
 				<use href={ref(m.team, m.role)} opacity={gone.has(m.hex) ? 0.3 : 1} transform="translate({c.x} {c.y}) rotate({(dirs[m.team] ?? 0) * 60}) scale({(box.size * 0.72) / 100})" />
 			{/each}
-			<MarkLayer layer="over" marks={op.marks} size={box.size} {at} {rot} side={op.side} hero={op.hero} uid="{uid}o" />
+			<MarkLayer layer="over" marks={op.marks} {occupied} size={box.size} {at} {rot} side={op.side} hero={op.hero} uid="{uid}o" />
 		</g>
 	</svg>
 </div>

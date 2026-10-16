@@ -31,6 +31,7 @@
 		...wave.map((m) => ({ ...m, faded: gone.has(m.hex) })),
 		...(heroHex ? [{ id: 'hero', hex: heroHex, team: op.side, hero: op.hero, color: TEAM[op.side], name: 'Start' }] : [])
 	];
+	$: occupied = new Set(pieces.map((x) => x.hex));
 	$: shown = [...marksAt(op, step), ...extra];
 	$: rotation = (op.side === 'orange' ? 180 : 0) + (turned ? 180 : 0);
 
@@ -50,6 +51,6 @@
 
 <BoardCanvas bind:this={board} map={OPENING_MAP} look="island" {rotation} {interactive} {placing} {pieces} {inset} {effects} sea={effects} rims={effects} wisps={false}
 	activeZone="Center" onHex={onHex} onMovePiece={onMovePiece} onCancelPlace={() => {}}>
-	{#snippet under(c)}<MarkLayer layer="under" marks={shown} {step} size={c.size} at={c.at} rot={c.rot} side={op.side} hero={op.hero} {picked} uid="{uid}u" />{/snippet}
-	{#snippet over(c)}<MarkLayer layer="over" marks={shown} {step} size={c.size} at={c.at} rot={c.rot} side={op.side} hero={op.hero} {picked} uid="{uid}o" />{/snippet}
+	{#snippet under(c)}<MarkLayer layer="under" marks={shown} {step} {occupied} size={c.size} at={c.at} rot={c.rot} side={op.side} hero={op.hero} {picked} uid="{uid}u" />{/snippet}
+	{#snippet over(c)}<MarkLayer layer="over" marks={shown} {step} {occupied} size={c.size} at={c.at} rot={c.rot} side={op.side} hero={op.hero} {picked} uid="{uid}o" />{/snippet}
 </BoardCanvas>
