@@ -67,13 +67,13 @@
 	let side: Side = 'blue';
 	let turned = false;
 	let selId = '';
-	let step = 1;
+	let step = 0; // 0 = the whole round (the default), then turns 1–4
 	try { const s = localStorage.getItem('goa2-op-side'); if (s === 'orange' || s === 'blue') side = s; } catch { /* ignore */ }
 	function setSide(s: Side) { side = s; try { localStorage.setItem('goa2-op-side', s); } catch { /* ignore */ } }
 	$: list = openings.map((o) => onSide(o, side));
 	$: if (list.length && !list.some((o) => o.id === selId)) selId = list[0].id;
 	$: op = list.find((o) => o.id === selId) ?? null;
-	function pick(id: string) { selId = id; step = 1; }
+	function pick(id: string) { selId = id; step = 0; }
 	// the snapshots' island picture, painted once by the live board
 	let board: OpeningBoard | null = null;
 	let pic = '';
@@ -88,7 +88,7 @@
 	function key(e: KeyboardEvent) {
 		if (tab !== 'openings' || !op || (e.target as HTMLElement)?.closest?.('input, textarea, select')) return;
 		if (e.key === 'ArrowRight') step = Math.min(4, step + 1);
-		else if (e.key === 'ArrowLeft') step = Math.max(1, step - 1);
+		else if (e.key === 'ArrowLeft') step = Math.max(0, step - 1);
 	}
 	const firstCards = (o: Opening) => o.turns.map((t) => t.cards[0]).filter(Boolean);
 	onMount(() => { void tick(); });
@@ -193,9 +193,9 @@
 				<button class="cb" on:click={() => board?.reset()} title="Recentre" aria-label="Recentre"><Icon name="target" /></button>
 			</div>
 			<div class="stepbadge">
-				<button on:click={() => (step = Math.max(1, step - 1))} disabled={step <= 1} aria-label="Previous turn">‹</button>
+				<button on:click={() => (step = Math.max(0, step - 1))} disabled={step <= 0} aria-label="Previous turn">‹</button>
 				{#if step > 0}<span class="sdot" style:background={CARD_HEX[op.turns[step - 1]?.cards[0] ?? 'silver']}></span><b>Turn {step}</b><em>{turnCards(op.turns[step - 1])}</em>{:else}<b>Whole round</b>{/if}
-				<button on:click={() => (step = step === 0 ? 1 : Math.min(4, step + 1))} disabled={step >= 4} aria-label="Next turn">›</button>
+				<button on:click={() => (step = Math.min(4, step + 1))} disabled={step >= 4} aria-label="Next turn">›</button>
 			</div>
 		{:else}
 			<div class="empty">
@@ -219,6 +219,7 @@
 				<div class="ochips">{#if op.size !== 'any'}<span>{SIZES[op.size]}</span>{/if}{#if op.lane}<span>{LANES[op.lane]}</span>{/if}</div>
 				{#if op.goal}<p class="goal">{op.goal}</p>{/if}
 				<ol class="steps">
+					<li><button class="all" class:on={step === 0} on:click={() => (step = 0)}><span class="tn">All</span><b>Whole round</b></button></li>
 					{#each [1, 2, 3, 4] as t (t)}
 						{@const tt = op.turns[t - 1]}
 						<li><button class:on={step === t} on:click={() => (step = t)}>
@@ -228,7 +229,6 @@
 							{#if tt?.note}<small>{tt.note}</small>{/if}
 						</button></li>
 					{/each}
-					<li><button class="all" class:on={step === 0} on:click={() => (step = 0)}><span class="tn">All</span><b>Whole round</b></button></li>
 				</ol>
 			</div>
 		{:else}
