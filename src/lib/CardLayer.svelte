@@ -923,6 +923,12 @@
 	let armedKind: 'commit' | 'discard' = 'commit';
 	$: if (armed != null && (!mine || !mine.hand.includes(armed) || (armedKind === 'commit' && !canCommit))) armed = null;
 	function armFor(kind: 'commit' | 'discard', idx: number) { armed = idx; armedKind = kind; selected = null; playedArm = null; orderArm = null; }
+	// Takahide's swap offer catches a hand pick from any hand style (fan, banners, the docked rack): true = taken
+	function mateTake(idx: number) {
+		if (!mateOff || (powerArm?.op === 'mateSwap' && powerArm.idx === idx)) return false;
+		armMateSwap(idx, 'hand');
+		return true;
+	}
 	function handCardClick2(idx: number) {
 		if (autoRetract && !handUp && !dockHand) { handUp = true; return; }
 		// Takahide offers a swap: a hand card goes in for the card you have in play (the ring confirms)
@@ -1435,7 +1441,7 @@
 	<!-- the host swapping a Takahide's gold (Game lobby → Gold): pick one from the deck, the action ring confirms -->
 	{#if goldFor && cards[goldFor]}
 		<div class="runefix" class:dk={!mobile}>
-			<TakaGold modal cs={cards[goldFor]} {turnIdx} fx={false} title="{pidName(goldFor)}'s gold" onPick={tkPickHost} onClose={() => (goldFor = null)} />
+			<TakaGold modal phone={mobile} cs={cards[goldFor]} {turnIdx} fx={false} title="{pidName(goldFor)}'s gold" onPick={tkPickHost} onClose={() => (goldFor = null)} />
 		</div>
 	{/if}
 
@@ -1679,7 +1685,7 @@
 			<div class="bstack" class:p2={phone2}>
 				{#each handOrdered as idx (idx)}
 					<div class="bwrap" class:tucked={autoRetract && bannerOpen !== idx}>
-						<CardBanner heroId={mine.hero} {idx} sel={selected === idx} on:click={() => bannerTap(idx, () => preview(idx))} />
+						<CardBanner heroId={mine.hero} {idx} sel={selected === idx} on:click={() => bannerTap(idx, () => { if (!mateTake(idx)) preview(idx); })} />
 					</div>
 				{/each}
 			</div>
@@ -1783,7 +1789,7 @@
 				autoHide={autoRetract} spread={spreadHand} docked={dockHand} hand={handOrdered} rowMax={h2rowMax} {ringColor} {armed} {pingArmed} discOpen={discOpen === 'dash'} radius={radiusCtl} tokens={tokenCtl}
 				onMe={() => (overlayId = clientId)} onCoins={changeCoins} onSlot={(e, t) => peekSlot(e, mine, t)}
 				onDiscard={() => (mine.discard.length === 1 ? openDiscard(mine.hero, mine.discard[0], true) : discTap('dash'))} onDiscPick={(i) => openDiscard(mine.hero, i, true)}
-				onDeck={() => (deckOpen = true)} {onUlt} onPing={onPing} onAutoHide={toggleRetract} onSpread={toggleSpread} onDock={toggleDock} onPick={(i) => (canCommit && armed !== i ? (armed = i) : preview(i))} />
+				onDeck={() => (deckOpen = true)} {onUlt} onPing={onPing} onAutoHide={toggleRetract} onSpread={toggleSpread} onDock={toggleDock} onPick={(i) => (mateTake(i) ? null : canCommit && armed !== i ? (armed = i) : preview(i))} />
 		</div>
 	{:else if mine}
 		{@const mst = statusMap[clientId] ?? EMPTY_STATUS}

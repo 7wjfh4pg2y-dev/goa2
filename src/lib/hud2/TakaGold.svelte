@@ -111,7 +111,7 @@
 			</div>
 			{#if view != null}
 				{@const t = tag(view)}
-				<div class="pv" class:ph={phone && !modal} style="--sh:{sheetH}px" role="presentation" on:click|stopPropagation>
+				<div class="pv" class:ph={phone && !modal} class:ov={phone && modal} style="--sh:{sheetH}px" role="presentation" on:click|stopPropagation>
 					<div class="pvc">
 						<button class="nav" on:click={() => step(-1)} aria-label="Previous gold card">‹</button>
 						<span class="pcw"><Card heroId={H} card={heroCards(H)[view]} /></span>
@@ -120,6 +120,7 @@
 					<div class="pvf">
 						<em class="tag {t.cls}">{t.txt}</em>
 						{#if canSwap}<button class="sw" class:on={pick === view} on:click={swapIt}>{pick === view ? 'On the ring' : 'Swap'}{#if lands}{` · ${lands}`}{/if}</button>{/if}
+						{#if phone && modal}<button class="nav" on:click={() => (view = null)} aria-label="Close preview">✕</button>{/if}
 					</div>
 				</div>
 			{/if}
@@ -164,7 +165,7 @@
 		background: linear-gradient(180deg, rgba(16, 40, 66, 0.99), rgba(6, 19, 34, 0.99)); border: 1px solid rgba(216, 179, 106, 0.45); box-shadow: 0 14px 34px rgba(0, 0, 0, 0.6); }
 	.gp::after { content: ''; position: absolute; left: 50%; bottom: -7px; width: 12px; height: 12px; transform: translateX(-50%) rotate(45deg); background: rgb(6, 19, 34); border-right: 1px solid rgba(216, 179, 106, 0.45); border-bottom: 1px solid rgba(216, 179, 106, 0.45); }
 	.gp.sheet { position: fixed; left: 8px; right: 8px; width: auto; transform: none; bottom: calc(108px + env(safe-area-inset-bottom, 0px)); }
-	.gp.win { position: relative; left: auto; bottom: auto; transform: none; width: 360px; }
+	.gp.win { position: relative; left: auto; bottom: auto; transform: none; width: 360px; max-width: calc(100vw - 16px); }
 	.gp.sheet::after, .gp.win::after { display: none; }
 	.hd { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 	.hd b { font-size: 15px; font-weight: normal; color: #f4dfa8; }
@@ -189,6 +190,9 @@
 	/* the preview: beside the panel (desktop / the host's window), above the sheet on a phone */
 	.pv { position: absolute; left: calc(100% + 18px); bottom: 0; width: 340px; display: flex; flex-direction: column; align-items: center; gap: 10px; pointer-events: auto; }
 	.pv.ph { position: fixed; left: 50%; bottom: calc(116px + var(--sh) + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); width: min(92vw, 340px); }
+	/* the host's window on a phone: the preview sits over it, centred */
+	.pv.ov { position: fixed; left: 50%; top: 50%; bottom: auto; transform: translate(-50%, -50%); width: min(92vw, 340px); z-index: 2; padding: 12px 0; border-radius: 14px; background: rgba(4, 12, 22, 0.94); box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.5); }
+	.pv.ov .pcw { width: min(62vw, calc((100dvh - 140px) / 1.396), 260px); }
 	.pvc { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; }
 	.pcw { width: 260px; border-radius: 12px; overflow: hidden; box-shadow: 0 0 0 2px #e3b341, 0 14px 34px rgba(0, 0, 0, 0.7); }
 	.pv.ph .pcw { width: min(62vw, calc((100dvh - 116px - var(--sh) - 210px) / 1.396), 260px); }

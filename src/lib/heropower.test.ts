@@ -204,6 +204,35 @@ describe('Takahide: gold card swaps, Bushido face down, teammates swap, Ready fo
 		expect(next.cards!.T.hand).toContain(tiger)
 		expect(next.cards!.T.hidden).toBeUndefined()
 	})
+	it('one swap per card: after it, his card can\'t swap again this action', () => {
+		const s = actingAs(tg(butterfly), 'T')
+		const a = { ...s, ...swap(s, sting) } as MatchState
+		expect(takaSwapKind(a, 'T', tctx(a))).toBe(null)
+		expect(swap(a, tiger)).toEqual({})
+		const b0 = actingAs(tg(silver), 'T')
+		const b = { ...b0, ...swap(b0, sting) } as MatchState
+		expect(swap(b, tiger)).toEqual({})
+	})
+	it('a gold swapped while it acts keeps his place in the order, whatever its new initiative', () => {
+		// B (blue) plays Butterfly (8), between Sting (7) and Tiger (9); Takahide acts first on Tiger
+		const s0 = tg(tiger, 0, { basics: [tiger, silver] })
+		const bb = newPlayerCardState('takahide')
+		const s1 = { ...s0, cards: { ...s0.cards, B: { ...bb, hand: bb.hand.filter((i) => i !== butterfly), pending: butterfly } } } as MatchState
+		const s = actingAs(s1, 'T')
+		const after = { ...s, ...swap(s, sting) } as MatchState
+		expect(after.cards!.T.pending).toBe(sting)
+		expect(actorOf(after)).toBe('T')
+	})
+	it('a face-down gold taken back from the discard is no longer face down', () => {
+		const base = newPlayerCardState('takahide')
+		const disc = actingAs(tg(silver, 0, { hand: base.hand.filter((i) => i !== silver && i !== butterfly), discard: [butterfly] }), 'T')
+		const d = { ...disc, ...swap(disc, tiger) } as MatchState
+		expect(isHidden(d.cards!.T, tiger)).toBe(true)
+		// the host moves it back to his hand (a retrieve card): the mark goes with it
+		const back = { ...d, cards: { ...d.cards, T: { ...d.cards!.T, discard: [], hand: [...d.cards!.T.hand, tiger] } } } as MatchState
+		const p = applyCardReq(back, { kind: 'coins', pid: 'T', delta: 1 } as never)
+		expect(isHidden({ ...back, ...p }.cards!.T, tiger)).toBe(false)
+	})
 	it('the host can swap it any time; nobody else can', () => {
 		const s = tg(red1)
 		expect(swap(s, tiger, 'B', 'T').cards!.T.hand).toContain(tiger)

@@ -19,6 +19,8 @@ export type PowerState = {
 	/** Takahide: his acting card (`key:at`) has hit — an attack on a hero ended, or he defeated a hero / a minion —
 	 *  so its "after the attack" swap is open to his teammates */
 	hit?: string
+	/** Takahide: he already swapped a gold for this acting card (`key:at`) — once per card */
+	swap?: string
 	/** Takahide: Ready for War has been applied (his silver traded for all three golds) */
 	war?: boolean
 }
@@ -114,6 +116,7 @@ export function spotOf(cs: PlayerCardState, idx: number): Spot {
 export function takaSwapKind(s: S, pid: string, ctx: TurnCtx): 'gold' | 'bushido' | null {
 	const cs = s.cards?.[pid]
 	if (!cs || cs.hero !== TAKA || !ctx.revealed || ctx.order[ctx.at] !== pid || !deckGolds(cs).length || cs.pending == null) return null
+	if (s.power?.[pid]?.swap === `${ctx.key}:${ctx.at}`) return null // one swap per card
 	if (heldGolds(cs).includes(cs.pending)) return 'gold'
 	if (cs.pending === silverIdx(TAKA) && basicsOf(cs).includes(cs.pending)) return 'bushido'
 	return null
@@ -197,7 +200,11 @@ export function applyPower(s: S & { tieTurn?: { key: string; coin: Team } | null
 		// after a gold: that gold (this turn's card). Bushido / the host: his gold, wherever it is
 		const from = kind === 'gold' ? (cs.pending as number) : heldGolds(cs)[0]
 		if (from == null) return {}
-		return { cards: { ...s.cards, [who]: swapGold(cs, from, req.idx, kind !== 'gold') } }
+		const out: Record<string, unknown> = { cards: { ...s.cards, [who]: swapGold(cs, from, req.idx, kind !== 'gold') } }
+		if (kind) out.power = { ...s.power, [who]: { ...s.power?.[who], swap: `${ctx.key}:${ctx.at}` } }
+		// the card in play changed its initiative: the cards that acted and the one acting keep their places
+		if (ctx.revealed && cs.pending === from) out.acting = { key: ctx.key, idx: ctx.at, done: s.acting?.key === ctx.key ? s.acting.done : undefined, pin: ctx.order.slice(0, ctx.at + 1) }
+		return out
 	}
 	if (req.op === 'mateSwap') {
 		const off = mateOffer(s, req.pid, ctx), cs = s.cards?.[req.pid]
@@ -254,10 +261,16 @@ export function syncPowers(s: S, _ctx: TurnCtx): { cards?: Record<string, Player
 		const cs = s.cards![pid]
 		if (cs.hero !== TAKA) continue
 		const applied = !!s.power?.[pid]?.war
-		const next = readyForWar(cs, applied)
-		if (!next) continue
+		const war = readyForWar(cs, applied)
+		let next = war ?? cs
+		// a face-down card stays face down only while it lies in a turn slot or the discard (retrieved / taken back = no longer)
+		if (next.hidden?.length) {
+			const keep = next.hidden.filter((i) => next.turns.includes(i) || next.discard.includes(i))
+			if (keep.length !== next.hidden.length) next = { ...next, hidden: keep.length ? keep : undefined }
+		}
+		if (next === cs) continue
 		cards = { ...(cards ?? s.cards), [pid]: next }
-		power = { ...(power ?? s.power), [pid]: { ...s.power?.[pid], war: cs.ultimate } }
+		if (war) power = { ...(power ?? s.power), [pid]: { ...s.power?.[pid], war: cs.ultimate } }
 	}
-	return cards ? { cards, power } : null
+	return cards ? (power ? { cards, power } : { cards }) : null
 }
