@@ -11,7 +11,8 @@
 	import StatBubbles from './StatBubbles.svelte';
 	import { heroCards, heroName } from '$lib/cards/deck';
 	import { heroSplash, splashFace } from '$lib/heroes';
-	import { levelOf, statDeltas, PASS, type PlayerCardState } from '$lib/cards/cardstate';
+	import { levelOf, statDeltas, PASS, isHidden, type PlayerCardState } from '$lib/cards/cardstate';
+	import CardBack from '$lib/cards/CardBack.svelte';
 
 	export let cs: PlayerCardState;
 	export let name = '';
@@ -29,6 +30,8 @@
 	/** Snorri's runes under the slots (public), and whether the Dashboard effects run */
 	export let runes: RuneSlots | null = null;
 	export let runeFx = true;
+	/** is this board yours? (face-down cards: yours under a veil, everyone else's as a card back) */
+	export let own = false;
 
 
 	const ROMAN = ['I', 'II', 'III', 'IV'];
@@ -37,7 +40,8 @@
 	$: top = cs.discard.length ? cs.discard[cs.discard.length - 1] : null;
 	// every open card, in reading order: played turns, discards, removed
 	$: played = cs.turns.filter((i): i is number => i != null && i !== PASS);
-	$: open = [...played, ...(revealed && cs.pending != null && cs.pending !== PASS && !cs.turns.includes(cs.pending) ? [cs.pending] : []), ...cs.discard, ...cs.removed];
+	$: down = (i: number | null | undefined) => !own && isHidden(cs, i);
+	$: open = [...played, ...(revealed && cs.pending != null && cs.pending !== PASS && !cs.turns.includes(cs.pending) ? [cs.pending] : []), ...cs.discard, ...cs.removed].filter((i) => !down(i));
 	const read = (idx: number) => onRead(open, Math.max(0, open.indexOf(idx)));
 	// swipe down to close
 	let y0: number | null = null, dy = 0;
@@ -64,18 +68,18 @@
 	<StatBubbles {cs} size={30} />
 	<div class="turns">
 		{#each [0, 1, 2, 3] as t (t)}
-			<span class="tw" class:now={t === turnIdx} class:glow={fxAt(t)}><TurnSlot heroId={cs.hero} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} label={ROMAN[t]} examinable on:click={(e) => onSlot(e, t)} />{#if runes}<span class="wr"><RuneMark rune={runes.at[t] ?? null} size={22} on={t === turnIdx && !!runes.at[t]} second={!!runes.second && runes.second === runes.at[t]} fx={runeFx} /></span>{/if}</span>
+			<span class="tw" class:now={t === turnIdx} class:glow={fxAt(t)}><TurnSlot heroId={cs.hero} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} label={ROMAN[t]} back={down(cs.turns[t])} veil={own && isHidden(cs, cs.turns[t])} examinable on:click={(e) => onSlot(e, t)} />{#if runes}<span class="wr"><RuneMark rune={runes.at[t] ?? null} size={22} on={t === turnIdx && !!runes.at[t]} second={!!runes.second && runes.second === runes.at[t]} fx={runeFx} /></span>{/if}</span>
 		{/each}
 		<span class="dv"></span>
-		<button class="tw pile" disabled={top == null} on:click={() => top != null && read(top)} aria-label="Discard pile">
-			{#if top != null}<Card heroId={cs.hero} card={heroCards(cs.hero)[top]} />{/if}
+		<button class="tw pile" disabled={top == null} on:click={() => top != null && !down(top) && read(top)} aria-label="Discard pile">
+			{#if top != null && down(top)}<CardBack hero={cs.hero} />{:else if top != null}<Card heroId={cs.hero} card={heroCards(cs.hero)[top]} />{/if}
 			<i class="tr"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4.5h6V7M6 7l1 13h10l1-13" /></svg></i>
 		</button>
 	</div>
 	<div class="strips">
 		<div class="strip">
 			<span class="sl"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4.5h6V7M6 7l1 13h10l1-13" /></svg>Discarded</span>
-			<span class="cards">{#each cs.discard as i (i)}<button class="sc disc" on:click={() => read(i)}><Card heroId={cs.hero} card={heroCards(cs.hero)[i]} /></button>{:else}<em>—</em>{/each}</span>
+			<span class="cards">{#each cs.discard as i (i)}{#if down(i)}<span class="sc disc"><CardBack hero={cs.hero} /></span>{:else}<button class="sc disc" on:click={() => read(i)}><Card heroId={cs.hero} card={heroCards(cs.hero)[i]} /></button>{/if}{:else}<em>—</em>{/each}</span>
 		</div>
 		<div class="strip">
 			<span class="sl rm"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" /><path d="M6.5 17.5l11-11" /></svg>Removed</span>

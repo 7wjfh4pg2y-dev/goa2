@@ -11,7 +11,8 @@
 	import type { RuneSlots } from './runes';
 	import { heroCards, heroName } from '$lib/cards/deck';
 	import { portraitCss, heroSplash, splashFace } from '$lib/heroes';
-	import { levelOf, statDeltas, PASS, type PlayerCardState } from '$lib/cards/cardstate';
+	import { levelOf, statDeltas, PASS, isHidden, type PlayerCardState } from '$lib/cards/cardstate';
+	import CardBack from '$lib/cards/CardBack.svelte';
 
 	export let cs: PlayerCardState;
 	export let name = '';
@@ -27,6 +28,8 @@
 	/** Snorri's runes under the slots (public), and whether the Dashboard effects run */
 	export let runes: RuneSlots | null = null;
 	export let runeFx = true;
+	/** is this board yours? (face-down cards: yours under a veil, everyone else's as a card back) */
+	export let own = false;
 
 	export let onSlot: (e: Event, t: number) => void = () => {};
 
@@ -67,13 +70,14 @@
 		<span class="slots">
 			{#each [0, 1, 2, 3] as t (t)}
 				<span class="ws" class:now={t === turnIdx} class:glow={fxAt(t)}>
-					<TurnSlot heroId={cs.hero} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} label={ROMAN[t]} examinable on:click={(e) => onSlot(e, t)} />
+					<TurnSlot heroId={cs.hero} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} label={ROMAN[t]} back={!own && isHidden(cs, cs.turns[t])} veil={own && isHidden(cs, cs.turns[t])} examinable on:click={(e) => onSlot(e, t)} />
 					{#if runes}<span class="wr"><RuneMark rune={runes.at[t] ?? null} size={small ? 18 : 20} on={t === turnIdx && !!runes.at[t]} second={!!runes.second && runes.second === runes.at[t]} fx={runeFx} /></span>{/if}
 				</span>
 			{/each}
 			<span class="sdiv"></span>
 			<span class="ws disc" title="Discard pile">
-				{#if top != null}<Card heroId={cs.hero} card={heroCards(cs.hero)[top]} /><em>{cs.discard.length}</em>
+				{#if top != null && !own && isHidden(cs, top)}<CardBack hero={cs.hero} /><em>{cs.discard.length}</em>
+				{:else if top != null}<Card heroId={cs.hero} card={heroCards(cs.hero)[top]} /><em>{cs.discard.length}</em>
 				{:else}<svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4.5h6V7M6 7l1 13h10l1-13" /></svg>{/if}
 			</span>
 		</span>

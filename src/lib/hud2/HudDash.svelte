@@ -29,7 +29,7 @@
 	import { fitText } from './fitText';
 	import { heroCards, heroName } from '$lib/cards/deck';
 	import { portraitCss, heroLogo } from '$lib/heroes';
-	import { levelOf, levelCost, type PlayerCardState } from '$lib/cards/cardstate';
+	import { levelOf, levelCost, isHidden, type PlayerCardState } from '$lib/cards/cardstate';
 
 	/** null = the host without a hero of their own: only the action ring (they move the game on, nothing more) */
 	export let cs: PlayerCardState | null;
@@ -66,6 +66,8 @@
 	/** Snorri's runes under the slots (public), and whether the Dashboard effects run */
 	export let runes: RuneSlots | null = null;
 	export let runeFx = true;
+	/** Takahide offers you a swap: your card in play (this turn's well) glows gold */
+	export let swapOffer = false;
 	export let onMe: () => void = () => {};
 	export let onCoins: (d: number) => void = () => {};
 	export let onSlot: (e: Event, t: number) => void = () => {};
@@ -180,15 +182,15 @@
 
 		<div class="dwells" class:rw={!!runes}>
 			{#each [0, 1, 2, 3] as t (t)}
-				<span class="dw" class:now={t === turnIdx} class:glow={fxAt(t)}>
-					<span class="dwc"><TurnSlot heroId={cs.hero} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} label={ROMAN[t]} peekable examinable on:click={(e) => onSlot(e, t)} /></span>
+				<span class="dw" class:now={t === turnIdx} class:glow={fxAt(t)} class:swapme={swapOffer && t === turnIdx}>
+					<span class="dwc"><TurnSlot heroId={cs.hero} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} label={ROMAN[t]} veil={isHidden(cs, cs.turns[t])} peekable examinable on:click={(e) => onSlot(e, t)} /></span>
 					{#if runes}<small class="rn"><RuneMark rune={runes.at[t] ?? null} size={22} on={t === turnIdx && !!runes.at[t]} second={!!runes.second && runes.second === runes.at[t]} fx={runeFx} /></small>{:else}<small>{ROMAN[t]}</small>{/if}
 				</span>
 			{/each}
 			<span class="dsep"></span>
 			<span class="dw pile">
 				<button class="dwc" on:click={onDiscard} title="Discard pile" disabled={top == null}>
-					{#if top != null}<Card heroId={cs.hero} card={heroCards(cs.hero)[top]} /><em>{cs.discard.length}</em>
+					{#if top != null}<Card heroId={cs.hero} card={heroCards(cs.hero)[top]} />{#if isHidden(cs, top)}<span class="veil" title="Face down — only you see it"></span>{/if}<em>{cs.discard.length}</em>
 					{:else}<svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4.5h6V7M6 7l1 13h10l1-13" /></svg>{/if}
 				</button>
 				<small>Discard</small>
@@ -299,11 +301,13 @@
 	/* Snorri: the wells sit 4 px higher so a bigger rune fits under them (the same 2 px over the card's foot) */
 	.dwells.rw { transform: translateY(-4px); }
 	.dw small.rn { height: 9px; display: grid; justify-items: center; align-items: start; overflow: visible; position: relative; z-index: 1; transform: translateY(-5px); }
+	.dw.swapme .dwc { box-shadow: 0 0 0 2px #e3b341, 0 0 14px 3px rgba(227, 179, 65, 0.6); border-radius: 6px; }
 	.dw.glow .dwc { box-shadow: 0 0 0 2px #fff, 0 0 12px 3px var(--tc); border-radius: 6px; }
 	.dsep { align-self: stretch; width: 1px; margin: 3px 2px 14px; background: var(--line); }
 	.pile .dwc { border: 1px solid rgba(255, 255, 255, 0.1); background: rgba(0, 0, 0, 0.22); cursor: pointer; }
 	.pile .dwc:disabled { cursor: default; }
 	.pile svg { width: 17px; height: 17px; fill: none; stroke: rgba(255, 255, 255, 0.3); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+	.dwc .veil { position: absolute; inset: 0; border-radius: 5px; pointer-events: none; box-shadow: inset 0 0 0 1.5px rgba(216, 179, 106, 0.75); background: repeating-linear-gradient(135deg, rgba(10, 22, 38, 0.5) 0 4px, rgba(10, 22, 38, 0.1) 4px 8px); }
 	.dwc em { position: absolute; right: -5px; bottom: -5px; z-index: 1; min-width: 17px; height: 17px; border-radius: 9px; display: grid; place-items: center; font-style: normal; font-size: 10px; background: #0a1a2c; border: 1px solid var(--line); }
 	.discpop { position: absolute; bottom: calc(100% + 14px); left: 50%; transform: translateX(-50%); z-index: 5; display: flex; gap: 6px; padding: 8px; border-radius: 12px; background: rgba(8, 22, 38, 0.97); border: 1px solid var(--line); box-shadow: 0 10px 24px rgba(0, 0, 0, 0.6); }
 	.discpop button { width: 78px; padding: 0; border: 0; background: none; cursor: pointer; }

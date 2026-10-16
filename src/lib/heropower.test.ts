@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { applyCardReq, turnOrder, turnKey, actingIdx, type MatchState, type Piece } from './match'
+import { applyCardReq, turnOrder, turnKey, actingIdx, actorOf, type MatchState, type Piece } from './match'
 import { newPlayerCardState } from './cards/cardstate'
 import { heroCards } from './cards/deck'
-import { equilibrium, canFlip, flipUsed, hasPower, canInscribe, activeRune, runesOf, secondRune, type Rune, type TurnCtx } from './heropower'
+import { equilibrium, canFlip, flipUsed, hasPower, canInscribe, activeRune, runesOf, secondRune, heldGolds, deckGolds, takaSwapKind, mateOffer, type Rune, type TurnCtx } from './heropower'
+import { goldsOf, isHidden, type PlayerCardState } from './cards/cardstate'
 import { draftable, isLabHero, FOUR_STAR_LAB, FOUR_STAR_LIVE, HEROES } from './heroes'
 import { isFullGame, type Journal } from './recorder'
 
@@ -140,5 +141,104 @@ describe('Snorri: Inscribe the Runes (his silver) — a rune under each turn slo
 		// no ultimate / not his turn: refused
 		expect(second({ ...base, cards: { ...base.cards, S: { ...base.cards!.S, ultimate: false } } } as MatchState, 'horn')).toEqual({})
 		expect(second(actingAs(base, 'B'), 'horn')).toEqual({})
+	})
+})
+
+describe('Takahide: gold card swaps, Bushido face down, teammates swap, Ready for War', () => {
+	const TC = heroCards('takahide')
+	const [butterfly, sting, tiger] = goldsOf('takahide')
+	const silver = TC.findIndex((c) => c.color === 'SILVER' && !c.handicapped)
+	const setEx = TC.findIndex((c) => c.name === 'Set an Example')
+	const sake = TC.findIndex((c) => c.name === 'Hold my Saké')
+	const red1 = TC.findIndex((c) => c.color === 'RED' && (c.level ?? 0) === 1)
+	const tctx = (s: MatchState): TurnCtx => ({ ...ctx(s), teams: { T: 'orange', M: 'orange', B: 'blue' } })
+	// T = Takahide (orange) + M = mate Arien (orange) vs B (blue); turn 2
+	function tg(tPending: number, mPending = 0, tExtra: Partial<PlayerCardState> = {}): MatchState {
+		const base = newPlayerCardState('takahide')
+		const t = { ...base, hand: base.hand.filter((i) => i !== tPending), pending: tPending, ...tExtra }
+		const m = { ...newPlayerCardState('arien'), pending: mPending }
+		m.hand = m.hand.filter((i) => i !== mPending)
+		return {
+			round: 1, turn: 2, seats: 4, life: { orange: 6, blue: 6 }, tieBreaker: 'orange', revealAt: 0, host: 'B',
+			pieces: { T: { id: 'T', hex: '1_1', team: 'orange', kind: 'hero', hero: 'takahide' }, M: { id: 'M', hex: '1_2', team: 'orange', kind: 'hero', hero: 'arien' }, B: { id: 'B', hex: '5_5', team: 'blue', kind: 'hero', hero: 'arien' } },
+			cards: { T: t, M: m, B: { ...newPlayerCardState('arien'), pending: 1 } }
+		} as unknown as MatchState
+	}
+	const swap = (s: MatchState, idx: number, pid = 'T', target?: string) => applyCardReq(s, { kind: 'power', pid, op: 'takaSwap', idx, target })
+	it('he starts holding Butterfly; the other two golds are in his deck', () => {
+		const cs = newPlayerCardState('takahide')
+		expect(heldGolds(cs)).toEqual([butterfly])
+		expect(deckGolds(cs)).toEqual([sting, tiger])
+	})
+	it('after playing a gold, it turns into another in this turn\'s slot, face up', () => {
+		const s = actingAs(tg(butterfly), 'T')
+		expect(takaSwapKind(s, 'T', tctx(s))).toBe('gold')
+		const cs = swap(s, tiger).cards!.T
+		expect(cs.pending).toBe(tiger)
+		expect(heldGolds(cs)).toEqual([tiger])
+		expect(cs.hidden ?? []).toEqual([])
+		expect(swap(actingAs(tg(butterfly), 'B'), tiger)).toEqual({})
+		expect(swap(s, butterfly)).toEqual({})
+	})
+	it('the safeguard that returns lost cards follows his current gold (Butterfly stays in the deck)', () => {
+		const s = actingAs(tg(butterfly), 'T')
+		const after = { ...s, ...swap(s, sting), turn: 4 } as MatchState
+		const next = { ...after, ...applyCardReq(after, { kind: 'advance', pid: 'B' }) } as MatchState
+		expect(next.cards!.T.hand).toContain(sting)
+		expect(next.cards!.T.hand).not.toContain(butterfly)
+	})
+	it('Bushido: his gold in the hand → the new one in the hand; in the discard → face down there', () => {
+		const inHand = actingAs(tg(silver), 'T')
+		expect(takaSwapKind(inHand, 'T', tctx(inHand))).toBe('bushido')
+		const h = swap(inHand, sting).cards!.T
+		expect(h.hand).toContain(sting)
+		expect(h.hand).not.toContain(butterfly)
+		expect(h.hidden ?? []).toEqual([])
+		const base = newPlayerCardState('takahide')
+		const disc = actingAs(tg(silver, 0, { hand: base.hand.filter((i) => i !== silver && i !== butterfly), discard: [butterfly] }), 'T')
+		const d = swap(disc, tiger).cards!.T
+		expect(d.discard).toEqual([tiger])
+		expect(isHidden(d, tiger)).toBe(true)
+		const end = { ...disc, cards: { ...disc.cards, T: d }, turn: 4 } as MatchState
+		const next = applyCardReq(end, { kind: 'advance', pid: 'B' })
+		expect(next.cards!.T.hand).toContain(tiger)
+		expect(next.cards!.T.hidden).toBeUndefined()
+	})
+	it('the host can swap it any time; nobody else can', () => {
+		const s = tg(red1)
+		expect(swap(s, tiger, 'B', 'T').cards!.T.hand).toContain(tiger)
+		expect(swap(s, tiger, 'M', 'T')).toEqual({})
+	})
+	it('a teammate swaps their unresolved card once while Set an Example acts; the order keeps the acted cards first', () => {
+		const arien = heroCards('arien')
+		const low = arien.findIndex((c) => c.color === 'GREEN' && (c.level ?? 0) === 1)
+		const s = actingAs(tg(setEx, low), 'T')
+		expect(mateOffer(s, 'M', tctx(s))).toEqual({ by: 'T', from: 'hand' })
+		expect(mateOffer(s, 'B', tctx(s))).toBe(null)
+		const high = s.cards!.M.hand.reduce((a, b) => ((arien[b].initiative ?? 0) > (arien[a].initiative ?? 0) ? b : a))
+		const p = applyCardReq(s, { kind: 'power', pid: 'M', op: 'mateSwap', idx: high, src: 'hand' })
+		const after = { ...s, ...p } as MatchState
+		expect(after.cards!.M.pending).toBe(high)
+		expect(after.cards!.M.hand).toContain(low)
+		expect(actorOf(after)).toBe('T')
+		expect(mateOffer(after, 'M', tctx(after))).toBe(null)
+		expect(applyCardReq(s, { kind: 'power', pid: 'M', op: 'mateSwap', idx: high, src: 'discard' })).toEqual({})
+		const sk = actingAs(tg(sake, low), 'T')
+		expect(mateOffer(sk, 'M', tctx(sk))?.from).toBe('both')
+		const ended = { ...after, ...applyCardReq(after, { kind: 'endAct', pid: 'T' }) } as MatchState
+		expect(turnOrder(ended)[0]).toBe('T')
+	})
+	it('Ready for War: the silver goes, all three golds come to hand; taken back, the other way', () => {
+		const s = tg(red1)
+		const on = { ...s, cards: { ...s.cards, T: { ...s.cards!.T, ultimate: true } } } as MatchState
+		const p = applyCardReq(on, { kind: 'coins', pid: 'T', delta: 1 })
+		const cs = p.cards!.T
+		expect(cs.hand).toEqual(expect.arrayContaining([butterfly, sting, tiger]))
+		expect(cs.hand).not.toContain(silver)
+		expect(p.power!.T.war).toBe(true)
+		const off = { ...on, ...p, cards: { ...p.cards, T: { ...cs, ultimate: false } } } as MatchState
+		const q = applyCardReq(off, { kind: 'coins', pid: 'T', delta: 1 })
+		expect(q.cards!.T.hand).toContain(silver)
+		expect(heldGolds(q.cards!.T)).toHaveLength(1)
 	})
 })

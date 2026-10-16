@@ -42,6 +42,11 @@ export interface PlayerCardState {
 	roundPicks?: number[]
 	/** How many of this round's levels were paid for with coins (refunded if undone). */
 	roundPaid?: number
+	/** The gold / silver cards this player owns now, when not the usual starting two (Takahide swaps his gold
+	 *  card for another from his deck; his ultimate trades the silver for all three golds). */
+	basics?: number[]
+	/** Cards lying FACE DOWN in a turn slot or the discard (Takahide's Bushido): only their owner sees which. */
+	hidden?: number[]
 }
 
 /** A place a card can live in a player's collection. */
@@ -151,6 +156,16 @@ export function startingHand(hero: string): number[] {
 		.map(({ i }) => i)
 	return [gold, silver, ...tierI].filter((i) => i >= 0)
 }
+
+/** The hero's gold cards (Takahide has three) and the silver. */
+export const goldsOf = (hero: string) => heroCards(hero).map((c, i) => ({ c, i })).filter(({ c }) => isColor(c.color, 'GOLD') && !c.handicapped).map(({ i }) => i)
+export const silverIdx = (hero: string) => heroCards(hero).findIndex((c) => isColor(c.color, 'SILVER') && !c.handicapped)
+/** The basics a player owns now: the starting gold + silver, unless swapped (`basics`). */
+export function basicsOf(s: PlayerCardState): number[] {
+	return s.basics ?? [goldsOf(s.hero)[0], silverIdx(s.hero)].filter((i) => i != null && i >= 0)
+}
+/** Is this card face down where it lies (a hidden turn slot / discard card)? Only meaningful to others. */
+export const isHidden = (s: PlayerCardState, idx: number | null | undefined) => idx != null && idx >= 0 && !!s.hidden?.includes(idx)
 
 /** Index of the hero's ultimate (the PURPLE / Tier-IV card), or -1. */
 export function ultimateIndex(hero: string): number {
@@ -271,7 +286,8 @@ export function endRound(s: PlayerCardState): PlayerCardState {
 		hand: [...s.hand, ...back].sort((a, b) => a - b),
 		turns: Array(TURNS_PER_ROUND).fill(null),
 		pending: null,
-		discard: []
+		discard: [],
+		hidden: undefined
 	})
 }
 
@@ -285,7 +301,8 @@ export function repairCards(s: PlayerCardState): PlayerCardState {
 	const cards = heroCards(s.hero)
 	const placed = new Set<number>([...s.hand, ...s.discard, ...s.removed, ...s.upgrade,
 		...s.turns.filter((x): x is number => x != null), ...(s.pending != null && s.pending >= 0 ? [s.pending] : [])])
-	const owned = new Set<number>(startingHand(s.hero))
+	const basic = new Set([...goldsOf(s.hero), silverIdx(s.hero)])
+	const owned = new Set<number>([...basicsOf(s), ...startingHand(s.hero).filter((i) => !basic.has(i))])
 	cards.forEach((c, i) => { if ((c.level ?? 1) >= 2 && c.color !== 'PURPLE' && s.upgrade.includes(twinOf(s.hero, i))) owned.add(i) })
 	const lost = [...owned].filter((i) => !placed.has(i) && cards[i])
 	if (!lost.length) return s

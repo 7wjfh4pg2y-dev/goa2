@@ -8,7 +8,7 @@
 	import type { RuneSlots } from './runes';
 	import { heroName } from '$lib/cards/deck';
 	import { portraitCss } from '$lib/heroes';
-	import { levelOf, type PlayerCardState } from '$lib/cards/cardstate';
+	import { levelOf, isHidden, type PlayerCardState } from '$lib/cards/cardstate';
 
 	export let cs: PlayerCardState;
 	export let name = '';
@@ -46,7 +46,7 @@
 		<span class="nm"><b>{heroName(cs.hero)}</b><small>{name}</small></span>
 	</button>
 	<span class="slot" class:glow={fx}>
-		<TurnSlot heroId={cs.hero} played={cs.turns[turnIdx]} pending={cs.pending} isCurrent {revealed} label={ROMAN[turnIdx] ?? ''} examinable on:click={(e) => onSlot(e, turnIdx)} />
+		<TurnSlot heroId={cs.hero} played={cs.turns[turnIdx]} pending={cs.pending} isCurrent {revealed} label={ROMAN[turnIdx] ?? ''} back={!me && isHidden(cs, cs.turns[turnIdx])} veil={me && isHidden(cs, cs.turns[turnIdx])} examinable on:click={(e) => onSlot(e, turnIdx)} />
 		{#if !revealed && ready}<i class="ok" title="Card in">✓</i>{/if}
 		{#if runes?.at[turnIdx]}<span class="nr"><RuneMark rune={runes.at[turnIdx]} size={15} on fx={runeFx} /></span>{/if}
 	</span>

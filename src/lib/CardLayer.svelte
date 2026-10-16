@@ -8,8 +8,9 @@
 	import { teamName } from '$lib/teams';
 	import type { Readable } from 'svelte/store';
 	import type { MatchSession, MatchState, Player } from '$lib/match';
-	import { teamForSeat, colorHex, battlePatch, levelPatch, canRespawn, turnPlan, claimable, actingIdx, actorOf, turnOrder, turnKey as keyOfTurn } from '$lib/match';
-	import { hasPower, equilibrium, canFlip, flipUsed, runesOf, secondRune, canInscribe, canSecond, RUNES, type Rune, type TurnCtx } from '$lib/heropower';
+	import { teamForSeat, colorHex, battlePatch, levelPatch, canRespawn, turnPlan, claimable, actingIdx, actorOf, turnOrder, teamOf, turnKey as keyOfTurn } from '$lib/match';
+	import { hasPower, equilibrium, canFlip, flipUsed, runesOf, secondRune, canInscribe, canSecond, RUNES, takaSwapKind, mateOffer, type Rune, type TurnCtx } from '$lib/heropower';
+	import TakaGold from '$lib/hud2/TakaGold.svelte';
 	import IgnatiaCoin from '$lib/hud2/IgnatiaCoin.svelte';
 	import SnorriRunes from '$lib/hud2/SnorriRunes.svelte';
 	import RunePanel from '$lib/hud2/RunePanel.svelte';
@@ -29,7 +30,7 @@
 	import { heroAvatar, heroLogo, heroSplash } from '$lib/heroes';
 	import { detectDuration, endOf, effectLabel, DUR_LABEL, type Effect, type EffectDur } from '$lib/effects';
 	import { HERO_KIT, COMPANIONS, MINES, statusFrom, toggleStatusMarker, tokenName, tokensLeft, type ArmToken } from '$lib/tokens';
-	import { PASS, statDeltas, levelOf, levelCost, ultimateIndex, mustLevel, canPick, canAfford, swapSource, twinOf, allowedMoves, type PlayerCardState, type StatKey, type CardZone } from '$lib/cards/cardstate';
+	import { PASS, isHidden, statDeltas, levelOf, levelCost, ultimateIndex, mustLevel, canPick, canAfford, swapSource, twinOf, allowedMoves, type PlayerCardState, type StatKey, type CardZone } from '$lib/cards/cardstate';
 	import LevelConfirm from '$lib/LevelConfirm.svelte';
 	import TurnSplash from '$lib/TurnSplash.svelte';
 	import DockHand from '$lib/DockHand.svelte';
@@ -218,7 +219,8 @@
 	const claimTie = () => session.cardAction({ kind: 'claim', pid: clientId });
 	// ── a 4★ hero's own dash button (heropower.ts): private to you, what it changes is public ──
 	$: myPower = mine && hasPower(mine.hero) ? mine.hero : null;
-	$: pctx = { key: keyOfTurn($ms), round: $ms.round, turnIdx: $ms.turn - 1, order: turnOrder($ms), at: actingIdx($ms), tieBreaker: $ms.tieBreaker, revealed } as TurnCtx;
+	$: pctx = { key: keyOfTurn($ms), round: $ms.round, turnIdx: $ms.turn - 1, order: turnOrder($ms), at: actingIdx($ms), tieBreaker: $ms.tieBreaker, revealed,
+		teams: Object.fromEntries(Object.keys($ms.cards ?? {}).map((pid) => [pid, teamOf($ms, pid)])) } as TurnCtx;
 	// Equilibrium = her silver's effect switched on (Activate effect, confirmed); it ends with the effect
 	$: igSplit = myPower === 'ignatia' && equilibrium($ms, clientId);
 	$: igReady = myPower === 'ignatia' && canFlip($ms, clientId, pctx);
@@ -235,7 +237,33 @@
 	$: runeMap = runeSlots($ms, pctx, viewCards);
 	$: runeNow = Object.fromEntries(Object.entries(runeMap).map(([pid, r]) => [pid, r?.at[turnIdx] ?? null])) as Record<string, Rune | null>;
 	// a power loaded onto the action ring, which confirms it (× drops it)
-	let powerArm: { op: 'ignatiaFlip' | 'snorriInscribe'; label: string; sub?: string; order?: Rune[]; target?: string } | null = null;
+	// Takahide: a gold swap open now (his gold or Bushido acting); his teammates: a swap offered by his red card
+	$: tkKind = myPower === 'takahide' ? takaSwapKind($ms, clientId, pctx) : null;
+	$: mateOff = mine ? mateOffer($ms, clientId, pctx) : null;
+	let powerArm: { op: 'ignatiaFlip' | 'snorriInscribe' | 'takaSwap' | 'mateSwap'; label: string; sub?: string; order?: Rune[]; target?: string; idx?: number; src?: 'hand' | 'discard' } | null = null;
+	$: if (powerArm && powerArm.op === 'takaSwap' && !powerArm.target && !tkKind) powerArm = null;
+	$: if (powerArm && powerArm.op === 'mateSwap' && !mateOff) powerArm = null;
+	// the gold panel hands over the gold to swap in (a stable function: the panel calls it reactively)
+	function tkPick(i: number | null) {
+		if (i == null) { if (powerArm?.op === 'takaSwap' && !powerArm.target) powerArm = null; return; }
+		if (powerArm?.op === 'takaSwap' && powerArm.idx === i && !powerArm.target) return;
+		powerArm = { op: 'takaSwap', label: 'Swap', sub: heroCards('takahide')[i]?.name, idx: i }; armed = null; playedArm = null; orderArm = null;
+	}
+	// the host swapping a Takahide's gold (Game lobby → Gold)
+	let goldFor: string | null = null;
+	export function openGoldFor(pid: string) { if ($ms.host !== clientId || cards[pid]?.hero !== 'takahide') return; goldFor = pid; }
+	function tkPickHost(i: number | null) {
+		const t = goldFor;
+		if (!t) return;
+		if (i == null) { if (powerArm?.op === 'takaSwap' && powerArm.target) powerArm = null; return; }
+		if (powerArm?.op === 'takaSwap' && powerArm.idx === i && powerArm.target === t) return;
+		powerArm = { op: 'takaSwap', label: 'Swap', sub: 'host', idx: i, target: t };
+	}
+	$: if (!goldFor && powerArm?.op === 'takaSwap' && powerArm.target) powerArm = null;
+	// a teammate's swap: their hand (or, for Hold my Saké, discard) card goes in for the card they have in play
+	function armMateSwap(idx: number, src: 'hand' | 'discard') {
+		powerArm = { op: 'mateSwap', label: 'Swap in', sub: mine ? heroCards(mine.hero)[idx]?.name : '', idx, src }; armed = null; playedArm = null; orderArm = null;
+	}
 	$: if (powerArm && powerArm.op === 'ignatiaFlip' && !igReady) powerArm = null;
 	$: if (powerArm && powerArm.op === 'snorriInscribe' && !powerArm.target && !snEdit) powerArm = null;
 	function armIgnatiaFlip() { if (igReady) { powerArm = { op: 'ignatiaFlip', label: 'Flip coin', sub: 'Chaos Incarnate' }; armed = null; playedArm = null; orderArm = null; } }
@@ -252,7 +280,7 @@
 	export function openRunesFor(pid: string) { if ($ms.host !== clientId || cards[pid]?.hero !== 'snorri') return; runeFor = pid; runeDraft = [...(runesOf($ms, pid) ?? RUNES)]; }
 	$: if (runeFor) { const o = runeDraft, cur = runesOf($ms, runeFor); const same = !!cur && cur.join() === o.join();
 		if (same) { if (powerArm?.target) powerArm = null; } else if (powerArm?.order?.join() !== o.join() || powerArm?.target !== runeFor) powerArm = { op: 'snorriInscribe', label: 'Inscribe', sub: 'host', order: [...o], target: runeFor }; }
-	$: if (!runeFor && powerArm?.target) powerArm = null;
+	$: if (!runeFor && powerArm?.op === 'snorriInscribe' && powerArm.target) powerArm = null;
 	$: actAt = actingIdx($ms);
 	$: actor = revealed ? actorOf($ms) : null;
 	$: actorName = actor ? heroName(cards[actor]?.hero ?? '') : '';
@@ -552,6 +580,7 @@
 	function discTap(key: string) { discOpen = discOpen === key ? null : key; }
 	function openDiscard(hero: string, idx: number, own: boolean) {
 		discOpen = null;
+		if (own && mateOff?.from === 'both' && !(powerArm?.op === 'mateSwap' && powerArm.idx === idx)) { armMateSwap(idx, 'discard'); return; }
 		if (own) preview(idx, 'discard');
 		else examine = { hid: hero, idx };
 	}
@@ -889,6 +918,8 @@
 	function armFor(kind: 'commit' | 'discard', idx: number) { armed = idx; armedKind = kind; selected = null; playedArm = null; orderArm = null; }
 	function handCardClick2(idx: number) {
 		if (autoRetract && !handUp && !dockHand) { handUp = true; return; }
+		// Takahide offers a swap: a hand card goes in for the card you have in play (the ring confirms)
+		if (mateOff && !(powerArm?.op === 'mateSwap' && powerArm.idx === idx)) { armMateSwap(idx, 'hand'); return; }
 		if (canCommit && armed !== idx) { armed = idx; armedKind = 'commit'; playedArm = null; orderArm = null; return; }
 		armed = null;
 		preview(idx);
@@ -919,7 +950,7 @@
 			if (nudgeLeft > 0) return { label: 'Nudge', sub: `in ${Math.ceil(nudgeLeft / 1000)} s`, kind: 'off', cancel: drop };
 			return { label: 'Nudge', sub: who, kind: 'go', pulse: true, run: () => { session.nudge(a.pid); drop(); }, cancel: drop };
 		}
-		if (powerArm) { const a = powerArm; return { label: a.label, sub: a.sub, kind: 'go', pulse: true, run: () => { session.cardAction({ kind: 'power', pid: clientId, op: a.op, order: a.order, target: a.target }); powerArm = null; if (a.target) runeFor = null; }, cancel: () => { powerArm = null; if (a.target) runeFor = null; } }; }
+		if (powerArm) { const a = powerArm; return { label: a.label, sub: a.sub, kind: 'go', pulse: true, card: a.op === 'takaSwap' || a.op === 'mateSwap', run: () => { session.cardAction({ kind: 'power', pid: clientId, op: a.op, order: a.order, target: a.target, idx: a.idx, src: a.src }); powerArm = null; if (a.target) { runeFor = null; goldFor = null; } }, cancel: () => { powerArm = null; if (a.target) { runeFor = null; goldFor = null; } } }; }
 		// a card chosen in its preview to discard (any time — a defence, or an effect): the ring asks once more
 		if (armed != null && armedKind === 'discard' && mine) { const i = armed; return { label: 'Discard', sub: heroCards(mine.hero)[i]?.name, card: true, kind: 'bad', pulse: true, run: () => { defend(i); armed = null; }, cancel: () => (armed = null) }; }
 		if (iCanRespawn) return { label: 'Respawn', kind: 'team', pulse: true, run: onRespawn };
@@ -974,6 +1005,8 @@
 {#snippet powerBtn(size: number)}
 	{#if myPower === 'ignatia'}
 		<IgnatiaCoin {size} face={$ms.tieBreaker} split={igSplit} ult={!!mine?.ultimate} ready={igReady} used={igUsed} flames={$boardPrefs.dash} art={(t) => icon(`tiebreaker_${t}`)} onPress={armIgnatiaFlip} />
+	{:else if myPower === 'takahide' && mine}
+		<TakaGold {size} cs={mine} kind={tkKind} {turnIdx} fx={$boardPrefs.dash} phone={mobile} onPick={tkPick} />
 	{:else if myPower === 'snorri'}
 		<SnorriRunes {size} runes={snRunes} {turnIdx} second={snSecond} ult={!!mine?.ultimate} canEdit={snEdit} canSecond={snCan2} fx={$boardPrefs.dash} phone={mobile} onDraft={snDraft} onSecond={snPickSecond} />
 	{/if}
@@ -1220,7 +1253,7 @@
 				{#if !platesTop}
 					{#each h2enemies as p (p.id)}
 						{@const cs = viewCards[p.id]}
-						{#if cs}{#if compact}{@render plate(p, cs, 344)}{:else}<HudBoard {cs} runes={runeMap[p.id]} runeFx={$boardPrefs.dash} name={p.name} color={colorHex(p.color)} team={pTeam(p)} {turnIdx} {revealed} ready={isReady(cards[p.id] ?? cs)} compact={h2compact} small={h2tight}
+						{#if cs}{#if compact}{@render plate(p, cs, 344)}{:else}<HudBoard {cs} own={p.id === clientId} runes={runeMap[p.id]} runeFx={$boardPrefs.dash} name={p.name} color={colorHex(p.color)} team={pTeam(p)} {turnIdx} {revealed} ready={isReady(cards[p.id] ?? cs)} compact={h2compact} small={h2tight}
 							fxAt={(t) => !!fxFor(p.id, slotIdx(cs, t))} onOpen={() => (overlayId = p.id)} onSlot={(e, t) => peekSlot(e, cs, t)} />{/if}{/if}
 					{/each}
 				{/if}
@@ -1229,7 +1262,7 @@
 				{#if !platesTop}
 					{#each colRight as p (p.id)}
 						{@const cs = viewCards[p.id]}
-						{#if cs}{#if compact}{@render plate(p, cs, 344)}{:else}<HudBoard {cs} runes={runeMap[p.id]} runeFx={$boardPrefs.dash} name={p.name} color={colorHex(p.color)} team={pTeam(p)} {turnIdx} {revealed} ready={isReady(cards[p.id] ?? cs)} compact={h2compact} small={h2tight}
+						{#if cs}{#if compact}{@render plate(p, cs, 344)}{:else}<HudBoard {cs} own={p.id === clientId} runes={runeMap[p.id]} runeFx={$boardPrefs.dash} name={p.name} color={colorHex(p.color)} team={pTeam(p)} {turnIdx} {revealed} ready={isReady(cards[p.id] ?? cs)} compact={h2compact} small={h2tight}
 							fxAt={(t) => !!fxFor(p.id, slotIdx(cs, t))} onOpen={() => (overlayId = p.id)} onSlot={(e, t) => peekSlot(e, cs, t)} />{/if}{/if}
 					{/each}
 				{/if}
@@ -1252,7 +1285,7 @@
 	{#if phone2 && overlayId && ovPlayer && viewCards[overlayId]}
 		{@const pcs = viewCards[overlayId]}
 		{@const pid = ovPlayer.id}
-		<PhoneBoard cs={pcs} runes={runeMap[pid]} runeFx={$boardPrefs.dash} name={ovPlayer.name} color={colorHex(ovPlayer.color)} team={pTeam(ovPlayer)} {turnIdx} {revealed} status={statusMap[pid] ?? EMPTY_STATUS} {markArt}
+		<PhoneBoard cs={pcs} own={pid === clientId} runes={runeMap[pid]} runeFx={$boardPrefs.dash} name={ovPlayer.name} color={colorHex(ovPlayer.color)} team={pTeam(ovPlayer)} {turnIdx} {revealed} status={statusMap[pid] ?? EMPTY_STATUS} {markArt}
 			fxAt={(t) => !!fxFor(pid, slotIdx(pcs, t))} onStatus={(k) => toggleStatus(pid, k)} onSlot={(e, t) => peekSlot(e, pcs, t)}
 			onRead={(list, at) => (examine = { hid: pcs.hero, idx: list[at], pid, list: list.map((i) => ({ hid: pcs.hero, idx: i, pid })) })} onClose={() => (overlayId = null)} />
 	{:else if overlayId && ovPlayer && viewCards[overlayId]}
@@ -1307,7 +1340,7 @@
 							<div class="tlabel">Turn {t + 1}</div>
 							<div class="tslot">
 								<span class="tbroman">{ROMAN[t]}</span>
-								<span class="fxwrap" class:fx={!!fxFor(oid, slotIdx(cs, t))} style="--fxc:{colorOf(oid)}"><TurnSlot heroId={oh} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} peekable={oid === clientId} examinable on:click={(e) => peekSlot(e, cs, t)} /></span>
+								<span class="fxwrap" class:fx={!!fxFor(oid, slotIdx(cs, t))} style="--fxc:{colorOf(oid)}"><TurnSlot heroId={oh} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} back={!own && isHidden(cs, cs.turns[t])} veil={own && isHidden(cs, cs.turns[t])} peekable={oid === clientId} examinable on:click={(e) => peekSlot(e, cs, t)} /></span>
 								{#if runeMap[oid]}{@const rs = runeMap[oid]}{@const r = rs?.at[t] ?? null}<span class="tbrune"><RuneMark rune={r} size={40} on={t === turnIdx && !!r} second={!!r && rs?.second === r} fx={$boardPrefs.dash} /></span>{/if}
 							</div>
 						</div>
@@ -1320,12 +1353,12 @@
 								<!-- one card: open it straight away; several: fan them out to choose -->
 								<button class="dstack" on:click={() => (cs.discard.length === 1 ? openDiscard(oh, cs.discard[0], own) : discTap(oid))} title={cs.discard.length === 1 ? 'Preview' : 'Show the discard pile'}>
 									{#each cs.discard.slice(-3) as i, di (i)}
-										<span class="dsk" style="--i:{di}; --n:{Math.min(3, cs.discard.length)}"><Card heroId={oh} card={od[i]} /></span>
+										<span class="dsk" style="--i:{di}; --n:{Math.min(3, cs.discard.length)}">{#if !own && isHidden(cs, i)}<CardBack hero={oh} />{:else}<Card heroId={oh} card={od[i]} />{/if}</span>
 									{/each}
 								</button>
 								{#if discOpen === oid}
 									<div class="discpop">
-										{#each cs.discard as i (i)}
+										{#each cs.discard.filter((i) => own || !isHidden(cs, i)) as i (i)}
 											<button class="dpc" on:click={() => openDiscard(oh, i, own)} title={own ? 'Preview (you can recover it to your hand)' : 'Preview'}><Card heroId={oh} card={od[i]} /></button>
 										{/each}
 									</div>
@@ -1390,6 +1423,13 @@
 			onTake={(i) => session.cardAction({ kind: 'take', pid: clientId, idx: i })}
 			onSwap={(i) => session.cardAction({ kind: 'swap', pid: clientId, idx: i })}
 			onPreview={(i) => mine && examineCard(mine.hero, i)} />
+	{/if}
+
+	<!-- the host swapping a Takahide's gold (Game lobby → Gold): pick one from the deck, the action ring confirms -->
+	{#if goldFor && cards[goldFor]}
+		<div class="runefix" class:dk={!mobile}>
+			<TakaGold modal cs={cards[goldFor]} {turnIdx} fx={false} title="{pidName(goldFor)}'s gold" onPick={tkPickHost} onClose={() => (goldFor = null)} />
+		</div>
 	{/if}
 
 	<!-- the host setting a Snorri's runes (Game lobby → Runes): tap two to swap, the action ring confirms -->
@@ -1647,7 +1687,7 @@
 			</div>
 		{/if}
 		{#if phone2}
-			<PhoneDash cs={mine} runes={runeMap[clientId]} runeFx={$boardPrefs.dash} power={myPower ? powerBtn : undefined} color={colorHex(myColor)} team={myTeam === 'blue' ? 'blue' : 'orange'} {turnIdx} {revealed} ini={myInit} fxAt={(t) => !!fxFor(clientId, slotIdx(mine, t))}
+			<PhoneDash cs={mine} swapOffer={!!mateOff} runes={runeMap[clientId]} runeFx={$boardPrefs.dash} power={myPower ? powerBtn : undefined} color={colorHex(myColor)} team={myTeam === 'blue' ? 'blue' : 'orange'} {turnIdx} {revealed} ini={myInit} fxAt={(t) => !!fxFor(clientId, slotIdx(mine, t))}
 				deckCount={deckCards(mine).length} levelUp={iMustLevel} ultIdx={myUlt} {ultReady} order={order2} {ringColor} autoHide={autoRetract}
 				handStyle={bannerHand ? 'banners' : spreadHand ? 'spread' : 'fan'} {pingArmed} radius={radiusCtl} tokens={tokenCtl}
 				onMe={() => (overlayId = clientId)} onSlot={(e, t) => peekSlot(e, mine, t)} onDiscPick={(i) => openDiscard(mine.hero, i, true)}
@@ -1731,7 +1771,7 @@
 			</div>
 		{/if}
 		<div class="h2dash">
-			<HudDash cs={mine} runes={runeMap[clientId]} runeFx={$boardPrefs.dash} power={myPower ? powerBtn : undefined} name={myName} color={colorHex(myColor)} team={myTeam === 'blue' ? 'blue' : 'orange'} {turnIdx} {revealed} ini={myInit} marks={statusMap[clientId] ?? EMPTY_STATUS} {markArt}
+			<HudDash cs={mine} swapOffer={!!mateOff} runes={runeMap[clientId]} runeFx={$boardPrefs.dash} power={myPower ? powerBtn : undefined} name={myName} color={colorHex(myColor)} team={myTeam === 'blue' ? 'blue' : 'orange'} {turnIdx} {revealed} ini={myInit} marks={statusMap[clientId] ?? EMPTY_STATUS} {markArt}
 				ultIdx={myUlt} {ultReady} deckCount={deckCards(mine).length} levelUp={iMustLevel} order={order2} fxAt={(t) => !!fxFor(clientId, slotIdx(mine, t))}
 				autoHide={autoRetract} spread={spreadHand} docked={dockHand} hand={handOrdered} rowMax={h2rowMax} {ringColor} {armed} {pingArmed} discOpen={discOpen === 'dash'} radius={radiusCtl} tokens={tokenCtl}
 				onMe={() => (overlayId = clientId)} onCoins={changeCoins} onSlot={(e, t) => peekSlot(e, mine, t)}

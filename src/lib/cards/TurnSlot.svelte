@@ -15,17 +15,22 @@
 	export let label = ''; // e.g. "1".."4" shown on an empty slot
 	export let examinable = false;
 	export let peekable = false; // your own face-down card: click to read it (it stays face-down for everyone else)
+	export let back = false; // a card lying FACE DOWN in this slot (Takahide's Bushido): others see only its back
+	export let veil = false; // …and its owner sees it face up under a striped veil
 
 	$: passed = isCurrent && pending === PASS;
 	$: showFlip = isCurrent && pending != null && pending !== PASS; // back/front flipper
 	$: faceIdx = played != null ? played : pending;
 </script>
 
-{#if played != null}
+{#if played != null && back}
+	<div class="slot static down" title="Face down"><CardBack hero={heroId} /></div>
+{:else if played != null}
 	<!-- not examinable ⇒ clicks pass through to the container (a disabled button
 	     would swallow them, so e.g. a player row couldn't open their board) -->
 	<button class="slot static" class:btn={examinable} class:thru={!examinable} tabindex={examinable ? 0 : -1} on:click on:keydown>
 		<Card {heroId} card={heroCards(heroId)[played]} />
+		{#if veil}<span class="veil" title="Face down — only you see it"></span>{/if}
 	</button>
 {:else if showFlip}
 	<button class="slot" class:btn={examinable && (revealed || peekable)} class:thru={!(examinable && (revealed || peekable))} tabindex={examinable && (revealed || peekable) ? 0 : -1} title={peekable && !revealed ? 'Your card — click to read it' : undefined} on:click on:keydown>
@@ -45,6 +50,11 @@
 	.slot.btn { cursor: zoom-in; }
 	.slot.thru { pointer-events: none; }
 	.static :global(.cardface) { display: block; width: 100%; border-radius: 6%; box-shadow: 0 3px 8px rgba(0, 0, 0, 0.5); }
+	.slot.static { position: relative; }
+	.slot.down { border-radius: 6%; overflow: hidden; box-shadow: 0 3px 8px rgba(0, 0, 0, 0.5); }
+	/* your own face-down card: still readable, striped so you know the others see its back */
+	.veil { position: absolute; inset: 0; border-radius: 6%; pointer-events: none; box-shadow: inset 0 0 0 1.5px rgba(216, 179, 106, 0.75);
+		background: repeating-linear-gradient(135deg, rgba(10, 22, 38, 0.5) 0 4px, rgba(10, 22, 38, 0.1) 4px 8px); }
 	.slot.blank { display: grid; place-items: center; border: 1px dashed rgba(255, 255, 255, 0.14); border-radius: 5px;
 		background: rgba(255, 255, 255, 0.02); color: #3d4a5e; font-size: 0.62rem; font-weight: 700; }
 	.slot.blank.cur { border-color: rgba(239, 180, 106, 0.5); color: #8b9bb0; }

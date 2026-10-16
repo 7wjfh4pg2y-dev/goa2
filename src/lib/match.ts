@@ -27,6 +27,7 @@ import type { GameMap } from './maps'
 import type { PlayerCardState } from './cards/cardstate'
 import {
 	commitCard,
+	basicsOf,
 	passTurn,
 	uncommit,
 	discardCard,
@@ -143,6 +144,13 @@ export function turnPlan(s: MatchState): { order: string[]; flips: number[]; cho
 		}
 		i = j
 	}
+	// a card swapped mid-turn (Takahide's teammates) can't jump past the cards that acted or the one acting
+	const pin = s.acting?.key === key ? (s.acting.pin ?? []).filter((p) => order.includes(p)) : []
+	if (pin.length) {
+		const next = [...pin, ...order.filter((p) => !pin.includes(p))]
+		const at = (p: string) => next.indexOf(p)
+		return { order: next, flips: flips.map((k) => at(order[k])), choice: next.map((p) => choice[order.indexOf(p)] ?? []) }
+	}
 	return { order, flips, choice }
 }
 export const turnOrder = (s: MatchState): string[] => turnPlan(s).order
@@ -159,14 +167,15 @@ export const actorOf = (s: MatchState): string | null => turnOrder(s)[actingIdx(
 /** Apply a card instruction to the shared state, returning the patch to broadcast. */
 // the turn facts a 4★ power needs (heropower.ts can't import this file)
 // (revealed: the host applies every request, and `revealAt` is in the host's clock)
-const powerCtx = (x: MatchState): TurnCtx => ({ key: turnKey(x), round: x.round, turnIdx: x.turn - 1, order: turnOrder(x), at: actingIdx(x), tieBreaker: x.tieBreaker, revealed: x.revealAt != null && Date.now() >= x.revealAt })
+const powerCtx = (x: MatchState): TurnCtx => ({ key: turnKey(x), round: x.round, turnIdx: x.turn - 1, order: turnOrder(x), at: actingIdx(x), tieBreaker: x.tieBreaker, revealed: x.revealAt != null && Date.now() >= x.revealAt,
+	teams: Object.fromEntries(Object.keys(x.cards ?? {}).map((pid) => [pid, teamOf(x, pid)])) })
 export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 	const patch = req.kind === 'power' ? (applyPower(s, req, powerCtx(s)) as Partial<MatchState>) : applyCardReqBase(s, req as Exclude<CardReq, PowerReq>)
 	if (!Object.keys(patch).length) return patch
 	const next = { ...s, ...patch }
 	if (!Object.values(next.cards ?? {}).some((c) => hasPower(c.hero))) return patch
-	const power = syncPowers(next, powerCtx(next))
-	return power ? { ...patch, power } : patch
+	const sync = syncPowers(next, powerCtx(next))
+	return sync ? { ...patch, ...sync } : patch
 }
 function applyCardReqBase(s: MatchState, req: Exclude<CardReq, PowerReq>): Partial<MatchState> {
 	const cards = s.cards ?? {}
@@ -187,8 +196,9 @@ function applyCardReqBase(s: MatchState, req: Exclude<CardReq, PowerReq>): Parti
 		const done = [...(s.acting?.key === key ? (s.acting.done ?? []) : order.slice(0, at)), order[at]]
 		// a card the coin chose between the teams: once it has acted, the coin flips (the plan keeps its course)
 		if (turnPlan(s).flips.includes(at))
-			return { acting: { key, idx: at + 1, done }, tieBreaker: otherTeamOf(s.tieBreaker), tieTurn: s.tieTurn?.key === key ? s.tieTurn : { key, coin: s.tieBreaker } }
-		return { acting: { key, idx: at + 1, done } }
+			return { acting: { key, idx: at + 1, done, pin: done }, tieBreaker: otherTeamOf(s.tieBreaker), tieTurn: s.tieTurn?.key === key ? s.tieTurn : { key, coin: s.tieBreaker } }
+		// the cards that acted stay pinned at the front (a card swapped later in the turn can't jump past them)
+		return { acting: { key, idx: at + 1, done, pin: done } }
 	}
 	// a tied player claims the card acting now from their teammate (the team chooses who goes first)
 	if (req.kind === 'claim') {
@@ -428,7 +438,7 @@ export interface MatchState {
 	// uncommits (so the count restarts from 3 when they all commit again).
 	revealAt?: number | null
 	/** after the reveal, whose card is acting: `idx` into turnOrder(), for the turn `key` (round-turn); another turn = 0 */
-	acting?: { key: string; idx: number; done?: string[] } | null
+	acting?: { key: string; idx: number; done?: string[]; pin?: string[] } | null
 	/** tied teammates who claimed to go first this turn (the most recent claim first) */
 	tieClaims?: { key: string; order: string[] } | null
 	/** the tie-breaker coin as this turn's order was set (an automatic flip mid-turn must not reshuffle it) */
@@ -1546,6 +1556,18 @@ export function joinMatch(
 		if (req.kind === 'claim' && patch.tieClaims) note(req.pid, 'claims the tie — goes first')
 		if (req.kind === 'power' && req.op === 'snorriInscribe' && patch.power && req.order) note(req.pid, req.target && req.target !== req.pid ? `set ${nameOf(req.target)}'s runes: ${runeLine(req.order)} (host)` : `inscribed the runes: ${runeLine(req.order)}`)
 		if (req.kind === 'power' && req.op === 'snorriSecond' && patch.power) note(req.pid, req.rune ? `Rune Mastery: ${RUNE_NAME[req.rune]} is active too` : 'Rune Mastery: no second rune')
+		if (req.kind === 'power' && req.op === 'takaSwap' && patch.cards && req.idx != null) {
+			const who = req.target ?? req.pid, before = local.cards?.[who], after = patch.cards[who]
+			const from = before ? basicsOf(before).find((i) => !basicsOf(after).includes(i)) : undefined
+			const nm = (i?: number) => (i != null ? heroCards('takahide')[i]?.name : '') ?? ''
+			// face up only when the gold just played turns into another in its slot; a swap in the hand or face down stays secret
+			const open = from != null && before?.pending === from && !after.hidden?.includes(req.idx)
+			note(req.pid, who !== req.pid ? `swapped ${nameOf(who)}'s gold card (host)` : open ? `swapped ${nm(from)} for ${nm(req.idx)}` : 'swapped their gold card (Bushido)')
+		}
+		if (req.kind === 'power' && req.op === 'mateSwap' && patch.cards && req.idx != null) {
+			const before = local.cards?.[req.pid], hero = before?.hero ?? ''
+			note(req.pid, `swapped ${heroCards(hero)[before?.pending ?? -1]?.name ?? 'their card'} for ${heroCards(hero)[req.idx]?.name ?? 'another'} (Takahide)`)
+		}
 		if (req.kind === 'power' && req.op === 'ignatiaFlip' && patch.tieBreaker) note(req.pid, `flips the tie-breaker coin to the ${teamName(patch.tieBreaker)} (Chaos Incarnate)`)
 		if (req.kind === 'removeHero' && patch.defeated) note(req.pid, 'took their hero off the board — back with their next card')
 		if (req.kind === 'clearAround' && patch.pieces) { const n = Object.keys(local.pieces ?? {}).length - Object.keys(patch.pieces).length; note(req.pid, `cleared ${n} token${n === 1 ? '' : 's'} next to them`) }

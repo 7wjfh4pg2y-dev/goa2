@@ -29,6 +29,7 @@
 	/** the host: open a seated player's deck for a free edit (level them up / down) */
 	export let onDeck: ((id: string) => void) | null = null;
 	export let onRunes: ((id: string) => void) | null = null; // Snorri's runes (host fix)
+	export let onGold: ((id: string) => void) | null = null; // Takahide's gold (host fix)
 	/** the host: hand the host role to someone here (tap, then tap again) */
 	export let hostId = '';
 	export let onHost: ((id: string) => void) | null = null;
@@ -67,7 +68,7 @@
 						<span class="gp" class:away={!s.present}>
 							<span class="gface" class:blank={!s.hero} style="--pc:{s.id ? colorOf(s.id) : '#555'}; {s.hero ? portraitCss(s.hero) : ''}"></span>
 							<span class="gn"><b>{s.hero ? heroById(s.hero)?.name ?? '' : 'Open seat'}</b><em>{s.name || '—'}{s.id === clientId ? ' · you' : !s.present && s.name ? ' · away' : ''}{s.id && s.id === hostId ? ' · host' : ''}</em></span>
-							{#if host && onDeck && s.id && s.hero}<button class="gok deck" on:click={() => { onDeck?.(s.id); onClose(); }} title="Edit {s.name || 'their'}'s deck — level up / down, free">Deck</button>{/if}{#if host && onRunes && s.id && s.hero === 'snorri'}<button class="gok deck" on:click={() => { onRunes?.(s.id); onClose(); }} title="Set {s.name || 'their'}'s runes">Runes</button>{/if}
+							{#if host && onDeck && s.id && s.hero}<button class="gok deck" on:click={() => { onDeck?.(s.id); onClose(); }} title="Edit {s.name || 'their'}'s deck — level up / down, free">Deck</button>{/if}{#if host && onRunes && s.id && s.hero === 'snorri'}<button class="gok deck" on:click={() => { onRunes?.(s.id); onClose(); }} title="Set {s.name || 'their'}'s runes">Runes</button>{/if}{#if host && onGold && s.id && s.hero === 'takahide'}<button class="gok deck" on:click={() => { onGold?.(s.id); onClose(); }} title="Swap {s.name || 'their'}'s gold card">Gold</button>{/if}
 							{#if host && onHost && s.present && s.id && s.id !== clientId}<button class="gok hostb" class:arm={hostArm === s.id} on:click={() => hostTap(s.id)} title="Make {s.name} the host">{hostArm === s.id ? 'Sure?' : 'Host'}</button>{/if}
 							{#if host && s.present && s.id && s.id !== clientId}<button class="gkick" on:click={() => onKick(s.id)}>Kick</button>{/if}
 							{#if host && giving && !s.present}<button class="gok give" on:click={() => { onGive(giving ?? '', s.seat); giving = null; }} title="Give this seat to {givingName}">Give</button>

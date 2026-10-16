@@ -13,7 +13,7 @@
 	import type { Order } from './HudDash.svelte';
 	import { heroCards } from '$lib/cards/deck';
 	import { portraitCss } from '$lib/heroes';
-	import { levelOf, statDeltas, type PlayerCardState } from '$lib/cards/cardstate';
+	import { levelOf, statDeltas, isHidden, type PlayerCardState } from '$lib/cards/cardstate';
 
 	/** null = the host without a hero of their own: just a line saying so, and the action pill */
 	export let cs: PlayerCardState | null;
@@ -38,6 +38,8 @@
 	/** Snorri's runes under the slots (public), and whether the Dashboard effects run */
 	export let runes: RuneSlots | null = null;
 	export let runeFx = true;
+	/** Takahide offers you a swap: your card in play glows gold */
+	export let swapOffer = false;
 	export let onMe: () => void = () => {};
 	export let onSlot: (e: Event, t: number) => void = () => {};
 	export let onDiscPick: (i: number) => void = () => {};
@@ -76,7 +78,7 @@
 		<StatBubbles {cs} size={21} cols={3} />
 		<span class="wells">
 			{#each [0, 1, 2, 3] as t (t)}
-				<span class="w" class:now={t === turnIdx} class:glow={fxAt(t)}><TurnSlot heroId={cs.hero} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} label={ROMAN[t]} peekable examinable on:click={(e) => onSlot(e, t)} />{#if runes}<span class="wr"><RuneMark rune={runes.at[t] ?? null} size={13} on={t === turnIdx && !!runes.at[t]} second={!!runes.second && runes.second === runes.at[t]} fx={runeFx} /></span>{/if}</span>
+				<span class="w" class:now={t === turnIdx} class:glow={fxAt(t)} class:swapme={swapOffer && t === turnIdx}><TurnSlot heroId={cs.hero} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} label={ROMAN[t]} veil={isHidden(cs, cs.turns[t])} peekable examinable on:click={(e) => onSlot(e, t)} />{#if runes}<span class="wr"><RuneMark rune={runes.at[t] ?? null} size={13} on={t === turnIdx && !!runes.at[t]} second={!!runes.second && runes.second === runes.at[t]} fx={runeFx} /></span>{/if}</span>
 			{/each}
 			<span class="sep"></span>
 			<span class="w pile">
@@ -146,6 +148,7 @@
 	.w :global(.slot) { aspect-ratio: 1192 / 1664; }
 	.w.now :global(.slot.blank) { border: 1.5px solid var(--brass); color: var(--brass-hi); }
 	.w.now :global(.flip), .w.now :global(.static) { box-shadow: 0 0 0 1.5px var(--brass-hi); border-radius: 4px; }
+	.w.swapme { box-shadow: 0 0 0 1.5px #e3b341, 0 0 10px 2px rgba(227, 179, 65, 0.6); border-radius: 4px; }
 	.w.glow { box-shadow: 0 0 0 1.5px #fff, 0 0 8px 2px var(--tc); border-radius: 4px; }
 	.sep { flex: none; align-self: stretch; width: 1px; margin: 6px 1px; background: var(--line); }
 	.wr { position: absolute; left: 50%; bottom: 0; transform: translate(-50%, 50%); z-index: 1; display: grid; pointer-events: none; }
