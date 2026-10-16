@@ -31,9 +31,17 @@ export function heroCards(heroId: string): HeroCardJson[] {
 	return DECKS[heroId] ?? [];
 }
 
+const EXTRA_AT = new Map<string, number>();
+for (const deck of Object.values(DECKS)) deck.filter((c) => c.extra).forEach((c, i) => EXTRA_AT.set(c.name, i));
+/** where an extra card stands among its hero's extra cards (-1 = unknown) */
+const extraIndex = (card: HeroCardJson) => EXTRA_AT.get(card.name) ?? -1;
+
 /** File slug for a card's background art (e.g. "GreenIA", "Gold", "Ultimate"). */
 export function backgroundSlug(card: HeroCardJson, extraSlotIndex: number | null = null): string {
-	if (card.extra && extraSlotIndex != null) return `Extra${extraSlotIndex + 1}`;
+	// an EXTRA card (e.g. Takahide's Sting like a Bee / Strike like a Tiger) has its own painting: Extra1, Extra2…
+	// in the order the hero's extra cards come
+	const ex = card.extra ? (extraSlotIndex ?? extraIndex(card)) : null;
+	if (ex != null && ex >= 0) return `Extra${ex + 1}`;
 	const c = card.color;
 	if (c === 'GOLD') return card.handicapped ? 'Handicap' : 'Gold';
 	if (c === 'SILVER') return card.handicapped ? 'Handicap' : 'Silver';
