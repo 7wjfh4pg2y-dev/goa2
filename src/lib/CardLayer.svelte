@@ -881,7 +881,7 @@
 		if ($ms.wonBy) return { label: 'Results', sub: 'Game over', kind: 'go', run: onResults };
 		if (ringAsk) return playedHue ? { ...ringAsk, tint: true } : ringAsk;
 		// a played card loaded from its preview: Retrieve (to the hand) / Discard — the ring confirms
-		if (playedArm) { const a = playedArm; return { label: a.kind === 'retrieve' ? 'Retrieve' : 'Discard', sub: heroCards(a.hid)[a.idx]?.name, kind: a.kind === 'retrieve' ? 'go' : 'bad', pulse: true, run: () => runPlayed(a), cancel: () => (playedArm = null) }; }
+		if (playedArm) { const a = playedArm; return { label: a.kind === 'retrieve' ? 'Retrieve' : 'Discard', sub: heroCards(a.hid)[a.idx]?.name, card: true, kind: a.kind === 'retrieve' ? 'go' : 'bad', pulse: true, run: () => runPlayed(a), cancel: () => (playedArm = null) }; }
 		// a tap in the turn order: Nudge them / (host) Skip to their card
 		if (orderArm) {
 			const a = orderArm, who = pidName(a.pid), drop = dropArm;
@@ -891,7 +891,7 @@
 		}
 		if (powerArm) { const a = powerArm; return { label: a.label, sub: a.sub, kind: 'go', pulse: true, run: () => { session.cardAction({ kind: 'power', pid: clientId, op: a.op }); powerArm = null; }, cancel: () => (powerArm = null) }; }
 		// a card chosen in its preview to discard (any time — a defence, or an effect): the ring asks once more
-		if (armed != null && armedKind === 'discard' && mine) { const i = armed; return { label: 'Discard', sub: heroCards(mine.hero)[i]?.name, kind: 'bad', pulse: true, run: () => { defend(i); armed = null; }, cancel: () => (armed = null) }; }
+		if (armed != null && armedKind === 'discard' && mine) { const i = armed; return { label: 'Discard', sub: heroCards(mine.hero)[i]?.name, card: true, kind: 'bad', pulse: true, run: () => { defend(i); armed = null; }, cancel: () => (armed = null) }; }
 		if (iCanRespawn) return { label: 'Respawn', kind: 'team', pulse: true, run: onRespawn };
 		if (iMustEnter) return { label: 'Spawn hero', kind: 'team', pulse: true, run: onEnter };
 		// attacked: Defeated until you discard a card (your defence); then the ring splits — Defended | Defeated
@@ -915,7 +915,7 @@
 		}
 		if (revealed) {
 			// your card names a lingering effect: on your turn the ring asks first (× = no effect), then End turn
-			if (fxAsking && actor === clientId && mine && myTurnCard != null) { const c = myTurnCard; const hero = mine.hero; return { label: 'Effect?', sub: heroCards(hero)[c]?.name, kind: 'go', tint: true, run: () => (examine = { hid: hero, idx: c, pid: clientId }), cancel: fxNo }; }
+			if (fxAsking && actor === clientId && mine && myTurnCard != null) { const c = myTurnCard; const hero = mine.hero; return { label: 'Effect?', sub: heroCards(hero)[c]?.name, card: true, kind: 'go', tint: true, run: () => (examine = { hid: hero, idx: c, pid: clientId }), cancel: fxNo }; }
 			if (actor === clientId) return { label: 'End turn', kind: 'go', tint: true, pulse: true, run: endAct };
 			if (canClaim) return { label: 'Go first', sub: `Tied with ${actorName}`, kind: 'team', run: claimTie, alt: iAmHost ? { label: 'Skip', run: endAct } : undefined };
 			if (actor) return { label: 'Waiting', sub: actorName, kind: 'wait', alt: iAmHost ? { label: 'Skip', run: endAct } : undefined };
@@ -924,7 +924,7 @@
 			return isFinalTurn ? { label: 'Minion battle', kind: 'next', run: startBattle } : { label: 'Next turn', kind: 'next', run: onAdvanceTurn };
 		}
 		if (myReady) return { label: 'Take back', sub: `${readyCount} of ${seatedWithCards.length} in`, kind: 'quiet', run: takeBack };
-		if (armed != null && armedKind === 'commit' && canCommit && mine) return { label: 'Commit', sub: heroCards(mine.hero)[armed]?.name, kind: 'go', pulse: true, run: commitArmed, cancel: () => (armed = null) };
+		if (armed != null && armedKind === 'commit' && canCommit && mine) return { label: 'Commit', sub: heroCards(mine.hero)[armed]?.name, card: true, kind: 'go', pulse: true, run: commitArmed, cancel: () => (armed = null) };
 		if (mine && !mine.hand.length) return { label: 'Waiting', kind: 'wait' };
 		if (!mine) return { label: 'Watching', sub: `${readyCount} of ${seatedWithCards.length} in`, kind: 'wait' };
 		return { label: 'Commit', kind: 'off' };

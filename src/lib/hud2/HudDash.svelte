@@ -2,7 +2,9 @@
 	// kind 'bad' = red (Defeated, Discard); 'next' = the lava lamp (blue and orange: the host moves the game on — Next
 	// turn, Minion battle, Next round); 'lvl' = the trees' colours; everything else is silver unless a card tints it.
 	// split = the ring in two halves, each its own choice (Defended | Defeated)
-	export type Order = { label: string; sub?: string; kind: 'go' | 'quiet' | 'wait' | 'off' | 'team' | 'bad' | 'lvl' | 'next'; pulse?: boolean; run?: () => void; alt?: { label: string; run: () => void }; tint?: boolean;
+	export type Order = { label: string; sub?: string; kind: 'go' | 'quiet' | 'wait' | 'off' | 'team' | 'bad' | 'lvl' | 'next'; pulse?: boolean; run?: () => void;
+		/** the sub line is just the card's name: the phone leaves it out (the ring's colour already says which card) */
+		card?: boolean; alt?: { label: string; run: () => void }; tint?: boolean;
 		/** something is loaded on the ring (an armed card, a board action): the small × unloads it */
 		cancel?: () => void;
 		split?: { left: { label: string; run: () => void }; right: { label: string; run: () => void } } };
