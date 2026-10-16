@@ -159,6 +159,7 @@
 	.tools { flex: none; display: flex; gap: 4px; }
 	.tl, .ts :global(.radbtn), .ts :global(.tokbtn) { position: relative; width: 30px; height: 30px; min-width: 0; border-radius: 50%; display: grid; place-items: center; padding: 0; color: var(--brass-hi); background: rgba(0, 0, 0, 0.3); border: 1px solid var(--line); box-sizing: border-box; }
 	.ts { position: relative; width: 30px; height: 30px; }
+	.ts.pw { margin: 0 6px 0 10px; } /* room for Ignatia's ring round her coin */
 	.ts :global(.tokbtn) { border: 1.5px solid var(--brass); background: radial-gradient(circle at 50% 35%, #3a5f86, #13304f 70%); box-shadow: 0 0 8px 1px rgba(244, 223, 168, 0.3); }
 	.ts :global(.radbtn svg), .ts :global(.tokbtn img) { width: 16px; height: 16px; }
 	.ts :global(.radbtn b) { position: absolute; right: -4px; bottom: -4px; min-width: 13px; height: 13px; border-radius: 7px; display: grid; place-items: center; font-weight: 400; font-size: 8px; background: #0a1a2c; border: 1px solid var(--line); }

@@ -2,10 +2,11 @@
 	// Ignatia's dash button: her own copy of the tie-breaker coin, so she always sees which half of her cards
 	// applies (the blue-symbol text while the coin shows the Titans, the orange one while it shows the Atlanteans).
 	// Equilibrium (her silver) = both halves for the rest of the round: a split coin, half Atlantean, half Titan, in
-	// orange and blue flames (the Dashboard effect switch). When the round ends the split goes and the coin shows the
+	// a ring of ten tomoe commas, fire and water (their pulse = the Dashboard effect switch). When the round ends the split goes and the coin shows the
 	// real coin again — flipping first if the real one changed meanwhile. With her ultimate (Chaos Incarnate) the coin
 	// has a purple rim and, on her own turn, can be pressed once to flip the real coin (the action ring confirms).
 	import { onDestroy } from 'svelte';
+	import { TOMOE, TOMOE_BODY, TOMOE_INK, TOMOE_MID } from './tomoe';
 	type Team = 'orange' | 'blue';
 	export let face: Team = 'orange';
 	export let split = false;
@@ -39,9 +40,16 @@
 </script>
 
 <button class="icoin" class:split class:ult class:ready class:used class:fx={flames} style="--s:{size}px" on:click={() => ready && onPress()} title={tip} aria-label={tip}>
-	{#if split && flames}
-		<span class="flames" aria-hidden="true">
-			{#each [0, 1, 2, 3, 4, 5, 6, 7] as k (k)}<i class="fl {k < 4 ? 'o' : 'b'}" style="--k:{k}"></i>{/each}
+	{#if split}
+		<!-- the tomoe ring: ten commas all round, fire on the Atlantean half, water on the Titan half -->
+		<span class="ring" aria-hidden="true">
+			{#each TOMOE as c, k (k)}
+				<svg class="tm" viewBox="0 0 200 200" style="--k:{k}">
+					<path d={c.d} fill={c.fire ? TOMOE_BODY.fire : TOMOE_BODY.water} stroke={c.fire ? TOMOE_INK.fire : TOMOE_INK.water} stroke-width="2.4" stroke-linejoin="round" />
+					<circle cx={c.head[0]} cy={c.head[1]} r={c.r * 0.55} fill={c.fire ? TOMOE_MID.fire : TOMOE_MID.water} />
+					<path d={c.swirl} fill="none" stroke={c.fire ? TOMOE_INK.fire : TOMOE_INK.water} stroke-width="1.6" stroke-linecap="round" />
+				</svg>
+			{/each}
 		</span>
 	{/if}
 	<span class="glow" aria-hidden="true"></span>
@@ -57,7 +65,7 @@
 <style>
 	.icoin { position: relative; width: var(--s); height: var(--s); padding: 0; border: 0; border-radius: 50%; background: none; cursor: default; flex: none; }
 	.icoin.ready { cursor: pointer; }
-	.face, .halves, .glow, .rim, .flames { position: absolute; inset: 0; border-radius: 50%; }
+	.face, .halves, .glow, .rim, .ring { position: absolute; inset: 0; border-radius: 50%; }
 	.face img, .halves img { display: block; width: 100%; height: 100%; border-radius: 50%; }
 	.face { box-shadow: 0 0 0 2.5px #0a1a2c, 0 0 0 3.5px #d8b36a, 0 5px 12px rgba(0, 0, 0, 0.55); }
 	.face.flip { animation: flip 0.36s ease-in-out; }
@@ -70,26 +78,18 @@
 	.hr { clip-path: inset(0 0 0 50%); }
 	.seam { position: absolute; left: 50%; top: 4%; bottom: 4%; width: 2px; margin-left: -1px; background: linear-gradient(180deg, transparent, #fff8e0 30%, #fff8e0 70%, transparent); box-shadow: 0 0 6px 1px rgba(255, 240, 200, 0.8); }
 	/* a still two-coloured glow under the split coin (no motion: it shows with the flames off too) */
-	.glow { opacity: 0; transition: opacity 0.3s ease; box-shadow: -6px 0 14px 2px rgba(239, 125, 34, 0.75), 6px 0 14px 2px rgba(47, 127, 230, 0.75); }
+	.glow { opacity: 0; transition: opacity 0.3s ease; box-shadow: -5px 0 12px 1px rgba(239, 125, 34, 0.45), 5px 0 12px 1px rgba(47, 127, 230, 0.45); }
 	.split .glow { opacity: 1; }
-	/* the flames: tongues round the rim, orange on the left half, blue on the right; transform + opacity only */
-	.flames { inset: -22%; pointer-events: none; }
-	/* each tongue stands on the coin's centre (its foot = the turning point), hidden under the coin but its tip */
-	.fl { position: absolute; left: 50%; top: 50%; width: 30%; height: 44%; margin: -44% 0 0 -15%; border-radius: 50% 50% 45% 45% / 70% 70% 30% 30%;
-		transform-origin: 50% 100%; opacity: 0.85;
-		--a: calc(-157.5deg + var(--k) * 37.5deg); }
-	.fl.o { background: radial-gradient(60% 75% at 50% 78%, #fff1b8 0%, #ffb347 35%, #ef7d22 62%, rgba(239, 125, 34, 0) 100%); }
-	.fl.b { background: radial-gradient(60% 75% at 50% 78%, #e6f6ff 0%, #8fd0ff 35%, #2f7fe6 62%, rgba(47, 127, 230, 0) 100%); --a: calc(45deg + (var(--k) - 4) * 37.5deg); }
-	.fl { animation: lick 1.1s ease-in-out infinite; animation-delay: calc(var(--k) * -0.17s); }
-	@keyframes lick {
-		0%, 100% { transform: rotate(var(--a)) translateY(-40%) scale(0.85, 0.8); opacity: 0.55; }
-		50% { transform: rotate(var(--a)) translateY(-48%) scale(1, 1.15); opacity: 0.95; }
-	}
+	/* the tomoe ring: drawn in a box twice the coin, under it; a soft pulse runs round the ten commas (Dashboard switch) */
+	.ring { inset: -50%; border-radius: 0; pointer-events: none; }
+	.tm { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; transform-origin: 50% 50%; }
+	.fx .tm { animation: tpulse 2s ease-in-out infinite; animation-delay: calc(var(--k) * -0.2s); }
+	@keyframes tpulse { 0%, 100% { transform: scale(0.96); opacity: 0.85; } 50% { transform: scale(1.04); opacity: 1; } }
 	/* the ultimate: a purple rim; ready to flip = it breathes (opacity), used this turn = the coin dims */
 	.rim { box-shadow: 0 0 0 3.5px #7a4292, 0 0 10px 2px rgba(160, 90, 220, 0.6); }
 	.ready.fx .rim { animation: breathe 1.6s ease-in-out infinite; }
 	@keyframes breathe { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
 	.used .face, .used .halves { opacity: 0.55; }
 	.used.split .halves { opacity: 0.55; }
-	@media (prefers-reduced-motion: reduce) { .fl, .ready.fx .rim { animation: none; } }
+	@media (prefers-reduced-motion: reduce) { .tm, .ready.fx .rim { animation: none; } }
 </style>
