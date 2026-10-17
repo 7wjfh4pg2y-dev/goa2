@@ -9,10 +9,11 @@
 	import type { Readable } from 'svelte/store';
 	import type { MatchSession, MatchState, Player } from '$lib/match';
 	import { teamForSeat, colorHex, battlePatch, levelPatch, canRespawn, turnPlan, claimable, actingIdx, actorOf, turnOrder, teamOf, turnKey as keyOfTurn } from '$lib/match';
-	import { hasPower, equilibrium, canFlip, flipUsed, runesOf, secondRune, canInscribe, canSecond, RUNES, takaSwapKind, mateOffer, canReverse, nextTurnKey, reversedTurn, warpOffer, warpSlots, capsuleOffer, RE_REVERSE, RE_TEMPORAL, type Rune, type TurnCtx } from '$lib/heropower';
+	import { hasPower, equilibrium, canFlip, flipUsed, runesOf, secondRune, canInscribe, canSecond, RUNES, takaSwapKind, mateOffer, canReverse, nextTurnKey, reversedTurn, warpOffer, warpSlots, capsuleOffer, RE_REVERSE, RE_TEMPORAL, nkPower, laughed, laughTargets, nkSwapsLeft, nkSlots, doubtNow, crackNow, pieceDist, type NkColor, type NkEnemy, type Rune, type TurnCtx } from '$lib/heropower';
 	import EmmittClock from '$lib/hud2/EmmittClock.svelte';
 	import TakaGold from '$lib/hud2/TakaGold.svelte';
 	import IgnatiaCoin from '$lib/hud2/IgnatiaCoin.svelte';
+	import NebkherEye from '$lib/hud2/NebkherEye.svelte';
 	import SnorriRunes from '$lib/hud2/SnorriRunes.svelte';
 	import RunePanel from '$lib/hud2/RunePanel.svelte';
 	import RuneMark from '$lib/hud2/RuneMark.svelte';
@@ -270,7 +271,34 @@
 	// Takahide: a gold swap open now (his gold or Bushido acting); his teammates: a swap offered by his red card
 	$: tkKind = myPower === 'takahide' ? takaSwapKind($ms, clientId, pctx) : null;
 	$: mateOff = mine ? mateOffer($ms, clientId, pctx) : null;
-	let powerArm: { op: 'ignatiaFlip' | 'snorriInscribe' | 'takaSwap' | 'mateSwap'; label: string; sub?: string; order?: Rune[]; target?: string; idx?: number; src?: 'hand' | 'discard' } | null = null;
+	let powerArm: { op: 'ignatiaFlip' | 'snorriInscribe' | 'takaSwap' | 'mateSwap' | 'nkLaugh' | 'nkSwap'; label: string; sub?: string; order?: Rune[]; target?: string; idx?: number; src?: 'hand' | 'discard'; slots?: [number, number] } | null = null;
+	// NebKher: the power his card acting opens (Laughter · Mind Grip / Probe · a colour to name · the Crack), the enemy
+	// heroes his panel lists, the colour he named (public) and his Crack line
+	$: nkKind = myPower === 'nebkher' && !battlePhase ? nkPower($ms, clientId, pctx) : null;
+	$: nkLaughed = myPower === 'nebkher' && laughed($ms, clientId, pctx);
+	$: nkTargets = nkKind === 'laugh' && mine?.ultimate ? laughTargets($ms, clientId, pctx) : [];
+	$: nkDoubt = myPower === 'nebkher' ? doubtNow($ms, clientId, pctx) : null;
+	$: nkCrackDir = myPower === 'nebkher' ? (crackNow($ms, pctx)?.pid === clientId ? crackNow($ms, pctx)!.dir : null) : null;
+	$: nkReach = nkKind && mine ? nkReachOf(mine, nkKind) : 0;
+	$: nkEnemies = nkKind === 'laugh' || nkKind === 'grip' ? nkEnemyList($ms, pctx) : [];
+	$: nkLeft = nkKind === 'laugh' ? nkSwapsLeft($ms, clientId, pctx) : 0;
+	/** Mind Grip / Probe: the card's range + Range items; Laughter: its radius + Area items */
+	function nkReachOf(cs: PlayerCardState, kind: string) { const c = heroCards('nebkher')[cs.pending ?? -1]; const d = statDeltas(cs); return (c?.modifierValue ?? 0) + ((kind === 'grip' ? d.range : d.radius) ?? 0); }
+	function nkEnemyList(st: MatchState, ctx: TurnCtx): NkEnemy[] {
+		const me = ctx.teams?.[clientId];
+		return Object.keys(st.cards ?? {}).filter((p) => ctx.teams?.[p] && ctx.teams[p] !== me).map((p) => {
+			const cs = st.cards![p], prev = ctx.turnIdx > 0 ? cs.turns[ctx.turnIdx - 1] ?? null : null;
+			return { pid: p, hero: cs.hero, name: `${heroName(cs.hero)} · ${pidName(p)}`, dist: pieceDist(st, clientId, p), prev: prev != null && prev >= 0 ? prev : null, prevHidden: prev != null && isHidden(cs, prev),
+				slots: nkSlots(cs, ctx.turnIdx).map((t) => ({ t, idx: cs.turns[t] as number, hidden: isHidden(cs, cs.turns[t]) })) };
+		});
+	}
+	function nkArmLaugh() { powerArm = { op: 'nkLaugh', label: 'Laugh', sub: nkTargets.length ? `${nkTargets.length} must discard` : 'Diabolically' }; armed = null; playedArm = null; orderArm = null; }
+	function nkArmSwap(t: string, a: number, b: number) { powerArm = { op: 'nkSwap', label: 'Swap cards', sub: heroName(cards[t]?.hero ?? ''), target: t, slots: [a, b] }; armed = null; playedArm = null; orderArm = null; }
+	const nkName = (c: NkColor) => session.cardAction({ kind: 'power', pid: clientId, op: 'nkName', color: c });
+	const nkCrack = (d: number) => session.cardAction({ kind: 'power', pid: clientId, op: 'nkCrack', dir: d });
+	const nkRead = (h: string, i: number) => (examine = { hid: h, idx: i });
+	$: if (powerArm?.op === 'nkLaugh' && (nkKind !== 'laugh' || nkLaughed)) powerArm = null;
+	$: if (powerArm?.op === 'nkSwap' && (nkKind !== 'laugh' || nkLeft <= 0)) powerArm = null;
 	$: if (powerArm && powerArm.op === 'takaSwap' && !powerArm.target && !tkKind) powerArm = null;
 	$: if (powerArm && powerArm.op === 'mateSwap' && !mateOff) powerArm = null;
 	// the gold panel hands over the gold to swap in (a stable function: the panel calls it reactively)
@@ -932,7 +960,7 @@
 	$: orderTop = cTop ? 62 : 100;
 	$: colTop = orderTop + (cOrder ? 30 : 60) + (cOrder ? 26 : 34);
 	// the Chronicle in the corner: beside the dash when there's room, else just above its left end
-	$: DASH_W = 900 + (myPower === 'takahide' ? 84 : myPower === 'snorri' ? 100 : myPower === 'emmitt' ? 104 : myPower === 'ignatia' ? 92 : myPower ? 60 : 0); // the dash's width (design px) without the ultimate's compartment (+ a 4★ hero's button)
+	$: DASH_W = 900 + (myPower === 'takahide' ? 84 : myPower === 'snorri' ? 100 : myPower === 'emmitt' ? 104 : myPower === 'ignatia' ? 92 : myPower === 'nebkher' ? 136 : myPower ? 60 : 0); // the dash's width (design px) without the ultimate's compartment (+ a 4★ hero's button)
 	$: myUltOpen = !!mine && myUlt >= 0 && (mine.ultimate || ultReady);
 	$: logRoom = canvasW / 2 - DASH_W / 2 - 14 - (myUltOpen ? 96 : 0) - 36;
 	$: logBeside = logRoom >= 220;
@@ -999,7 +1027,7 @@
 			if (nudgeLeft > 0) return { label: 'Nudge', sub: `in ${Math.ceil(nudgeLeft / 1000)} s`, kind: 'off', cancel: drop };
 			return { label: 'Nudge', sub: who, kind: 'go', pulse: true, run: () => { session.nudge(a.pid); drop(); }, cancel: drop };
 		}
-		if (powerArm) { const a = powerArm; return { label: a.label, sub: a.sub, kind: 'go', pulse: true, card: a.op === 'takaSwap' || a.op === 'mateSwap', run: () => { session.cardAction({ kind: 'power', pid: clientId, op: a.op, order: a.order, target: a.target, idx: a.idx, src: a.src }); powerArm = null; if (a.target) { runeFor = null; goldFor = null; } }, cancel: () => { powerArm = null; if (a.target) { runeFor = null; goldFor = null; } } }; }
+		if (powerArm) { const a = powerArm; return { label: a.label, sub: a.sub, kind: 'go', pulse: true, card: a.op === 'takaSwap' || a.op === 'mateSwap', run: () => { session.cardAction({ kind: 'power', pid: clientId, op: a.op, order: a.order, target: a.target, idx: a.idx, src: a.src, slots: a.slots }); powerArm = null; if (a.target) { runeFor = null; goldFor = null; } }, cancel: () => { powerArm = null; if (a.target) { runeFor = null; goldFor = null; } } }; }
 		// Time Warp names you: pick a resolved slot, then the ring swaps it in
 		if (warpOff && mine) {
 			if (warpPick != null) { const t = warpPick, i = mine.turns[t]; return { label: 'Swap in', sub: i != null ? heroCards(mine.hero)[i]?.name : '', card: true, kind: 'go', pulse: true, run: () => sendWarp(t), cancel: dropWarpPick }; }
@@ -1017,7 +1045,7 @@
 		if (myForced) return myForced.die
 			? { label: 'Defeated', sub: 'or discard', kind: 'bad', run: () => forceAnswer(clientId, 'defeated') }
 			: mine && mine.hand.length ? { label: 'Discard', sub: 'Pick a card', kind: 'wait' } : { label: 'No card', kind: 'go', run: () => forceAnswer(clientId, 'none') };
-		if (myForcing) { const t = myForcing[0]; return { label: 'Waiting', sub: heroName(cards[t]?.hero ?? ''), kind: 'wait', cancel: () => forceAnswer(t, 'cancel') }; }
+		if (myForcing) { const t = myForcing[0], more = Object.values($ms.forced ?? {}).filter((f) => f.by === clientId).length - 1; return { label: 'Waiting', sub: heroName(cards[t]?.hero ?? '') + (more > 0 ? ` +${more}` : ''), kind: 'wait', cancel: () => forceAnswer(t, 'cancel') }; }
 		if (spawnWaiting.length) return { label: 'Waiting', sub: waitFor(spawnWaiting), kind: 'wait' };
 		if (battlePhase) {
 			if ($ms.battle?.remove) return { label: 'Waiting', sub: teamName($ms.battle.loser), kind: 'wait' };
@@ -1067,6 +1095,9 @@
 		<TakaGold {size} cs={mine} kind={tkKind} {turnIdx} fx={dashFx} phone={mobile} onPick={tkPick} />
 	{:else if myPower === 'emmitt'}
 		<EmmittClock {size} phone={mobile} mode={emMode} fx={dashFx} />
+	{:else if myPower === 'nebkher'}
+		<NebkherEye {size} phone={mobile} fx={dashFx} ult={!!mine?.ultimate} kind={nkKind} doubt={nkDoubt} enemies={nkEnemies} laughed={nkLaughed} swapsLeft={nkLeft}
+			targets={nkTargets.map((t) => heroName(cards[t]?.hero ?? ''))} reach={nkReach} crackDir={nkCrackDir} onLaugh={nkArmLaugh} onSwap={nkArmSwap} onName={nkName} onCrack={nkCrack} onRead={nkRead} />
 	{:else if myPower === 'snorri'}
 		<SnorriRunes {size} runes={snRunes} {turnIdx} second={snSecond} ult={!!mine?.ultimate} canEdit={snEdit} canSecond={snCan2} fx={dashFx} phone={mobile} onDraft={snDraft} onSecond={snPickSecond} />
 	{/if}

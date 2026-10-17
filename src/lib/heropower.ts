@@ -3,7 +3,9 @@
 // button itself is private to its player, what it changes is public. Pure functions with no import of match.ts (it
 // calls into this file): the turn facts they need come in as a `TurnCtx`.
 import { heroCards } from './cards/deck'
-import { basicsOf, goldsOf, silverIdx, PASS, type PlayerCardState } from './cards/cardstate'
+import { basicsOf, goldsOf, silverIdx, statDeltas, PASS, type PlayerCardState } from './cards/cardstate'
+import { hexCube, cubeDist } from './zones'
+import { hexNeighbour } from './board/hexgeo'
 
 export type Team = 'orange' | 'blue'
 /** one player's power state; each hero uses its own fields */
@@ -31,8 +33,20 @@ export type PowerState = {
 	warp?: { key: string; at: number; target: string }
 	/** anyone: Emmitt's Time Capsule / Future Proof taken back (`key:at`) — once per card */
 	cap?: string
+	/** NebKher: he laughed diabolically for this acting card (`key:at`) — once per card */
+	laugh?: string
+	/** NebKher: the card swaps Diabolical Laughter made for this acting card (up to three) */
+	nsw?: { mark: string; n: number }
+	/** NebKher: the colour he named (Imbue Doubt…) and the turn he named it in — shown till the next turn ends */
+	doubt?: { key: string; color: NkColor }
+	/** NebKher: the Crack in Reality / Shift Reality line for this turn: through `hex`, along axis `dir` (0–2) */
+	crack?: { key: string; hex: string; dir: number }
 }
-export type PowerReq = { kind: 'power'; pid: string; op: 'ignatiaFlip' | 'snorriInscribe' | 'snorriSecond' | 'takaSwap' | 'mateSwap' | 'emReverse' | 'emWarp' | 'warpSwap' | 'capsule';
+export type NkColor = 'GOLD' | 'SILVER' | 'RED' | 'BLUE' | 'GREEN'
+export const NK_COLORS: NkColor[] = ['GOLD', 'SILVER', 'RED', 'BLUE', 'GREEN']
+/** an enemy hero as NebKher's panel lists them */
+export type NkEnemy = { pid: string; hero: string; name: string; dist: number | null; prev: number | null; prevHidden: boolean; slots: { t: number; idx: number; hidden: boolean }[] }
+export type PowerReq = { kind: 'power'; pid: string; op: 'ignatiaFlip' | 'snorriInscribe' | 'snorriSecond' | 'takaSwap' | 'mateSwap' | 'emReverse' | 'emWarp' | 'warpSwap' | 'capsule' | 'nkLaugh' | 'nkSwap' | 'nkName' | 'nkCrack';
 	/** takaSwap: the gold card from his deck to take; mateSwap: the hand / discard card to swap in; warpSwap: the turn slot (0–3) */
 	idx?: number
 	/** mateSwap: where the swapped-in card comes from */
@@ -44,7 +58,13 @@ export type PowerReq = { kind: 'power'; pid: string; op: 'ignatiaFlip' | 'snorri
 	/** the host fixing another player's runes / gold; emWarp: the enemy hero */
 	target?: string
 	/** emReverse (host): switch the reversal on / off */
-	on?: boolean }
+	on?: boolean
+	/** nkSwap: the two turn slots (0–3) of the target to swap */
+	slots?: [number, number]
+	/** nkName: the colour named */
+	color?: NkColor
+	/** nkCrack: the axis of the line (0–2) */
+	dir?: number }
 /** what the engine knows about the turn in play */
 export type TurnCtx = { key: string; round: number; turnIdx: number; order: string[]; at: number; tieBreaker: Team; revealed: boolean
 	/** each player's team (for "a friendly hero") */
@@ -52,10 +72,11 @@ export type TurnCtx = { key: string; round: number; turnIdx: number; order: stri
 type S = { cards?: Record<string, PlayerCardState>; power?: Record<string, PowerState>; effects?: { pid: string; hero: string; idx: number }[]; host?: string
 	lastClash?: { id: string; kind: string; by: string; out: string } | null; lastDefeat?: { id: string; by: string } | null
 	attacks?: Record<string, unknown>; forced?: Record<string, unknown>
-	turnDisc?: { key: string; by: Record<string, number[]> } | null }
+	turnDisc?: { key: string; by: Record<string, number[]> } | null
+	pieces?: Record<string, { id: string; hex: string; kind?: string; team?: string; token?: string; owner?: string }> }
 
 /** heroes with their own dash button */
-export const POWER_HEROES = ['ignatia', 'snorri', 'takahide', 'emmitt']
+export const POWER_HEROES = ['ignatia', 'snorri', 'takahide', 'emmitt', 'nebkher']
 export const hasPower = (hero: string | undefined | null) => !!hero && POWER_HEROES.includes(hero)
 
 // ── Ignatia ──
@@ -213,7 +234,7 @@ export function readyForWar(cs: PlayerCardState, applied: boolean): PlayerCardSt
 // back every card they discarded this turn. Temporal Punch / Slam / Judgment: the defender uses Initiative (a note).
 const EMM = 'emmitt'
 // (the card text, with the '>' line marks of its 'Choose one' options taken out)
-const cardText = (cs: PlayerCardState | undefined, idx: number | null | undefined) => (cs && idx != null && idx >= 0 ? (heroCards(cs.hero)[idx]?.description ?? '').replace(/>/g, ' ') : '')
+export const cardText = (cs: PlayerCardState | undefined, idx: number | null | undefined) => (cs && idx != null && idx >= 0 ? (heroCards(cs.hero)[idx]?.description ?? '').replace(/>/g, ' ') : '')
 /** the card Emmitt has acting now, by what it says */
 export const emActing = (s: S, ctx: TurnCtx, re: RegExp): string | null => {
 	const by = ctx.order[ctx.at]
@@ -267,8 +288,117 @@ export function trackDiscards(prev: S, next: S, key: string): S['turnDisc'] | un
 	return next.turnDisc && next.turnDisc.key !== key ? null : undefined
 }
 
+// ── NebKher ──
+// Diabolical Laughter (his silver): he laughs, then up to three times swaps with an Illusion / places one (board moves)
+// or swaps two RESOLVED cards of an enemy hero (here: two of their earlier turn slots this round; effects stay on).
+// What the Hell Are You? (ultimate): after he laughs, every enemy hero in radius (5 + his Area items) discards a card or
+// is defeated — each a forced discard of its own (× drops one, e.g. for an immune hero). Mind Grip / Probe (golds): he
+// reads the card in an enemy hero's previous turn slot and performs it. Imbue Doubt · Time to Reconsider · An Illusion
+// of Choice: he names a colour (public; the discard itself is the players' business). Crack in Reality / Shift Reality:
+// a straight line of spaces through his space, drawn on everyone's board for this turn. Illusionary Force / Army: while
+// that effect is on, his Illusions next to the hero he attacks count as his melee minions (−1 defence each; match.ts).
+export const NEB = 'nebkher'
+/** the card `hero` has acting now, by what it says (the actor's pid, or null) */
+export const heroActing = (s: S, ctx: TurnCtx, hero: string, re: RegExp): string | null => {
+	const by = ctx.order[ctx.at]
+	const cs = by ? s.cards?.[by] : undefined
+	return ctx.revealed && cs?.hero === hero && re.test(cardText(cs, cs.pending)) ? by : null
+}
+export const RE_LAUGH = /laugh\s+diabolically\s*;/i
+export const RE_GRIP = /previous\s+turn\s+slot\s+of\s+an\s+enemy/i
+export const RE_NAME = /name\s+a\s+colou?r/i
+export const RE_CRACK = /straight\s+line\s+of\s+spaces\s+drawn\s+through\s+your\s+space/i
+export const RE_ILLUSION_FORCE = /illusion\s+tokens\s+count\s+as\s+both\s+tokens\s+and\s+friendly\s+melee\s+minions/i
+/** which of his powers the card acting now opens (null = none) */
+export function nkPower(s: S, pid: string, ctx: TurnCtx): 'laugh' | 'grip' | 'name' | 'crack' | null {
+	if (s.cards?.[pid]?.hero !== NEB) return null
+	if (heroActing(s, ctx, NEB, RE_LAUGH) === pid) return 'laugh'
+	if (heroActing(s, ctx, NEB, RE_GRIP) === pid) return 'grip'
+	if (heroActing(s, ctx, NEB, RE_NAME) === pid) return 'name'
+	if (heroActing(s, ctx, NEB, RE_CRACK) === pid) return 'crack'
+	return null
+}
+const markOf = (ctx: TurnCtx) => `${ctx.key}:${ctx.at}`
+export const laughed = (s: S, pid: string, ctx: TurnCtx) => s.power?.[pid]?.laugh === markOf(ctx)
+/** spaces between two board pieces (null when either is off the board) */
+export const pieceDist = (s: S, a: string, b: string): number | null => {
+	const pa = s.pieces?.[a], pb = s.pieces?.[b]
+	if (!pa || !pb) return null
+	try { return cubeDist(hexCube(pa.hex), hexCube(pb.hex)) } catch { return null }
+}
+/** his ultimate's radius: the card's 5, plus his Area items */
+export const nkUltRadius = (cs: PlayerCardState) => 5 + (statDeltas(cs).radius ?? 0)
+/** the enemy heroes his laugh would make discard now (on the board, in radius, not already forced) */
+export function laughTargets(s: S, pid: string, ctx: TurnCtx): string[] {
+	const cs = s.cards?.[pid], me = ctx.teams?.[pid]
+	if (!cs || !cs.ultimate || !me) return []
+	const r = nkUltRadius(cs)
+	return Object.keys(s.cards ?? {}).filter((t) => {
+		const team = ctx.teams?.[t]
+		if (!team || team === me || s.pieces?.[t]?.kind !== 'hero' || s.forced?.[t]) return false
+		const d = pieceDist(s, pid, t)
+		return d != null && d <= r
+	})
+}
+/** he may laugh now: his silver is the card acting and he hasn't laughed for it yet */
+export const canLaugh = (s: S, pid: string, ctx: TurnCtx) => nkPower(s, pid, ctx) === 'laugh' && !laughed(s, pid, ctx)
+/** an enemy hero's resolved cards Laughter may swap: their earlier turn slots this round */
+export const nkSlots = (cs: PlayerCardState | undefined, turnIdx: number) => warpSlots(cs, turnIdx)
+/** card swaps left for this Laughter (three choices in all; only the swaps are counted) */
+export const nkSwapsLeft = (s: S, pid: string, ctx: TurnCtx) => { const n = s.power?.[pid]?.nsw; return 3 - (n && n.mark === markOf(ctx) ? n.n : 0) }
+/** the turn after `key` ("r-t" → "r-(t+1)"; none after the 4th) */
+const keyAfter = (key: string) => { const [r, t] = key.split('-').map(Number); return t < 4 ? `${r}-${t + 1}` : null }
+/** the colour he named, while it still matters (the turn he named it and the next) */
+export function doubtNow(s: S, pid: string, ctx: TurnCtx): NkColor | null {
+	const d = s.power?.[pid]?.doubt
+	return d && (d.key === ctx.key || keyAfter(d.key) === ctx.key) ? d.color : null
+}
+/** the Crack line in play this turn, if any */
+export function crackNow(s: S, ctx: TurnCtx): { pid: string; hex: string; dir: number } | null {
+	for (const pid in s.power ?? {}) { const c = s.power![pid]?.crack; if (c && c.key === ctx.key) return { pid, hex: c.hex, dir: c.dir } }
+	return null
+}
+/** the spaces of a straight line through `hex` along axis `dir` (0 = NE–SW, 1 = E–W, 2 = SE–NW), on the map */
+export function lineHexes(hex: string, dir: number, onMap: (h: string) => boolean): string[] {
+	const out = [hex]
+	for (const k of [dir, dir + 3]) { let h = hex; for (let i = 0; i < 40; i++) { h = hexNeighbour(h, k); if (!onMap(h)) break; out.push(h) } }
+	return out
+}
+/** Illusionary Force / Army: an effect from that card of his is on now */
+export const illusionForce = (s: S, pid: string) => (s.effects ?? []).some((e) => e.pid === pid && e.hero === NEB && RE_ILLUSION_FORCE.test((heroCards(NEB)[e.idx]?.description ?? '').replace(/>/g, ' ')))
+
 /** the host applies a power request: the patch (empty = refused) */
 export function applyPower(s: S & { tieTurn?: { key: string; coin: Team } | null; acting?: { key: string; idx: number; done?: string[]; pin?: string[] } | null }, req: PowerReq, ctx: TurnCtx) {
+	if (req.op === 'nkLaugh') {
+		if (!canLaugh(s, req.pid, ctx)) return {}
+		const out: Record<string, unknown> = { power: { ...s.power, [req.pid]: { ...s.power?.[req.pid], laugh: markOf(ctx) } } }
+		const targets = laughTargets(s, req.pid, ctx)
+		if (targets.length) {
+			const at = Date.now()
+			out.forced = { ...(s.forced ?? {}), ...Object.fromEntries(targets.map((t) => [t, { by: req.pid, die: true, at }])) }
+		}
+		return out
+	}
+	if (req.op === 'nkSwap') {
+		const t = req.target, sl = req.slots
+		if (nkPower(s, req.pid, ctx) !== 'laugh' || !t || !sl || sl[0] === sl[1] || nkSwapsLeft(s, req.pid, ctx) <= 0) return {}
+		if (!ctx.teams?.[t] || ctx.teams[t] === ctx.teams?.[req.pid]) return {}
+		const cs = s.cards?.[t], ok = nkSlots(cs, ctx.turnIdx)
+		if (!cs || !ok.includes(sl[0]) || !ok.includes(sl[1])) return {}
+		const turns = cs.turns.slice();
+		[turns[sl[0]], turns[sl[1]]] = [turns[sl[1]], turns[sl[0]]]
+		const n = s.power?.[req.pid]?.nsw, mark = markOf(ctx)
+		return { cards: { ...s.cards, [t]: { ...cs, turns } }, power: { ...s.power, [req.pid]: { ...s.power?.[req.pid], nsw: { mark, n: (n?.mark === mark ? n.n : 0) + 1 } } } }
+	}
+	if (req.op === 'nkName') {
+		if (nkPower(s, req.pid, ctx) !== 'name' || !req.color || !NK_COLORS.includes(req.color)) return {}
+		return { power: { ...s.power, [req.pid]: { ...s.power?.[req.pid], doubt: { key: ctx.key, color: req.color } } } }
+	}
+	if (req.op === 'nkCrack') {
+		const hex = s.pieces?.[req.pid]?.hex
+		if (nkPower(s, req.pid, ctx) !== 'crack' || !hex || req.dir == null || ![0, 1, 2].includes(req.dir)) return {}
+		return { power: { ...s.power, [req.pid]: { ...s.power?.[req.pid], crack: { key: ctx.key, hex, dir: req.dir } } } }
+	}
 	if (req.op === 'emReverse') {
 		const who = req.target ?? req.pid
 		const byHost = req.pid === s.host && req.target != null

@@ -13,7 +13,7 @@
 // broken by `updatedAt`) wins. For a handful of players nudging a shared
 // tracker this is robust and easy to reason about.
 
-import { applyPower, syncPowers, takaHit, hasPower, runeLine, RUNE_NAME, reversedTurn, trackDiscards, type PowerReq, type PowerState, type TurnCtx } from './heropower'
+import { applyPower, syncPowers, takaHit, hasPower, runeLine, RUNE_NAME, reversedTurn, trackDiscards, illusionForce, NEB, type PowerReq, type PowerState, type TurnCtx } from './heropower'
 import { teamName, aMinion } from './teams'
 import { hexCube, cubeDist } from './zones'
 import { tokenExpiry, sweepTokens, statusFrom, isTurret } from './tokens'
@@ -1598,6 +1598,10 @@ export function joinMatch(
 		if (req.kind === 'power' && req.op === 'emWarp' && patch.power && req.target) note(req.pid, `warps time: ${nameOf(req.target)} swaps their card in play for a resolved one`)
 		if (req.kind === 'power' && req.op === 'warpSwap' && patch.cards && req.idx != null) { const b = local.cards?.[req.pid], h = b?.hero ?? ''; note(req.pid, `swapped ${heroCards(h)[b?.pending ?? -1]?.name ?? 'their card'} for ${heroCards(h)[b?.turns[req.idx] ?? -1]?.name ?? 'a resolved card'} (Time Warp)`) }
 		if (req.kind === 'power' && req.op === 'capsule' && patch.cards) { const n = (local.cards?.[req.pid]?.discard.length ?? 0) - (patch.cards[req.pid]?.discard.length ?? 0); note(req.pid, `took back ${n} discarded card${n === 1 ? '' : 's'} (Time Capsule)`) }
+		if (req.kind === 'power' && req.op === 'nkLaugh' && patch.power) { const f = Object.keys(patch.forced ?? {}).filter((t) => !local.forced?.[t]); note(req.pid, f.length ? `laughs diabolically — ${f.map(nameOf).join(', ')} must discard or be defeated! (What the Hell Are You?)` : 'laughs diabolically') }
+		if (req.kind === 'power' && req.op === 'nkSwap' && patch.cards && req.target && req.slots) { const c = local.cards?.[req.target], h = c?.hero ?? ''; const nm = (t: number) => heroCards(h)[c?.turns[t] ?? -1]?.name ?? 'a card'; note(req.pid, `swapped ${nameOf(req.target)}'s ${nm(req.slots[0])} (turn ${req.slots[0] + 1}) and ${nm(req.slots[1])} (turn ${req.slots[1] + 1}) — Diabolical Laughter`) }
+		if (req.kind === 'power' && req.op === 'nkName' && patch.power && req.color) note(req.pid, `names ${req.color[0] + req.color.slice(1).toLowerCase()} (${heroCards(NEB)[local.cards?.[req.pid]?.pending ?? -1]?.name ?? 'Imbue Doubt'})`)
+		if (req.kind === 'power' && req.op === 'nkCrack' && patch.power && local.power?.[req.pid]?.crack?.key !== (patch.power as Record<string, PowerState>)[req.pid]?.crack?.key) note(req.pid, `splits the board in two (${heroCards(NEB)[local.cards?.[req.pid]?.pending ?? -1]?.name ?? 'Crack in Reality'})`)
 		if (req.kind === 'power' && req.op === 'ignatiaFlip' && patch.tieBreaker) note(req.pid, `flips the tie-breaker coin to the ${teamName(patch.tieBreaker)} (Chaos Incarnate)`)
 		if (req.kind === 'removeHero' && patch.defeated) note(req.pid, 'took their hero off the board — back with their next card')
 		if (req.kind === 'clearAround' && patch.pieces) { const n = Object.keys(local.pieces ?? {}).length - Object.keys(patch.pieces).length; note(req.pid, `cleared ${n} token${n === 1 ? '' : 's'} next to them`) }
@@ -2167,6 +2171,11 @@ export function minionDefense(s: MatchState, target: string): { mods: { id: stri
 		if (p.team !== hero.team) { if (close || (p.role === 'ranged' && dist <= 2)) mods.push({ id: p.id, d: -1 }) }
 		else if (close) mods.push({ id: p.id, d: 1 })
 	}
+	// NebKher's Illusionary Force / Army: while he attacks, his Illusions next to the target count as his melee minions
+	// (only on his own actions — when he is attacked they give him nothing)
+	const by = s.attacks?.[target]?.by
+	if (by && s.cards?.[by]?.hero === NEB && illusionForce(s, by))
+		for (const p of Object.values(s.pieces ?? {})) if (p.kind === 'token' && p.token === 'token_illusion' && p.owner === by && cubeDist(hexCube(p.hex), at) === 1) mods.push({ id: p.id, d: -1 })
 	return { mods, total: mods.reduce((n, m) => n + m.d, 0) }
 }
 

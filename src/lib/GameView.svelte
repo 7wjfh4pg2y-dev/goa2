@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { hasPower, emActing, warpSlots, RE_REWIND, RE_WARP, RE_TEMPORAL, type TurnCtx } from '$lib/heropower';
+	import { hasPower, emActing, warpSlots, crackNow, lineHexes, RE_REWIND, RE_WARP, RE_TEMPORAL, type TurnCtx } from '$lib/heropower';
 	import { afterUpdate, onDestroy } from 'svelte';
 	import { readable, type Readable } from 'svelte/store';
 	import BoardCanvas from '$lib/BoardCanvas.svelte';
@@ -352,7 +352,10 @@
 	$: activeFx = $ms.effects ?? [];
 	// area radii (set from each player's dash): centred on that player's hero, in their colour
 	$: myPriv = $privRadius && $privRadius.key === `${$ms.round}-${$ms.turn}` && $ms.pieces?.[clientId] ? $privRadius.n : 0;
-	$: areas = [...Object.entries($ms.radii ?? {}).flatMap(([pid, r]) => {
+	// NebKher's Crack in Reality / Shift Reality: the straight line through his space, this turn, on everyone's board
+	$: crack = turnCtx ? crackNow($ms, turnCtx) : null;
+	$: crackArea = crack ? [{ hex: crack.hex, r: 0, color: '#c58cff', alpha: 0.38, hexes: lineHexes(crack.hex, crack.dir, (h) => !!$ms.map?.cells?.[h]) }] : [];
+	$: areas = [...crackArea, ...Object.entries($ms.radii ?? {}).flatMap(([pid, r]) => {
 		const hero = $ms.pieces?.[pid];
 		return hero && r > 0 && !(pid === clientId && myPriv) ? [{ hex: hero.hex, r, color: colorHex(hero.color ?? '') }] : [];
 	}), ...(myPriv ? [{ hex: $ms.pieces[clientId].hex, r: myPriv, color: colorHex($ms.pieces[clientId].color ?? '') }] : [])];

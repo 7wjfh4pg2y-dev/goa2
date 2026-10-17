@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { applyCardReq, turnOrder, turnKey, actingIdx, actorOf, type MatchState, type Piece } from './match'
+import { applyCardReq, turnOrder, turnKey, actingIdx, actorOf, minionDefense, type MatchState, type Piece } from './match'
 import { newPlayerCardState } from './cards/cardstate'
 import { heroCards } from './cards/deck'
-import { equilibrium, canFlip, flipUsed, hasPower, canInscribe, activeRune, runesOf, secondRune, heldGolds, deckGolds, takaSwapKind, mateOffer, canReverse, warpOffer, capsuleOffer, type Rune, type TurnCtx } from './heropower'
+import { equilibrium, canFlip, flipUsed, hasPower, canInscribe, activeRune, runesOf, secondRune, heldGolds, deckGolds, takaSwapKind, mateOffer, canReverse, warpOffer, capsuleOffer, nkPower, canLaugh, laughTargets, nkSwapsLeft, doubtNow, crackNow, lineHexes, type Rune, type TurnCtx } from './heropower'
 import { goldsOf, isHidden, type PlayerCardState } from './cards/cardstate'
 import { draftable, isLabHero, FOUR_STAR_LAB, FOUR_STAR_LIVE, HEROES } from './heroes'
 import { isFullGame, type Journal } from './recorder'
@@ -360,5 +360,112 @@ describe('Emmitt: reversed turns, Time Warp, Time Capsule', () => {
 		expect(s2.cards!.M.discard).not.toContain(mHand[0])
 		expect(s2.power?.E?.shen).toBe(turnKey(s2))
 		expect(pw(s2, 'M', 'capsule')).toEqual({})
+	})
+})
+
+describe('NebKher: Diabolical Laughter, What the Hell Are You?, card swaps, a named colour, the Crack, Illusionary Force', () => {
+	const NC = heroCards('nebkher'), AC = heroCards('arien')
+	const named = (n: string) => NC.findIndex((c) => c.name === n)
+	const laughC = named('Diabolical Laughter'), doubtC = named('Imbue Doubt'), crackC = named('Crack in Reality'), grip = named('Mind Grip'), forceC = named('Illusionary Force')
+	const lowA = AC.reduce((a, _, i) => (!AC[i].handicapped && AC[i].color !== 'PURPLE' && (AC[i].initiative ?? 99) < (AC[a].initiative ?? 99) ? i : a), 0)
+	// N (NebKher, orange) at 5_5 · B and C (blue) at 2 and 7 spaces away · M his teammate
+	function ng(nPending: number, ult = false, extra: Partial<MatchState> = {}, turn = 3): MatchState {
+		const n = { ...newPlayerCardState('nebkher'), pending: nPending, ultimate: ult }
+		const b = { ...newPlayerCardState('arien'), pending: lowA, turns: [3, 4, null, null] }
+		const c = { ...newPlayerCardState('arien'), pending: lowA }
+		const m = { ...newPlayerCardState('arien'), pending: lowA }
+		return {
+			round: 1, turn, seats: 4, life: { orange: 6, blue: 6 }, tieBreaker: 'orange', revealAt: 0, host: 'H',
+			pieces: { N: { id: 'N', hex: '5_5', team: 'orange', kind: 'hero', hero: 'nebkher' }, M: { id: 'M', hex: '5_6', team: 'orange', kind: 'hero', hero: 'arien' },
+				B: { id: 'B', hex: '7_5', team: 'blue', kind: 'hero', hero: 'arien' }, C: { id: 'C', hex: '12_5', team: 'blue', kind: 'hero', hero: 'arien' } },
+			cards: { N: n, B: b, C: c, M: m }, ...extra
+		} as unknown as MatchState
+	}
+	const pw = (s: MatchState, pid: string, op: string, more: Record<string, unknown> = {}) => applyCardReq(s, { kind: 'power', pid, op, ...more } as never)
+	const tc = (s: MatchState): TurnCtx => ({ ...ctx(s), teams: { N: 'orange', M: 'orange', B: 'blue', C: 'blue' } })
+	it('is a lab hero with a power', () => {
+		expect(hasPower('nebkher')).toBe(true)
+		expect(FOUR_STAR_LAB).toContain('nebkher')
+	})
+	it('the card acting decides the button: laugh · grip · name · crack', () => {
+		expect(nkPower(actingAs(ng(laughC), 'N'), 'N', tc(ng(laughC)))).toBe(null) // not his turn to act unless acting
+		expect(nkPower(actingAs(ng(laughC), 'N'), 'N', tc(actingAs(ng(laughC), 'N')))).toBe('laugh')
+		expect(nkPower(actingAs(ng(grip), 'N'), 'N', tc(actingAs(ng(grip), 'N')))).toBe('grip')
+		expect(nkPower(actingAs(ng(doubtC), 'N'), 'N', tc(actingAs(ng(doubtC), 'N')))).toBe('name')
+		expect(nkPower(actingAs(ng(crackC), 'N'), 'N', tc(actingAs(ng(crackC), 'N')))).toBe('crack')
+		expect(nkPower(actingAs(ng(forceC), 'N'), 'N', tc(actingAs(ng(forceC), 'N')))).toBe(null)
+	})
+	it('he laughs once per card; without the ultimate nobody has to discard', () => {
+		const s = actingAs(ng(laughC), 'N')
+		const p = pw(s, 'N', 'nkLaugh')
+		expect(p.power?.N?.laugh).toBeTruthy()
+		expect(p.forced).toBeUndefined()
+		const s2 = { ...s, ...p } as MatchState
+		expect(canLaugh(s2, 'N', tc(s2))).toBe(false)
+		expect(pw(s2, 'N', 'nkLaugh')).toEqual({})
+		// not while another card acts, and not for someone else
+		expect(pw(actingAs(ng(laughC), 'B'), 'N', 'nkLaugh')).toEqual({})
+		expect(pw(s, 'B', 'nkLaugh')).toEqual({})
+	})
+	it('with the ultimate, every enemy hero in radius (5 + Area items) must discard or be defeated; each can be called off', () => {
+		const s = actingAs(ng(laughC, true), 'N')
+		expect(laughTargets(s, 'N', tc(s))).toEqual(['B']) // C is 7 away, M is a friend
+		const p = pw(s, 'N', 'nkLaugh')
+		expect(Object.keys(p.forced ?? {})).toEqual(['B'])
+		expect(p.forced?.B).toMatchObject({ by: 'N', die: true })
+		// two Area items reach C
+		const far = actingAs(ng(laughC, true), 'N')
+		far.cards!.N = { ...far.cards!.N, items: { radius: 2 } }
+		expect(laughTargets(far, 'N', tc(far)).sort()).toEqual(['B', 'C'])
+		const p2 = pw(far, 'N', 'nkLaugh')
+		const s3 = { ...far, ...p2 } as MatchState
+		// he calls one off (an immune hero): the other still has to answer
+		const s4 = { ...s3, ...applyCardReq(s3, { kind: 'forceResolve', pid: 'N', target: 'C', result: 'cancel' }) } as MatchState
+		expect(Object.keys(s4.forced ?? {})).toEqual(['B'])
+	})
+	it('swaps two resolved cards of an enemy hero, up to three times a Laughter', () => {
+		const s = actingAs(ng(laughC), 'N')
+		const p = pw(s, 'N', 'nkSwap', { target: 'B', slots: [0, 1] })
+		expect(p.cards?.B?.turns).toEqual([4, 3, null, null])
+		let x = { ...s, ...p } as MatchState
+		expect(nkSwapsLeft(x, 'N', tc(x))).toBe(2)
+		x = { ...x, ...pw(x, 'N', 'nkSwap', { target: 'B', slots: [0, 1] }) } as MatchState
+		x = { ...x, ...pw(x, 'N', 'nkSwap', { target: 'B', slots: [0, 1] }) } as MatchState
+		expect(pw(x, 'N', 'nkSwap', { target: 'B', slots: [0, 1] })).toEqual({})
+		// only earlier turn slots that hold a card, only an enemy, two different slots
+		expect(pw(s, 'N', 'nkSwap', { target: 'B', slots: [0, 2] })).toEqual({})
+		expect(pw(s, 'N', 'nkSwap', { target: 'M', slots: [0, 1] })).toEqual({})
+		expect(pw(s, 'N', 'nkSwap', { target: 'B', slots: [1, 1] })).toEqual({})
+	})
+	it('names a colour: seen this turn and the next, then gone', () => {
+		const s = actingAs(ng(doubtC), 'N')
+		const p = pw(s, 'N', 'nkName', { color: 'RED' })
+		const x = { ...s, ...p } as MatchState
+		expect(doubtNow(x, 'N', tc(x))).toBe('RED')
+		const t4 = { ...x, turn: 4 } as MatchState
+		expect(doubtNow(t4, 'N', tc(t4))).toBe('RED')
+		const r2 = { ...x, round: 2, turn: 1 } as MatchState
+		expect(doubtNow(r2, 'N', tc(r2))).toBe(null)
+		expect(pw(actingAs(ng(laughC), 'N'), 'N', 'nkName', { color: 'RED' })).toEqual({})
+	})
+	it('the Crack: a straight line through his space, this turn only', () => {
+		const s = actingAs(ng(crackC), 'N')
+		const x = { ...s, ...pw(s, 'N', 'nkCrack', { dir: 1 }) } as MatchState
+		expect(crackNow(x, tc(x))).toEqual({ pid: 'N', hex: '5_5', dir: 1 })
+		const line = lineHexes('5_5', 1, (h) => { const [c, r] = h.split('_').map(Number); return c >= 0 && c < 10 && r >= 0 && r < 10 })
+		expect(line).toContain('0_5'); expect(line).toContain('9_5'); expect(line.every((h) => h.endsWith('_5'))).toBe(true)
+		expect(crackNow({ ...x, turn: 4 } as MatchState, tc({ ...x, turn: 4 } as MatchState))).toBe(null)
+	})
+	it('Illusionary Force: his Illusions next to the hero he attacks lower its defence; not when he is attacked', () => {
+		const ill = { id: 'i1', hex: '6_5', team: 'orange', kind: 'token', token: 'token_illusion', owner: 'N' }
+		const fx = { id: 'e1', pid: 'N', hero: 'nebkher', idx: forceC, name: 'Illusionary Force', dur: 'round', round: 1, turn: 3, endRound: 1, endTurn: 4 }
+		const base = ng(laughC, false, {}) as MatchState
+		const s = { ...base, pieces: { ...base.pieces, i1: ill }, effects: [fx], attacks: { B: { by: 'N', defending: false, at: 0 } } } as unknown as MatchState
+		expect(minionDefense(s, 'B').mods).toContainEqual({ id: 'i1', d: -1 })
+		// the effect off: nothing
+		expect(minionDefense({ ...s, effects: [] } as MatchState, 'B').mods.find((m) => m.id === 'i1')).toBeUndefined()
+		// B attacks N: his Illusions give him nothing
+		const back = { ...s, pieces: { ...s.pieces, i1: { ...ill, hex: '5_4' } }, attacks: { N: { by: 'B', defending: false, at: 0 } } } as unknown as MatchState
+		expect(minionDefense(back, 'N').mods.find((m) => m.id === 'i1')).toBeUndefined()
 	})
 })
