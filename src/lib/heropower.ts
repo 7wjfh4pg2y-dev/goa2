@@ -323,6 +323,9 @@ export function nkPower(s: S, pid: string, ctx: TurnCtx): 'laugh' | 'grip' | 'na
 	return null
 }
 const markOf = (ctx: TurnCtx) => `${ctx.key}:${ctx.at}`
+/** what NebKher just did, for everyone's toast + laugh burst (GameView plays each id once) */
+export type NkNews = { id: string; kind: 'laugh' | 'steal' | 'swap' | 'doubt' | 'crack'; by: string; detail?: string; ult?: boolean; at: number }
+const nkNewsOf = (kind: NkNews['kind'], by: string, more: Partial<NkNews> = {}): NkNews => ({ id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, kind, by, at: Date.now(), ...more })
 export const laughed = (s: S, pid: string, ctx: TurnCtx) => s.power?.[pid]?.laugh === markOf(ctx)
 /** spaces between two board pieces (null when either is off the board) */
 export const pieceDist = (s: S, a: string, b: string): number | null => {
@@ -386,8 +389,8 @@ export const illusionForce = (s: S, pid: string) => (s.effects ?? []).some((e) =
 export function applyPower(s: S & { tieTurn?: { key: string; coin: Team } | null; acting?: { key: string; idx: number; done?: string[]; pin?: string[] } | null }, req: PowerReq, ctx: TurnCtx) {
 	if (req.op === 'nkLaugh') {
 		if (!canLaugh(s, req.pid, ctx)) return {}
-		const out: Record<string, unknown> = { power: { ...s.power, [req.pid]: { ...s.power?.[req.pid], laugh: markOf(ctx) } } }
 		const targets = laughTargets(s, req.pid, ctx)
+		const out: Record<string, unknown> = { power: { ...s.power, [req.pid]: { ...s.power?.[req.pid], laugh: markOf(ctx) } }, nkNews: nkNewsOf('laugh', req.pid, { ult: targets.length > 0 }) }
 		if (targets.length) {
 			const at = Date.now()
 			out.forced = { ...(s.forced ?? {}), ...Object.fromEntries(targets.map((t) => [t, { by: req.pid, die: true, at }])) }
@@ -405,7 +408,7 @@ export function applyPower(s: S & { tieTurn?: { key: string; coin: Team } | null
 		const put = (k: number, v: number | null | undefined) => { if (k === ctx.turnIdx) next.pending = v as number; else next.turns[k] = v as number }
 		put(sl[0], b); put(sl[1], a)
 		const n = s.power?.[req.pid]?.nsw, mark = markOf(ctx)
-		const out: Record<string, unknown> = { cards: { ...s.cards, [t]: next }, power: { ...s.power, [req.pid]: { ...s.power?.[req.pid], nsw: { mark, n: (n?.mark === mark ? n.n : 0) + 1 } } } }
+		const out: Record<string, unknown> = { cards: { ...s.cards, [t]: next }, power: { ...s.power, [req.pid]: { ...s.power?.[req.pid], nsw: { mark, n: (n?.mark === mark ? n.n : 0) + 1 } } }, nkNews: nkNewsOf('swap', req.pid) }
 		// this turn's card changed (its initiative too): the cards that acted and the one acting keep their places
 		if (sl.includes(ctx.turnIdx)) out.acting = { key: ctx.key, idx: ctx.at, done: s.acting?.key === ctx.key ? s.acting.done : undefined, pin: ctx.order.slice(0, ctx.at + 1) }
 		return out
@@ -413,16 +416,19 @@ export function applyPower(s: S & { tieTurn?: { key: string; coin: Team } | null
 	if (req.op === 'nkGrip') {
 		const t = req.target
 		if (nkPower(s, req.pid, ctx) !== 'grip' || !t || !ctx.teams?.[t] || ctx.teams[t] === ctx.teams?.[req.pid] || prevCard(s.cards?.[t], ctx.turnIdx) == null) return {}
-		return { power: { ...s.power, [req.pid]: { ...s.power?.[req.pid], grip: { mark: markOf(ctx), target: t } } } }
+		const tc = s.cards![t], card = heroCards(tc.hero)[prevCard(tc, ctx.turnIdx)!]?.name
+		return { power: { ...s.power, [req.pid]: { ...s.power?.[req.pid], grip: { mark: markOf(ctx), target: t } } }, nkNews: nkNewsOf('steal', req.pid, { detail: card }) }
 	}
 	if (req.op === 'nkName') {
 		if (nkPower(s, req.pid, ctx) !== 'name' || !req.color || !NK_COLORS.includes(req.color)) return {}
-		return { power: { ...s.power, [req.pid]: { ...s.power?.[req.pid], doubt: { key: ctx.key, color: req.color } } } }
+		return { power: { ...s.power, [req.pid]: { ...s.power?.[req.pid], doubt: { key: ctx.key, color: req.color } } }, nkNews: nkNewsOf('doubt', req.pid, { detail: req.color[0] + req.color.slice(1).toLowerCase() }) }
 	}
 	if (req.op === 'nkCrack') {
 		const hex = s.pieces?.[req.pid]?.hex
 		if (nkPower(s, req.pid, ctx) !== 'crack' || !hex || req.dir == null || ![0, 1, 2].includes(req.dir)) return {}
-		return { power: { ...s.power, [req.pid]: { ...s.power?.[req.pid], crack: { key: ctx.key, hex, dir: req.dir } } } }
+		// a new line this turn is news; moving the line he already drew is not
+		const again = s.power?.[req.pid]?.crack?.key === ctx.key
+		return { power: { ...s.power, [req.pid]: { ...s.power?.[req.pid], crack: { key: ctx.key, hex, dir: req.dir } } }, ...(again ? {} : { nkNews: nkNewsOf('crack', req.pid) }) }
 	}
 	if (req.op === 'emReverse') {
 		const who = req.target ?? req.pid

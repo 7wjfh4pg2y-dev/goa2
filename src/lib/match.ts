@@ -13,7 +13,7 @@
 // broken by `updatedAt`) wins. For a handful of players nudging a shared
 // tracker this is robust and easy to reason about.
 
-import { applyPower, syncPowers, takaHit, hasPower, runeLine, RUNE_NAME, reversedTurn, trackDiscards, illusionForce, NEB, type PowerReq, type PowerState, type TurnCtx } from './heropower'
+import { applyPower, syncPowers, takaHit, hasPower, runeLine, RUNE_NAME, reversedTurn, trackDiscards, illusionForce, NEB, type NkNews, type PowerReq, type PowerState, type TurnCtx } from './heropower'
 import { teamName, aMinion } from './teams'
 import { hexCube, cubeDist } from './zones'
 import { tokenExpiry, sweepTokens, statusFrom, isTurret } from './tokens'
@@ -447,6 +447,8 @@ export interface MatchState {
 	/** heroes under attack, keyed by the defender: who attacks, and whether they chose to defend */
 	/** discarded: the defender has discarded a card since the attack began — only then can they answer Defended */
 	attacks?: Record<string, { by: string; defending: boolean; at: number; discarded?: boolean }>
+	/** NebKher's latest act (laugh / steal / swap / doubt / crack): every screen plays its toast + laugh burst once */
+	nkNews?: NkNews | null
 	/** forced discards, keyed by the hero who must discard: who forces it, and whether it's "…or die" */
 	forced?: Record<string, { by: string; die: boolean; at: number }>
 	/** the latest lane push — every client plays the "wave advances" splash when `id` changes */

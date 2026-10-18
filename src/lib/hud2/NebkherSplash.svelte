@@ -22,11 +22,13 @@
 	let kind: NkSplashKind | null = null, detail = '', ult = false, run = 0
 	let timer: ReturnType<typeof setTimeout> | null = null
 	/** play one: `detail` = the stolen card's name / the colour named; `ult` = the laugh that makes them discard */
-	export function play(k: NkSplashKind, d = '', u = false) {
+	let dur = 2900
+	export function play(k: NkSplashKind, d = '', u = false, ms = 2900) {
+		dur = ms
 		kind = null; detail = d; ult = u; run++
 		if (timer) clearTimeout(timer)
-		requestAnimationFrame(() => { kind = k; timer = setTimeout(() => (kind = null), 2900) })
-		return 2900
+		requestAnimationFrame(() => { kind = k; timer = setTimeout(() => (kind = null), ms) })
+		return ms
 	}
 	$: c = kind ? COPY[kind] : null
 	$: sub = c ? (kind === 'laugh' && ult ? 'Discard a card — or be defeated!' : c.sub.replace('{x}', detail || (kind === 'doubt' ? 'Red' : 'your spell'))) : ''
@@ -35,7 +37,7 @@
 
 {#if kind && c}
 	{#key run}
-		<div class="nks" class:ph={phone} class:ult aria-live="polite">
+		<div class="nks" class:ph={phone} class:ult aria-live="polite" style="--dur:{dur}ms">
 			<div class="band">
 				<span class="artbox"><span class="art" style="background-image:url('{art}')"></span><span class="flash"></span></span>
 				<span class="edge"></span>
@@ -51,13 +53,13 @@
 
 <style>
 	/* a toast-sized banner under the top bar: his laughing face in a slanted window, three lines beside it */
-	.nks { position: fixed; left: 50%; top: 86px; z-index: 62; pointer-events: none; transform: translateX(-50%); animation: nkin 2.9s cubic-bezier(0.2, 1.2, 0.4, 1) both; }
+	.nks { position: fixed; left: 50%; top: calc(86px * var(--uis, 1)); z-index: 62; pointer-events: none; transform: translateX(-50%); animation: nkin var(--dur, 2.9s) cubic-bezier(0.2, 1.2, 0.4, 1) both; }
 	@keyframes nkin { 0% { opacity: 0; transform: translate(-50%, -24px) scale(0.92); } 10% { opacity: 1; transform: translate(-50%, 0) scale(1); } 86% { opacity: 1; transform: translate(-50%, 0); } 100% { opacity: 0; transform: translate(-50%, -14px); } }
 	.band { width: min(470px, 92vw); height: 96px; display: grid; grid-template-columns: 112px 1fr; align-items: center; overflow: hidden; border-radius: 12px;
 		background: linear-gradient(90deg, rgba(10, 22, 12, 0.97), rgba(8, 16, 26, 0.97)); border: 1px solid rgba(201, 224, 74, 0.55); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5), 0 12px 30px rgba(0, 0, 0, 0.55), 0 0 22px rgba(201, 224, 74, 0.18); }
 	.ult .band { border-color: rgba(197, 140, 255, 0.65); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5), 0 12px 30px rgba(0, 0, 0, 0.55), 0 0 22px rgba(162, 75, 255, 0.25); }
 	.artbox { position: relative; height: 100%; overflow: hidden; clip-path: polygon(0 0, 100% 0, 84% 100%, 0 100%); }
-	.art { position: absolute; inset: 0; background-size: 260%; background-position: 83% 24%; animation: nkart 2.9s ease-out both; }
+	.art { position: absolute; inset: 0; background-size: 260%; background-position: 83% 24%; animation: nkart var(--dur, 2.9s) ease-out both; }
 	@keyframes nkart { from { transform: scale(1.18); } to { transform: scale(1); } }
 	/* one flicker of storm light over his face as it lands */
 	.flash { position: absolute; inset: 0; background: radial-gradient(circle at 60% 40%, rgba(235, 255, 160, 0.75), transparent 70%); opacity: 0; animation: nkfl 1.2s 0.15s steps(1) both; }
