@@ -217,10 +217,7 @@
 	const CLOCK = [0, 90, 180, 270, 45, 135, 225, 315];
 	type Pill = { label: string; run?: () => void; kind?: 'go' | 'bad' | 'rem' | 'move' | 'imm' | 'force' | 'swap' | 'time'; coin?: number; off?: boolean; title?: string };
 	$: if (!selPieceId) carryingSel = false;
-	$: pills = !hud2 || !selPiece || ringAsk || carryingSel ? [] : swapFrom ? ([
-		{ label: 'Pick a piece', kind: 'swap', off: true, title: 'Tap the piece to swap places with' },
-		{ label: 'Cancel', run: () => (swapFrom = null) }
-	] as Pill[]) : forceMenu ? ([
+	$: pills = !hud2 || !selPiece || ringAsk || carryingSel || swapFrom ? [] : forceMenu ? ([
 		{ label: 'Discard', kind: 'force', run: () => forceSel(false), title: 'They discard a card' },
 		{ label: 'Discard or die', kind: 'bad', coin: heroDefeatSummary($ms, clientId, selPiece.id).coins, run: () => forceSel(true), title: 'They discard a card — or are defeated (you take the rewards)' },
 		{ label: 'Back', run: () => (forceMenu = false) }
@@ -591,6 +588,9 @@
 	$: if (swapFrom && (watcher || !$ms.pieces[swapFrom])) swapFrom = null;
 	$: selSwappable = selMovable && !watcher && !selPiece?.attachedTo;
 	function startSwap() { if (selPiece) swapFrom = selPiece.id; }
+	// while picking the second piece the prompt sits on the action ring — pills round the piece covered the very
+	// neighbours one swaps with (Twist Fate: an Illusion next to you ↔ the enemy beside it; audit 2026-10-18)
+	$: swapAsk = swapFrom && (hud2 || phone2) ? ({ label: 'Swap', sub: 'Pick a piece', kind: 'wait', run: () => {}, cancel: () => (swapFrom = null) } as Order) : null;
 	const pieceLabel = (p: Piece | undefined) => !p ? 'a piece' : p.kind === 'hero' ? heroById(p.hero ?? '')?.name ?? 'a hero' : p.kind === 'minion' ? aMinion(p.team as Team, p.role) : p.token ? tokenName(p.token) : 'a token';
 	// Emmitt's own time tricks wind his clock back for the rest of the turn
 	const emShen = (by: string | null) => (by && $ms.cards?.[by]?.hero === 'emmitt' ? { power: { ...$ms.power, [by]: { ...$ms.power?.[by], shen: turnKey($ms) } } } : {});
@@ -1079,7 +1079,7 @@
 	<BoardCanvas bind:this={board} map={$ms.map ?? {}} inset={boardInset} look={boardLook} {glowZone} activeZone={$ms.wonBy ? null : battleZone($ms)} effects={!deckCovered} sea={$boardPrefs.sea} rims={$boardPrefs.rims} rotation={orientation} interactive={true} {placing} {placeGhost} holdColor={myHoldColor} onCancelPlace={cancelPlace} {areas} marks={boardMarks} badges={defBadges} zoomLock={mobile && $boardPrefs.zoomLock} wisps={$boardPrefs.wisps} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} pings={boardPings} onPing={doPing} {pingArmed} />
 	</div>
 
-	<CardLayer bind:this={cardLayer} bind:turnCtx bind:crackPreview areaW={gvw} areaH={gvh} {mobile} {hud2} {phone2} {ringAsk} onResults={() => (victoryClosed = false)} compact={$boardPrefs.compact} cTop={$boardPrefs.cTop} cOrder={$boardPrefs.cOrder} cLog={$boardPrefs.cLog} bind:topW {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} bind:covered={deckCovered} bind:phoneStatus onRespawn={placeMyHero} onEnter={placeMyHero} onArmToken={armToken} holdingToken={!!pendingToken} {pingArmed} onPing={pingButton} bind:previewId />
+	<CardLayer bind:this={cardLayer} bind:turnCtx bind:crackPreview areaW={gvw} areaH={gvh} {mobile} {hud2} {phone2} ringAsk={ringAsk ?? swapAsk} onResults={() => (victoryClosed = false)} compact={$boardPrefs.compact} cTop={$boardPrefs.cTop} cOrder={$boardPrefs.cOrder} cLog={$boardPrefs.cLog} bind:topW {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} bind:covered={deckCovered} bind:phoneStatus onRespawn={placeMyHero} onEnter={placeMyHero} onArmToken={armToken} holdingToken={!!pendingToken} {pingArmed} onPing={pingButton} bind:previewId />
 
 	<!-- selected minion/token: offer delete (heroes aren't deletable) -->
 	{#if hud2}
@@ -1103,7 +1103,7 @@
 			{/if}
 			<button class="piex" on:click={closeConfirm} aria-label="Cancel">✕</button>
 		</div>
-	{:else if selPiece && !carryingSel}
+	{:else if selPiece && !carryingSel && !(phone2 && swapFrom)}
 		<div class="pietool" class:anchored={!!tipPos} style={tipPos ? `left:${tipPos.x / lay.s}px; top:${tipPos.y / lay.s}px` : ''}>
 			<span class="pietxt" style:color={teamText(selPiece)}>{selLabel}</span>
 			{#if swapFrom}<span class="pietxt nc">Tap the piece to swap with</span><button class="piex" on:click={() => (swapFrom = null)} aria-label="Cancel">✕</button>
