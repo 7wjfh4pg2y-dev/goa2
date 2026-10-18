@@ -6,6 +6,7 @@ import { heroCards } from './cards/deck'
 import { basicsOf, goldsOf, silverIdx, statDeltas, PASS, type PlayerCardState } from './cards/cardstate'
 import { hexCube, cubeDist } from './zones'
 import { hexNeighbour } from './board/hexgeo'
+import { detectDuration, endOf, type Effect } from './effects'
 
 export type Team = 'orange' | 'blue'
 /** one player's power state; each hero uses its own fields */
@@ -75,7 +76,7 @@ export type PowerReq = { kind: 'power'; pid: string; op: 'ignatiaFlip' | 'snorri
 export type TurnCtx = { key: string; round: number; turnIdx: number; order: string[]; at: number; tieBreaker: Team; revealed: boolean
 	/** each player's team (for "a friendly hero") */
 	teams?: Record<string, Team | null> }
-type S = { cards?: Record<string, PlayerCardState>; power?: Record<string, PowerState>; effects?: { pid: string; hero: string; idx: number }[]; host?: string
+type S = { cards?: Record<string, PlayerCardState>; power?: Record<string, PowerState>; effects?: Effect[]; host?: string
 	lastClash?: { id: string; kind: string; by: string; out: string } | null; lastDefeat?: { id: string; by: string } | null
 	attacks?: Record<string, unknown>; forced?: Record<string, unknown>
 	turnDisc?: { key: string; by: Record<string, number[]> } | null
@@ -371,6 +372,17 @@ export const nkSwapsLeft = (s: S, pid: string, ctx: TurnCtx) => { const n = s.po
 /** the turn after `key` ("r-t" → "r-(t+1)"; none after the 4th) */
 const keyAfter = (key: string) => { const [r, t] = key.split('-').map(Number); return t < 4 ? `${r}-${t + 1}` : null }
 /** the colour he named, while it still matters (the turn he named it and the next) */
+/** naming a colour / drawing the Crack IS playing that card: its lingering effect (Next turn / This turn, from the
+ *  card text) switches on with it, so the card glows and the ring's 'Effect?' ask is answered (2026-10-18) */
+function withCardFx(s: S, pid: string, ctx: TurnCtx): Effect[] | undefined {
+	const cs = s.cards?.[pid], idx = cs?.pending
+	if (!cs || idx == null || idx < 0) return undefined
+	const card = heroCards(cs.hero)[idx], dur = detectDuration(card?.description)
+	const list = s.effects ?? []
+	if (!card || !dur || list.some((e) => e.pid === pid && e.idx === idx)) return undefined
+	const turn = ctx.turnIdx + 1
+	return [...list, { id: `fx_${pid}_${idx}_${Date.now().toString(36)}`, pid, hero: cs.hero, idx, name: card.name, dur, round: ctx.round, turn, ...endOf(dur, ctx.round, turn) }]
+}
 export function doubtNow(s: S, pid: string, ctx: TurnCtx): NkColor | null {
 	const d = s.power?.[pid]?.doubt
 	return d && (d.key === ctx.key || keyAfter(d.key) === ctx.key) ? d.color : null
@@ -429,14 +441,16 @@ export function applyPower(s: S & { tieTurn?: { key: string; coin: Team } | null
 	}
 	if (req.op === 'nkName') {
 		if (nkPower(s, req.pid, ctx) !== 'name' || !req.color || !NK_COLORS.includes(req.color)) return {}
-		return { power: { ...s.power, [req.pid]: { ...s.power?.[req.pid], doubt: { key: ctx.key, color: req.color } } }, nkNews: nkNewsOf('doubt', req.pid, { detail: req.color[0] + req.color.slice(1).toLowerCase(), to: Object.keys(s.cards ?? {}).filter((p) => ctx.teams?.[p] && ctx.teams[p] !== ctx.teams?.[req.pid]) }) }
+		const fx = withCardFx(s, req.pid, ctx)
+		return { ...(fx ? { effects: fx } : {}), power: { ...s.power, [req.pid]: { ...s.power?.[req.pid], doubt: { key: ctx.key, color: req.color } } }, nkNews: nkNewsOf('doubt', req.pid, { detail: req.color[0] + req.color.slice(1).toLowerCase(), to: Object.keys(s.cards ?? {}).filter((p) => ctx.teams?.[p] && ctx.teams[p] !== ctx.teams?.[req.pid]) }) }
 	}
 	if (req.op === 'nkCrack') {
 		const hex = s.pieces?.[req.pid]?.hex
 		if (nkPower(s, req.pid, ctx) !== 'crack' || !hex || req.dir == null || ![0, 1, 2].includes(req.dir)) return {}
 		// a new line this turn is news; moving the line he already drew is not
 		const again = s.power?.[req.pid]?.crack?.key === ctx.key
-		return { power: { ...s.power, [req.pid]: { ...s.power?.[req.pid], crack: { key: ctx.key, hex, dir: req.dir } } }, ...(again ? {} : { nkNews: nkNewsOf('crack', req.pid) }) }
+		const fx = withCardFx(s, req.pid, ctx)
+		return { ...(fx ? { effects: fx } : {}), power: { ...s.power, [req.pid]: { ...s.power?.[req.pid], crack: { key: ctx.key, hex, dir: req.dir } } }, ...(again ? {} : { nkNews: nkNewsOf('crack', req.pid) }) }
 	}
 	if (req.op === 'emReverse') {
 		const who = req.target ?? req.pid

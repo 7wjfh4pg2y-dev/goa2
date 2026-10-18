@@ -475,12 +475,17 @@ describe('NebKher: Diabolical Laughter, What the Hell Are You?, card swaps, a na
 		expect(doubtNow(t4, 'N', tc(t4))).toBe('RED')
 		const r2 = { ...x, round: 2, turn: 1 } as MatchState
 		expect(doubtNow(r2, 'N', tc(r2))).toBe(null)
+		// naming it switches the card's Next-turn effect on (the ring's Effect? ask is answered); naming again adds none
+		expect((x.effects ?? []).filter((e) => e.pid === 'N' && e.idx === doubtC).map((e) => e.dur)).toEqual(['next'])
+		const y = { ...x, ...pw(x, 'N', 'nkName', { color: 'BLUE' }) } as MatchState
+		expect((y.effects ?? []).filter((e) => e.pid === 'N').length).toBe(1)
 		expect(pw(actingAs(ng(laughC), 'N'), 'N', 'nkName', { color: 'RED' })).toEqual({})
 	})
 	it('the Crack: a straight line through his space, this turn only', () => {
 		const s = actingAs(ng(crackC), 'N')
 		const x = { ...s, ...pw(s, 'N', 'nkCrack', { dir: 1 }) } as MatchState
 		expect(crackNow(x, tc(x))).toEqual({ pid: 'N', hex: '5_5', dir: 1 })
+		expect((x.effects ?? []).map((e) => e.dur)).toEqual(['turn'])
 		const line = lineHexes('5_5', 1, (h) => { const [c, r] = h.split('_').map(Number); return c >= 0 && c < 10 && r >= 0 && r < 10 })
 		expect(line).toContain('0_5'); expect(line).toContain('9_5'); expect(line.every((h) => h.endsWith('_5'))).toBe(true)
 		expect(crackNow({ ...x, turn: 4 } as MatchState, tc({ ...x, turn: 4 } as MatchState))).toBe(null)

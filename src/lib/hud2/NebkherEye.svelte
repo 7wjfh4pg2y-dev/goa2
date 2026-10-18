@@ -28,10 +28,12 @@
 	export let crackDir: number | null = null
 	/** the Crack line he's looking at before he confirms it (only on his screen) */
 	export let crackPick: number | null = null
+	/** the colour picked and loaded onto the ring, not yet confirmed */
+	export let namePick: NkColor | null = null
 	export let onLaugh: () => void = () => {}
 	/** a swap made on an enemy's board (acts at once, like a move) */
 	export let onSwap: (target: string, a: number, b: number) => void = () => {}
-	export let onName: (c: NkColor) => void = () => {}
+	export let onName: (c: NkColor | null) => void = () => {}
 	export let onCrack: (dir: number | null) => void = () => {}
 	/** Spell Steal: load the stolen card onto the ring */
 	export let onSteal: (target: string | null) => void = () => {}
@@ -61,7 +63,9 @@
 	$: live = !!kind
 	// the slot = the wings fully spread: 2 × (1.15·wl − 0.38) + 1 disc
 	$: slotW = Math.ceil(z * (2 * (1.15 * wl - 0.38) + 1))
-	let open = false, panelH = 0
+	/** the panel is open (bound: the action ring opens it for Name a colour / Crack) */
+	export let open = false
+	let panelH = 0
 	$: if (!kind) open = false
 	// the side window: an enemy's board (Laughter's swaps) or a stolen card's preview (Mind Grip)
 	let sideFor: string | null = null
@@ -74,6 +78,7 @@
 	$: if (!sideFor) stealing = false
 	function pickFace(pid: string) { stealing = false; sideFor = sideFor === pid ? null : pid }
 	$: if (!open && kind === 'crack' && crackPick != null) onCrack(null)
+	$: if (!open && kind === 'name' && namePick != null) onName(null)
 	// the swap board: drag a card onto another (or tap one, then the other)
 	let held: number | null = null, drag: { t: number; x0: number; y0: number; dx: number; dy: number; z: number; moved: boolean } | null = null, over: number | null = null
 	$: if (!side) { held = null; drag = null; over = null }
@@ -163,7 +168,7 @@
 					<div class="nh"><b>{title(kind)}</b><button class="nx" on:click={() => (open = false)} aria-label="Close">✕</button></div>
 					<div class="cols">
 						{#each NK_COLORS as c (c)}
-							<button class="col" class:on={doubt === c} style="--gc:{GEM[c]}" on:click={() => onName(c)}><span class="dot"></span>{CNAME[c]}</button>
+							<button class="col" class:on={(namePick ?? doubt) === c} class:set={doubt === c} style="--gc:{GEM[c]}" on:click={() => onName(namePick === c ? null : c)}><span class="dot"></span>{CNAME[c]}</button>
 						{/each}
 					</div>
 				{:else if kind === 'crack'}
@@ -278,6 +283,7 @@
 	.col { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px 0; border-radius: 10px; border: 1px solid rgba(216, 179, 106, 0.25); background: rgba(0, 0, 0, 0.22); color: #e9e2d2; font-size: 10.5px; cursor: pointer; }
 	.col .dot { width: 20px; height: 20px; border-radius: 50%; background: var(--gc); box-shadow: inset 0 0 0 1.5px rgba(0, 0, 0, 0.4); }
 	.col.on { border-color: var(--brass-hi); background: rgba(216, 179, 106, 0.16); }
+	.col.set { box-shadow: inset 0 0 0 1px var(--brass-hi); }
 	.nw.ph .cols { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 	.axes { display: flex; gap: 8px; justify-content: center; }
 	.ax { width: 64px; height: 64px; padding: 2px; border-radius: 12px; border: 1px solid rgba(216, 179, 106, 0.25); background: rgba(0, 0, 0, 0.22); cursor: pointer; }
