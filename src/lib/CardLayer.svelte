@@ -9,11 +9,12 @@
 	import type { Readable } from 'svelte/store';
 	import type { MatchSession, MatchState, Player } from '$lib/match';
 	import { teamForSeat, colorHex, battlePatch, levelPatch, canRespawn, turnPlan, claimable, actingIdx, actorOf, turnOrder, teamOf, turnKey as keyOfTurn } from '$lib/match';
-	import { hasPower, equilibrium, canFlip, flipUsed, runesOf, secondRune, canInscribe, canSecond, RUNES, takaSwapKind, mateOffer, canReverse, nextTurnKey, reversedTurn, warpOffer, warpSlots, capsuleOffer, RE_REVERSE, RE_TEMPORAL, nkPower, laughed, laughTargets, nkSwapsLeft, nkSlots, nkCardAt, prevCard, doubtNow, crackNow, pieceDist, type NkColor, type NkEnemy, type Rune, type TurnCtx } from '$lib/heropower';
+	import { hasPower, equilibrium, canFlip, flipUsed, runesOf, secondRune, canInscribe, canSecond, RUNES, takaSwapKind, mateOffer, canReverse, nextTurnKey, reversedTurn, warpOffer, warpSlots, capsuleOffer, RE_REVERSE, RE_TEMPORAL, nkPower, laughed, laughTargets, nkSwapsLeft, nkSlots, nkCardAt, prevCard, doubtNow, crackNow, pieceDist, rzPower, rzSpawnsLeft, rzLeft, facesInUse, crowdBonus, type NkColor, type NkEnemy, type Rune, type TurnCtx } from '$lib/heropower';
 	import EmmittClock from '$lib/hud2/EmmittClock.svelte';
 	import TakaGold from '$lib/hud2/TakaGold.svelte';
 	import IgnatiaCoin from '$lib/hud2/IgnatiaCoin.svelte';
 	import NebkherEye from '$lib/hud2/NebkherEye.svelte';
+	import RazzleTop from '$lib/hud2/RazzleTop.svelte';
 	import SnorriRunes from '$lib/hud2/SnorriRunes.svelte';
 	import RunePanel from '$lib/hud2/RunePanel.svelte';
 	import RuneMark from '$lib/hud2/RuneMark.svelte';
@@ -61,6 +62,8 @@
 	export let previewId: string | null = null; // set by the board to open a player's overlay
 	export let onArmToken: (t: ArmToken) => void = () => {}; // pick a token off the shelf → place it on a hex
 	export let holdingToken = false; // a shelf token is in hand, waiting for its hex
+	export let onArmDouble: (face: number | null) => void = () => {}; // Razzle: a face off her shelf → place the double on a space
+	export let placingDouble: number | null = null; // …the face waiting for its space
 	export let onRespawn: () => void = () => {}; // defeated hero: pick a spawn point to come back on
 	export let onEnter: () => void = () => {}; // game start: pick a spawn point for your hero
 	export let pingArmed = false; // the next board tap pings
@@ -275,6 +278,18 @@
 	// NebKher: the power his card acting opens (Laughter · Mind Grip / Probe · a colour to name · the Crack), the enemy
 	// heroes his panel lists, the colour he named (public) and his Crack line
 	$: nkKind = myPower === 'nebkher' && !battlePhase ? nkPower($ms, clientId, pctx) : null;
+	// ── Razzle: her doubles (heropower.ts) — what her card acting opens, her faces on the board, what's left to do ──
+	$: rzKind = myPower === 'razzle' && !battlePhase ? rzPower($ms, clientId, pctx) : null;
+	$: rzFaces = myPower === 'razzle' ? facesInUse($ms, clientId) : [0];
+	$: rzN = rzKind === 'spawn' ? rzSpawnsLeft($ms, clientId, pctx) : rzKind === 'retrieve' ? rzLeft($ms, clientId, pctx) : 0;
+	let rzOpen = false, rzNo = '';
+	function rzSkip() { rzNo = fxKey; rzOpen = false; onArmDouble(null); }
+	const rzRetrieve = (idx: number) => session.cardAction({ kind: 'power', pid: clientId, op: 'rzRetrieve', idx });
+	const rzClear = () => session.cardAction({ kind: 'power', pid: clientId, op: 'rzClear' });
+	// the shelf's face put down unplaced when the chance has gone (the card moved on, all out)
+	$: if (placingDouble != null && rzKind !== 'spawn') onArmDouble(null);
+	// Crowd Control as a defence: +2 for each other one of her near the body attacked — her own reminder (silver in hand)
+	$: rzCrowd = myPower === 'razzle' && myAttack ? crowdBonus($ms, clientId, myAttack.body ?? clientId) : 0;
 	$: nkLaughed = myPower === 'nebkher' && laughed($ms, clientId, pctx);
 	$: nkTargets = nkKind === 'laugh' && mine?.ultimate ? laughTargets($ms, clientId, pctx) : [];
 	$: nkDoubt = myPower === 'nebkher' ? doubtNow($ms, clientId, pctx) : null;
@@ -989,7 +1004,7 @@
 	$: orderTop = cTop ? 62 : 100;
 	$: colTop = orderTop + (cOrder ? 30 : 60) + (cOrder ? 26 : 34);
 	// the Chronicle in the corner: beside the dash when there's room, else just above its left end
-	$: DASH_W = 900 + (myPower === 'takahide' ? 84 : myPower === 'snorri' ? 100 : myPower === 'emmitt' ? 104 : myPower === 'ignatia' ? 92 : myPower === 'nebkher' ? 136 : myPower ? 60 : 0); // the dash's width (design px) without the ultimate's compartment (+ a 4★ hero's button)
+	$: DASH_W = 900 + (myPower === 'takahide' ? 84 : myPower === 'snorri' ? 100 : myPower === 'emmitt' ? 104 : myPower === 'ignatia' ? 92 : myPower === 'nebkher' ? 136 : myPower === 'razzle' ? 94 : myPower ? 60 : 0); // the dash's width (design px) without the ultimate's compartment (+ a 4★ hero's button)
 	$: myUltOpen = !!mine && myUlt >= 0 && (mine.ultimate || ultReady);
 	$: logRoom = canvasW / 2 - DASH_W / 2 - 14 - (myUltOpen ? 96 : 0) - 36;
 	$: logBeside = logRoom >= 220;
@@ -1068,8 +1083,8 @@
 		if (iMustEnter) return { label: 'Spawn hero', kind: 'team', pulse: true, run: onEnter };
 		// attacked: Defeated until you discard a card (your defence); then the ring splits — Defended | Defeated
 		if (myAttack) return myAttack.discarded
-			? { label: 'Defended', kind: 'team', split: { left: { label: 'Defended', run: () => answerAttack('defended') }, right: { label: 'Defeated', run: () => answerAttack('defeated') } } }
-			: { label: 'Defeated', sub: temporal ? 'Defend with Initiative' : undefined, kind: 'bad', run: () => answerAttack('defeated') };
+			? { label: 'Defended', kind: 'team', split: { left: { label: rzCrowd ? `Defended +${rzCrowd}` : 'Defended', run: () => answerAttack('defended') }, right: { label: 'Defeated', run: () => answerAttack('defeated') } } }
+			: { label: 'Defeated', sub: temporal ? 'Defend with Initiative' : rzCrowd ? `Crowd Control +${rzCrowd}` : undefined, kind: 'bad', run: () => answerAttack('defeated') };
 		// forced to discard: pick a card (it arms Discard, above); "…or die" can also take the defeat
 		if (myForced) return myForced.die
 			? { label: 'Defeated', sub: 'or discard', kind: 'bad', run: () => forceAnswer(clientId, 'defeated') }
@@ -1093,6 +1108,13 @@
 			// your card names a lingering effect: on your turn the ring asks first (× = no effect), then End turn
 			// Diabolical Laughter: the laugh comes first ('if you do' — the swaps wait for it); × = no laugh this card
 			if (actor === clientId && nkKind === 'laugh' && !nkLaughed && nkNoLaugh !== fxKey) return { label: 'Laugh', sub: nkTargets.length ? `${nkTargets.length} must discard` : 'Diabolically', kind: 'go', tint: true, pulse: true, run: () => session.cardAction({ kind: 'power', pid: clientId, op: 'nkLaugh' }), cancel: nkSkipLaugh };
+			// Razzle: her card's chance comes first (× = not this time): spawn doubles · Crowd Control · retrieve
+			if (actor === clientId && rzKind && rzNo !== fxKey) {
+				if (rzKind === 'spawn') return placingDouble != null ? { label: 'Place', sub: 'Tap a space', kind: 'wait', cancel: () => onArmDouble(null) }
+					: { label: 'Spawn', sub: `${rzN} left`, kind: 'go', tint: true, pulse: true, run: () => (rzOpen = true), cancel: rzSkip };
+				if (rzKind === 'clear') return { label: 'Remove doubles', sub: 'Crowd Control', kind: 'go', tint: true, pulse: true, run: rzClear, cancel: rzSkip };
+				return { label: 'Retrieve', sub: `${rzN} card${rzN === 1 ? '' : 's'}`, kind: 'go', tint: true, pulse: true, run: () => (rzOpen = true), cancel: rzSkip };
+			}
 			// his Name a colour / Crack cards: the ring opens his panel instead (confirming there switches the effect on)
 			if (fxAsking && actor === clientId && (nkKind === 'name' || nkKind === 'crack')) return { label: nkKind === 'name' ? 'Name' : 'Crack', sub: nkKind === 'name' ? 'a colour' : 'reality', kind: 'go', tint: true, pulse: true, run: () => (nkOpen = true), cancel: fxNo };
 			if (fxAsking && actor === clientId && mine && myTurnCard != null) { const c = myTurnCard; const hero = mine.hero; return { label: 'Effect?', sub: heroCards(hero)[c]?.name, card: true, kind: 'go', tint: true, run: () => (examine = { hid: hero, idx: c, pid: clientId }), cancel: fxNo }; }
@@ -1131,6 +1153,9 @@
 	{:else if myPower === 'nebkher'}
 		<NebkherEye {size} phone={mobile} fx={dashFx} ult={!!mine?.ultimate} kind={nkKind} doubt={nkDoubt} enemies={nkEnemies} laughed={nkLaughed} swapsLeft={nkLeft} stolen={nkStolen}
 			targets={nkTargets.map((t) => heroName(cards[t]?.hero ?? ''))} crackDir={nkCrackDir} crackPick={nkCrackPick} namePick={nkNamePick} bind:open={nkOpen} onLaugh={nkArmLaugh} onSwap={nkSwapNow} onName={nkName} onCrack={nkCrackSet} onSteal={nkStealSet} onRead={nkRead} />
+	{:else if myPower === 'razzle'}
+		<RazzleTop {size} phone={mobile} fx={dashFx} sparkle={$boardPrefs.sparkle} ult={!!mine?.ultimate} kind={rzKind} faces={rzFaces} left={rzN} discard={mine?.discard ?? []} picking={placingDouble}
+			bind:open={rzOpen} onFace={onArmDouble} onClear={rzClear} onRetrieve={rzRetrieve} />
 	{:else if myPower === 'snorri'}
 		<SnorriRunes {size} runes={snRunes} {turnIdx} second={snSecond} ult={!!mine?.ultimate} canEdit={snEdit} canSecond={snCan2} fx={dashFx} phone={mobile} onDraft={snDraft} onSecond={snPickSecond} />
 	{/if}

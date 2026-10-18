@@ -46,6 +46,10 @@ export type PowerState = {
 	grip?: { mark: string; target: string }
 	/** NebKher: the Crack in Reality / Shift Reality line for this turn: through `hex`, along axis `dir` (0–2) */
 	crack?: { key: string; hex: string; dir: number }
+	/** Razzle: the doubles her gold spawned for this acting card (`key:at`) — up to three */
+	rzs?: { mark: string; n: number }
+	/** Razzle: the discarded cards Rummage / Ransack took back for this acting card */
+	rzr?: { mark: string; n: number }
 }
 export type NkColor = 'GOLD' | 'SILVER' | 'RED' | 'BLUE' | 'GREEN'
 export const NK_COLORS: NkColor[] = ['GOLD', 'SILVER', 'RED', 'BLUE', 'GREEN']
@@ -53,7 +57,7 @@ export const NK_COLORS: NkColor[] = ['GOLD', 'SILVER', 'RED', 'BLUE', 'GREEN']
 export type NkEnemy = { pid: string; hero: string; name: string; player: string; dist: number | null; prev: number | null; prevHidden: boolean
 	/** every turn slot I–IV as it stands (this turn's = the card in play), and whether Laughter may swap it */
 	cards: { t: number; idx: number | null; hidden: boolean; ok: boolean; now: boolean }[] }
-export type PowerReq = { kind: 'power'; pid: string; op: 'ignatiaFlip' | 'snorriInscribe' | 'snorriSecond' | 'takaSwap' | 'mateSwap' | 'emReverse' | 'emWarp' | 'warpSwap' | 'capsule' | 'nkLaugh' | 'nkSwap' | 'nkName' | 'nkCrack' | 'nkGrip';
+export type PowerReq = { kind: 'power'; pid: string; op: 'ignatiaFlip' | 'snorriInscribe' | 'snorriSecond' | 'takaSwap' | 'mateSwap' | 'emReverse' | 'emWarp' | 'warpSwap' | 'capsule' | 'nkLaugh' | 'nkSwap' | 'nkName' | 'nkCrack' | 'nkGrip' | 'rzSpawn' | 'rzRemove' | 'rzClear' | 'rzRetrieve';
 	/** takaSwap: the gold card from his deck to take; mateSwap: the hand / discard card to swap in; warpSwap: the turn slot (0–3) */
 	idx?: number
 	/** mateSwap: where the swapped-in card comes from */
@@ -71,19 +75,25 @@ export type PowerReq = { kind: 'power'; pid: string; op: 'ignatiaFlip' | 'snorri
 	/** nkName: the colour named */
 	color?: NkColor
 	/** nkCrack: the axis of the line (0–2) */
-	dir?: number }
+	dir?: number
+	/** rzSpawn: where the double goes */
+	hex?: string
+	/** rzSpawn: which of her faces it wears (1–3 = her card paintings; 0 = her portrait) */
+	face?: number
+	/** rzRemove: the body (piece id) to take off the board */
+	id?: string }
 /** what the engine knows about the turn in play */
 export type TurnCtx = { key: string; round: number; turnIdx: number; order: string[]; at: number; tieBreaker: Team; revealed: boolean
 	/** each player's team (for "a friendly hero") */
 	teams?: Record<string, Team | null> }
 type S = { cards?: Record<string, PlayerCardState>; power?: Record<string, PowerState>; effects?: Effect[]; host?: string
 	lastClash?: { id: string; kind: string; by: string; out: string } | null; lastDefeat?: { id: string; by: string } | null
-	attacks?: Record<string, unknown>; forced?: Record<string, unknown>
+	attacks?: Record<string, { discarded?: boolean } | undefined>; forced?: Record<string, unknown>
 	turnDisc?: { key: string; by: Record<string, number[]> } | null
-	pieces?: Record<string, { id: string; hex: string; kind?: string; team?: string; token?: string; owner?: string }> }
+	pieces?: Record<string, { id: string; hex: string; kind?: string; team?: string; token?: string; owner?: string; hero?: string; face?: number; attachedTo?: string }> }
 
 /** heroes with their own dash button */
-export const POWER_HEROES = ['ignatia', 'snorri', 'takahide', 'emmitt', 'nebkher']
+export const POWER_HEROES = ['ignatia', 'snorri', 'takahide', 'emmitt', 'nebkher', 'razzle']
 export const hasPower = (hero: string | undefined | null) => !!hero && POWER_HEROES.includes(hero)
 
 // ── Ignatia ──
@@ -206,7 +216,7 @@ export function takaHit(prev: S, next: S, req: { kind: string; pid?: string }, c
 	const by = ctx.order[ctx.at]
 	const cs = by ? next.cards?.[by] : undefined
 	// Takahide's swap reds, and Emmitt's golds ("After the attack: next turn…")
-	if (!by || !ctx.revealed || !(offerOf(cs) || (cs?.hero === EMM && RE_REVERSE.test(cardText(cs, cs.pending))))) return null
+	if (!by || !ctx.revealed || !(offerOf(cs) || (cs?.hero === EMM && RE_REVERSE.test(cardText(cs, cs.pending))) || (cs?.hero === RZ && RE_AFTER.test(cardText(cs, cs.pending))))) return null
 	const mark = `${ctx.key}:${ctx.at}`
 	if (next.power?.[by]?.hit === mark) return null
 	const c = next.lastClash, d = next.lastDefeat
@@ -334,9 +344,12 @@ const nkNewsOf = (kind: NkNews['kind'], by: string, more: Partial<NkNews> = {}):
 export const laughed = (s: S, pid: string, ctx: TurnCtx) => s.power?.[pid]?.laugh === markOf(ctx)
 /** spaces between two board pieces (null when either is off the board) */
 export const pieceDist = (s: S, a: string, b: string): number | null => {
-	const pa = s.pieces?.[a], pb = s.pieces?.[b]
-	if (!pa || !pb) return null
-	try { return cubeDist(hexCube(pa.hex), hexCube(pb.hex)) } catch { return null }
+	const pa = s.pieces?.[a]
+	if (!pa || !s.pieces?.[b]) return null
+	// a hero with doubles (Razzle) is as near as her nearest body
+	let best: number | null = null
+	for (const pb of bodiesOf(s, b)) { try { const d = cubeDist(hexCube(pa.hex), hexCube(pb.hex)); if (best == null || d < best) best = d } catch { /* off the map */ } }
+	return best
 }
 /** his ultimate's radius: the card's 5, plus his Area items */
 export const nkUltRadius = (cs: PlayerCardState) => 5 + (statDeltas(cs).radius ?? 0)
@@ -402,7 +415,132 @@ export function lineHexes(hex: string, dir: number, onMap: (h: string) => boolea
 export const illusionForce = (s: S, pid: string) => (s.effects ?? []).some((e) => e.pid === pid && e.hero === NEB && RE_ILLUSION_FORCE.test((heroCards(NEB)[e.idx]?.description ?? '').replace(/>/g, ' ')))
 
 /** the host applies a power request: the patch (empty = refused) */
+
+// ── Razzle ──
+// She has up to three DOUBLES on the board besides herself: hero pieces of their own (id `<pid>~1..3`, `owner` = her
+// pid, `face` = which of her card paintings they wear; her own piece keeps her pid). Each is the same hero except when
+// actions are performed: any of them can be attacked, and defeating one defeats them all (defeatHero / removeHero in
+// match.ts clear every body). Stunt Doubles (gold): after the attack, up to three more of her in radius — she picks a
+// face from her shelf and taps a space (radius not enforced). Crowd Control (silver): as a skill, every other one of
+// her leaves; as a defence, +2 for each other one in radius (a private reminder). Phantom Strike / Hit and Gone / Into
+// Thin Air: after the attack she takes bodies off (the Remove pill on her own bodies; all of them = Into Thin Air).
+// Rummage / Ransack: after the attack, retrieve a discarded card if another one of her is in radius / one per other in
+// radius. Removing her own piece while doubles stand promotes a double into it, so there is always a 'main' body.
+export const RZ = 'razzle'
+export const RZ_MAX = 4
+export const RE_SPAWN = /spawn\s+up\s+to\s+3\s+more\s+of\s+you/i
+export const RE_CLEAR = /remove\s+all\s+other\s+you/i
+export const RE_RETRIEVE = /retrieve\s+a\s+discarded\s+card/i
+const RE_AFTER = /after\s+the\s+attack/i
+const RE_EACH = /for\s+each\s+other\s+one\s+of\s+you/i
+type Body = NonNullable<S['pieces']>[string]
+/** a double of a hero: a hero piece owned by another piece's player */
+export const isDouble = (p: { id: string; kind?: string; owner?: string } | undefined) => !!p && p.kind === 'hero' && !!p.owner && p.owner !== p.id
+/** the player a hero piece belongs to (a double → its owner) */
+export const heroPidOf = (p: { id: string; kind?: string; owner?: string } | undefined) => (!p ? null : isDouble(p) ? p.owner! : p.id)
+/** every body of a hero on the board: its own piece first, then its doubles */
+export function bodiesOf(s: S, pid: string): Body[] {
+	const main = s.pieces?.[pid]
+	if (!main) return []
+	return [main, ...Object.values(s.pieces ?? {}).filter((p) => p.kind === 'hero' && p.owner === pid && p.id !== pid)]
+}
+/** the faces her bodies wear now (0 = her portrait) */
+export const facesInUse = (s: S, pid: string) => bodiesOf(s, pid).map((p) => p.face ?? 0)
+/** how many others of her stand within `r` of the body `of` */
+export const othersNear = (s: S, pid: string, of: string, r: number) => {
+	const me = s.pieces?.[of]
+	if (!me) return 0
+	return bodiesOf(s, pid).filter((p) => p.id !== of && cubeDist(hexCube(p.hex), hexCube(me.hex)) <= r).length
+}
+/** the most others of her near any one of her bodies (which body acted isn't tracked: the best case) */
+const othersNearBest = (s: S, pid: string, r: number) => Math.max(0, ...bodiesOf(s, pid).map((p) => othersNear(s, pid, p.id, r)))
+const rzCard = (s: S, pid: string) => { const cs = s.cards?.[pid]; return cs && cs.pending != null && cs.pending >= 0 ? heroCards(RZ)[cs.pending] : undefined }
+/** retrievals her Rummage / Ransack allow now (radius = the card's + her Area items) */
+export function rzRetrievals(s: S, pid: string): number {
+	const c = rzCard(s, pid), cs = s.cards?.[pid]
+	if (!c || !cs || !RE_RETRIEVE.test(c.description ?? '')) return 0
+	const near = othersNearBest(s, pid, (c.modifierValue ?? 0) + (statDeltas(cs).radius ?? 0))
+	return RE_EACH.test(c.description ?? '') ? near : Math.min(1, near)
+}
+const cnt = (x: { mark: string; n: number } | undefined, mark: string) => (x?.mark === mark ? x.n : 0)
+/** what her button offers now: spawn doubles (her gold, after the attack), clear them (Crowd Control as a skill),
+ *  retrieve (Rummage / Ransack, after the attack); null = nothing */
+export function rzPower(s: S, pid: string, ctx: TurnCtx): 'spawn' | 'clear' | 'retrieve' | null {
+	if (s.cards?.[pid]?.hero !== RZ || !s.pieces?.[pid]) return null
+	const mark = markOf(ctx), hit = s.power?.[pid]?.hit === mark
+	if (heroActing(s, ctx, RZ, RE_SPAWN) === pid) return hit && cnt(s.power?.[pid]?.rzs, mark) < 3 && bodiesOf(s, pid).length < RZ_MAX ? 'spawn' : null
+	if (heroActing(s, ctx, RZ, RE_CLEAR) === pid) return bodiesOf(s, pid).length > 1 ? 'clear' : null
+	if (heroActing(s, ctx, RZ, RE_RETRIEVE) === pid) return hit && rzLeft(s, pid, ctx) > 0 && (s.cards?.[pid]?.discard.length ?? 0) > 0 ? 'retrieve' : null
+	return null
+}
+/** doubles her gold may still spawn for this card */
+export const rzSpawnsLeft = (s: S, pid: string, ctx: TurnCtx) => Math.max(0, Math.min(3 - cnt(s.power?.[pid]?.rzs, markOf(ctx)), RZ_MAX - bodiesOf(s, pid).length))
+/** discarded cards still to take back for this card */
+export const rzLeft = (s: S, pid: string, ctx: TurnCtx) => Math.max(0, rzRetrievals(s, pid) - cnt(s.power?.[pid]?.rzr, markOf(ctx)))
+/** Crowd Control as a defence: +2 for each other one of her in radius (3 + Area items) of the body attacked — her own
+ *  reminder, only while the silver is in her hand */
+export function crowdBonus(s: S, pid: string, body: string): number {
+	const cs = s.cards?.[pid]
+	if (!cs || cs.hero !== RZ) return 0
+	const silver = silverIdx(RZ)
+	// in hand (she may still defend with it), or just discarded as this attack's defence
+	const used = !!s.attacks?.[pid]?.discarded && cs.discard[cs.discard.length - 1] === silver
+	if (silver < 0 || !(cs.hand.includes(silver) || used)) return 0
+	const c = heroCards(RZ)[silver]
+	return 2 * othersNear(s, pid, s.pieces?.[body] ? body : pid, (c?.modifierValue ?? 3) + (statDeltas(cs).radius ?? 0))
+}
+/** the bodies leave: markers riding on them move to her own piece (they're on HER, not on one body) */
+function dropBodies(pieces: NonNullable<S['pieces']>, ids: string[], to: string) {
+	const out = { ...pieces }
+	for (const id of ids) delete out[id]
+	for (const k in out) if (out[k].attachedTo && ids.includes(out[k].attachedTo!)) out[k] = { ...out[k], attachedTo: to }
+	return out
+}
+function applyRazzle(s: S, req: PowerReq, ctx: TurnCtx): Record<string, unknown> {
+	const pid = req.pid, mark = markOf(ctx)
+	if (req.op === 'rzSpawn') {
+		const main = s.pieces?.[pid], face = req.face, hex = req.hex
+		if (rzPower(s, pid, ctx) !== 'spawn' || !main || !hex || face == null || ![1, 2, 3].includes(face) || facesInUse(s, pid).includes(face)) return {}
+		// a free space: nothing standing there (markers ride on heroes, they don't take a space)
+		if (Object.values(s.pieces ?? {}).some((p) => p.hex === hex && !p.attachedTo)) return {}
+		let n = 1
+		while (s.pieces?.[`${pid}~${n}`]) n++
+		const id = `${pid}~${n}`
+		const piece = { ...main, id, hex, face, owner: pid, attachedTo: undefined }
+		delete (piece as { attachedTo?: string }).attachedTo
+		return { pieces: { ...s.pieces, [id]: piece }, power: { ...s.power, [pid]: { ...s.power?.[pid], rzs: { mark, n: cnt(s.power?.[pid]?.rzs, mark) + 1 } } } }
+	}
+	if (req.op === 'rzRemove') {
+		// one body off the board (her own call, or the host's): never the last one — that is Remove (her hero) / a defeat
+		const id = req.id
+		const owner = id ? heroPidOf(s.pieces?.[id]) : null
+		if (!id || !owner || s.cards?.[owner]?.hero !== RZ || (req.pid !== owner && req.pid !== s.host)) return {}
+		const bodies = bodiesOf(s, owner)
+		if (bodies.length < 2) return {}
+		if (id !== owner) return { pieces: dropBodies(s.pieces!, [id], owner) }
+		// her own piece goes: the first double steps into it (her pid keeps a body on the board)
+		const d = bodies[1]
+		const pieces = dropBodies(s.pieces!, [d.id], owner)
+		pieces[owner] = { ...pieces[owner], hex: d.hex, face: d.face ?? 0 }
+		return { pieces }
+	}
+	if (req.op === 'rzClear') {
+		// Crowd Control as a skill: every other one of her leaves (her own piece stays)
+		if (rzPower(s, pid, ctx) !== 'clear') return {}
+		const ids = bodiesOf(s, pid).slice(1).map((p) => p.id)
+		return ids.length ? { pieces: dropBodies(s.pieces!, ids, pid) } : {}
+	}
+	if (req.op === 'rzRetrieve') {
+		const cs = s.cards?.[pid], idx = req.idx
+		if (rzPower(s, pid, ctx) !== 'retrieve' || !cs || idx == null || !cs.discard.includes(idx)) return {}
+		return { cards: { ...s.cards, [pid]: { ...cs, discard: cs.discard.filter((i) => i !== idx), hand: [...cs.hand, idx] } },
+			power: { ...s.power, [pid]: { ...s.power?.[pid], rzr: { mark, n: cnt(s.power?.[pid]?.rzr, mark) + 1 } } } }
+	}
+	return {}
+}
+
 export function applyPower(s: S & { tieTurn?: { key: string; coin: Team } | null; acting?: { key: string; idx: number; done?: string[]; pin?: string[] } | null }, req: PowerReq, ctx: TurnCtx) {
+	if (req.op.startsWith('rz')) return applyRazzle(s, req, ctx)
 	if (req.op === 'nkLaugh') {
 		if (!canLaugh(s, req.pid, ctx)) return {}
 		const targets = laughTargets(s, req.pid, ctx)

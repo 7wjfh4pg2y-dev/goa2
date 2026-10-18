@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { applyCardReq, turnOrder, turnKey, actingIdx, actorOf, minionDefense, type MatchState, type Piece } from './match'
+import { applyCardReq, transferSeat, turnOrder, turnKey, actingIdx, actorOf, minionDefense, respawnHero, type MatchState, type Piece } from './match'
 import { newPlayerCardState } from './cards/cardstate'
 import { heroCards } from './cards/deck'
-import { equilibrium, canFlip, flipUsed, hasPower, canInscribe, activeRune, runesOf, secondRune, heldGolds, deckGolds, takaSwapKind, mateOffer, canReverse, warpOffer, capsuleOffer, nkPower, canLaugh, laughTargets, nkSwapsLeft, nkSlots, doubtNow, crackNow, lineHexes, type Rune, type TurnCtx } from './heropower'
+import { equilibrium, canFlip, flipUsed, hasPower, canInscribe, activeRune, runesOf, secondRune, heldGolds, deckGolds, takaSwapKind, mateOffer, canReverse, warpOffer, capsuleOffer, nkPower, canLaugh, laughTargets, nkSwapsLeft, nkSlots, doubtNow, crackNow, lineHexes, rzPower, rzSpawnsLeft, rzLeft, bodiesOf, isDouble, heroPidOf, crowdBonus, pieceDist, type Rune, type TurnCtx } from './heropower'
 import { goldsOf, isHidden, type PlayerCardState } from './cards/cardstate'
 import { draftable, isLabHero, FOUR_STAR_LAB, FOUR_STAR_LIVE, HEROES } from './heroes'
 import { isFullGame, type Journal } from './recorder'
+import { statusFrom } from './tokens'
 
 // I = Ignatia (orange) vs B (blue, Arien); turn 2 of round 1, both cards revealed
 const silver = heroCards('ignatia').findIndex((c) => c.color === 'SILVER' && !c.handicapped)
@@ -501,5 +502,141 @@ describe('NebKher: Diabolical Laughter, What the Hell Are You?, card swaps, a na
 		// B attacks N: his Illusions give him nothing
 		const back = { ...s, pieces: { ...s.pieces, i1: { ...ill, hex: '5_4' } }, attacks: { N: { by: 'B', defending: false, at: 0 } } } as unknown as MatchState
 		expect(minionDefense(back, 'N').mods.find((m) => m.id === 'i1')).toBeUndefined()
+	})
+})
+
+describe('Razzle: her doubles — spawn, faces, remove / promote, Crowd Control, Rummage / Ransack, defeat clears every body', () => {
+	const RC = heroCards('razzle'), AC = heroCards('arien')
+	const named = (n: string) => RC.findIndex((c) => c.name === n)
+	const gold = named('Stunt Doubles'), crowd = named('Crowd Control'), rummage = named('Rummage'), ransack = named('Ransack'), phantom = named('Phantom Strike')
+	const lowA = AC.reduce((a, _, i) => (!AC[i].handicapped && AC[i].color !== 'PURPLE' && (AC[i].initiative ?? 99) < (AC[a].initiative ?? 99) ? i : a), 0)
+	// R (Razzle, orange) at 5_5 · B (blue) next to her · M her teammate · H the host (no hero)
+	function rg(rPending: number, extra: Partial<MatchState> = {}, rMore: Partial<PlayerCardState> = {}): MatchState {
+		const r = { ...newPlayerCardState('razzle'), pending: rPending, ...rMore }
+		const b = { ...newPlayerCardState('arien'), pending: lowA }
+		const m = { ...newPlayerCardState('arien'), pending: lowA }
+		return {
+			round: 1, turn: 2, seats: 4, life: { orange: 6, blue: 6 }, tieBreaker: 'orange', revealAt: 0, host: 'H',
+			pieces: { R: { id: 'R', hex: '5_5', team: 'orange', kind: 'hero', hero: 'razzle' }, M: { id: 'M', hex: '9_9', team: 'orange', kind: 'hero', hero: 'arien' },
+				B: { id: 'B', hex: '6_5', team: 'blue', kind: 'hero', hero: 'arien' } },
+			cards: { R: r, B: b, M: m }, ...extra
+		} as unknown as MatchState
+	}
+	const pw = (s: MatchState, pid: string, op: string, more: Record<string, unknown> = {}) => applyCardReq(s, { kind: 'power', pid, op, ...more } as never)
+	const tc = (s: MatchState): TurnCtx => ({ ...ctx(s), teams: { R: 'orange', M: 'orange', B: 'blue' } })
+	const go = (s: MatchState, p: Partial<MatchState>) => ({ ...s, ...p }) as MatchState
+	// her gold attacks B, the host says Defended: the attack is over → the gold's "after the attack" opens
+	const afterAttack = (s: MatchState) => { const a = go(s, applyCardReq(s, { kind: 'attack', pid: 'R', target: 'B' })); return go(a, applyCardReq(a, { kind: 'attackResolve', pid: 'H', target: 'B', result: 'defended' } as never)) }
+	it('is a lab hero with a power', () => {
+		expect(hasPower('razzle')).toBe(true)
+		expect(FOUR_STAR_LAB).toContain('razzle')
+	})
+	it('Stunt Doubles: nothing to spawn until the attack has ended (defended counts), then up to 3 doubles, each with its own face', () => {
+		const s = actingAs(rg(gold), 'R')
+		expect(rzPower(s, 'R', tc(s))).toBe(null)
+		expect(pw(s, 'R', 'rzSpawn', { hex: '3_3', face: 1 })).toEqual({})
+		let x = afterAttack(s)
+		expect(rzPower(x, 'R', tc(x))).toBe('spawn')
+		x = go(x, pw(x, 'R', 'rzSpawn', { hex: '3_3', face: 1 }))
+		expect(bodiesOf(x, 'R').map((p) => p.face ?? 0)).toEqual([0, 1])
+		expect(isDouble(x.pieces['R~1'])).toBe(true)
+		expect(heroPidOf(x.pieces['R~1'])).toBe('R')
+		// the same face twice, an occupied space, a face out of range: refused
+		expect(pw(x, 'R', 'rzSpawn', { hex: '3_4', face: 1 })).toEqual({})
+		expect(pw(x, 'R', 'rzSpawn', { hex: '6_5', face: 2 })).toEqual({})
+		expect(pw(x, 'R', 'rzSpawn', { hex: '3_4', face: 4 })).toEqual({})
+		x = go(x, pw(x, 'R', 'rzSpawn', { hex: '3_4', face: 2 }))
+		x = go(x, pw(x, 'R', 'rzSpawn', { hex: '3_5', face: 3 }))
+		expect(bodiesOf(x, 'R').length).toBe(4)
+		expect(rzPower(x, 'R', tc(x))).toBe(null) // four of her: no more
+		expect(rzSpawnsLeft(x, 'R', tc(x))).toBe(0)
+		// not on someone else's turn, not for another player
+		expect(pw(afterAttack(actingAs(rg(gold), 'R')), 'M', 'rzSpawn', { hex: '3_3', face: 1 })).toEqual({})
+	})
+	it('a double can be attacked; defeating it defeats her: every body leaves, markers on them come off, she respawns as one with a random face', () => {
+		let x = afterAttack(actingAs(rg(gold), 'R'))
+		x = go(x, pw(x, 'R', 'rzSpawn', { hex: '3_3', face: 1 }))
+		x = go(x, pw(x, 'R', 'rzSpawn', { hex: '3_4', face: 2 }))
+		x = { ...x, pieces: { ...x.pieces, pz: { id: 'pz', hex: '3_3', team: 'blue', kind: 'token', token: 'token_poison', owner: 'B', attachedTo: 'R~1' } } } as MatchState
+		const a = go(x, applyCardReq(x, { kind: 'attack', pid: 'B', target: 'R', body: 'R~2' }))
+		expect(a.attacks?.R?.body).toBe('R~2')
+		const d = go(a, applyCardReq(a, { kind: 'attackResolve', pid: 'R', target: 'R', result: 'defeated' } as never))
+		expect(Object.keys(d.pieces).sort()).toEqual(['B', 'M'])
+		expect(d.defeated?.R?.piece.id).toBe('R')
+		// the minions next to the BODY attacked count (not her own piece's)
+		const mx = { ...a, pieces: { ...a.pieces, m1: { id: 'm1', hex: '3_5', team: 'blue', kind: 'minion', role: 'melee' } } } as MatchState
+		expect(minionDefense(mx, 'R').total).toBe(-1)
+		// respawn: one body, any of her four faces
+		const r = { ...d, turn: 3, cards: { ...d.cards, R: { ...d.cards!.R, pending: phantom } }, acting: undefined } as unknown as MatchState
+		const back = respawnHero(actingAs(r, 'R'), 'R', '1_1')
+		expect(back.pieces).toBeTruthy()
+		expect([0, 1, 2, 3]).toContain(back.pieces!.R.face ?? 0)
+		expect(Object.values(back.pieces!).filter((p) => p.kind === 'hero' && heroPidOf(p) === 'R').length).toBe(1)
+	})
+	it('Remove one body: a double just goes; her own piece hands its place to a double; never the last one; Remove (her hero) takes them all', () => {
+		let x = afterAttack(actingAs(rg(gold), 'R'))
+		x = go(x, pw(x, 'R', 'rzSpawn', { hex: '3_3', face: 1 }))
+		x = go(x, pw(x, 'R', 'rzSpawn', { hex: '3_4', face: 2 }))
+		x = { ...x, pieces: { ...x.pieces, bt: { id: 'bt', hex: '3_3', team: 'blue', kind: 'token', token: 'marker_bounty', owner: 'B', attachedTo: 'R~1' } } } as MatchState
+		expect(statusFrom(x.pieces).R?.bounty).toBe(1) // a marker on a double is on HER
+		const one = go(x, pw(x, 'R', 'rzRemove', { id: 'R~1' }))
+		expect(bodiesOf(one, 'R').length).toBe(2)
+		expect(one.pieces.bt.attachedTo).toBe('R') // the marker stays on HER
+		const promo = go(one, pw(one, 'R', 'rzRemove', { id: 'R' }))
+		expect(bodiesOf(promo, 'R').length).toBe(1)
+		expect(promo.pieces.R.hex).toBe('3_4')
+		expect(promo.pieces.R.face).toBe(2)
+		expect(pw(promo, 'R', 'rzRemove', { id: 'R' })).toEqual({}) // the last one: that's Remove (her hero)
+		expect(pw(one, 'B', 'rzRemove', { id: 'R~2' })).toEqual({}) // not an enemy's to remove
+		expect(pw(one, 'H', 'rzRemove', { id: 'R~2' }).pieces).toBeTruthy() // the host may
+		const all = go(x, applyCardReq(x, { kind: 'removeHero', pid: 'R' } as never))
+		expect(Object.keys(all.pieces).filter((k) => k.startsWith('R'))).toEqual([])
+		expect(all.defeated?.R).toBeTruthy()
+	})
+	it('Crowd Control: as a skill every other one of her leaves; as a defence +2 for each other one within 3 — only while it is in her hand', () => {
+		let x = afterAttack(actingAs(rg(gold), 'R'))
+		x = go(x, pw(x, 'R', 'rzSpawn', { hex: '5_6', face: 1 }))
+		x = go(x, pw(x, 'R', 'rzSpawn', { hex: '15_15', face: 2 }))
+		// the silver in her hand: 2 × the doubles within 3 of the body attacked
+		expect(crowdBonus(x, 'R', 'R')).toBe(x.cards!.R.hand.includes(crowd) ? 2 : 0)
+		const inHand = { ...x, cards: { ...x.cards, R: { ...x.cards!.R, hand: [...x.cards!.R.hand.filter((i) => i !== crowd), crowd] } } } as MatchState
+		expect(crowdBonus(inHand, 'R', 'R')).toBe(2)
+		expect(crowdBonus(inHand, 'R', 'R~2')).toBe(0)
+		const out = { ...x, cards: { ...x.cards, R: { ...x.cards!.R, hand: x.cards!.R.hand.filter((i) => i !== crowd) } } } as MatchState
+		expect(crowdBonus(out, 'R', 'R')).toBe(0)
+		// discarded as THIS attack's defence: the reminder stays on (Defended +2)
+		const used = { ...out, attacks: { R: { by: 'B', defending: true, at: 1, discarded: true } }, cards: { ...out.cards, R: { ...out.cards!.R, discard: [...out.cards!.R.discard, crowd] } } } as MatchState
+		expect(crowdBonus(used, 'R', 'R')).toBe(2)
+		// as a skill: her silver acting → Remove doubles
+		const sk = actingAs({ ...x, cards: { ...x.cards, R: { ...x.cards!.R, pending: crowd, hand: x.cards!.R.hand.filter((i) => i !== crowd) } } } as MatchState, 'R')
+		expect(rzPower(sk, 'R', tc(sk))).toBe('clear')
+		const cl = go(sk, pw(sk, 'R', 'rzClear'))
+		expect(bodiesOf(cl, 'R').map((p) => p.id)).toEqual(['R'])
+	})
+	it('a seat handed to a new id takes her doubles along (they follow their owner)', () => {
+		let x = afterAttack(actingAs(rg(gold), 'R'))
+		x = go(x, pw(x, 'R', 'rzSpawn', { hex: '5_6', face: 2 }))
+		const t = go(x, transferSeat(x, 'R', 'R2', 'Zara', 0))
+		expect(bodiesOf(t, 'R2').map((p) => p.id)).toEqual(['R2', 'R~1'])
+		expect(heroPidOf(t.pieces['R~1'])).toBe('R2')
+		expect(isDouble(t.pieces.R2)).toBe(false)
+	})
+	it('Rummage: after the attack, one discarded card back if another one of her is in radius; Ransack: one per other in radius', () => {
+		const disc = { discard: [1, 3, 4] }
+		let x = afterAttack(actingAs(rg(rummage, {}, disc), 'R'))
+		expect(rzPower(x, 'R', tc(x))).toBe(null) // nobody else of her near
+		x = { ...x, pieces: { ...x.pieces, 'R~1': { ...x.pieces.R, id: 'R~1', hex: '5_6', face: 1, owner: 'R' }, 'R~2': { ...x.pieces.R, id: 'R~2', hex: '4_5', face: 2, owner: 'R' } } } as MatchState
+		expect(rzLeft(x, 'R', tc(x))).toBe(1)
+		const r1 = go(x, pw(x, 'R', 'rzRetrieve', { idx: 3 }))
+		expect(r1.cards!.R.hand).toContain(3)
+		expect(r1.cards!.R.discard).not.toContain(3)
+		expect(pw(r1, 'R', 'rzRetrieve', { idx: 4 })).toEqual({})
+		let y = afterAttack(actingAs(rg(ransack, {}, disc), 'R'))
+		y = { ...y, pieces: x.pieces } as MatchState
+		expect(rzLeft(y, 'R', tc(y))).toBe(2)
+	})
+	it('distances to her count from her nearest body', () => {
+		const x = { ...rg(gold), pieces: { ...rg(gold).pieces, 'R~1': { id: 'R~1', hex: '9_8', team: 'orange', kind: 'hero', hero: 'razzle', owner: 'R', face: 1 } } } as MatchState
+		expect(pieceDist(x, 'M', 'R')).toBe(1)
 	})
 })

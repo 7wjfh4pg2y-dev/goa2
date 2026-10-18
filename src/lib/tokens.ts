@@ -76,8 +76,11 @@ export function statusFrom(pieces: Record<string, Piece>): Record<string, { pois
 	const out: Record<string, { poison: number; bounty: number }> = {}
 	for (const p of Object.values(pieces)) {
 		const k = p.token ? STATUS_MARKERS[p.token] : undefined
-		if (!k || !p.attachedTo || !pieces[p.attachedTo]) continue
-		;(out[p.attachedTo] ??= { poison: 0, bounty: 0 })[k] = 1
+		const h = p.attachedTo ? pieces[p.attachedTo] : undefined
+		if (!k || !h) continue
+		// a marker riding one of Razzle's doubles is on HER (the player the double belongs to)
+		const who = h.kind === 'hero' && h.owner && h.owner !== h.id ? h.owner : h.id
+		;(out[who] ??= { poison: 0, bounty: 0 })[k] = 1
 	}
 	return out
 }

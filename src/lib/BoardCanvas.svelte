@@ -24,7 +24,7 @@
 	export let interactive = true;
 	export let rotation = 0; // base orientation in degrees (e.g. 180 so your base sits at the bottom)
 
-	export let pieces: Array<{ id: string; hex: string; team: string; role?: string; label?: string; color?: string; token?: string; sym?: string; hero?: string; letter?: string;
+	export let pieces: Array<{ id: string; hex: string; team: string; role?: string; label?: string; color?: string; token?: string; sym?: string; hero?: string; face?: number; letter?: string;
 		attachTo?: string; mine?: 'down' | 'up'; peek?: string; immune?: boolean; locked?: boolean; name?: string; nameColor?: string; faded?: boolean }> = [];
 	// holding something to place (minion / token): every tap reports its hex, pieces
 	// aren't picked up, and a hex with a hero on it is still a valid target
@@ -648,7 +648,7 @@
 				</g>
 			{/if}
 		{:else}
-			<HeroToken x={c.x} y={c.y} r={size * 0.78} hero={p.hero} team={p.team} color={p.color} uid={cid} sym={p.sym} label={p.label} />
+			<HeroToken x={c.x} y={c.y} r={size * 0.78} hero={p.hero} face={p.face} team={p.team} color={p.color} uid={cid} sym={p.sym} label={p.label} />
 		{/if}
 {/snippet}
 

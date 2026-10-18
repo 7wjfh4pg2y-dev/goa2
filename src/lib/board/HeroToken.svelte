@@ -17,9 +17,11 @@
 	/** fallbacks when there is no hero art: an emblem image, or a letter */
 	export let sym: string | undefined = undefined;
 	export let label: string | undefined = undefined;
+	/** Razzle's doubles: which face (1–3 = her card paintings; 0 / none = the portrait) */
+	export let face: number | undefined = undefined;
 
 	const TEAM: Record<string, string> = { orange: '#ea6a1e', blue: '#2f79e6' };
-	$: pr = hero ? portraitRect(hero, x, y, r * 1.39) : null;
+	$: pr = hero ? portraitRect(hero, x, y, r * 1.39, face) : null;
 </script>
 
 <circle cx={x} cy={y} {r} fill="#0d1118" />

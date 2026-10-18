@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { hasPower, emActing, warpSlots, crackNow, lineHexes, RE_REWIND, RE_WARP, RE_TEMPORAL, type TurnCtx } from '$lib/heropower';
+	import { hasPower, emActing, warpSlots, crackNow, lineHexes, RE_REWIND, RE_WARP, RE_TEMPORAL, heroPidOf, bodiesOf, isDouble, type TurnCtx } from '$lib/heropower';
 	import { afterUpdate, onDestroy } from 'svelte';
 	import { readable, type Readable } from 'svelte/store';
 	import BoardCanvas from '$lib/BoardCanvas.svelte';
@@ -169,6 +169,7 @@
 		peek: p.faceDown && p.owner === clientId ? (p.token === 'token_blast' ? 'B' : 'D') : undefined,
 		// hero pieces draw the player icon (portrait); companions are letter discs
 		hero: p.hero && !p.token ? p.hero : undefined,
+		face: p.face || undefined, // Razzle's bodies: which face each wears
 		letter: p.token === 'companion' ? (p.label?.[0] ?? '?').toUpperCase() : undefined,
 		sym: p.hero ? heroLogo(p.hero) : undefined,
 		label: p.hero ? (heroById(p.hero)?.name?.[0]?.toUpperCase() ?? '?') : (p.label ?? ''),
@@ -219,7 +220,7 @@
 	$: if (!selPieceId) carryingSel = false;
 	$: pills = !hud2 || !selPiece || ringAsk || carryingSel || swapFrom ? [] : forceMenu ? ([
 		{ label: 'Discard', kind: 'force', run: () => forceSel(false), title: 'They discard a card' },
-		{ label: 'Discard or die', kind: 'bad', coin: heroDefeatSummary($ms, clientId, selPiece.id).coins, run: () => forceSel(true), title: 'They discard a card — or are defeated (you take the rewards)' },
+		{ label: 'Discard or die', kind: 'bad', coin: heroDefeatSummary($ms, clientId, selHero ?? '').coins, run: () => forceSel(true), title: 'They discard a card — or are defeated (you take the rewards)' },
 		{ label: 'Back', run: () => (forceMenu = false) }
 	] as Pill[]) : ([
 		selImmune ? { label: 'Immune', kind: 'imm', title: 'Heavy minions can\'t be moved, defeated or removed while another minion of their team is in the battle zone' } : null,
@@ -228,13 +229,17 @@
 		canRewindSel ? { label: 'Rewind', kind: 'time', run: rewindSel, title: 'Back to the Future: back to where they stood as the turn began' } : null,
 		canWarpSel ? { label: 'Warp', kind: 'time', run: warpSel, title: 'Time Warp: they swap their card in play for one of their resolved cards' } : null,
 		canFlip ? { label: selPiece.faceDown ? 'Flip — reveal' : 'Flip face down', run: flipMine } : null,
-		canDefeatSel && selPiece.kind === 'hero' ? { label: attacks[selPiece.id] ? 'Under attack…' : 'Attack', kind: 'go', off: !!attacks[selPiece.id], run: () => attackSel('attack') } : null,
-		canDefeatSel && selPiece.kind === 'hero' ? { label: 'Defeat', kind: 'bad', coin: heroDefeatSummary($ms, clientId, selPiece.id).coins, run: () => attackSel('defeat'), title: 'Not an attack: defeat them outright — same rewards' } : null,
-		canDefeatSel && selPiece.kind === 'hero' ? { label: $ms.forced?.[selPiece.id] ? 'Discarding…' : 'Forced discard', kind: 'force', off: !!$ms.forced?.[selPiece.id], run: () => (forceMenu = true), title: 'A card makes them discard (or be defeated)' } : null,
+		canDefeatSel && selPiece.kind === 'hero' ? { label: attacks[selHero ?? ''] ? 'Under attack…' : 'Attack', kind: 'go', off: !!attacks[selHero ?? ''], run: () => attackSel('attack') } : null,
+		canDefeatSel && selPiece.kind === 'hero' ? { label: 'Defeat', kind: 'bad', coin: heroDefeatSummary($ms, clientId, selHero ?? '').coins, run: () => attackSel('defeat'), title: 'Not an attack: defeat them outright — same rewards' } : null,
+		canDefeatSel && selPiece.kind === 'hero' ? { label: $ms.forced?.[selHero ?? ''] ? 'Discarding…' : 'Forced discard', kind: 'force', off: !!$ms.forced?.[selHero ?? ''], run: () => (forceMenu = true), title: 'A card makes them discard (or be defeated)' } : null,
 		canDefeatSel && selPiece.kind !== 'hero' && (!selImmune || iAmHost) ? { label: 'Defeat', kind: 'bad', coin: minionCoins(selPiece.role), run: defeatSel } : null,
-		ownHeroSel && ownAttack ? { label: `Clear${clearCount ? ` ${clearCount}` : ''}`, off: !clearCount, run: startClear } : null,
+		ownHeroSel && ownAttack && selPiece.id === clientId ? { label: `Clear${clearCount ? ` ${clearCount}` : ''}`, off: !clearCount, run: startClear } : null,
 		ownHeroSel ? { label: 'Defeated', kind: 'bad', run: selfDefeatAsk, title: 'You were defeated (not by an Attack): choose who gets the reward' } : null,
-		ownHeroSel ? { label: 'Remove', kind: 'rem', run: selfRemoveAsk, title: 'A card effect takes your hero off the board — back with your next card' } : null,
+		// Razzle with doubles: take THIS one of her off (Phantom Strike, Hit and Gone…) — or every one of her (Into Thin Air)
+		ownHeroSel && myBodies > 1 ? { label: 'Remove', kind: 'rem', run: bodyRemoveAsk, title: 'Take this one of you off the board' } : null,
+		ownHeroSel ? { label: myBodies > 1 ? 'Remove all' : 'Remove', kind: 'rem', run: selfRemoveAsk, title: myBodies > 1 ? 'Every one of you leaves the board — not a defeat; back with your next card' : 'A card effect takes your hero off the board — back with your next card' } : null,
+		// the host may take a body of Razzle's off for her
+		!ownHeroSel && iAmHost && isDouble(selPiece) ? { label: 'Remove', kind: 'rem', run: bodyRemoveAsk, title: 'Take this double off the board' } : null,
 		canBattleSel ? { label: 'Remove for the battle', kind: 'rem', run: battleTakeSel } : null,
 		canRemoveSel && selPiece.kind !== 'hero' && (!selImmune || iAmHost) ? { label: 'Remove', kind: 'rem', run: openRemove } : null
 	].filter(Boolean) as Pill[]);
@@ -308,6 +313,8 @@
 			{ id: 'wisps', label: 'Wisps', icon: ICON.wisps, on: $boardPrefs.wisps, title: `The spirit swirl on spaces to act on: ${$boardPrefs.wisps ? 'on' : 'off'}`, act: () => boardPrefs.set({ wisps: !$boardPrefs.wisps }) },
 			{ id: 'cue', label: 'Cue', icon: ICON.cue, on: $boardPrefs.turnCue, title: `The YOUR TURN cue when your card acts: ${$boardPrefs.turnCue ? 'on' : 'off'}`, act: () => boardPrefs.set({ turnCue: !$boardPrefs.turnCue }) },
 			// NebKher's laugh bursting out of his token (only while a NebKher plays)
+			// Razzle's ultimate: the sparkles round her own dash button (only to her)
+			...($ms.cards?.[clientId]?.hero === 'razzle' ? [{ id: 'sparkle', label: 'Sparkles', icon: ICON.cue, on: $boardPrefs.sparkle, title: `The sparkles round your button (ultimate): ${$boardPrefs.sparkle ? 'on' : 'off'}`, act: () => boardPrefs.set({ sparkle: !$boardPrefs.sparkle }) }] : []),
 			...(Object.values($ms.cards ?? {}).some((c) => c.hero === 'nebkher') ? [{ id: 'laugh', label: 'Laugh', icon: ICON.laugh, on: $boardPrefs.laugh, title: `NebKher's laugh bursting from his token: ${$boardPrefs.laugh ? 'on' : 'off'}`, act: () => boardPrefs.set({ laugh: !$boardPrefs.laugh }) }] : []),
 			// a 4★ hero's dash button effects (Ignatia's flames, …): one switch for all of them
 			...((hud2 || phone2) && hasPower($ms.cards?.[clientId]?.hero) ? [{ id: 'dash', label: 'Dashboard', icon: ICON.dash, on: $boardPrefs.dash, title: `Your hero button's effects: ${$boardPrefs.dash ? 'on' : 'off'}`, act: () => boardPrefs.set({ dash: !$boardPrefs.dash }) }] : []),
@@ -488,8 +495,12 @@
 	}
 	// a token / marker picked off the dash shelf, waiting for its hex
 	let pendingToken: ArmToken | null = null;
-	function armToken(t: ArmToken) { pendingSpawn = null; pendingRespawn = false; pendingToken = t; selPieceId = null; }
+	function armToken(t: ArmToken) { pendingSpawn = null; pendingRespawn = false; pendingDouble = null; pendingToken = t; selPieceId = null; }
 	$: if (pendingSpawn) pendingToken = null;
+	// Razzle: a double picked off her shelf (the face it wears), waiting for its space
+	let pendingDouble: number | null = null;
+	function armDouble(face: number | null) { pendingSpawn = null; pendingRespawn = false; pendingToken = null; pendingDouble = face; selPieceId = null; }
+	$: if (pendingDouble != null && (pendingSpawn || pendingToken || pendingRespawn)) pendingDouble = null;
 	// a defeated hero coming back: tap a hex (a spawn point) to place yourself
 	// (or, at the start of the game, entering it for the first time)
 	let pendingRespawn = false;
@@ -498,12 +509,15 @@
 	$: myEntry = $ms.toSpawn?.[clientId] ?? null;
 	$: heroToPlace = myDefeat?.piece ?? myEntry;
 	$: if (!heroToPlace) pendingRespawn = false;
-	$: placing = !!pendingSpawn || !!pendingToken || pendingRespawn || !!myStray;
+	$: placing = !!pendingSpawn || !!pendingToken || pendingRespawn || pendingDouble != null || !!myStray;
 	function placeMyHero() { cancelPlace(); selPieceId = null; actId = null; pendingRespawn = true; }
 	// the free spawn points of your base light up while you place your hero
 	$: spawnMarks = pendingRespawn && heroToPlace ? freeSpawns($ms, heroToPlace.team as Team).map((hex) => ({ hex, r: 0, team: heroToPlace?.team ?? 'orange', color: '#fff3a8' })) : [];
 	// what's held, drawn by the board as a see-through ghost under the cursor
-	$: placeGhost = pendingRespawn && heroToPlace
+	$: myMain = $ms.pieces?.[clientId];
+	$: placeGhost = pendingDouble != null && myMain
+		? { id: '__ghost', hex: '', team: myMain.team, hero: myMain.hero, face: pendingDouble, color: myMain.color ? colorHex(myMain.color) : undefined }
+		: pendingRespawn && heroToPlace
 		? { id: '__ghost', hex: '', team: heroToPlace.team, hero: heroToPlace.hero, sym: heroLogo(heroToPlace.hero ?? ''),
 			label: heroById(heroToPlace.hero ?? '')?.name?.[0]?.toUpperCase() ?? '?', color: heroToPlace.color ? colorHex(heroToPlace.color) : undefined }
 		: pendingSpawn
@@ -515,17 +529,23 @@
 			: null;
 	// the hex under a held object lights up in your chosen colour
 	$: myHoldColor = colorHex($players.find((p) => p.id === clientId)?.color ?? '');
-	function cancelPlace() { pendingSpawn = null; pendingToken = null; pendingRespawn = false; }
+	function cancelPlace() { pendingSpawn = null; pendingToken = null; pendingRespawn = false; pendingDouble = null; }
 	// board hex tapped while holding something: drop it right there
 	function onBoardHex(hex: string) {
 		if (watcher) return;
-		if (myStray && !pendingSpawn && !pendingToken && !pendingRespawn) {
+		if (myStray && !pendingSpawn && !pendingToken && !pendingRespawn && pendingDouble == null) {
 			const [id, opts] = myStray;
 			if (!opts.includes(hex)) return;
 			const m = $ms.pieces[id];
 			const rest = { ...($ms.strays ?? {}) };
 			delete rest[id];
 			session.act(inZone($ms, m.hex) ? `placed ${aMinion(m.team, m.role)} (its spawn point was blocked)` : `put ${aMinion(m.team, m.role)} back into the battle zone`, { ...movePiece($ms, id, hex), strays: rest });
+			return;
+		}
+		if (pendingDouble != null) {
+			// Razzle's double onto the space tapped (the engine refuses a taken space or a face already out)
+			session.cardAction({ kind: 'power', pid: clientId, op: 'rzSpawn', hex, face: pendingDouble });
+			pendingDouble = null;
 			return;
 		}
 		if (pendingRespawn) {
@@ -578,6 +598,9 @@
 		selPieceId = pc && !watcher ? id : null;
 	}
 	$: selPiece = selPieceId ? $ms.pieces[selPieceId] : null;
+	// the player a hero piece belongs to (one of Razzle's doubles → Razzle's player)
+	$: selHero = selPiece?.kind === 'hero' ? heroPidOf(selPiece) : null;
+	$: myBodies = bodiesOf($ms, clientId).length;
 	// Move: pick the selected piece up (a click only selects it; a drag still moves it straight away)
 	$: selMovable = !!selPiece && !(selImmune && !iAmHost);
 	// Move picks it up: the pills step aside until it is put down
@@ -610,8 +633,8 @@
 	const enemyHeroOf = (by: string | null) => !!by && (clientId === by || iAmHost) && !!selPiece && selPiece.kind === 'hero' && selPiece.team !== teamOf($ms, by);
 	$: startHex = selPiece && $ms.turnStart?.key === turnKey($ms) ? $ms.turnStart.pos[selPiece.id] : undefined;
 	$: canRewindSel = enemyHeroOf(rewindBy) && !!startHex && startHex !== selPiece?.hex;
-	$: canWarpSel = enemyHeroOf(warpBy) && !!turnCtx && !!selPiece && turnCtx.order.indexOf(selPiece.id) > turnCtx.at && $ms.power?.[warpBy ?? '']?.warp?.target !== selPiece.id
-		&& warpSlots($ms.cards?.[selPiece.id], $ms.turn - 1).length > 0; // they need a resolved card to swap for
+	$: canWarpSel = enemyHeroOf(warpBy) && !!turnCtx && !!selHero && turnCtx.order.indexOf(selHero) > turnCtx.at && $ms.power?.[warpBy ?? '']?.warp?.target !== selHero
+		&& warpSlots($ms.cards?.[selHero], $ms.turn - 1).length > 0; // they need a resolved card to swap for
 	function rewindSel() {
 		if (!selPiece || !startHex) return;
 		const p = selPiece, to = startHex;
@@ -620,9 +643,9 @@
 		session.act(`rewound ${pieceLabel(p)} to where they stood as the turn began (Back to the Future)`, { ...movePiece($ms, p.id, to), ...emShen(rewindBy) });
 	}
 	function warpSel() {
-		if (!selPiece) return;
-		const id = selPiece.id;
-		askRing(id, 'Warp', heroById(selPiece.hero ?? '')?.name ?? '', 'go', () => session.cardAction({ kind: 'power', pid: clientId, op: 'emWarp', target: id }));
+		if (!selPiece || !selHero) return;
+		const id = selHero;
+		askRing(selPiece.id, 'Warp', heroById(selPiece.hero ?? '')?.name ?? '', 'go', () => session.cardAction({ kind: 'power', pid: clientId, op: 'emWarp', target: id }));
 	}
 	// Temporal Punch / Slam / Judgment: the defender uses Initiative instead of Defense
 	$: temporalIn = !!incoming && RE_TEMPORAL.test(heroCards($ms.cards?.[incoming.by]?.hero ?? '')[$ms.cards?.[incoming.by]?.pending ?? -1]?.description ?? '');
@@ -647,7 +670,7 @@
 	// a small confirm takes the toolbar's place, right above the piece: attack a hero / remove a minion
 	let confirmKind: 'attack' | 'defeat' | 'remove' | 'selfremove' | null = null;
 	$: if (confirmKind && !actPiece) confirmKind = null;
-	$: attackSum = (confirmKind === 'attack' || confirmKind === 'defeat') && actPiece ? heroDefeatSummary($ms, clientId, actPiece.id) : null;
+	$: attackSum = (confirmKind === 'attack' || confirmKind === 'defeat') && actPiece ? heroDefeatSummary($ms, clientId, heroPidOf(actPiece) ?? actPiece.id) : null;
 	function defeatSel() {
 		if (!selPiece) return;
 		const p = selPiece;
@@ -660,29 +683,29 @@
 	// a hero can be attacked (they may defend) or simply defeated (a discard-or-die effect,
 	// anything that isn't an attack) — same rewards and splash either way
 	function attackSel(kind: 'attack' | 'defeat' = 'attack') {
-		if (!selPiece) return;
+		if (!selPiece || !selHero) return;
 		if (useRing) {
-			const id = selPiece.id, sum = heroDefeatSummary($ms, clientId, id);
-			askRing(id, kind === 'attack' ? 'Attack' : 'Defeat', `${heroOf(id)} · +${sum.coins}`, kind === 'attack' ? 'go' : 'bad',
-				() => session.cardAction(kind === 'attack' ? { kind: 'attack', pid: clientId, target: id } : { kind: 'defeatHero', pid: clientId, target: id }));
+			const id = selHero, body = selPiece.id, sum = heroDefeatSummary($ms, clientId, id);
+			askRing(body, kind === 'attack' ? 'Attack' : 'Defeat', `${heroOf(id)} · +${sum.coins}`, kind === 'attack' ? 'go' : 'bad',
+				() => session.cardAction(kind === 'attack' ? { kind: 'attack', pid: clientId, target: id, body } : { kind: 'defeatHero', pid: clientId, target: id }));
 			return;
 		}
 		actId = selPiece.id; confirmKind = kind;
 		board?.release();
 	}
 	function doDefeatHero() {
-		if (actPiece) session.cardAction({ kind: 'defeatHero', pid: clientId, target: actPiece.id });
+		if (actPiece) session.cardAction({ kind: 'defeatHero', pid: clientId, target: heroPidOf(actPiece) ?? actPiece.id });
 		closeConfirm();
 	}
 	function doAttack() {
-		if (actPiece) session.cardAction({ kind: 'attack', pid: clientId, target: actPiece.id });
+		if (actPiece) session.cardAction({ kind: 'attack', pid: clientId, target: heroPidOf(actPiece) ?? actPiece.id, body: actPiece.id });
 		closeConfirm();
 	}
 	function closeConfirm() { confirmKind = null; actId = null; selPieceId = null; }
 	// your OWN hero: take it off the board (a card effect), say who defeated you (they get the
 	// reward, their teammates the assists), or Clear instead of an attack (choose which of the
 	// tokens next to you leave — yours, a friend's or the enemy's; rulebook p.13)
-	$: ownHeroSel = !!selPiece && selPiece.kind === 'hero' && selPiece.id === clientId;
+	$: ownHeroSel = !!selPiece && selPiece.kind === 'hero' && heroPidOf(selPiece) === clientId;
 	$: ownCs = $ms.cards?.[clientId];
 	$: ownCardIdx = ownCs ? (ownCs.turns?.[$ms.turn - 1] ?? ownCs.pending) : null;
 	$: ownAttack = !!ownCs && ownCardIdx != null && ownCardIdx >= 0 && heroCards(ownCs.hero)[ownCardIdx]?.primaryAction === 'ATTACK';
@@ -703,6 +726,14 @@
 		if (!selPiece) return;
 		if (useRing) { askRing(selPiece.id, 'Remove', 'Your hero', 'bad', () => session.cardAction({ kind: 'removeHero', pid: clientId })); return; }
 		actId = selPiece.id; confirmKind = 'selfremove'; board?.release();
+	}
+	// Razzle: one body off the board (a double; her own piece hands its place to a double)
+	function bodyRemoveAsk() {
+		if (!selPiece) return;
+		const id = selPiece.id, own = heroPidOf(selPiece) === clientId;
+		const go = () => session.cardAction({ kind: 'power', pid: clientId, op: 'rzRemove', id });
+		if (useRing) { askRing(id, 'Remove', own ? 'This one of you' : 'Double', 'bad', go); return; }
+		board?.release(); selPieceId = null; go();
 	}
 	function doSelfRemove() { session.cardAction({ kind: 'removeHero', pid: clientId }); closeConfirm(); }
 	function selfDefeatAsk() { board?.release(); pickKiller = true; }
@@ -725,11 +756,11 @@
 	let forceMenu = false; // the Forced discard pill opens its two options
 	$: if (!selPieceId) forceMenu = false;
 	function forceSel(die: boolean) {
-		if (!selPiece) return;
-		const id = selPiece.id;
+		if (!selPiece || !selHero) return;
+		const id = selHero;
 		forceMenu = false;
 		const go = () => session.cardAction({ kind: 'force', pid: clientId, target: id, die });
-		if (useRing) { const sum = heroDefeatSummary($ms, clientId, id); askRing(id, die ? 'Discard or die' : 'Discard', `${heroOf(id)}${die ? ` · +${sum.coins}` : ''}`, die ? 'bad' : 'go', go); return; }
+		if (useRing) { const sum = heroDefeatSummary($ms, clientId, id); askRing(selPiece.id, die ? 'Discard or die' : 'Discard', `${heroOf(id)}${die ? ` · +${sum.coins}` : ''}`, die ? 'bad' : 'go', go); return; }
 		board?.release(); selPieceId = null; go();
 	}
 	// while an attack is on: the minion modifiers on the defence, as shields over the board (everyone sees them)
@@ -738,7 +769,7 @@
 		if (!$ms.pieces?.[t]) return [];
 		return [
 			...r.mods.map((m) => ({ id: m.id, text: m.d > 0 ? '+1' : '−1', tone: (m.d > 0 ? 'up' : 'down') as 'up' | 'down' })),
-			{ id: t, text: r.total > 0 ? `+${r.total}` : r.total < 0 ? `−${-r.total}` : '±0', tone: (r.total > 0 ? 'up' : r.total < 0 ? 'down' : 'even') as 'up' | 'down' | 'even', total: true }
+			{ id: attacks[t]?.body && $ms.pieces?.[attacks[t].body!] ? attacks[t].body! : t, text: r.total > 0 ? `+${r.total}` : r.total < 0 ? `−${-r.total}` : '±0', tone: (r.total > 0 ? 'up' : r.total < 0 ? 'down' : 'even') as 'up' | 'down' | 'even', total: true }
 		];
 	});
 	$: myDefMods = incoming ? minionDefense($ms, clientId).total : 0;
@@ -757,7 +788,7 @@
 	let pickHeroFor: RemovalOption | null = null; // a mine going off: which enemy hero set it off
 	$: canRemoveSel = !!selPiece && canRemove(selPiece, clientId, iAmHost);
 	$: removeOpts = actPiece ? removalOptions(actPiece) : [];
-	$: enemyHeroes = actPiece ? Object.values($ms.pieces ?? {}).filter((p) => p.kind === 'hero' && p.team !== actPiece?.team) : [];
+	$: enemyHeroes = actPiece ? Object.values($ms.pieces ?? {}).filter((p) => p.kind === 'hero' && !isDouble(p) && p.team !== actPiece?.team) : [];
 	function openRemove() {
 		actId = selPiece?.id ?? null; board?.release(); pickHeroFor = null;
 		// a minion just needs a quick yes; tokens get the menu of reasons (one plain reason → just the yes)
@@ -819,7 +850,7 @@
 	// hero / minion names read in their team colour (a lighter tint so they stay legible)
 	const teamText = (p: { kind?: string; role?: string; team: string } | null | undefined) =>
 		p && (p.kind === 'hero' || p.role) ? (p.team === 'blue' ? '#6aa8ff' : p.team === 'orange' ? '#ff9a4a' : undefined) : undefined;
-	const labelOf = (p: typeof selPiece) => !p ? '' : p.kind === 'hero' ? `${heroById(p.hero ?? '')?.name ?? 'Hero'} (${playerName(p.id)})`
+	const labelOf = (p: typeof selPiece) => !p ? '' : p.kind === 'hero' ? `${heroById(p.hero ?? '')?.name ?? 'Hero'} (${playerName(heroPidOf(p) ?? p.id)})`
 		: p.role ? `${p.role} minion`
 		: p.token === 'companion' ? (p.label ?? 'companion')
 		: p.token && MINES.has(p.token) ? (p.faceDown ? 'mine (face down)' : tokenName(p.token))
@@ -946,7 +977,7 @@
 	</div>
 {/snippet}
 
-<svelte:window on:keydown={(e) => { if (e.key !== 'Escape') return; if (wheelOpen) wheelOpen = false; else if (lobbyOpen) lobbyOpen = false; else if (confirmLeave) confirmLeave = false; else if (ringAsk) ringDone(); else { pendingSpawn = null; pendingToken = null; pingArmed = false; if (clearing) cancelClear(); } }} bind:innerWidth={winW} bind:innerHeight={winH} />
+<svelte:window on:keydown={(e) => { if (e.key !== 'Escape') return; if (wheelOpen) wheelOpen = false; else if (lobbyOpen) lobbyOpen = false; else if (confirmLeave) confirmLeave = false; else if (ringAsk) ringDone(); else { pendingSpawn = null; pendingToken = null; pendingDouble = null; pingArmed = false; if (clearing) cancelClear(); } }} bind:innerWidth={winW} bind:innerHeight={winH} />
 
 <div class="gamewrap" bind:clientWidth={wrapW} bind:clientHeight={wrapH} class:sea={boardLook === 'island'} class:mob={mobile} class:p2={phone2} class:h2={hud2} class:dashfull={!mobile && !hud2 && lay.underHud} style={mobile ? '' : layoutVars(lay) + (hud2 ? `; --dh:${88 * lay.s}px` : '')}>
 	{#if $ms.wonBy}
@@ -1028,9 +1059,11 @@
 	{:else if strayWait && !pendingToken && !pendingRespawn}
 		<div class="placehint stray"><span>Waiting for the {teamName($ms.pieces[strayWait[0]].team)} to {inZone($ms, $ms.pieces[strayWait[0]].hex) ? 'place their minion' : 'put their minion back into the battle zone'}</span></div>
 	{/if}
-	{#if pendingToken || pendingRespawn || (mobile && pendingSpawn)}
+	{#if pendingToken || pendingRespawn || pendingDouble != null || (mobile && pendingSpawn)}
 		<div class="placehint">
-			{#if pendingRespawn}
+			{#if pendingDouble != null}
+				<span>Tap a space for your double</span>
+			{:else if pendingRespawn}
 				<span>Tap a glowing spawn point in your base</span>
 			{:else if pendingToken}
 				<span>Tap a hex to place {pendingToken.token === 'companion' ? pendingToken.label : tokenName(pendingToken.token)}{MINES.has(pendingToken.token) ? ' (face down)' : ''}</span>
@@ -1079,7 +1112,7 @@
 	<BoardCanvas bind:this={board} map={$ms.map ?? {}} inset={boardInset} look={boardLook} {glowZone} activeZone={$ms.wonBy ? null : battleZone($ms)} effects={!deckCovered} sea={$boardPrefs.sea} rims={$boardPrefs.rims} rotation={orientation} interactive={true} {placing} {placeGhost} holdColor={myHoldColor} onCancelPlace={cancelPlace} {areas} marks={boardMarks} badges={defBadges} zoomLock={mobile && $boardPrefs.zoomLock} wisps={$boardPrefs.wisps} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} pings={boardPings} onPing={doPing} {pingArmed} />
 	</div>
 
-	<CardLayer bind:this={cardLayer} bind:turnCtx bind:crackPreview areaW={gvw} areaH={gvh} {mobile} {hud2} {phone2} ringAsk={ringAsk ?? swapAsk} onResults={() => (victoryClosed = false)} compact={$boardPrefs.compact} cTop={$boardPrefs.cTop} cOrder={$boardPrefs.cOrder} cLog={$boardPrefs.cLog} bind:topW {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} bind:covered={deckCovered} bind:phoneStatus onRespawn={placeMyHero} onEnter={placeMyHero} onArmToken={armToken} holdingToken={!!pendingToken} {pingArmed} onPing={pingButton} bind:previewId />
+	<CardLayer bind:this={cardLayer} bind:turnCtx bind:crackPreview areaW={gvw} areaH={gvh} {mobile} {hud2} {phone2} ringAsk={ringAsk ?? swapAsk} onResults={() => (victoryClosed = false)} compact={$boardPrefs.compact} cTop={$boardPrefs.cTop} cOrder={$boardPrefs.cOrder} cLog={$boardPrefs.cLog} bind:topW {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} bind:covered={deckCovered} bind:phoneStatus onRespawn={placeMyHero} onEnter={placeMyHero} onArmToken={armToken} onArmDouble={armDouble} placingDouble={pendingDouble} holdingToken={!!pendingToken} {pingArmed} onPing={pingButton} bind:previewId />
 
 	<!-- selected minion/token: offer delete (heroes aren't deletable) -->
 	{#if hud2}
@@ -1117,18 +1150,20 @@
 			{/if}
 			{#if selImmune}<span class="pieimm" title="Heavy minions can't be moved, defeated or removed while another minion of their team is in the battle zone{iAmHost ? ' — as host you can still override for card exceptions' : ''}">Immune</span>{/if}
 			{#if canDefeatSel && selPiece.kind === 'hero'}
-				<button class="piedefeat" on:click={() => attackSel('attack')} disabled={!!attacks[selPiece.id]}>{attacks[selPiece.id] ? 'Under attack…' : '⚔ Attack'}</button>
+				<button class="piedefeat" on:click={() => attackSel('attack')} disabled={!!attacks[selHero ?? '']}>{attacks[selHero ?? ''] ? 'Under attack…' : '⚔ Attack'}</button>
 				<button class="piedel" on:click={() => attackSel('defeat')} title="Not an attack: defeat them outright — same rewards">☠ Defeat</button>
-				<button class="pieflip" on:click={() => forceSel(false)} disabled={!!$ms.forced?.[selPiece.id]} title="A card makes them discard">Discard</button>
-				<button class="piedel" on:click={() => forceSel(true)} disabled={!!$ms.forced?.[selPiece.id]} title="They discard a card — or are defeated (you take the rewards)">Discard or die</button>
+				<button class="pieflip" on:click={() => forceSel(false)} disabled={!!$ms.forced?.[selHero ?? '']} title="A card makes them discard">Discard</button>
+				<button class="piedel" on:click={() => forceSel(true)} disabled={!!$ms.forced?.[selHero ?? '']} title="They discard a card — or are defeated (you take the rewards)">Discard or die</button>
 			{:else if canDefeatSel && (!selImmune || iAmHost)}
 				<button class="piedefeat" on:click={defeatSel}>Defeat <span class="gc sm"></span>{minionCoins(selPiece.role)}</button>
 			{/if}
 			{#if ownHeroSel}
-				{#if ownAttack}<button class="piedefeat" on:click={startClear} disabled={!clearCount} title="Clear instead of attacking: choose which tokens next to you leave the board">Clear{clearCount ? ` (${clearCount})` : ''}</button>{/if}
-				<button class="piedel" on:click={selfRemoveAsk} title="A card effect takes your hero off the board — no rewards; back with your next card">Remove</button>
+				{#if ownAttack && selPiece.id === clientId}<button class="piedefeat" on:click={startClear} disabled={!clearCount} title="Clear instead of attacking: choose which tokens next to you leave the board">Clear{clearCount ? ` (${clearCount})` : ''}</button>{/if}
+				{#if myBodies > 1}<button class="piedel" on:click={bodyRemoveAsk} title="Take this one of you off the board">Remove</button>{/if}
+				<button class="piedel" on:click={selfRemoveAsk} title="A card effect takes your hero off the board — no rewards; back with your next card">{myBodies > 1 ? 'Remove all' : 'Remove'}</button>
 				<button class="piedel" on:click={selfDefeatAsk} title="You were defeated (not by an Attack): choose who gets the reward">☠ Defeat</button>
 			{/if}
+			{#if !ownHeroSel && iAmHost && isDouble(selPiece)}<button class="piedel" on:click={bodyRemoveAsk} title="Take this double off the board">Remove</button>{/if}
 			{#if canBattleSel}<button class="piedefeat" on:click={battleTakeSel}>Remove for the battle</button>{/if}
 			{#if canRemoveSel && selPiece.kind !== 'hero' && (!selImmune || iAmHost)}<button class="piedel" on:click={openRemove}>Remove</button>{/if}
 			{/if}

@@ -13,7 +13,7 @@
 // broken by `updatedAt`) wins. For a handful of players nudging a shared
 // tracker this is robust and easy to reason about.
 
-import { applyPower, syncPowers, takaHit, hasPower, runeLine, RUNE_NAME, reversedTurn, trackDiscards, illusionForce, NEB, type NkNews, type PowerReq, type PowerState, type TurnCtx } from './heropower'
+import { applyPower, syncPowers, takaHit, hasPower, isDouble, RZ, runeLine, RUNE_NAME, reversedTurn, trackDiscards, illusionForce, NEB, type NkNews, type PowerReq, type PowerState, type TurnCtx } from './heropower'
 import { teamName, aMinion } from './teams'
 import { hexCube, cubeDist } from './zones'
 import { tokenExpiry, sweepTokens, statusFrom, isTurret } from './tokens'
@@ -72,7 +72,7 @@ export type CardReq =
 	| { kind: 'removeHero'; pid: string } // pid takes their own hero off the board (a card effect): no rewards, respawns with their next card
 	| { kind: 'clearAround'; pid: string; ids: string[] } // Clear (instead of an attack): the chosen tokens next to pid's hero leave the board
 	| { kind: 'defeatHero'; pid: string; target: string; keepCard?: boolean } // pid defeated target's hero (coins, assists, life); keepCard = their card this turn had already resolved (default: worked out from initiative)
-	| { kind: 'attack'; pid: string; target: string } // pid attacks target's hero → the defender is asked "Defend?"
+	| { kind: 'attack'; pid: string; target: string; body?: string } // pid attacks target's hero → the defender is asked "Defend?" (body = which of Razzle's bodies)
 	| { kind: 'force'; pid: string; target: string; die: boolean } // a card effect: target discards a card (die = "…or is defeated", rewards to pid)
 	| { kind: 'forceResolve'; pid: string; target: string; result: 'defeated' | 'none' | 'cancel' } // die → defeated · no card to discard · the forcer calls it off
 	| { kind: 'attackResolve'; pid: string; target: string; result: 'defend' | 'defended' | 'defeated' | 'cancel' } // the defender's answer (or the host's); the attacker may cancel
@@ -265,7 +265,7 @@ function applyCardReqBase(s: MatchState, req: Exclude<CardReq, PowerReq>): Parti
 	if (req.kind === 'clearAround') { const c = clearAround(s, req.pid, req.ids ?? []); return c.removed.length ? { pieces: c.pieces } : {} }
 	if (req.kind === 'respawn') return respawnHero(s, req.pid, req.hex)
 	if (req.kind === 'spawn') return spawnHero(s, req.pid, req.hex)
-	if (req.kind === 'attack') return startAttack(s, req.pid, req.target)
+	if (req.kind === 'attack') return startAttack(s, req.pid, req.target, req.body)
 	if (req.kind === 'attackResolve') return resolveAttack(s, req.pid, req.target, req.result)
 	if (req.kind === 'force') return startForce(s, req.pid, req.target, req.die)
 	if (req.kind === 'forceResolve') return resolveForce(s, req.pid, req.target, req.result)
@@ -446,7 +446,7 @@ export interface MatchState {
 	wonBy?: { team: Team; reason: string } | null // a push won the game (throne / last wave)
 	/** heroes under attack, keyed by the defender: who attacks, and whether they chose to defend */
 	/** discarded: the defender has discarded a card since the attack began — only then can they answer Defended */
-	attacks?: Record<string, { by: string; defending: boolean; at: number; discarded?: boolean }>
+	attacks?: Record<string, { by: string; defending: boolean; at: number; discarded?: boolean; body?: string }>
 	/** NebKher's latest act (laugh / steal / swap / doubt / crack): every screen plays its toast + laugh burst once */
 	nkNews?: NkNews | null
 	/** forced discards, keyed by the hero who must discard: who forces it, and whether it's "…or die" */
@@ -528,6 +528,7 @@ export interface Piece {
 	owner?: string // clientId of the player who placed this token
 	attachedTo?: string // a marker riding on a hero piece (by piece id) — moves with it
 	faceDown?: boolean // double-sided tokens (Min's Blast/Dud mines) placed hidden
+	face?: number // Razzle: which of her faces this body wears (0 / none = her portrait, 1–3 = her card paintings)
 }
 
 /** Tokens/markers that survive the end of a round (Wuk's trees, Trinkets' turret,
@@ -1607,6 +1608,10 @@ export function joinMatch(
 		if (req.kind === 'power' && req.op === 'nkCrack' && patch.power && local.power?.[req.pid]?.crack?.key !== (patch.power as Record<string, PowerState>)[req.pid]?.crack?.key) note(req.pid, `splits the board in two (${heroCards(NEB)[local.cards?.[req.pid]?.pending ?? -1]?.name ?? 'Crack in Reality'})`)
 		if (req.kind === 'power' && req.op === 'ignatiaFlip' && patch.tieBreaker) note(req.pid, `flips the tie-breaker coin to the ${teamName(patch.tieBreaker)} (Chaos Incarnate)`)
 		if (req.kind === 'removeHero' && patch.defeated) note(req.pid, 'took their hero off the board — back with their next card')
+		if (req.kind === 'power' && req.op === 'rzSpawn' && patch.pieces) note(req.pid, 'spawns a double (Stunt Doubles)')
+		if (req.kind === 'power' && req.op === 'rzRemove' && patch.pieces) note(req.pid, 'takes one of her bodies off the board')
+		if (req.kind === 'power' && req.op === 'rzClear' && patch.pieces) note(req.pid, 'calls every double back (Crowd Control)')
+		if (req.kind === 'power' && req.op === 'rzRetrieve' && patch.cards && req.idx != null) note(req.pid, `retrieves ${heroCards(RZ)[req.idx]?.name ?? 'a card'} from her discard`)
 		if (req.kind === 'clearAround' && patch.pieces) { const n = Object.keys(local.pieces ?? {}).length - Object.keys(patch.pieces).length; note(req.pid, `cleared ${n} token${n === 1 ? '' : 's'} next to them`) }
 		if (req.kind === 'spawn' && patch.pieces) note(req.pid, 'entered the battlefield')
 		if (req.kind === 'attack' && patch.attacks) note(req.pid, `attacks ${nameOf(req.target)}!`)
@@ -1987,6 +1992,14 @@ export function heroDefeatSummary(s: MatchState, pid: string, target: string) {
 	return { level, coins: level, assist: tier, assists, lives: tier + (bounty ? 1 : 0), bounty, team: teamOf(s, target) }
 }
 
+/** The board without a hero: its piece, Razzle's doubles of it, and the markers riding on any of them. */
+function withoutHero(s: MatchState, pid: string): Record<string, Piece> {
+	const gone = new Set([pid, ...Object.values(s.pieces ?? {}).filter((p) => isDouble(p) && p.owner === pid).map((p) => p.id)])
+	const pieces: Record<string, Piece> = {}
+	for (const id in s.pieces) { const p = s.pieces[id]; if (!gone.has(id) && !(p.attachedTo && gone.has(p.attachedTo))) pieces[id] = p }
+	return pieces
+}
+
 /** `pid` defeats `target`'s hero: +coins = its level (from the game, not the victim);
  *  every teammate of `pid` +assist coins = its level tier; the victim's team spends
  *  that tier in Life (+1 with the Bounty); markers on it come off; the tokens they
@@ -2004,12 +2017,7 @@ export function defeatHero(s: MatchState, pid: string, target: string, keepCard?
 	// stay where they are ("Tokens are not removed when the hero who placed them is defeated")
 	// until they'd normally go. This turn's card stays in its slot (some heroes care what's
 	// in their turn slots, others what's in their discard).
-	const pieces: Record<string, Piece> = {}
-	for (const id in s.pieces) {
-		const p = s.pieces[id]
-		if (id === target || p.attachedTo === target) continue
-		pieces[id] = p
-	}
+	const pieces = withoutHero(s, target)
 	const life = sum.team ? { ...s.life, [sum.team]: Math.max(0, s.life[sum.team] - sum.lives) } : s.life
 	const lifeTok = sum.team && s.lifeTok ? { ...s.lifeTok, [sum.team]: spendTokens(s.lifeTok[sum.team] ?? [], sum.lives) } : s.lifeTok
 	const attacks = { ...(s.attacks ?? {}) }
@@ -2046,8 +2054,7 @@ export function canRespawn(s: MatchState, pid: string): boolean {
 export function removeHero(s: MatchState, pid: string): Partial<MatchState> {
 	const hero = s.pieces?.[pid]
 	if (!hero || hero.kind !== 'hero') return {}
-	const pieces: Record<string, Piece> = {}
-	for (const id in s.pieces) if (id !== pid && s.pieces[id].attachedTo !== pid) pieces[id] = s.pieces[id]
+	const pieces = withoutHero(s, pid)
 	const attacks = { ...(s.attacks ?? {}) }
 	delete attacks[pid]
 	const forced = { ...(s.forced ?? {}) }
@@ -2118,12 +2125,14 @@ export function spawnHero(s: MatchState, pid: string, hex: string): Partial<Matc
 export const waitingToSpawn = (s: MatchState, present: string[]) => present.filter((id) => !!s.toSpawn?.[id])
 
 // ── attacks on heroes: attacker → "Defend?" → defended / defeated ──────────
-export function startAttack(s: MatchState, pid: string, target: string): Partial<MatchState> {
+export function startAttack(s: MatchState, pid: string, target: string, body?: string): Partial<MatchState> {
 	const hero = s.pieces?.[target]
 	if (!hero || hero.kind !== 'hero' || pid === target || s.attacks?.[target]) return {}
 	const a = teamOf(s, pid)
 	if (!a || a === teamOf(s, target)) return {}
-	return { attacks: { ...(s.attacks ?? {}), [target]: { by: pid, defending: false, at: Date.now() } } }
+	// which of Razzle's bodies was attacked (its own minions count, and her Crowd Control reminder)
+	const b = body && body !== target && s.pieces?.[body]?.owner === target && isDouble(s.pieces[body]) ? body : undefined
+	return { attacks: { ...(s.attacks ?? {}), [target]: { by: pid, defending: false, at: Date.now(), ...(b ? { body: b } : {}) } } }
 }
 export function resolveAttack(s: MatchState, pid: string, target: string, result: 'defend' | 'defended' | 'defeated' | 'cancel'): Partial<MatchState> {
 	const at = s.attacks?.[target]
@@ -2163,7 +2172,7 @@ export function resolveForce(s: MatchState, pid: string, target: string, result:
  *  next to them −1 each, enemy ranged within range 2 −1 each, friendly melee / heavy next to them
  *  +1 each (friendly ranged: nothing). */
 export function minionDefense(s: MatchState, target: string): { mods: { id: string; d: number }[]; total: number } {
-	const hero = s.pieces?.[target]
+	const hero = s.pieces?.[s.attacks?.[target]?.body ?? target] ?? s.pieces?.[target]
 	if (!hero || hero.kind !== 'hero') return { mods: [], total: 0 }
 	const at = hexCube(hero.hex)
 	const mods: { id: string; d: number }[] = []
@@ -2187,7 +2196,8 @@ export function respawnHero(s: MatchState, pid: string, hex: string): Partial<Ma
 	if (!d || !canRespawn(s, pid) || !spawnOk(s, d.piece.team as Team, hex)) return {}
 	const defeated = { ...s.defeated }
 	delete defeated[pid]
-	return { pieces: { ...s.pieces, [pid]: { ...d.piece, hex } }, defeated }
+	const face = d.piece.hero === RZ ? Math.floor(Math.random() * 4) : d.piece.face
+	return { pieces: { ...s.pieces, [pid]: { ...d.piece, hex, face } }, defeated }
 }
 
 

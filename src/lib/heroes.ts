@@ -48,7 +48,7 @@ export interface Hero {
  *  LIVE = draftable by everyone; LAB = a GM can test them (Create → 4★ shows to GMs only, and the room's games never
  *  reach the Hall). Any other 4★ hero stays "coming soon". */
 export const FOUR_STAR_LIVE: string[] = []
-export const FOUR_STAR_LAB: string[] = ['ignatia', 'snorri', 'takahide', 'emmitt', 'nebkher']
+export const FOUR_STAR_LAB: string[] = ['ignatia', 'snorri', 'takahide', 'emmitt', 'nebkher', 'razzle']
 export const isLabHero = (id: string) => FOUR_STAR_LAB.includes(id) && !FOUR_STAR_LIVE.includes(id)
 /** a hero the draft may offer: its complexity is picked, and a 4★ one is live (or in the lab, in a GM's room) */
 export const draftable = (h: { id: string; stars: number }, stars: number[], lab = false) =>
@@ -95,6 +95,10 @@ export const heroById = (id: string): Hero | undefined => HERO_BY_ID[id];
 /** Hero portrait URLs, keyed by hero id (bundled via Vite). */
 const avatarUrls = import.meta.glob('./images/avatars/*.webp', { eager: true, import: 'default' }) as Record<string, string>;
 export const heroAvatar = (id: string): string => avatarUrls[`./images/avatars/${id}.webp`] ?? '';
+// Razzle's doubles wear faces from her card paintings (Alleyoop · Hit and Gone · Aaaand it's gone!): square crops with the
+// face centred (images/doubles/<hero>-<n>.webp). face 0 / none = the hero's own portrait.
+const altFaceUrls = import.meta.glob('./images/doubles/*.webp', { eager: true, import: 'default' }) as Record<string, string>;
+export const altFace = (id: string, face?: number): string => (face ? altFaceUrls[`./images/doubles/${id}-${face}.webp`] ?? '' : '');
 
 /** Full landscape splash art, keyed by hero id. */
 const splashUrls = import.meta.glob('./images/avatars_full/*.webp', { eager: true, import: 'default' }) as Record<string, string>;
@@ -149,7 +153,9 @@ export function portraitCss(id: string): string {
 
 /** SVG equivalent: where to draw the avatar image so the face is centred in a
  * circle of diameter `d` centred on (cx, cy). Clip the image to that circle. */
-export function portraitRect(id: string, cx: number, cy: number, d: number) {
+export function portraitRect(id: string, cx: number, cy: number, d: number, face?: number) {
+	const alt = altFace(id, face);
+	if (alt) return { href: alt, x: cx - d / 2, y: cy - d / 2, w: d, h: d };
 	const [fx, fy, z] = HERO_FACE[id] ?? FACE_DEFAULT;
 	const w = 2 * d * z, h = d * z;
 	const x = Math.min(cx - d / 2, Math.max(cx + d / 2 - w, cx - fx * w));

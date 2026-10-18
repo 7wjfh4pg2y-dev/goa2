@@ -117,7 +117,7 @@
 				<button class="o" on:click={() => fire(order.alt?.run)}>{order.alt.label}</button>
 			</span>
 		{:else}
-			<button class="act {order.kind}" class:tinted={!!ringColor && (order.kind !== 'bad' || !!order.tint)} style={ringColor ? `--rc:${ringColor}` : ''} class:pulse={order.pulse} class:snug={!!order.cancel && (order.short ?? order.label).length > 5} disabled={!order.run} on:click={() => fire(order.run)}>
+			<button class="act {order.kind}" class:tinted={!!ringColor && (order.kind !== 'bad' || !!order.tint)} style={ringColor ? `--rc:${ringColor}` : ''} class:pulse={order.pulse} class:snug={!!order.cancel && ((order.short ?? order.label).length > 5 || (order.short ?? order.label).length + (order.card ? 0 : order.sub?.length ?? 0) > 9)} disabled={!order.run} on:click={() => fire(order.run)}>
 				<b>{order.short ?? order.label}</b>{#if order.sub && !order.card}<small>{order.sub}</small>{/if}
 			</button>
 		{/if}
