@@ -11,10 +11,10 @@
 
 	const COPY: Record<NkSplashKind, { kicker: string; title: string; sub: string }> = {
 		laugh: { kicker: 'Diabolical Laughter', title: 'MWA-HA-HA!', sub: 'NebKher laughs diabolically' },
-		steal: { kicker: 'Mind Grip', title: 'Your spell is mine', sub: 'NebKher steals {x}' },
-		swap: { kicker: 'Diabolical Laughter', title: 'Fate, twisted', sub: 'NebKher swaps your cards' },
-		doubt: { kicker: 'Imbue Doubt', title: 'Doubt creeps in', sub: 'Discard a {x} card' },
-		crack: { kicker: 'Crack in Reality', title: 'Reality cracks', sub: 'The board splits in two' },
+		steal: { kicker: 'Mind Grip', title: 'Your spells are mine!', sub: 'NebKher steals {x}' },
+		swap: { kicker: 'Diabolical Laughter', title: 'I twist your fate!', sub: 'NebKher swaps your cards' },
+		doubt: { kicker: 'Imbue Doubt', title: 'Doubt your choices!', sub: 'Discard a {x} card' },
+		crack: { kicker: 'Crack in Reality', title: 'Reality bends to me!', sub: 'The board splits in two' },
 	}
 	const GEM: Record<string, string> = { Gold: '#e8bd52', Silver: '#c9d2dc', Red: '#d6453a', Blue: '#3b7fe0', Green: '#41ae59' }
 
@@ -41,7 +41,7 @@
 				<span class="edge"></span>
 				<div class="copy">
 					<small class="kick">{c.kicker}</small>
-					<b class="title">{kind === 'laugh' ? 'MWA-HA-HA!' : c.title}</b>
+					<b class="title" class:long={(kind === 'laugh' ? 10 : c.title.length) > 17}>{kind === 'laugh' ? 'MWA-HA-HA!' : c.title}</b>
 					<span class="sub">{#if gem}<i class="gem" style="--gc:{gem}"></i>{/if}{sub}</span>
 				</div>
 			</div>
@@ -69,6 +69,7 @@
 	.ult .kick { color: #d7b0ff; }
 	.title { font-weight: normal; font-size: 30px; line-height: 1; color: #f4f7e0; letter-spacing: 0.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 		-webkit-text-stroke: 1px #0b1a10; paint-order: stroke fill; text-shadow: 0 0 14px rgba(201, 224, 74, 0.45), 2px 3px 0 #0b1a10; animation: nkslam 0.45s 0.2s cubic-bezier(0.2, 1.6, 0.4, 1) both; }
+	.title.long { font-size: 25px; }
 	.ult .title { text-shadow: 0 0 14px rgba(197, 140, 255, 0.55), 2px 3px 0 #12081e; }
 	@keyframes nkslam { from { opacity: 0; transform: scale(1.4); } to { opacity: 1; transform: none; } }
 	.sub { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: #d9e6c8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -78,6 +79,7 @@
 	.ph .band { height: 80px; grid-template-columns: 92px 1fr; }
 	.ph .edge { left: 76px; }
 	.ph .title { font-size: 24px; }
+	.ph .title.long { font-size: 20px; }
 	.ph .sub { font-size: 12px; }
 	@media (prefers-reduced-motion: reduce) { .nks *, .nks { animation-duration: 0.01s !important; animation-delay: 0s !important; } }
 </style>
