@@ -9,7 +9,7 @@
 	import type { Readable } from 'svelte/store';
 	import type { MatchSession, MatchState, Player } from '$lib/match';
 	import { teamForSeat, colorHex, battlePatch, levelPatch, canRespawn, turnPlan, claimable, actingIdx, actorOf, turnOrder, teamOf, turnKey as keyOfTurn } from '$lib/match';
-	import { hasPower, equilibrium, canFlip, flipUsed, runesOf, secondRune, canInscribe, canSecond, RUNES, takaSwapKind, mateOffer, canReverse, nextTurnKey, reversedTurn, warpOffer, warpSlots, capsuleOffer, RE_REVERSE, RE_TEMPORAL, nkPower, laughed, laughTargets, nkSwapsLeft, nkSlots, doubtNow, crackNow, pieceDist, type NkColor, type NkEnemy, type Rune, type TurnCtx } from '$lib/heropower';
+	import { hasPower, equilibrium, canFlip, flipUsed, runesOf, secondRune, canInscribe, canSecond, RUNES, takaSwapKind, mateOffer, canReverse, nextTurnKey, reversedTurn, warpOffer, warpSlots, capsuleOffer, RE_REVERSE, RE_TEMPORAL, nkPower, laughed, laughTargets, nkSwapsLeft, nkSlots, nkCardAt, prevCard, doubtNow, crackNow, pieceDist, type NkColor, type NkEnemy, type Rune, type TurnCtx } from '$lib/heropower';
 	import EmmittClock from '$lib/hud2/EmmittClock.svelte';
 	import TakaGold from '$lib/hud2/TakaGold.svelte';
 	import IgnatiaCoin from '$lib/hud2/IgnatiaCoin.svelte';
@@ -271,7 +271,7 @@
 	// Takahide: a gold swap open now (his gold or Bushido acting); his teammates: a swap offered by his red card
 	$: tkKind = myPower === 'takahide' ? takaSwapKind($ms, clientId, pctx) : null;
 	$: mateOff = mine ? mateOffer($ms, clientId, pctx) : null;
-	let powerArm: { op: 'ignatiaFlip' | 'snorriInscribe' | 'takaSwap' | 'mateSwap' | 'nkLaugh' | 'nkSwap'; label: string; sub?: string; order?: Rune[]; target?: string; idx?: number; src?: 'hand' | 'discard'; slots?: [number, number] } | null = null;
+	let powerArm: { op: 'ignatiaFlip' | 'snorriInscribe' | 'takaSwap' | 'mateSwap' | 'nkLaugh' | 'nkGrip' | 'nkCrack'; label: string; sub?: string; order?: Rune[]; target?: string; idx?: number; src?: 'hand' | 'discard'; dir?: number } | null = null;
 	// NebKher: the power his card acting opens (Laughter · Mind Grip / Probe · a colour to name · the Crack), the enemy
 	// heroes his panel lists, the colour he named (public) and his Crack line
 	$: nkKind = myPower === 'nebkher' && !battlePhase ? nkPower($ms, clientId, pctx) : null;
@@ -280,25 +280,44 @@
 	$: nkDoubt = myPower === 'nebkher' ? doubtNow($ms, clientId, pctx) : null;
 	$: nkCrackDir = myPower === 'nebkher' ? (crackNow($ms, pctx)?.pid === clientId ? crackNow($ms, pctx)!.dir : null) : null;
 	$: nkReach = nkKind && mine ? nkReachOf(mine, nkKind) : 0;
-	$: nkEnemies = nkKind === 'laugh' || nkKind === 'grip' ? nkEnemyList($ms, pctx) : [];
+	$: nkEnemies = nkKind === 'laugh' || nkKind === 'grip' ? nkEnemyList($ms, pctx, nkReach) : [];
+	$: nkStolen = nkKind === 'grip' && $ms.power?.[clientId]?.grip?.mark === `${pctx.key}:${pctx.at}` ? $ms.power[clientId].grip!.target : null;
 	$: nkLeft = nkKind === 'laugh' ? nkSwapsLeft($ms, clientId, pctx) : 0;
 	/** Mind Grip / Probe: the card's range + Range items; Laughter: its radius + Area items */
 	function nkReachOf(cs: PlayerCardState, kind: string) { const c = heroCards('nebkher')[cs.pending ?? -1]; const d = statDeltas(cs); return (c?.modifierValue ?? 0) + ((kind === 'grip' ? d.range : d.radius) ?? 0); }
-	function nkEnemyList(st: MatchState, ctx: TurnCtx): NkEnemy[] {
+	/** the enemy heroes on the board within reach of his card acting, nearest first */
+	function nkEnemyList(st: MatchState, ctx: TurnCtx, reach: number): NkEnemy[] {
 		const me = ctx.teams?.[clientId];
 		return Object.keys(st.cards ?? {}).filter((p) => ctx.teams?.[p] && ctx.teams[p] !== me).map((p) => {
-			const cs = st.cards![p], prev = ctx.turnIdx > 0 ? cs.turns[ctx.turnIdx - 1] ?? null : null;
-			return { pid: p, hero: cs.hero, name: `${heroName(cs.hero)} · ${pidName(p)}`, dist: pieceDist(st, clientId, p), prev: prev != null && prev >= 0 ? prev : null, prevHidden: prev != null && isHidden(cs, prev),
-				slots: nkSlots(cs, ctx.turnIdx).map((t) => ({ t, idx: cs.turns[t] as number, hidden: isHidden(cs, cs.turns[t]) })) };
-		});
+			const cs = st.cards![p], prev = prevCard(cs, ctx.turnIdx), ok = nkSlots(st, p, ctx);
+			return { pid: p, hero: cs.hero, name: heroName(cs.hero), player: pidName(p), dist: pieceDist(st, clientId, p), prev, prevHidden: prev != null && isHidden(cs, prev),
+				cards: [0, 1, 2, 3].map((t) => { const i = t > ctx.turnIdx || (t === ctx.turnIdx && !ctx.revealed) ? null : nkCardAt(cs, t, ctx.turnIdx); const idx = i != null && i >= 0 ? i : null; return { t, idx, hidden: idx != null && isHidden(cs, idx), ok: ok.includes(t), now: t === ctx.turnIdx }; }) };
+		}).filter((e) => e.dist != null && e.dist <= reach).sort((a, b) => (a.dist ?? 0) - (b.dist ?? 0));
 	}
 	function nkArmLaugh() { powerArm = { op: 'nkLaugh', label: 'Laugh', sub: nkTargets.length ? `${nkTargets.length} must discard` : 'Diabolically' }; armed = null; playedArm = null; orderArm = null; }
-	function nkArmSwap(t: string, a: number, b: number) { powerArm = { op: 'nkSwap', label: 'Swap cards', sub: heroName(cards[t]?.hero ?? ''), target: t, slots: [a, b] }; armed = null; playedArm = null; orderArm = null; }
+	// a swap on an enemy's board acts at once (like a move; logged)
+	const nkSwapNow = (t: string, a: number, b: number) => session.cardAction({ kind: 'power', pid: clientId, op: 'nkSwap', target: t, slots: [a, b] });
+	// Mind Grip / Probe: Spell Steal loads onto the ring (STABLE: the panel calls it from a reactive line)
+	function nkStealSet(t: string | null) {
+		if (!t) { if (powerArm?.op === 'nkGrip') powerArm = null; return; }
+		if (powerArm?.op === 'nkGrip' && powerArm.target === t) return;
+		const c = cards[t]; powerArm = { op: 'nkGrip', label: 'Spell Steal', sub: heroCards(c?.hero ?? '')[prevCard(c, turnIdx) ?? -1]?.name, target: t }; armed = null; playedArm = null; orderArm = null;
+	}
+	// the Crack: the line he picks shows only on his board until the ring confirms it
+	let nkCrackPick: number | null = null;
+	function nkCrackSet(d: number | null) {
+		nkCrackPick = d;
+		if (d == null) { if (powerArm?.op === 'nkCrack') powerArm = null; return; }
+		powerArm = { op: 'nkCrack', label: 'Crack', sub: 'reality', dir: d }; armed = null; playedArm = null; orderArm = null;
+	}
+	$: if (nkCrackPick != null && powerArm?.op !== 'nkCrack') nkCrackPick = null;
+	export let crackPreview: { hex: string; dir: number } | null = null;
+	$: crackPreview = nkCrackPick != null && $ms.pieces?.[clientId] ? { hex: $ms.pieces[clientId].hex, dir: nkCrackPick } : null;
 	const nkName = (c: NkColor) => session.cardAction({ kind: 'power', pid: clientId, op: 'nkName', color: c });
-	const nkCrack = (d: number) => session.cardAction({ kind: 'power', pid: clientId, op: 'nkCrack', dir: d });
 	const nkRead = (h: string, i: number) => (examine = { hid: h, idx: i });
 	$: if (powerArm?.op === 'nkLaugh' && (nkKind !== 'laugh' || nkLaughed)) powerArm = null;
-	$: if (powerArm?.op === 'nkSwap' && (nkKind !== 'laugh' || nkLeft <= 0)) powerArm = null;
+	$: if (powerArm?.op === 'nkGrip' && (nkKind !== 'grip' || !!nkStolen)) powerArm = null;
+	$: if (powerArm?.op === 'nkCrack' && nkKind !== 'crack') powerArm = null;
 	$: if (powerArm && powerArm.op === 'takaSwap' && !powerArm.target && !tkKind) powerArm = null;
 	$: if (powerArm && powerArm.op === 'mateSwap' && !mateOff) powerArm = null;
 	// the gold panel hands over the gold to swap in (a stable function: the panel calls it reactively)
@@ -1027,7 +1046,7 @@
 			if (nudgeLeft > 0) return { label: 'Nudge', sub: `in ${Math.ceil(nudgeLeft / 1000)} s`, kind: 'off', cancel: drop };
 			return { label: 'Nudge', sub: who, kind: 'go', pulse: true, run: () => { session.nudge(a.pid); drop(); }, cancel: drop };
 		}
-		if (powerArm) { const a = powerArm; return { label: a.label, sub: a.sub, kind: 'go', pulse: true, card: a.op === 'takaSwap' || a.op === 'mateSwap', run: () => { session.cardAction({ kind: 'power', pid: clientId, op: a.op, order: a.order, target: a.target, idx: a.idx, src: a.src, slots: a.slots }); powerArm = null; if (a.target) { runeFor = null; goldFor = null; } }, cancel: () => { powerArm = null; if (a.target) { runeFor = null; goldFor = null; } } }; }
+		if (powerArm) { const a = powerArm; return { label: a.label, sub: a.sub, kind: 'go', pulse: true, card: a.op === 'takaSwap' || a.op === 'mateSwap', run: () => { session.cardAction({ kind: 'power', pid: clientId, op: a.op, order: a.order, target: a.target, idx: a.idx, src: a.src, dir: a.dir }); powerArm = null; if (a.target) { runeFor = null; goldFor = null; } }, cancel: () => { powerArm = null; if (a.target) { runeFor = null; goldFor = null; } } }; }
 		// Time Warp names you: pick a resolved slot, then the ring swaps it in
 		if (warpOff && mine) {
 			if (warpPick != null) { const t = warpPick, i = mine.turns[t]; return { label: 'Swap in', sub: i != null ? heroCards(mine.hero)[i]?.name : '', card: true, kind: 'go', pulse: true, run: () => sendWarp(t), cancel: dropWarpPick }; }
@@ -1096,8 +1115,8 @@
 	{:else if myPower === 'emmitt'}
 		<EmmittClock {size} phone={mobile} mode={emMode} fx={dashFx} />
 	{:else if myPower === 'nebkher'}
-		<NebkherEye {size} phone={mobile} fx={dashFx} ult={!!mine?.ultimate} kind={nkKind} doubt={nkDoubt} enemies={nkEnemies} laughed={nkLaughed} swapsLeft={nkLeft}
-			targets={nkTargets.map((t) => heroName(cards[t]?.hero ?? ''))} reach={nkReach} crackDir={nkCrackDir} onLaugh={nkArmLaugh} onSwap={nkArmSwap} onName={nkName} onCrack={nkCrack} onRead={nkRead} />
+		<NebkherEye {size} phone={mobile} fx={dashFx} ult={!!mine?.ultimate} kind={nkKind} doubt={nkDoubt} enemies={nkEnemies} laughed={nkLaughed} swapsLeft={nkLeft} stolen={nkStolen}
+			targets={nkTargets.map((t) => heroName(cards[t]?.hero ?? ''))} crackDir={nkCrackDir} crackPick={nkCrackPick} onLaugh={nkArmLaugh} onSwap={nkSwapNow} onName={nkName} onCrack={nkCrackSet} onSteal={nkStealSet} onRead={nkRead} />
 	{:else if myPower === 'snorri'}
 		<SnorriRunes {size} runes={snRunes} {turnIdx} second={snSecond} ult={!!mine?.ultimate} canEdit={snEdit} canSecond={snCan2} fx={dashFx} phone={mobile} onDraft={snDraft} onSecond={snPickSecond} />
 	{/if}

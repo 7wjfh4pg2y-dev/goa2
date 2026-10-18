@@ -39,14 +39,18 @@ export type PowerState = {
 	nsw?: { mark: string; n: number }
 	/** NebKher: the colour he named (Imbue Doubt…) and the turn he named it in — shown till the next turn ends */
 	doubt?: { key: string; color: NkColor }
+	/** NebKher: the enemy hero whose previous card he took with Mind Grip / Probe, for this acting card */
+	grip?: { mark: string; target: string }
 	/** NebKher: the Crack in Reality / Shift Reality line for this turn: through `hex`, along axis `dir` (0–2) */
 	crack?: { key: string; hex: string; dir: number }
 }
 export type NkColor = 'GOLD' | 'SILVER' | 'RED' | 'BLUE' | 'GREEN'
 export const NK_COLORS: NkColor[] = ['GOLD', 'SILVER', 'RED', 'BLUE', 'GREEN']
 /** an enemy hero as NebKher's panel lists them */
-export type NkEnemy = { pid: string; hero: string; name: string; dist: number | null; prev: number | null; prevHidden: boolean; slots: { t: number; idx: number; hidden: boolean }[] }
-export type PowerReq = { kind: 'power'; pid: string; op: 'ignatiaFlip' | 'snorriInscribe' | 'snorriSecond' | 'takaSwap' | 'mateSwap' | 'emReverse' | 'emWarp' | 'warpSwap' | 'capsule' | 'nkLaugh' | 'nkSwap' | 'nkName' | 'nkCrack';
+export type NkEnemy = { pid: string; hero: string; name: string; player: string; dist: number | null; prev: number | null; prevHidden: boolean
+	/** every turn slot I–IV as it stands (this turn's = the card in play), and whether Laughter may swap it */
+	cards: { t: number; idx: number | null; hidden: boolean; ok: boolean; now: boolean }[] }
+export type PowerReq = { kind: 'power'; pid: string; op: 'ignatiaFlip' | 'snorriInscribe' | 'snorriSecond' | 'takaSwap' | 'mateSwap' | 'emReverse' | 'emWarp' | 'warpSwap' | 'capsule' | 'nkLaugh' | 'nkSwap' | 'nkName' | 'nkCrack' | 'nkGrip';
 	/** takaSwap: the gold card from his deck to take; mateSwap: the hand / discard card to swap in; warpSwap: the turn slot (0–3) */
 	idx?: number
 	/** mateSwap: where the swapped-in card comes from */
@@ -342,8 +346,19 @@ export function laughTargets(s: S, pid: string, ctx: TurnCtx): string[] {
 }
 /** he may laugh now: his silver is the card acting and he hasn't laughed for it yet */
 export const canLaugh = (s: S, pid: string, ctx: TurnCtx) => nkPower(s, pid, ctx) === 'laugh' && !laughed(s, pid, ctx)
-/** an enemy hero's resolved cards Laughter may swap: their earlier turn slots this round */
-export const nkSlots = (cs: PlayerCardState | undefined, turnIdx: number) => warpSlots(cs, turnIdx)
+/** an enemy hero's RESOLVED cards Laughter may swap: their earlier turn slots this round, and this turn's card once
+ *  it has acted (his silver is slow — most cards have) */
+export function nkSlots(s: S, pid: string, ctx: TurnCtx): number[] {
+	const cs = s.cards?.[pid]
+	const out = warpSlots(cs, ctx.turnIdx)
+	const k = ctx.order.indexOf(pid)
+	if (cs && ctx.revealed && k >= 0 && k < ctx.at && cs.pending != null && cs.pending >= 0) out.push(ctx.turnIdx)
+	return out
+}
+/** the card in turn slot `t` (this turn's = the card in play) */
+export const nkCardAt = (cs: PlayerCardState, t: number, turnIdx: number) => (t === turnIdx ? cs.pending : cs.turns[t])
+/** Mind Grip / Probe: the card in an enemy hero's previous turn slot (none on turn 1) */
+export const prevCard = (cs: PlayerCardState | undefined, turnIdx: number) => { const i = turnIdx > 0 ? cs?.turns[turnIdx - 1] : null; return i != null && i >= 0 ? i : null }
 /** card swaps left for this Laughter (three choices in all; only the swaps are counted) */
 export const nkSwapsLeft = (s: S, pid: string, ctx: TurnCtx) => { const n = s.power?.[pid]?.nsw; return 3 - (n && n.mark === markOf(ctx) ? n.n : 0) }
 /** the turn after `key` ("r-t" → "r-(t+1)"; none after the 4th) */
@@ -383,12 +398,22 @@ export function applyPower(s: S & { tieTurn?: { key: string; coin: Team } | null
 		const t = req.target, sl = req.slots
 		if (nkPower(s, req.pid, ctx) !== 'laugh' || !t || !sl || sl[0] === sl[1] || nkSwapsLeft(s, req.pid, ctx) <= 0) return {}
 		if (!ctx.teams?.[t] || ctx.teams[t] === ctx.teams?.[req.pid]) return {}
-		const cs = s.cards?.[t], ok = nkSlots(cs, ctx.turnIdx)
-		if (!cs || !ok.includes(sl[0]) || !ok.includes(sl[1])) return {}
-		const turns = cs.turns.slice();
-		[turns[sl[0]], turns[sl[1]]] = [turns[sl[1]], turns[sl[0]]]
+		const cs = s.cards?.[t], ok = nkSlots(s, t, ctx)
+		if (!cs || !laughed(s, req.pid, ctx) || !ok.includes(sl[0]) || !ok.includes(sl[1])) return {}
+		const a = nkCardAt(cs, sl[0], ctx.turnIdx), b = nkCardAt(cs, sl[1], ctx.turnIdx)
+		const next: PlayerCardState = { ...cs, turns: cs.turns.slice() }
+		const put = (k: number, v: number | null | undefined) => { if (k === ctx.turnIdx) next.pending = v as number; else next.turns[k] = v as number }
+		put(sl[0], b); put(sl[1], a)
 		const n = s.power?.[req.pid]?.nsw, mark = markOf(ctx)
-		return { cards: { ...s.cards, [t]: { ...cs, turns } }, power: { ...s.power, [req.pid]: { ...s.power?.[req.pid], nsw: { mark, n: (n?.mark === mark ? n.n : 0) + 1 } } } }
+		const out: Record<string, unknown> = { cards: { ...s.cards, [t]: next }, power: { ...s.power, [req.pid]: { ...s.power?.[req.pid], nsw: { mark, n: (n?.mark === mark ? n.n : 0) + 1 } } } }
+		// this turn's card changed (its initiative too): the cards that acted and the one acting keep their places
+		if (sl.includes(ctx.turnIdx)) out.acting = { key: ctx.key, idx: ctx.at, done: s.acting?.key === ctx.key ? s.acting.done : undefined, pin: ctx.order.slice(0, ctx.at + 1) }
+		return out
+	}
+	if (req.op === 'nkGrip') {
+		const t = req.target
+		if (nkPower(s, req.pid, ctx) !== 'grip' || !t || !ctx.teams?.[t] || ctx.teams[t] === ctx.teams?.[req.pid] || prevCard(s.cards?.[t], ctx.turnIdx) == null) return {}
+		return { power: { ...s.power, [req.pid]: { ...s.power?.[req.pid], grip: { mark: markOf(ctx), target: t } } } }
 	}
 	if (req.op === 'nkName') {
 		if (nkPower(s, req.pid, ctx) !== 'name' || !req.color || !NK_COLORS.includes(req.color)) return {}

@@ -10,6 +10,7 @@
 	import Card from '$lib/cards/Card.svelte'
 	import CardBack from '$lib/cards/CardBack.svelte'
 	import { heroCards } from '$lib/cards/deck'
+	import { portraitCss } from '$lib/heroes'
 
 	export let size = 48
 	export let phone = false
@@ -18,19 +19,25 @@
 	/** the power the card acting opens now (null = rest) */
 	export let kind: 'laugh' | 'grip' | 'name' | 'crack' | null = null
 	export let doubt: NkColor | null = null
+	/** the enemy heroes in reach of the card acting (Laughter: its radius; Mind Grip / Probe: its range) */
 	export let enemies: NkEnemy[] = []
 	export let laughed = false
 	export let swapsLeft = 3
 	/** the names his laugh would make discard (with the ultimate) */
 	export let targets: string[] = []
-	/** reach of the card acting: Mind Grip's range, Laughter's radius */
-	export let reach = 0
 	export let crackDir: number | null = null
+	/** the Crack line he's looking at before he confirms it (only on his screen) */
+	export let crackPick: number | null = null
 	export let onLaugh: () => void = () => {}
+	/** a swap made on an enemy's board (acts at once, like a move) */
 	export let onSwap: (target: string, a: number, b: number) => void = () => {}
 	export let onName: (c: NkColor) => void = () => {}
-	export let onCrack: (dir: number) => void = () => {}
+	export let onCrack: (dir: number | null) => void = () => {}
+	/** Spell Steal: load the stolen card onto the ring */
+	export let onSteal: (target: string | null) => void = () => {}
 	export let onRead: (hero: string, idx: number) => void = () => {}
+	/** the enemy hero whose card he already stole with this Mind Grip (the pill reads Stolen) */
+	export let stolen: string | null = null
 
 	const f = (n: number) => n.toFixed(1)
 	// one wing, drawn for the LEFT side (the right one is its mirror): eight feathers fanning from the root + a gold covert band
@@ -47,7 +54,6 @@
 	const WL = wing(false), WR = wing(true)
 	const GEM: Record<NkColor, string> = { GOLD: '#e8bd52', SILVER: '#c9d2dc', RED: '#d6453a', BLUE: '#3b7fe0', GREEN: '#41ae59' }
 	const CNAME: Record<NkColor, string> = { GOLD: 'Gold', SILVER: 'Silver', RED: 'Red', BLUE: 'Blue', GREEN: 'Green' }
-	const AXES = ['↗ ↙', '← →', '↘ ↖']
 
 	$: z = phone ? size - 4 : size
 	$: wl = phone ? 0.85 : 1
@@ -55,19 +61,50 @@
 	$: live = !!kind
 	// the slot = the wings fully spread: 2 × (1.15·wl − 0.38) + 1 disc
 	$: slotW = Math.ceil(z * (2 * (1.15 * wl - 0.38) + 1))
-	let open = false
+	let open = false, panelH = 0
 	$: if (!kind) open = false
-	let pick: { pid: string; t: number } | null = null
-	$: if (kind !== 'laugh') pick = null
-	function tapSlot(pid: string, t: number) {
-		if (swapsLeft <= 0) return
-		if (!pick || pick.pid !== pid) { pick = { pid, t }; return }
-		if (pick.t === t) { pick = null; return }
-		onSwap(pid, pick.t, t); pick = null
+	// the side window: an enemy's board (Laughter's swaps) or a stolen card's preview (Mind Grip)
+	let sideFor: string | null = null
+	$: if (!open || (kind !== 'laugh' && kind !== 'grip')) sideFor = null
+	$: if (sideFor && !enemies.some((e) => e.pid === sideFor)) sideFor = null
+	$: if (kind === 'laugh' && (!laughed || swapsLeft <= 0) && sideFor) sideFor = null
+	$: side = sideFor ? enemies.find((e) => e.pid === sideFor) ?? null : null
+	$: onSteal(kind === 'grip' && open && stealing ? sideFor : null)
+	let stealing = false
+	$: if (!sideFor) stealing = false
+	function pickFace(pid: string) { stealing = false; sideFor = sideFor === pid ? null : pid }
+	$: if (!open && kind === 'crack' && crackPick != null) onCrack(null)
+	// the swap board: drag a card onto another (or tap one, then the other)
+	let held: number | null = null, drag: { t: number; x0: number; y0: number; dx: number; dy: number; z: number; moved: boolean } | null = null, over: number | null = null
+	$: if (!side) { held = null; drag = null; over = null }
+	const ROMAN = ['I', 'II', 'III', 'IV']
+	function swapNow(a: number, b: number) { if (side && a !== b && swapsLeft > 0) onSwap(side.pid, a, b); held = null }
+	function down(e: PointerEvent, t: number) {
+		const el = e.currentTarget as HTMLElement, r = el.getBoundingClientRect()
+		drag = { t, x0: e.clientX, y0: e.clientY, dx: 0, dy: 0, z: r.width / (el.offsetWidth || r.width), moved: false }
+		el.setPointerCapture(e.pointerId)
 	}
+	function move(e: PointerEvent) {
+		if (!drag) return
+		const dx = e.clientX - drag.x0, dy = e.clientY - drag.y0
+		if (!drag.moved && Math.hypot(dx, dy) < 6) return
+		drag = { ...drag, dx: dx / drag.z, dy: dy / drag.z, moved: true }
+		const hit = (document.elementsFromPoint(e.clientX, e.clientY) as HTMLElement[]).find((x) => x.dataset?.nkslot != null && +x.dataset.nkslot! !== drag!.t)
+		over = hit ? +hit.dataset.nkslot! : null
+	}
+	function up(t: number) {
+		const d = drag; drag = null
+		if (d?.moved) { const o = over; over = null; if (o != null && side?.cards[o]?.ok) swapNow(t, o); return }
+		// a tap: pick this card, or swap it with the one picked
+		if (held == null) held = t; else if (held === t) held = null; else swapNow(held, t)
+	}
+	// Crack in Reality: three straight lines of hexes run through a space (pointy-top: across, and both diagonals)
+	const DIRS = [{ d: 0, a: -60, n: 'Diagonal ↗' }, { d: 1, a: 0, n: 'Across ↔' }, { d: 2, a: 60, n: 'Diagonal ↘' }]
+	const hexPts = (cx: number, cy: number, r: number) => [0, 1, 2, 3, 4, 5].map((i) => { const t = ((60 * i - 90) * Math.PI) / 180; return `${(cx + r * Math.cos(t)).toFixed(1)},${(cy + r * Math.sin(t)).toFixed(1)}` }).join(' ')
+	const chain = (a: number) => [-1, 0, 1].map((k) => { const t = (a * Math.PI) / 180; return { x: 30 + k * 17.3 * Math.cos(t), y: 30 + k * 17.3 * Math.sin(t) } })
 	$: tip = kind === 'laugh' ? 'Diabolical Laughter' : kind === 'grip' ? 'Mind Grip — read an enemy’s previous card' : kind === 'name' ? 'Name a colour' : kind === 'crack' ? 'Split the board' : 'NebKher'
 	const onKey = (e: KeyboardEvent) => { if (open && e.key === 'Escape') open = false }
-	const title = (k: typeof kind) => (k === 'laugh' ? 'Diabolical Laughter' : k === 'grip' ? 'Previous turn slots' : k === 'name' ? 'Name a colour' : 'Crack in Reality')
+	const title = (k: typeof kind) => (k === 'laugh' ? 'Diabolical Laughter' : k === 'grip' ? 'Mind Grip' : k === 'name' ? 'Name a colour' : 'Crack in Reality')
 </script>
 
 <svelte:window on:keydown={onKey} />
@@ -91,46 +128,77 @@
 		{/if}
 	</span>
 	{#if open && kind}
-		<div class="np {phone ? 'sheet' : 'pop'}" role="dialog" tabindex="-1" aria-label={title(kind)} on:click|stopPropagation on:keydown|stopPropagation={(e) => e.key === 'Escape' && (open = false)}>
-			<div class="nh"><b>{title(kind)}</b><button class="nx" on:click={() => (open = false)} aria-label="Close">✕</button></div>
-			{#if kind === 'laugh'}
-				<button class="laugh" class:ult disabled={laughed} on:click={() => { onLaugh(); open = false }}>
-					<b>{laughed ? 'Laughed' : 'Laugh'}</b>
-					<small>{laughed ? 'once per card' : ult ? (targets.length ? `${targets.join(', ')} must discard or be defeated` : 'No enemy hero in radius') : 'Then choose up to three times'}</small>
-				</button>
-				<div class="sl">Swap two resolved cards <em>{swapsLeft} left</em></div>
-				{#each enemies as e (e.pid)}
-					<div class="er">
-						<span class="en"><b>{e.name}</b>{#if e.dist != null}<em class:in={e.dist <= reach}>{e.dist} {e.dist === 1 ? 'space' : 'spaces'}{e.dist <= reach ? ' · in radius' : ''}</em>{/if}</span>
-						<span class="slots">
-							{#each [0, 1, 2, 3] as t (t)}
-								{@const s = e.slots.find((x) => x.t === t)}
-								<button class="sc" class:pick={pick?.pid === e.pid && pick.t === t} disabled={!s || swapsLeft <= 0} on:click={() => tapSlot(e.pid, t)} title={s ? (s.hidden ? 'Face down' : heroCards(e.hero)[s.idx]?.name ?? '') : ''}>
-									<small>{['I', 'II', 'III', 'IV'][t]}</small>
-									{#if s}<span class="cf">{#if s.hidden}<CardBack hero={e.hero} />{:else}<Card heroId={e.hero} card={heroCards(e.hero)[s.idx]} />{/if}</span>{/if}
+		<div class="nw" class:ph={phone} role="dialog" tabindex="-1" aria-label={title(kind)} on:click|stopPropagation on:keydown|stopPropagation={(e) => e.key === 'Escape' && (sideFor ? (sideFor = null) : (open = false))}>
+			<div class="np" bind:clientHeight={panelH}>
+				{#if kind === 'laugh'}
+					<div class="nh">
+						<b>{title(kind)}</b>
+						<button class="laugh" class:ult class:done={laughed} disabled={laughed} on:click={onLaugh} title={ult && targets.length ? `${targets.join(', ')} must discard or be defeated` : ''}>
+							{laughed ? 'Laughed' : 'Laugh'}{#if ult && !laughed && targets.length}<em>☠ {targets.length}</em>{/if}
+						</button>
+						<button class="nx" on:click={() => (open = false)} aria-label="Close">✕</button>
+					</div>
+					<div class="rule"><span>Swap cards</span><em>{laughed ? `${swapsLeft} left` : 'laugh first'}</em></div>
+					{#if enemies.length}
+						<div class="faces">
+							{#each enemies as e (e.pid)}
+								<button class="fc" class:on={sideFor === e.pid} disabled={!laughed || swapsLeft <= 0 || !e.cards.some((c) => c.ok)} on:click={() => pickFace(e.pid)} title="{e.name} · {e.player}">
+									<span class="face" style={portraitCss(e.hero)}></span><small>{e.name}</small>
 								</button>
 							{/each}
-						</span>
+						</div>
+					{:else}<div class="none">No enemy hero in radius</div>{/if}
+				{:else if kind === 'grip'}
+					<div class="nh"><b>{title(kind)}</b><button class="nx" on:click={() => (open = false)} aria-label="Close">✕</button></div>
+					{#if enemies.length}
+						<div class="faces">
+							{#each enemies as e (e.pid)}
+								<button class="fc" class:on={sideFor === e.pid} disabled={e.prev == null || e.prevHidden} on:click={() => pickFace(e.pid)} title="{e.name} · {e.player}{e.prev == null ? ' — no previous card' : ''}">
+									<span class="face" style={portraitCss(e.hero)}></span><small>{e.name}</small>
+								</button>
+							{/each}
+						</div>
+					{:else}<div class="none">No enemy hero in range</div>{/if}
+				{:else if kind === 'name'}
+					<div class="nh"><b>{title(kind)}</b><button class="nx" on:click={() => (open = false)} aria-label="Close">✕</button></div>
+					<div class="cols">
+						{#each NK_COLORS as c (c)}
+							<button class="col" class:on={doubt === c} style="--gc:{GEM[c]}" on:click={() => onName(c)}><span class="dot"></span>{CNAME[c]}</button>
+						{/each}
 					</div>
-				{:else}<div class="none">No enemy heroes</div>{/each}
-			{:else if kind === 'grip'}
-				{#each enemies as e (e.pid)}
-					<button class="gr" disabled={e.prev == null || e.prevHidden} on:click={() => e.prev != null && onRead(e.hero, e.prev)}>
-						<span class="en"><b>{e.name}</b>{#if e.dist != null}<em class:in={e.dist <= reach}>{e.dist} {e.dist === 1 ? 'space' : 'spaces'}{e.dist <= reach ? ' · in range' : ''}</em>{/if}</span>
-						{#if e.prev == null}<i>No previous card</i>{:else if e.prevHidden}<i>Face down</i>{:else}<span class="gc"><span class="cf"><Card heroId={e.hero} card={heroCards(e.hero)[e.prev]} /></span><span>{heroCards(e.hero)[e.prev]?.name ?? ''}</span></span>{/if}
-					</button>
-				{:else}<div class="none">No enemy heroes</div>{/each}
-			{:else if kind === 'name'}
-				<div class="cols">
-					{#each NK_COLORS as c (c)}
-						<button class="col" class:on={doubt === c} style="--gc:{GEM[c]}" on:click={() => onName(c)}><span class="dot"></span>{CNAME[c]}</button>
-					{/each}
+				{:else if kind === 'crack'}
+					<div class="nh"><b>{title(kind)}</b><button class="nx" on:click={() => (open = false)} aria-label="Close">✕</button></div>
+					<div class="axes">
+						{#each DIRS as x (x.d)}
+							<button class="ax" class:on={(crackPick ?? crackDir) === x.d} class:set={crackDir === x.d} on:click={() => onCrack(crackPick === x.d ? null : x.d)} title={x.n}>
+								<svg viewBox="0 0 60 60" aria-hidden="true">{#each chain(x.a) as h, i (i)}<polygon points={hexPts(h.x, h.y, 9.4)} class:mid={i === 1} />{/each}</svg>
+							</button>
+						{/each}
+					</div>
+				{/if}
+			</div>
+			{#if side && kind === 'laugh'}
+				<div class="side board" style="--ph:{panelH}px">
+					<div class="bh"><span class="face" style={portraitCss(side.hero)}></span><span class="bn"><b>{side.name}</b><small>{side.player}</small></span><em>{swapsLeft} {swapsLeft === 1 ? 'swap' : 'swaps'} left</em><button class="nx" on:click={() => (sideFor = null)} aria-label="Close">✕</button></div>
+					<div class="slots">
+						{#each side.cards as c (c.t)}
+							<div class="slot" class:ok={c.ok} class:over={over === c.t} class:held={held === c.t} data-nkslot={c.ok ? c.t : null}>
+								<small>{ROMAN[c.t]}{c.now ? ' · now' : ''}</small>
+								{#if c.idx != null}
+									<button class="sc" disabled={!c.ok} style={drag?.t === c.t && drag.moved ? `transform: translate(${drag.dx}px, ${drag.dy}px) rotate(-3deg); z-index: 5` : ''}
+										on:pointerdown={(e) => c.ok && down(e, c.t)} on:pointermove={move} on:pointerup={() => c.ok && up(c.t)} on:pointercancel={() => { drag = null; over = null }}>
+										{#if c.hidden}<CardBack hero={side.hero} />{:else}<Card heroId={side.hero} card={heroCards(side.hero)[c.idx]} />{/if}
+									</button>
+								{:else}<span class="empty"></span>{/if}
+							</div>
+						{/each}
+					</div>
+					<div class="hint">Drag a card onto another to swap them</div>
 				</div>
-			{:else if kind === 'crack'}
-				<div class="axes">
-					{#each [0, 1, 2] as d (d)}
-						<button class="ax" class:on={crackDir === d} on:click={() => onCrack(d)}><svg viewBox="0 0 40 40" aria-hidden="true"><line x1="20" y1="20" x2={20 + 15 * Math.cos(((-60 + d * 60) * Math.PI) / 180)} y2={20 + 15 * Math.sin(((-60 + d * 60) * Math.PI) / 180)} /><line x1="20" y1="20" x2={20 - 15 * Math.cos(((-60 + d * 60) * Math.PI) / 180)} y2={20 - 15 * Math.sin(((-60 + d * 60) * Math.PI) / 180)} /><circle cx="20" cy="20" r="4" /></svg><small>{AXES[d]}</small></button>
-					{/each}
+			{:else if side && kind === 'grip' && side.prev != null}
+				<div class="side prev" style="--ph:{panelH}px">
+					<button class="pv" on:click={() => side && side.prev != null && onRead(side.hero, side.prev)} title="Read it"><Card heroId={side.hero} card={heroCards(side.hero)[side.prev]} /></button>
+					<button class="steal" class:on={stealing} disabled={!!stolen} on:click={() => (stealing = !stealing)}>{stolen === side.pid ? 'Stolen' : 'Spell Steal'}</button>
 				</div>
 			{/if}
 		</div>
@@ -174,51 +242,79 @@
 	@keyframes nkhl { 0% { opacity: 0.75; transform: scale(0.86); } 100% { opacity: 0; transform: scale(var(--hx)); } }
 	@media (prefers-reduced-motion: reduce) { .unit * { animation: none !important; transition: none !important; } }
 
-	/* the panel: above the button (desktop), a bottom sheet over the dash (phone) */
-	.np { --brass: #d8b36a; --brass-hi: #f4dfa8; pointer-events: auto; z-index: 30; width: 340px; box-sizing: border-box; padding: 10px 12px 12px; border-radius: 14px; color: #f2ecdf; text-align: left;
-		background: linear-gradient(180deg, rgba(16, 40, 66, 0.99), rgba(6, 19, 34, 0.99)); border: 1px solid rgba(216, 179, 106, 0.45); box-shadow: 0 14px 34px rgba(0, 0, 0, 0.6); display: flex; flex-direction: column; gap: 8px; }
-	.np.pop { position: absolute; bottom: calc(100% + 24px); left: 50%; transform: translateX(-50%); }
-	.np.pop::after { content: ''; position: absolute; left: 50%; bottom: -7px; width: 12px; height: 12px; transform: translateX(-50%) rotate(45deg); background: rgb(6, 19, 34); border-right: 1px solid rgba(216, 179, 106, 0.45); border-bottom: 1px solid rgba(216, 179, 106, 0.45); }
-	.np.sheet { position: fixed; left: 8px; right: 8px; width: auto; bottom: calc(108px + env(safe-area-inset-bottom, 0px)); }
+	/* the panel: above the button (desktop), a bottom sheet over the dash (phone); a side window beside it (desktop) or
+	   stacked above it (phone): an enemy's board, or a stolen card */
+	.nw { --brass: #d8b36a; --brass-hi: #f4dfa8; position: absolute; bottom: calc(100% + 24px); left: 50%; transform: translateX(-50%); z-index: 30; pointer-events: auto; color: #f2ecdf; text-align: left; }
+	.np, .side { box-sizing: border-box; border-radius: 14px; background: linear-gradient(180deg, rgba(16, 40, 66, 0.99), rgba(6, 19, 34, 0.99)); border: 1px solid rgba(216, 179, 106, 0.45); box-shadow: 0 14px 34px rgba(0, 0, 0, 0.6); }
+	.np { position: relative; width: max-content; min-width: 240px; max-width: 420px; padding: 9px 10px 10px; display: flex; flex-direction: column; gap: 7px; }
+	.np::after { content: ''; position: absolute; left: 50%; bottom: -7px; width: 12px; height: 12px; transform: translateX(-50%) rotate(45deg); background: rgb(6, 19, 34); border-right: 1px solid rgba(216, 179, 106, 0.45); border-bottom: 1px solid rgba(216, 179, 106, 0.45); }
+	.side { position: absolute; left: calc(100% + 14px); bottom: 0; padding: 9px 10px 10px; }
+	.nw.ph { position: fixed; left: 8px; right: 8px; bottom: calc(108px + env(safe-area-inset-bottom, 0px)); transform: none; }
+	.nw.ph .np { width: auto; max-width: none; }
+	.nw.ph .np::after { display: none; }
+	.nw.ph .side { left: 0; right: 0; bottom: calc(var(--ph) + 8px); }
 	.nh { display: flex; align-items: center; gap: 8px; }
-	.nh b { flex: 1; font-size: 15px; font-weight: normal; color: var(--brass-hi); letter-spacing: 0.02em; }
-	.nx { width: 24px; height: 24px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.18); background: rgba(0, 0, 0, 0.25); color: #c9d4df; font-size: 11px; cursor: pointer; }
-	.laugh { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 10px; border-radius: 12px; cursor: pointer; color: #1b1204;
+	.nh b { flex: 1; font-size: 14px; font-weight: normal; color: var(--brass-hi); letter-spacing: 0.02em; white-space: nowrap; }
+	.nx { flex: none; width: 24px; height: 24px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.18); background: rgba(0, 0, 0, 0.25); color: #c9d4df; font-size: 11px; cursor: pointer; }
+	.laugh { flex: none; height: 26px; display: inline-flex; align-items: center; gap: 6px; padding: 0 12px; border-radius: 13px; cursor: pointer; color: #1b1204; font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase;
 		background: linear-gradient(180deg, #f4dfa8, #d8b36a); border: 0; }
 	.laugh.ult { background: linear-gradient(180deg, #e3c2ff, #9b5be0); color: #1a0b2c; }
-	.laugh b { font-weight: normal; font-size: 17px; letter-spacing: 0.08em; text-transform: uppercase; }
-	.laugh small { font-size: 11px; letter-spacing: 0.02em; text-align: center; }
-	.laugh:disabled { opacity: 0.45; cursor: default; }
-	.sl { display: flex; align-items: baseline; gap: 8px; font-size: 12px; color: #8a9fb3; letter-spacing: 0.04em; padding-top: 6px; border-top: 1px solid rgba(216, 179, 106, 0.22); }
-	.sl em { font-style: normal; color: var(--brass-hi); margin-left: auto; }
-	.er { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; }
-	.en { display: flex; flex-direction: column; min-width: 0; }
-	.en b { font-weight: normal; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-	.en em { font-style: normal; font-size: 10.5px; color: #8a9fb3; }
-	.en em.in { color: #7fe0c4; }
-	.slots { display: flex; gap: 4px; }
-	.sc { position: relative; width: 34px; height: 46px; padding: 0; border-radius: 5px; border: 1px solid rgba(216, 179, 106, 0.3); background: rgba(0, 0, 0, 0.3); overflow: hidden; cursor: pointer; }
-	.sc:disabled { cursor: default; opacity: 0.5; }
-	.sc.pick { border: 2px solid var(--brass-hi); box-shadow: 0 0 8px rgba(244, 223, 168, 0.6); }
-	.sc .cf { position: absolute; inset: 0; display: block; }
-	.cf :global(.cardface), .cf :global(canvas), .cf :global(img) { width: 100%; height: 100%; display: block; }
-	.sc small { position: absolute; left: 2px; top: 1px; font-size: 9px; color: #f4dfa8; text-shadow: 0 1px 2px #000; z-index: 1; }
-	.gr { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 10px; border: 1px solid rgba(216, 179, 106, 0.25); background: rgba(0, 0, 0, 0.22); color: inherit; text-align: left; cursor: pointer; }
-	.gr:disabled { cursor: default; opacity: 0.7; }
-	.gr i { font-size: 11px; color: #8a9fb3; }
-	.gc { display: flex; align-items: center; gap: 6px; max-width: 170px; }
-	.gc .cf { position: relative; width: 30px; height: 42px; border-radius: 4px; overflow: hidden; flex: none; }
-	.gc span { font-size: 12px; color: #f4dfa8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-	.cols { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
-	.col { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px 0; border-radius: 10px; border: 1px solid rgba(216, 179, 106, 0.25); background: rgba(0, 0, 0, 0.22); color: #e9e2d2; font-size: 11px; cursor: pointer; }
+	.laugh em { font-style: normal; font-size: 11px; letter-spacing: 0; opacity: 0.8; }
+	.laugh.done { background: rgba(0, 0, 0, 0.3); color: #8a9fb3; border: 1px solid rgba(216, 179, 106, 0.3); cursor: default; }
+	.rule { display: flex; align-items: baseline; gap: 8px; font-size: 11px; color: #8a9fb3; letter-spacing: 0.06em; text-transform: uppercase; padding-top: 6px; border-top: 1px solid rgba(216, 179, 106, 0.25); }
+	.rule em { font-style: normal; color: var(--brass-hi); margin-left: auto; text-transform: none; letter-spacing: 0.02em; }
+	.faces { display: flex; gap: 6px; justify-content: center; }
+	.fc { width: 58px; flex: none; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 4px 0 3px; border-radius: 10px; border: 1px solid transparent; background: none; color: #e9e2d2; cursor: pointer; }
+	.fc .face { width: 44px; height: 44px; border-radius: 50%; display: block; box-shadow: 0 0 0 2px rgba(216, 179, 106, 0.55); background-color: #0b1b30; }
+	.fc small { max-width: 56px; font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.fc:hover:not(:disabled) { border-color: rgba(216, 179, 106, 0.35); }
+	.fc.on { border-color: var(--brass-hi); background: rgba(216, 179, 106, 0.14); }
+	.fc.on .face { box-shadow: 0 0 0 2px var(--brass-hi), 0 0 10px rgba(244, 223, 168, 0.5); }
+	.fc:disabled { cursor: default; opacity: 0.38; }
+	.fc:disabled .face { filter: grayscale(0.8); }
+	.cols { display: grid; grid-template-columns: repeat(5, 48px); gap: 6px; }
+	.col { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px 0; border-radius: 10px; border: 1px solid rgba(216, 179, 106, 0.25); background: rgba(0, 0, 0, 0.22); color: #e9e2d2; font-size: 10.5px; cursor: pointer; }
 	.col .dot { width: 20px; height: 20px; border-radius: 50%; background: var(--gc); box-shadow: inset 0 0 0 1.5px rgba(0, 0, 0, 0.4); }
 	.col.on { border-color: var(--brass-hi); background: rgba(216, 179, 106, 0.16); }
-	.axes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
-	.ax { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 0; border-radius: 10px; border: 1px solid rgba(216, 179, 106, 0.25); background: rgba(0, 0, 0, 0.22); color: #c9d4df; cursor: pointer; }
-	.ax svg { width: 40px; height: 40px; }
-	.ax line { stroke: #d7b0ff; stroke-width: 3; stroke-linecap: round; }
-	.ax circle { fill: #f4dfa8; }
-	.ax small { font-size: 11px; }
-	.ax.on { border-color: #d7b0ff; background: rgba(140, 85, 214, 0.2); }
-	.none { font-size: 12px; color: #8a9fb3; }
+	.nw.ph .cols { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+	.axes { display: flex; gap: 8px; justify-content: center; }
+	.ax { width: 64px; height: 64px; padding: 2px; border-radius: 12px; border: 1px solid rgba(216, 179, 106, 0.25); background: rgba(0, 0, 0, 0.22); cursor: pointer; }
+	.ax svg { width: 100%; height: 100%; display: block; }
+	.ax polygon { fill: rgba(197, 140, 255, 0.18); stroke: #b98af0; stroke-width: 1.4; }
+	.ax polygon.mid { fill: rgba(244, 223, 168, 0.35); stroke: #f4dfa8; }
+	.ax.on { border-color: #c58cff; background: rgba(140, 85, 214, 0.22); }
+	.ax.on polygon { fill: rgba(197, 140, 255, 0.5); }
+	.ax.set { box-shadow: inset 0 0 0 1px #c58cff; }
+	.none { font-size: 12px; color: #8a9fb3; text-align: center; padding: 4px 0; }
+	/* an enemy's board: their four turn slots, the resolved ones draggable */
+	.board { width: max-content; display: flex; flex-direction: column; gap: 8px; }
+	.bh { display: flex; align-items: center; gap: 8px; }
+	.bh .face { width: 30px; height: 30px; border-radius: 50%; display: block; flex: none; box-shadow: 0 0 0 2px rgba(216, 179, 106, 0.55); background-color: #0b1b30; }
+	.bn { display: flex; flex-direction: column; line-height: 1.1; min-width: 0; flex: 1; }
+	.bn b { font-weight: normal; font-size: 14px; color: var(--brass-hi); }
+	.bn small { font-size: 11px; color: #8a9fb3; }
+	.bh em { font-style: normal; font-size: 12px; color: var(--brass-hi); white-space: nowrap; }
+	.slots { display: grid; grid-template-columns: repeat(4, var(--cw, 86px)); gap: 8px; }
+	.nw.ph .board { width: auto; }
+	.nw.ph .slots { --cw: minmax(0, 1fr); }
+	.slot { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 4px; border-radius: 9px; border: 1px dashed rgba(255, 255, 255, 0.08); }
+	.slot small { font-size: 10px; color: #8a9fb3; letter-spacing: 0.06em; }
+	.slot.ok { border-color: rgba(216, 179, 106, 0.35); }
+	.slot.over { border: 1.5px solid #c58cff; background: rgba(140, 85, 214, 0.2); }
+	.slot.held { border: 1.5px solid var(--brass-hi); background: rgba(216, 179, 106, 0.14); }
+	.sc { position: relative; width: 100%; aspect-ratio: 1192 / 1664; padding: 0; border: 0; border-radius: 6px; overflow: hidden; background: none; touch-action: none; cursor: grab; }
+	.sc:disabled { cursor: default; opacity: 0.45; filter: grayscale(0.6); }
+	.sc :global(.cardface), .sc :global(canvas) { width: 100%; height: 100%; display: block; }
+	.slot .empty { width: 100%; aspect-ratio: 1192 / 1664; border-radius: 6px; background: rgba(0, 0, 0, 0.2); }
+	.hint { font-size: 11px; color: #8a9fb3; text-align: center; }
+	/* Mind Grip: the stolen card, large, and Spell Steal */
+	.prev { width: 214px; display: flex; flex-direction: column; gap: 8px; align-items: stretch; }
+	.nw.ph .prev { width: auto; flex-direction: row; align-items: flex-end; }
+	.pv { width: 100%; aspect-ratio: 1192 / 1664; padding: 0; border: 0; background: none; border-radius: 8px; overflow: hidden; cursor: zoom-in; }
+	.nw.ph .pv { width: 140px; flex: none; }
+	.pv :global(.cardface), .pv :global(canvas) { width: 100%; height: 100%; display: block; }
+	.steal { height: 34px; border-radius: 17px; border: 0; cursor: pointer; color: #1a0b2c; font-size: 14px; letter-spacing: 0.08em; text-transform: uppercase; background: linear-gradient(180deg, #e3c2ff, #9b5be0); }
+	.nw.ph .steal { flex: 1; }
+	.steal:disabled { opacity: 0.5; cursor: default; }
+	.steal.on { box-shadow: 0 0 0 2px #f4dfa8, 0 0 12px rgba(197, 140, 255, 0.6); }
 </style>

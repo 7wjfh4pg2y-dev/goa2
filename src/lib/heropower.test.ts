@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { applyCardReq, turnOrder, turnKey, actingIdx, actorOf, minionDefense, type MatchState, type Piece } from './match'
 import { newPlayerCardState } from './cards/cardstate'
 import { heroCards } from './cards/deck'
-import { equilibrium, canFlip, flipUsed, hasPower, canInscribe, activeRune, runesOf, secondRune, heldGolds, deckGolds, takaSwapKind, mateOffer, canReverse, warpOffer, capsuleOffer, nkPower, canLaugh, laughTargets, nkSwapsLeft, doubtNow, crackNow, lineHexes, type Rune, type TurnCtx } from './heropower'
+import { equilibrium, canFlip, flipUsed, hasPower, canInscribe, activeRune, runesOf, secondRune, heldGolds, deckGolds, takaSwapKind, mateOffer, canReverse, warpOffer, capsuleOffer, nkPower, canLaugh, laughTargets, nkSwapsLeft, nkSlots, doubtNow, crackNow, lineHexes, type Rune, type TurnCtx } from './heropower'
 import { goldsOf, isHidden, type PlayerCardState } from './cards/cardstate'
 import { draftable, isLabHero, FOUR_STAR_LAB, FOUR_STAR_LIVE, HEROES } from './heroes'
 import { isFullGame, type Journal } from './recorder'
@@ -423,8 +423,10 @@ describe('NebKher: Diabolical Laughter, What the Hell Are You?, card swaps, a na
 		const s4 = { ...s3, ...applyCardReq(s3, { kind: 'forceResolve', pid: 'N', target: 'C', result: 'cancel' }) } as MatchState
 		expect(Object.keys(s4.forced ?? {})).toEqual(['B'])
 	})
-	it('swaps two resolved cards of an enemy hero, up to three times a Laughter', () => {
-		const s = actingAs(ng(laughC), 'N')
+	it('swaps two resolved cards of an enemy hero, up to three times a Laughter — only once he has laughed', () => {
+		const s0 = actingAs(ng(laughC), 'N')
+		expect(pw(s0, 'N', 'nkSwap', { target: 'B', slots: [0, 1] })).toEqual({})
+		const s = { ...s0, ...pw(s0, 'N', 'nkLaugh') } as MatchState
 		const p = pw(s, 'N', 'nkSwap', { target: 'B', slots: [0, 1] })
 		expect(p.cards?.B?.turns).toEqual([4, 3, null, null])
 		let x = { ...s, ...p } as MatchState
@@ -433,9 +435,32 @@ describe('NebKher: Diabolical Laughter, What the Hell Are You?, card swaps, a na
 		x = { ...x, ...pw(x, 'N', 'nkSwap', { target: 'B', slots: [0, 1] }) } as MatchState
 		expect(pw(x, 'N', 'nkSwap', { target: 'B', slots: [0, 1] })).toEqual({})
 		// only earlier turn slots that hold a card, only an enemy, two different slots
-		expect(pw(s, 'N', 'nkSwap', { target: 'B', slots: [0, 2] })).toEqual({})
+		expect(pw(s, 'N', 'nkSwap', { target: 'B', slots: [0, 3] })).toEqual({})
 		expect(pw(s, 'N', 'nkSwap', { target: 'M', slots: [0, 1] })).toEqual({})
 		expect(pw(s, 'N', 'nkSwap', { target: 'B', slots: [1, 1] })).toEqual({})
+	})
+	it("a card that already acted this turn counts as resolved: it can trade places with an earlier slot", () => {
+		const hiA = AC.reduce((a, _, i) => (!AC[i].handicapped && (AC[i].initiative ?? 0) > (AC[a].initiative ?? 0) ? i : a), 0)
+		const base = ng(laughC)
+		base.cards!.B = { ...base.cards!.B, pending: hiA }
+		const s0 = actingAs(base, 'N')
+		expect(turnOrder(s0).indexOf('B')).toBeLessThan(turnOrder(s0).indexOf('N'))
+		expect(nkSlots(s0, 'B', tc(s0))).toEqual([0, 1, 2])
+		const s = { ...s0, ...pw(s0, 'N', 'nkLaugh') } as MatchState
+		const p = pw(s, 'N', 'nkSwap', { target: 'B', slots: [2, 0] })
+		expect(p.cards?.B?.pending).toBe(3)
+		expect(p.cards?.B?.turns[0]).toBe(hiA)
+		expect(p.acting?.pin).toEqual(turnOrder(s0).slice(0, actingIdx(s0) + 1))
+		// a card that hasn't acted yet is not resolved: once the order passes him, nothing of this turn counts
+		const early = { ...s0, acting: { key: turnKey(s0), idx: 0 } } as MatchState
+		expect(nkSlots(early, 'B', tc(early))).toEqual([0, 1])
+	})
+	it('Mind Grip: steals an enemy hero’s previous card (a log line; performing it is the player’s)', () => {
+		const s = actingAs(ng(grip), 'N')
+		expect(pw(s, 'N', 'nkGrip', { target: 'B' }).power?.N?.grip?.target).toBe('B')
+		expect(pw(s, 'N', 'nkGrip', { target: 'C' })).toEqual({}) // nothing in C's previous slot
+		expect(pw(s, 'N', 'nkGrip', { target: 'M' })).toEqual({}) // a friend
+		expect(pw(actingAs(ng(laughC), 'N'), 'N', 'nkGrip', { target: 'B' })).toEqual({})
 	})
 	it('names a colour: seen this turn and the next, then gone', () => {
 		const s = actingAs(ng(doubtC), 'N')

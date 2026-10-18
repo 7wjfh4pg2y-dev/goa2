@@ -354,7 +354,10 @@
 	$: myPriv = $privRadius && $privRadius.key === `${$ms.round}-${$ms.turn}` && $ms.pieces?.[clientId] ? $privRadius.n : 0;
 	// NebKher's Crack in Reality / Shift Reality: the straight line through his space, this turn, on everyone's board
 	$: crack = turnCtx ? crackNow($ms, turnCtx) : null;
-	$: crackArea = crack ? [{ hex: crack.hex, r: 0, color: '#c58cff', alpha: 0.38, hexes: lineHexes(crack.hex, crack.dir, (h) => !!$ms.map?.cells?.[h]) }] : [];
+	// …and the line NebKher is choosing, dimmer, only on his own screen until he confirms it
+	let crackPreview: { hex: string; dir: number } | null = null;
+	$: crackShown = crackPreview ? { ...crackPreview, alpha: 0.24 } : crack ? { ...crack, alpha: 0.38 } : null;
+	$: crackArea = crackShown ? [{ hex: crackShown.hex, r: 0, color: '#c58cff', alpha: crackShown.alpha, hexes: lineHexes(crackShown.hex, crackShown.dir, (h) => !!$ms.map?.cells?.[h]) }] : [];
 	$: areas = [...crackArea, ...Object.entries($ms.radii ?? {}).flatMap(([pid, r]) => {
 		const hero = $ms.pieces?.[pid];
 		return hero && r > 0 && !(pid === clientId && myPriv) ? [{ hex: hero.hex, r, color: colorHex(hero.color ?? '') }] : [];
@@ -1056,7 +1059,7 @@
 	<BoardCanvas bind:this={board} map={$ms.map ?? {}} inset={boardInset} look={boardLook} {glowZone} activeZone={$ms.wonBy ? null : battleZone($ms)} effects={!deckCovered} sea={$boardPrefs.sea} rims={$boardPrefs.rims} rotation={orientation} interactive={true} {placing} {placeGhost} holdColor={myHoldColor} onCancelPlace={cancelPlace} {areas} marks={boardMarks} badges={defBadges} zoomLock={mobile && $boardPrefs.zoomLock} wisps={$boardPrefs.wisps} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} pings={boardPings} onPing={doPing} {pingArmed} />
 	</div>
 
-	<CardLayer bind:this={cardLayer} bind:turnCtx areaW={gvw} areaH={gvh} {mobile} {hud2} {phone2} {ringAsk} onResults={() => (victoryClosed = false)} compact={$boardPrefs.compact} cTop={$boardPrefs.cTop} cOrder={$boardPrefs.cOrder} cLog={$boardPrefs.cLog} bind:topW {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} bind:covered={deckCovered} bind:phoneStatus onRespawn={placeMyHero} onEnter={placeMyHero} onArmToken={armToken} holdingToken={!!pendingToken} {pingArmed} onPing={pingButton} bind:previewId />
+	<CardLayer bind:this={cardLayer} bind:turnCtx bind:crackPreview areaW={gvw} areaH={gvh} {mobile} {hud2} {phone2} {ringAsk} onResults={() => (victoryClosed = false)} compact={$boardPrefs.compact} cTop={$boardPrefs.cTop} cOrder={$boardPrefs.cOrder} cLog={$boardPrefs.cLog} bind:topW {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} bind:covered={deckCovered} bind:phoneStatus onRespawn={placeMyHero} onEnter={placeMyHero} onArmToken={armToken} holdingToken={!!pendingToken} {pingArmed} onPing={pingButton} bind:previewId />
 
 	<!-- selected minion/token: offer delete (heroes aren't deletable) -->
 	{#if hud2}
