@@ -69,7 +69,7 @@
 	.sh { fill: #1f9c8c; }
 	.ult .bg { fill: #e9d3ff; }
 	.ult .sh { fill: #6d4a9c; }
-	.pop b { position: relative; font-weight: normal; font-size: calc(var(--u) * 0.34 * var(--s)); line-height: 1; letter-spacing: 0.02em; color: #b8231b; white-space: nowrap;
+	.pop b { position: relative; font-weight: normal; font-size: calc(var(--u) * 0.27 * var(--s)); line-height: 1; letter-spacing: 0.02em; color: #b8231b; white-space: nowrap;
 		-webkit-text-stroke: calc(var(--u) * 0.035) #0b1a10; paint-order: stroke fill; transform: rotate(-3deg); }
 	.ult .pop b { color: #5a1d9c; }
 	@media (prefers-reduced-motion: reduce) { .lb * { animation-duration: 0.01s !important; } }
