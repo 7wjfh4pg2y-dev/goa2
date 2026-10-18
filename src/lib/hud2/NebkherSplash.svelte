@@ -75,6 +75,7 @@
 	.ult .title { text-shadow: 0 0 14px rgba(197, 140, 255, 0.55), 2px 3px 0 #12081e; }
 	@keyframes nkslam { from { opacity: 0; transform: scale(1.4); } to { opacity: 1; transform: none; } }
 	.sub { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: #d9e6c8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.sub { padding-block: 3px; }
 	.gem { width: 13px; height: 13px; border-radius: 50%; background: var(--gc); box-shadow: 0 0 0 1.5px #ebbd4f; flex: none; }
 	/* phones: under the phone's top bar, a little smaller */
 	.ph { top: 64px; }

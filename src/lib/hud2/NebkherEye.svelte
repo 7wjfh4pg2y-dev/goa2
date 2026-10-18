@@ -234,6 +234,8 @@
 	.wing :global(.tips) { opacity: 0; }
 	.gem { position: absolute; right: -10%; bottom: -10%; width: 34%; height: 34%; pointer-events: none; }
 	.gem svg { width: 100%; height: 100%; display: block; overflow: visible; }
+	/* the phone's tools row is short: the gem tucks inside the disc's corner so the dash never cuts it */
+	.ph .gem { right: -4%; bottom: -2%; width: 38%; height: 38%; }
 	/* motion (the Dashboard switch): opacity / transform only */
 	.fx .glow, .fx .wing :global(.tips), .fx .iris { animation: nkbr 2.6s ease-in-out infinite; }
 	.fx .heat { animation: nkhl 2.6s ease-out infinite; }

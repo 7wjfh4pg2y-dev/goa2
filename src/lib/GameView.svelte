@@ -382,7 +382,8 @@
 	function playNk(n: NonNullable<typeof nkNews>) {
 		nkSeen = n.id;
 		if (Math.abs(Date.now() - n.at) > 10000) return;
-		nkSplash?.play(n.kind, n.detail ?? '', !!n.ult, n.kind === 'laugh' && !n.ult ? 3000 : 4000);
+		// the toast is for the heroes it targets (and NebKher himself); the laugh bursts out of his token for everyone
+		if (!n.to || n.to.includes(clientId) || n.by === clientId) nkSplash?.play(n.kind, n.detail ?? '', !!n.ult, n.kind === 'laugh' && !n.ult ? 3000 : 4000);
 		const p = $boardPrefs.laugh ? board?.clientPos(n.by) : null;
 		if (p) { nkX = p.x; nkY = p.y; nkR = Math.max(34, Math.min(80, p.r * 2)); nkUlt = !!$ms.cards?.[n.by]?.ultimate; setTimeout(() => nkBurst?.play(), 0); }
 	}

@@ -431,7 +431,11 @@ describe('NebKher: Diabolical Laughter, What the Hell Are You?, card swaps, a na
 		expect(p.cards?.B?.turns).toEqual([4, 3, null, null])
 		let x = { ...s, ...p } as MatchState
 		expect(nkSwapsLeft(x, 'N', tc(x))).toBe(2)
-		x = { ...x, ...pw(x, 'N', 'nkSwap', { target: 'B', slots: [0, 1] }) } as MatchState
+		expect(p.nkNews).toMatchObject({ kind: 'swap', to: ['B'] })
+		// the second swap on the same hero this turn: no second toast
+		const p2 = pw(x, 'N', 'nkSwap', { target: 'B', slots: [0, 1] })
+		expect(p2.nkNews).toBeUndefined()
+		x = { ...x, ...p2 } as MatchState
 		x = { ...x, ...pw(x, 'N', 'nkSwap', { target: 'B', slots: [0, 1] }) } as MatchState
 		expect(pw(x, 'N', 'nkSwap', { target: 'B', slots: [0, 1] })).toEqual({})
 		// only earlier turn slots that hold a card, only an enemy, two different slots

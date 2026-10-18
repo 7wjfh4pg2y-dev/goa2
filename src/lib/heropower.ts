@@ -37,6 +37,8 @@ export type PowerState = {
 	laugh?: string
 	/** NebKher: the card swaps Diabolical Laughter made for this acting card (up to three) */
 	nsw?: { mark: string; n: number }
+	/** NebKher: the enemy heroes his card swaps have already been told about this turn (one toast each per turn) */
+	told?: { key: string; pids: string[] }
 	/** NebKher: the colour he named (Imbue Doubt…) and the turn he named it in — shown till the next turn ends */
 	doubt?: { key: string; color: NkColor }
 	/** NebKher: the enemy hero whose previous card he took with Mind Grip / Probe, for this acting card */
@@ -324,7 +326,9 @@ export function nkPower(s: S, pid: string, ctx: TurnCtx): 'laugh' | 'grip' | 'na
 }
 const markOf = (ctx: TurnCtx) => `${ctx.key}:${ctx.at}`
 /** what NebKher just did, for everyone's toast + laugh burst (GameView plays each id once) */
-export type NkNews = { id: string; kind: 'laugh' | 'steal' | 'swap' | 'doubt' | 'crack'; by: string; detail?: string; ult?: boolean; at: number }
+export type NkNews = { id: string; kind: 'laugh' | 'steal' | 'swap' | 'doubt' | 'crack'; by: string; detail?: string; ult?: boolean; at: number
+	/** who the toast is for (plus NebKher himself); none = everyone. The laugh burst shows for everyone */
+	to?: string[] }
 const nkNewsOf = (kind: NkNews['kind'], by: string, more: Partial<NkNews> = {}): NkNews => ({ id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, kind, by, at: Date.now(), ...more })
 export const laughed = (s: S, pid: string, ctx: TurnCtx) => s.power?.[pid]?.laugh === markOf(ctx)
 /** spaces between two board pieces (null when either is off the board) */
@@ -390,7 +394,7 @@ export function applyPower(s: S & { tieTurn?: { key: string; coin: Team } | null
 	if (req.op === 'nkLaugh') {
 		if (!canLaugh(s, req.pid, ctx)) return {}
 		const targets = laughTargets(s, req.pid, ctx)
-		const out: Record<string, unknown> = { power: { ...s.power, [req.pid]: { ...s.power?.[req.pid], laugh: markOf(ctx) } }, nkNews: nkNewsOf('laugh', req.pid, { ult: targets.length > 0 }) }
+		const out: Record<string, unknown> = { power: { ...s.power, [req.pid]: { ...s.power?.[req.pid], laugh: markOf(ctx) } }, nkNews: nkNewsOf('laugh', req.pid, targets.length ? { ult: true, to: targets } : {}) }
 		if (targets.length) {
 			const at = Date.now()
 			out.forced = { ...(s.forced ?? {}), ...Object.fromEntries(targets.map((t) => [t, { by: req.pid, die: true, at }])) }
@@ -408,7 +412,11 @@ export function applyPower(s: S & { tieTurn?: { key: string; coin: Team } | null
 		const put = (k: number, v: number | null | undefined) => { if (k === ctx.turnIdx) next.pending = v as number; else next.turns[k] = v as number }
 		put(sl[0], b); put(sl[1], a)
 		const n = s.power?.[req.pid]?.nsw, mark = markOf(ctx)
-		const out: Record<string, unknown> = { cards: { ...s.cards, [t]: next }, power: { ...s.power, [req.pid]: { ...s.power?.[req.pid], nsw: { mark, n: (n?.mark === mark ? n.n : 0) + 1 } } }, nkNews: nkNewsOf('swap', req.pid) }
+		// the toast (and laugh) once per enemy hero per turn, however many swaps he makes on them
+		const told = s.power?.[req.pid]?.told?.key === ctx.key ? s.power[req.pid].told!.pids : []
+		const fresh = !told.includes(t)
+		const out: Record<string, unknown> = { cards: { ...s.cards, [t]: next }, power: { ...s.power, [req.pid]: { ...s.power?.[req.pid], nsw: { mark, n: (n?.mark === mark ? n.n : 0) + 1 }, told: { key: ctx.key, pids: fresh ? [...told, t] : told } } } }
+		if (fresh) out.nkNews = nkNewsOf('swap', req.pid, { to: [t] })
 		// this turn's card changed (its initiative too): the cards that acted and the one acting keep their places
 		if (sl.includes(ctx.turnIdx)) out.acting = { key: ctx.key, idx: ctx.at, done: s.acting?.key === ctx.key ? s.acting.done : undefined, pin: ctx.order.slice(0, ctx.at + 1) }
 		return out
@@ -417,11 +425,11 @@ export function applyPower(s: S & { tieTurn?: { key: string; coin: Team } | null
 		const t = req.target
 		if (nkPower(s, req.pid, ctx) !== 'grip' || !t || !ctx.teams?.[t] || ctx.teams[t] === ctx.teams?.[req.pid] || prevCard(s.cards?.[t], ctx.turnIdx) == null) return {}
 		const tc = s.cards![t], card = heroCards(tc.hero)[prevCard(tc, ctx.turnIdx)!]?.name
-		return { power: { ...s.power, [req.pid]: { ...s.power?.[req.pid], grip: { mark: markOf(ctx), target: t } } }, nkNews: nkNewsOf('steal', req.pid, { detail: card }) }
+		return { power: { ...s.power, [req.pid]: { ...s.power?.[req.pid], grip: { mark: markOf(ctx), target: t } } }, nkNews: nkNewsOf('steal', req.pid, { detail: card, to: [t] }) }
 	}
 	if (req.op === 'nkName') {
 		if (nkPower(s, req.pid, ctx) !== 'name' || !req.color || !NK_COLORS.includes(req.color)) return {}
-		return { power: { ...s.power, [req.pid]: { ...s.power?.[req.pid], doubt: { key: ctx.key, color: req.color } } }, nkNews: nkNewsOf('doubt', req.pid, { detail: req.color[0] + req.color.slice(1).toLowerCase() }) }
+		return { power: { ...s.power, [req.pid]: { ...s.power?.[req.pid], doubt: { key: ctx.key, color: req.color } } }, nkNews: nkNewsOf('doubt', req.pid, { detail: req.color[0] + req.color.slice(1).toLowerCase(), to: Object.keys(s.cards ?? {}).filter((p) => ctx.teams?.[p] && ctx.teams[p] !== ctx.teams?.[req.pid]) }) }
 	}
 	if (req.op === 'nkCrack') {
 		const hex = s.pieces?.[req.pid]?.hex
