@@ -71,6 +71,6 @@
 	.ult .sh { fill: #6d4a9c; }
 	.pop b { position: relative; font-weight: normal; font-size: calc(var(--u) * 0.27 * var(--s)); line-height: 1; letter-spacing: 0.02em; color: #b8231b; white-space: nowrap;
 		-webkit-text-stroke: calc(var(--u) * 0.035) #0b1a10; paint-order: stroke fill; transform: rotate(-3deg); }
-	.ult .pop b { color: #5a1d9c; }
+	.ult .pop b { color: #d4f03a; } /* purple bubble → its opposite on the wheel (the user, 2026-10-18) */
 	@media (prefers-reduced-motion: reduce) { .lb * { animation-duration: 0.01s !important; } }
 </style>
