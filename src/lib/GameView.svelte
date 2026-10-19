@@ -4,6 +4,10 @@
 	import { readable, type Readable } from 'svelte/store';
 	import BoardCanvas from '$lib/BoardCanvas.svelte';
 	import CardLayer from '$lib/CardLayer.svelte';
+	import SpellToast from '$lib/hud2/SpellToast.svelte';
+	import { castNow as gyCastNow, guardNow, castsAttack, spellNums } from '$lib/gydion';
+	import { schoolIcon } from '$lib/cards/spells';
+	const guardIcon = schoolIcon('abjuration');
 	import DefeatSplash from '$lib/DefeatSplash.svelte';
 	import BattleSplash from '$lib/BattleSplash.svelte';
 	import NebkherSplash from '$lib/hud2/NebkherSplash.svelte';
@@ -176,6 +180,8 @@
 		color: p.color ? colorHex(p.color) : undefined,
 		// heavies are immune while another minion of theirs stands in the battle zone (host can override)
 		immune: p.role === 'heavy' && heavyImmune($ms, p.id) ? true : undefined,
+		// Gydion's Shield / Invulnerability for the round: the Abjuration hand on his piece
+		guard: p.kind === 'hero' && $ms.cards?.[p.id]?.hero === 'gydion' && guardNow($ms, p.id, $ms.round).length ? guardIcon : undefined,
 		// hover label (mouse): the same name the toolbar shows, heroes/minions in their team colour
 		name: labelOf(p), nameColor: teamText(p),
 		locked: watcher || clearing || (p.role === 'heavy' && !iAmHost && heavyImmune($ms, p.id)) ? true : undefined
@@ -340,6 +346,8 @@
 			// NebKher's laugh bursting out of his token (only while a NebKher plays)
 			// Razzle's ultimate: the sparkles round her own dash button (only to her)
 			...($ms.cards?.[clientId]?.hero === 'razzle' ? [{ id: 'sparkle', label: 'Sparkles', icon: ICON.cue, on: $boardPrefs.sparkle, title: `The sparkles round your button (ultimate): ${$boardPrefs.sparkle ? 'on' : 'off'}`, act: () => boardPrefs.set({ sparkle: !$boardPrefs.sparkle }) }] : []),
+			// Gydion's cast toast (only while a Gydion plays)
+			...(Object.values($ms.cards ?? {}).some((c) => c.hero === 'gydion') ? [{ id: 'spells', label: 'Spells', icon: ICON.cue, on: $boardPrefs.spells, title: `Gydion's spell toast: ${$boardPrefs.spells ? 'on' : 'off'}`, act: () => boardPrefs.set({ spells: !$boardPrefs.spells }) }] : []),
 			...(Object.values($ms.cards ?? {}).some((c) => c.hero === 'nebkher') ? [{ id: 'laugh', label: 'Laugh', icon: ICON.laugh, on: $boardPrefs.laugh, title: `NebKher's laugh bursting from his token: ${$boardPrefs.laugh ? 'on' : 'off'}`, act: () => boardPrefs.set({ laugh: !$boardPrefs.laugh }) }] : []),
 			// a 4★ hero's dash button effects (Ignatia's flames, …): one switch for all of them
 			...((hud2 || phone2) && hasPower($ms.cards?.[clientId]?.hero) ? [{ id: 'dash', label: 'Dashboard', icon: ICON.dash, on: $boardPrefs.dash, title: `Your hero button's effects: ${$boardPrefs.dash ? 'on' : 'off'}`, act: () => boardPrefs.set({ dash: !$boardPrefs.dash }) }] : []),
@@ -397,7 +405,10 @@
 		return hero && r > 0 && !(pid === clientId && myPriv) ? [{ hex: hero.hex, r, color: colorHex(hero.color ?? '') }] : [];
 	}), ...(myPriv ? [{ hex: $ms.pieces[clientId].hex, r: myPriv, color: colorHex($ms.pieces[clientId].color ?? '') }] : [])];
 	// single hexes to act on: a spirit swirl round each (BoardCanvas `marks`)
-	$: boardMarks = [...battleMarks, ...spawnMarks, ...clearMarks, ...strayMarks];
+	// Gydion's Create Undead: the empty friendly spawn points he may raise a minion on (CardLayer decides when)
+	let gyRaise: string[] = [];
+	$: raiseMarks = gyRaise.map((hex) => ({ hex, r: 0, team: myTeam ?? 'orange', color: '' }));
+	$: boardMarks = [...battleMarks, ...spawnMarks, ...clearMarks, ...strayMarks, ...raiseMarks];
 
 	// ── minion battle / lane (battle.ts) ──
 	// the minions the battle's loser may take off glow red on the board
@@ -415,6 +426,17 @@
 		if (!n.to || n.to.includes(clientId) || n.by === clientId) nkSplash?.play(n.kind, n.detail ?? '', !!n.ult, n.kind === 'laugh' && !n.ult ? 3000 : 4000);
 		const p = $boardPrefs.laugh ? board?.clientPos(n.by) : null;
 		if (p) { nkX = p.x; nkY = p.y; nkR = Math.max(34, Math.min(80, p.r * 2)); nkUlt = !!$ms.cards?.[n.by]?.ultimate; setTimeout(() => nkBurst?.play(), 0); }
+	}
+	// Gydion casting (Prepare / Wish / a spell): a toast for everyone (Effects → Spells); each id once, never on joining
+	let spellToast: SpellToast, gySeen: string | null = $ms.gyNews?.id ?? null;
+	$: gyNews = $ms.gyNews ?? null;
+	$: if (gyNews && gyNews.id !== gySeen) playGy(gyNews);
+	function playGy(n: NonNullable<typeof gyNews>) {
+		gySeen = n.id;
+		if (Math.abs(Date.now() - n.at) > 10000 || !$boardPrefs.spells) return;
+		const nm = spellNums($ms, n.by, n.spell);
+		const line = [nm.attack != null && `Attack ${nm.attack}`, nm.move != null && `Move ${nm.move}`, nm.range != null && `Range ${nm.range}`, nm.radius != null && `Radius ${nm.radius}`, nm.coins != null && `+${nm.coins} coins`].filter(Boolean).join(' · ');
+		spellToast?.play(n.spell, line, n.wish ?? 0);
 	}
 	$: battleNews = $ms.battleNews ?? null;
 	$: battleSplashing = !!battleNews && battleNews.id !== battleDoneId && Date.now() - battleNews.at < 15000;
@@ -534,7 +556,7 @@
 	$: myEntry = $ms.toSpawn?.[clientId] ?? null;
 	$: heroToPlace = myDefeat?.piece ?? myEntry;
 	$: if (!heroToPlace) pendingRespawn = false;
-	$: placing = !!pendingSpawn || !!pendingToken || pendingRespawn || pendingDouble != null || !!myStray;
+	$: placing = !!pendingSpawn || !!pendingToken || pendingRespawn || pendingDouble != null || !!myStray || gyRaise.length > 0;
 	function placeMyHero() { cancelPlace(); selPieceId = null; actId = null; pendingRespawn = true; }
 	// the free spawn points of your base light up while you place your hero
 	$: spawnMarks = pendingRespawn && heroToPlace ? freeSpawns($ms, heroToPlace.team as Team).map((hex) => ({ hex, r: 0, team: heroToPlace?.team ?? 'orange', color: '#fff3a8' })) : [];
@@ -565,6 +587,11 @@
 			const rest = { ...($ms.strays ?? {}) };
 			delete rest[id];
 			session.act(inZone($ms, m.hex) ? `placed ${aMinion(m.team, m.role)} (its spawn point was blocked)` : `put ${aMinion(m.team, m.role)} back into the battle zone`, { ...movePiece($ms, id, hex), strays: rest });
+			return;
+		}
+		if (gyRaise.length && !pendingSpawn && !pendingToken && !pendingRespawn && pendingDouble == null) {
+			// Gydion raises a minion on a glowing spawn point (the engine checks it again)
+			if (gyRaise.includes(hex)) session.cardAction({ kind: 'power', pid: clientId, op: 'gyRaise', hex });
 			return;
 		}
 		if (pendingDouble != null) {
@@ -711,7 +738,9 @@
 		if (!selPiece || !selHero) return;
 		if (useRing) {
 			const id = selHero, body = selPiece.id, sum = heroDefeatSummary($ms, clientId, id);
-			askRing(body, kind === 'attack' ? 'Attack' : 'Defeat', `${heroOf(id)} · +${sum.coins}`, kind === 'attack' ? 'go' : 'bad',
+			const guard = $ms.cards?.[id]?.hero === 'gydion' ? guardNow($ms, id, $ms.round) : [];
+			const gtxt = guard.length === 2 ? 'Immune to attacks' : guard[0] === 'shield' ? 'Immune: basic attacks' : guard[0] === 'invulnerability' ? 'Immune: non-basic' : '';
+			askRing(body, kind === 'attack' ? 'Attack' : 'Defeat', gtxt && kind === 'attack' ? `${heroOf(id)} · ${gtxt}` : `${heroOf(id)} · +${sum.coins}`, kind === 'attack' ? 'go' : 'bad',
 				() => session.cardAction(kind === 'attack' ? { kind: 'attack', pid: clientId, target: id, body } : { kind: 'defeatHero', pid: clientId, target: id }));
 			return;
 		}
@@ -733,7 +762,7 @@
 	$: ownHeroSel = !!selPiece && selPiece.kind === 'hero' && heroPidOf(selPiece) === clientId;
 	$: ownCs = $ms.cards?.[clientId];
 	$: ownCardIdx = ownCs ? (ownCs.turns?.[$ms.turn - 1] ?? ownCs.pending) : null;
-	$: ownAttack = !!ownCs && ownCardIdx != null && ownCardIdx >= 0 && heroCards(ownCs.hero)[ownCardIdx]?.primaryAction === 'ATTACK';
+	$: ownAttack = !!ownCs && ownCardIdx != null && ownCardIdx >= 0 && (heroCards(ownCs.hero)[ownCardIdx]?.primaryAction === 'ATTACK' || (ownCs.hero === 'gydion' && !!turnCtx && castsAttack($ms, clientId, turnCtx)));
 	$: clearCount = ownHeroSel && ownAttack ? clearable($ms, clientId).length : 0;
 	// Clear mode: the tokens next to you glow; tap the ones to remove, then confirm
 	let clearing = false;
@@ -819,7 +848,9 @@
 	// Remove menu: the reasons the cards give for taking a token out of play (tokens.ts)
 	let removing = false;
 	let pickHeroFor: RemovalOption | null = null; // a mine going off: which enemy hero set it off
-	$: canRemoveSel = !!selPiece && canRemove(selPiece, clientId, iAmHost);
+	// Gydion's Disintegrate (cast this card): a token of anyone's may go too
+	$: gyDisint = !!turnCtx && $ms.cards?.[clientId]?.hero === 'gydion' && gyCastNow($ms, clientId, turnCtx) === 'disintegrate';
+	$: canRemoveSel = !!selPiece && (canRemove(selPiece, clientId, iAmHost) || (gyDisint && selPiece.kind === 'token'));
 	$: removeOpts = actPiece ? removalOptions(actPiece) : [];
 	$: enemyHeroes = actPiece ? Object.values($ms.pieces ?? {}).filter((p) => p.kind === 'hero' && !isDouble(p) && p.team !== actPiece?.team) : [];
 	function openRemove() {
@@ -1083,7 +1114,7 @@
 				</div>
 				<div class="aktitle"><i></i>{forcedMe.die ? 'Discard or die' : 'Forced discard'}<i></i></div>
 				<div class="akwho"><b>{heroOf(forcedMe.by)}</b><em>{playerName(forcedMe.by)}</em></div>
-				<div class="akhint">{forcedMe.die ? 'Discard a card — or be defeated' : 'Discard a card'}</div>
+				<div class="akhint">{forcedMe.die ? 'Discard a card — or be defeated' : forcedMe.only === 'basic' ? 'Discard a basic card, if able' : forcedMe.only === 'nonbasic' ? 'Discard a non-basic card, if able' : 'Discard a card'}</div>
 			</div>
 		</div>
 	{/if}
@@ -1134,6 +1165,7 @@
 			</div>
 		{/if}
 	<NebkherSplash bind:this={nkSplash} phone={mobile} />
+	<SpellToast bind:this={spellToast} phone={mobile} />
 	<LaughBurst bind:this={nkBurst} x={nkX} y={nkY} size={nkR} ult={nkUlt} />
 	<BattleSplash news={battleNews} {mobile} myTeam={viewTeam} onDone={() => (battleDoneId = battleNews?.id ?? null)} />
 	<!-- a push (mid-turn, or from the battle) waits for the battle splash to finish -->
@@ -1145,7 +1177,7 @@
 	<BoardCanvas bind:this={board} map={$ms.map ?? {}} inset={boardInset} look={boardLook} {glowZone} activeZone={$ms.wonBy ? null : battleZone($ms)} effects={!deckCovered} sea={$boardPrefs.sea} rims={$boardPrefs.rims} rotation={orientation} interactive={true} {placing} {placeGhost} holdColor={myHoldColor} onCancelPlace={cancelPlace} {areas} marks={boardMarks} badges={defBadges} zoomLock={mobile && $boardPrefs.zoomLock} wisps={$boardPrefs.wisps} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} pings={boardPings} onPing={doPing} {pingArmed} />
 	</div>
 
-	<CardLayer bind:this={cardLayer} bind:turnCtx bind:crackPreview areaW={gvw} areaH={gvh} {mobile} {hud2} {phone2} ringAsk={ringAsk ?? swapAsk} onResults={() => (victoryClosed = false)} compact={$boardPrefs.compact} cTop={$boardPrefs.cTop} cOrder={$boardPrefs.cOrder} cLog={$boardPrefs.cLog} bind:topW {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} bind:covered={deckCovered} bind:phoneStatus onRespawn={placeMyHero} onEnter={placeMyHero} onArmToken={armToken} onArmDouble={armDouble} placingDouble={pendingDouble} holdingToken={!!pendingToken} {pingArmed} onPing={pingButton} bind:previewId />
+	<CardLayer bind:this={cardLayer} bind:turnCtx bind:crackPreview bind:gyRaise areaW={gvw} areaH={gvh} {mobile} {hud2} {phone2} ringAsk={ringAsk ?? swapAsk} onResults={() => (victoryClosed = false)} compact={$boardPrefs.compact} cTop={$boardPrefs.cTop} cOrder={$boardPrefs.cOrder} cLog={$boardPrefs.cLog} bind:topW {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} bind:covered={deckCovered} bind:phoneStatus onRespawn={placeMyHero} onEnter={placeMyHero} onArmToken={armToken} onArmDouble={armDouble} placingDouble={pendingDouble} holdingToken={!!pendingToken} {pingArmed} onPing={pingButton} bind:previewId />
 
 	<!-- selected minion/token: offer delete (heroes aren't deletable) -->
 	{#if hud2}

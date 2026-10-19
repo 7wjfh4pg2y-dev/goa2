@@ -15,6 +15,10 @@
 	import IgnatiaCoin from '$lib/hud2/IgnatiaCoin.svelte';
 	import NebkherEye from '$lib/hud2/NebkherEye.svelte';
 	import RazzleTop from '$lib/hud2/RazzleTop.svelte';
+	import GydionBook from '$lib/hud2/GydionBook.svelte';
+	import SpellbookWindow from '$lib/hud2/SpellbookWindow.svelte';
+	import { gyOf, gyMode, castOptions, castNow, bookSpells, cardSpells, canWish, canStrike, canDrink, forceTargets, raiseSpots, spellNums, FORCE_SPELLS } from '$lib/gydion';
+	import { spellOf, schoolOf, schoolIcon } from '$lib/cards/spells';
 	import SnorriRunes from '$lib/hud2/SnorriRunes.svelte';
 	import RunePanel from '$lib/hud2/RunePanel.svelte';
 	import RuneMark from '$lib/hud2/RuneMark.svelte';
@@ -325,6 +329,50 @@
 	// Crowd Control as a defence: +2 for each other one of her near the body attacked — her own reminder (silver in hand)
 	$: rzCrowdOn = myPower === 'razzle' && !!myAttack && crowdOn($ms, clientId);
 	$: rzCrowd = rzCrowdOn && myAttack ? crowdBonus($ms, clientId, myAttack.body ?? clientId) : 0;
+	// ── Gydion: his spellbook (gydion.ts) — the button, the window, what his card acting asks for, and the follow-up of
+	// the spell he cast (Find Familiar's strikes · a forced discard · Vampiric Touch's retrieve · Create Undead's minion) ──
+	$: gyMine = myPower === 'gydion';
+	$: gyMark = `${pctx.key}:${pctx.at}`;
+	$: gyM = gyMine && !battlePhase ? gyMode($ms, clientId, pctx) : null;
+	$: gyOpts = gyMine && !battlePhase ? castOptions($ms, clientId, pctx) : [];
+	$: gyCastId = gyMine && !battlePhase ? castNow($ms, clientId, pctx) : null;
+	$: gySt = gyMine ? gyOf($ms, clientId) : {};
+	$: gyBookL = gyMine ? bookSpells($ms, clientId) : [];
+	$: gyWishOk = gyMine && !battlePhase && canWish($ms, clientId, pctx);
+	$: gyCardSp = gyMine ? cardSpells($ms, clientId, pctx) : [];
+	const gyCardOf = (i: number) => { const c = heroCards('gydion')[i]; return c ? { name: c.name, color: c.color.toLowerCase() } : null; };
+	$: gyActing = gyMine && revealed && actor === clientId && mine && mine.pending != null && mine.pending >= 0 ? gyCardOf(mine.pending) : null;
+	let gyOpen = false, gyPick: string | null = null, gyNo: string[] = [], gyArm: { label: string; sub: string; run: () => void } | null = null;
+	$: if (gyPick && !gyOpts.includes(gyPick)) gyPick = null;
+	const gySkipped = (what: string, key: string, no: string[]) => no.includes(`${key}:${what}`);
+	function gySkip(what: string) { gyNo = [...gyNo.filter((k) => k.startsWith(fxKey + ':')), `${fxKey}:${what}`]; gyOpen = false; }
+	const gyReq = (op: string, more: Record<string, unknown> = {}) => session.cardAction({ kind: 'power', pid: clientId, op, ...more } as never);
+	// a spell the card can cast, tapped in the book: it loads onto the ring (which confirms it)
+	function gyPickSpell(id: string | null) { gyPick = id; if (id) { armed = null; playedArm = null; orderArm = null; powerArm = null; gyArm = null; } }
+	function gyCastGo() { const sp = gyPick; gyPick = null; gyOpen = false; if (sp) gyReq('gyCast', { spell: sp }); }
+	$: gyStrikeOn = gyMine && !battlePhase && canStrike($ms, clientId, pctx);
+	$: gyForceT = gyMine && !battlePhase && !!gyCastId && gyCastId in FORCE_SPELLS ? forceTargets($ms, clientId, pctx) : [];
+	$: gyDrinkOn = gyMine && !battlePhase && canDrink($ms, clientId, pctx);
+	$: gyRaiseL = gyMine && !battlePhase ? raiseSpots($ms, clientId, pctx) : [];
+	// (out to GameView: the spawn points that glow and take a tap while Create Undead waits)
+	export let gyRaise: string[] = [];
+	$: gyRaise = gyMine && actor === clientId && gyRaiseL.length > 0 && !gySkipped('raise', fxKey, gyNo) ? gyRaiseL : [];
+	$: gyFollow = !gyCastId || actor !== clientId ? null
+		: gyStrikeOn && !gySkipped('strike', fxKey, gyNo) ? { kind: 'strike' as const, spell: gyCastId }
+		: gyForceT.length && !gySkipped('force', fxKey, gyNo) ? { kind: 'force' as const, spell: gyCastId, targets: gyForceT.map((pid) => ({ pid, hero: cards[pid]?.hero ?? '', name: `${heroName(cards[pid]?.hero ?? '')} (${pidName(pid)})` })) }
+		: gyDrinkOn && !gySkipped('drink', fxKey, gyNo) && mine ? { kind: 'drink' as const, spell: gyCastId, discard: mine.discard } : null;
+	// the window closes by itself once the follow-up it was showing is done
+	let gyFollowWas = false;
+	$: gyFollowNow = !!gyFollow;
+	$: gyFollowEnded(gyFollowNow);
+	function gyFollowEnded(now: boolean) { if (gyFollowWas && !now) gyOpen = false; gyFollowWas = now; }
+	function gyForceArm(pid: string) { gyArm = { label: 'Discard', sub: heroName(cards[pid]?.hero ?? ''), run: () => gyReq('gyForce', { target: pid }) }; gyOpen = false; }
+	function gyStrikeGo(ids: string[]) { gyReq('gyStrike', { spells: ids }); }
+	function gyDrinkGo(idx: number) { gyReq('gyDrink', { idx }); }
+	$: if (gyArm && !gyForceT.length) gyArm = null;
+	// the grimoire on the dash: idle · loaded (his card asks) · open (the window is up) · picked / cast (the spell's colour)
+	$: gyBtnMode = (!gyMine ? 'idle' : gyCastId ? (gyOpen ? 'picked' : 'cast') : gyPick ? 'picked' : gyOpen ? 'open' : gyM ? 'loaded' : 'idle') as 'idle' | 'loaded' | 'open' | 'picked' | 'cast';
+	$: gySchool = gyCastId ? schoolOf(gyCastId) : gyPick ? schoolOf(gyPick) : gyM === 'cast' ? (gySt.wishOpen === gyMark ? 'wish' : schoolOf(gyCardSp[0] ?? '') || null) : null;
 	$: nkLaughed = myPower === 'nebkher' && laughed($ms, clientId, pctx);
 	$: nkTargets = nkKind === 'laugh' && mine?.ultimate ? laughTargets($ms, clientId, pctx) : [];
 	$: nkDoubt = myPower === 'nebkher' ? doubtNow($ms, clientId, pctx) : null;
@@ -1040,7 +1088,7 @@
 	$: orderTop = cTop ? 62 : 100;
 	$: colTop = orderTop + (cOrder ? 30 : 60) + (cOrder ? 26 : 34);
 	// the Chronicle in the corner: beside the dash when there's room, else just above its left end
-	$: DASH_W = 900 + (myPower === 'takahide' ? 84 : myPower === 'snorri' ? 100 : myPower === 'emmitt' ? 104 : myPower === 'ignatia' ? 92 : myPower === 'nebkher' ? 136 : myPower === 'razzle' ? 94 : myPower ? 60 : 0); // the dash's width (design px) without the ultimate's compartment (+ a 4★ hero's button)
+	$: DASH_W = 900 + (myPower === 'takahide' ? 84 : myPower === 'snorri' ? 100 : myPower === 'emmitt' ? 104 : myPower === 'ignatia' ? 92 : myPower === 'nebkher' ? 136 : myPower === 'razzle' ? 94 : myPower === 'gydion' ? 80 : myPower ? 60 : 0); // the dash's width (design px) without the ultimate's compartment (+ a 4★ hero's button)
 	$: myUltOpen = !!mine && myUlt >= 0 && (mine.ultimate || ultReady);
 	$: logRoom = canvasW / 2 - DASH_W / 2 - 14 - (myUltOpen ? 96 : 0) - 36;
 	$: logBeside = logRoom >= 220;
@@ -1110,6 +1158,8 @@
 			return { label: 'Nudge', sub: who, kind: 'go', pulse: true, run: () => { session.nudge(a.pid); drop(); }, cancel: drop };
 		}
 		if (rzArm) { const a = rzArm; return { label: a.label, sub: a.sub, kind: 'bad', pulse: true, run: () => { a.run(); rzArm = null; }, cancel: () => (rzArm = null) }; }
+		if (gyArm) { const a = gyArm; return { label: a.label, sub: a.sub, kind: 'go', pulse: true, run: () => { gyArm = null; a.run(); }, cancel: () => (gyArm = null) }; }
+		if (gyPick) { const sp = spellOf(gyPick); return { label: 'Cast', sub: sp?.name, kind: 'go', pulse: true, run: gyCastGo, cancel: () => (gyPick = null) }; }
 		if (powerArm) { const a = powerArm; return { label: a.label, sub: a.sub, kind: 'go', pulse: true, card: a.op === 'takaSwap' || a.op === 'mateSwap', run: () => { session.cardAction({ kind: 'power', pid: clientId, op: a.op, order: a.order, target: a.target, idx: a.idx, src: a.src, dir: a.dir, color: a.color }); powerArm = null; if (a.target) { runeFor = null; goldFor = null; } }, cancel: () => { powerArm = null; if (a.target) { runeFor = null; goldFor = null; } } }; }
 		// Time Warp names you: pick a resolved slot, then the ring swaps it in
 		if (warpOff && mine) {
@@ -1127,7 +1177,7 @@
 		// forced to discard: pick a card (it arms Discard, above); "…or die" can also take the defeat
 		if (myForced) return myForced.die
 			? { label: 'Defeated', sub: 'or discard', kind: 'bad', run: () => forceAnswer(clientId, 'defeated') }
-			: mine && mine.hand.length ? { label: 'Discard', sub: 'Pick a card', kind: 'wait' } : { label: 'No card', kind: 'go', run: () => forceAnswer(clientId, 'none') };
+			: mine && mine.hand.length ? { label: 'Discard', sub: myForced.only === 'basic' ? 'A basic card' : myForced.only === 'nonbasic' ? 'A non-basic card' : 'Pick a card', subShort: myForced.only === 'basic' ? 'Basic' : myForced.only === 'nonbasic' ? 'Non-basic' : undefined, kind: 'wait' } : { label: 'No card', kind: 'go', run: () => forceAnswer(clientId, 'none') };
 		if (myForcing) { const t = myForcing[0], more = Object.values($ms.forced ?? {}).filter((f) => f.by === clientId).length - 1; return { label: 'Waiting', sub: heroName(cards[t]?.hero ?? '') + (more > 0 ? ` +${more}` : ''), kind: 'wait', cancel: () => forceAnswer(t, 'cancel') }; }
 		if (spawnWaiting.length) return { label: 'Waiting', sub: waitFor(spawnWaiting), kind: 'wait' };
 		if (battlePhase) {
@@ -1165,6 +1215,18 @@
 				if (rzKind === 'clear' && !rzSkipped('clear', fxKey, rzNo)) return { label: 'Remove doubles', sub: 'Crowd Control', kind: 'go', tint: true, pulse: true, run: rzClear, cancel: () => rzSkip('clear') };
 				if (rzTw === 'offer' && !rzSkipped('twin', fxKey, rzNo)) return { label: 'Twin Strike', sub: 'Attack again', kind: 'go', tint: true, pulse: true, run: rzTwinGo, cancel: () => rzSkip('twin') };
 				if (rzTw === 'live' && !rzSkipped('twin', fxKey, rzNo)) return { label: 'Twin Strike', sub: 'Another of you · another target', kind: 'wait', cancel: () => rzSkip('twin') };
+			}
+			// Gydion: Prepare (or Wish) on his silver · Cast on a casting card (the book opens) · then the spell's follow-up;
+			// each has its own × (not this time)
+			if (actor === clientId && gyMine) {
+				if (gyM === 'prepare' && !gySkipped('prep', fxKey, gyNo)) return gyWishOk
+					? { label: 'Prepare', kind: 'go', split: { left: { label: 'Prepare', run: () => gyReq('gyPrepare'), icon: heroLogo('gydion'), bg: 'radial-gradient(circle at 80% 45%, #6f7c8c, #2a313b 80%)' }, right: { label: 'Wish', run: () => gyReq('gyWish'), icon: schoolIcon('wish'), bg: 'radial-gradient(circle at 20% 45%, #8a4fd1, #3a1660 80%)' } } }
+					: { label: 'Prepare', sub: 'Spells', kind: 'go', tint: true, pulse: true, run: () => gyReq('gyPrepare'), cancel: () => gySkip('prep') };
+				if (gyM === 'cast' && !gySkipped('cast', fxKey, gyNo)) return { label: 'Cast', sub: gySt.wishOpen === gyMark ? 'Any spell · Wish' : 'A spell', subShort: gySt.wishOpen === gyMark ? 'Any spell' : 'A spell', kind: 'go', tint: true, pulse: true, run: () => (gyOpen = true), cancel: () => gySkip('cast') };
+				if (gyFollow?.kind === 'strike') return { label: 'Strike', sub: 'Up to 3 spells', subShort: 'Up to 3', kind: 'go', tint: true, pulse: true, run: () => (gyOpen = true), cancel: () => gyStrikeGo([]) };
+				if (gyFollow?.kind === 'force') return { label: 'Discard', sub: 'Pick a hero', subShort: 'Pick', kind: 'go', tint: true, pulse: true, run: () => (gyOpen = true), cancel: () => gySkip('force') };
+				if (gyFollow?.kind === 'drink') return { label: 'Retrieve', sub: 'A discard', subShort: 'Card', kind: 'go', tint: true, pulse: true, run: () => (gyOpen = true), cancel: () => gySkip('drink') };
+				if (gyRaise.length) return { label: 'Raise', sub: 'Tap a spawn point', subShort: 'Tap a point', kind: 'wait', cancel: () => gySkip('raise') };
 			}
 			// his Name a colour / Crack cards: the ring opens his panel instead (confirming there switches the effect on)
 			if (fxAsking && actor === clientId && (nkKind === 'name' || nkKind === 'crack')) return { label: nkKind === 'name' ? 'Name' : 'Crack', sub: nkKind === 'name' ? 'a colour' : 'reality', kind: 'go', tint: true, pulse: true, run: () => (nkOpen = true), cancel: fxNo };
@@ -1213,6 +1275,9 @@
 	{:else if myPower === 'razzle'}
 		<RazzleTop {size} phone={mobile} fx={dashFx} sparkle={$boardPrefs.sparkle} ult={!!mine?.ultimate} kind={rzKind} bodies={rzBodies} left={rzN} discard={mine?.discard ?? []} picking={placingDouble}
 			removes={rzRem} twin={rzTw} bind:open={rzOpen} onFace={onArmDouble} onClear={rzClear} onRetrieve={rzRetrieve} onRemove={rzRemoveBody} onRemoveAll={rzRemoveAll} onTwin={rzTwinGo} />
+	{:else if myPower === 'gydion'}
+		<GydionBook {size} phone={mobile} fx={dashFx} ult={!!mine?.ultimate} mode={gyBtnMode} school={gySchool} left={gyBookL.filter((x) => x !== 'wish').length} wishes={gySt.wish ?? 0}
+			label={gyM === 'prepare' ? 'Spellbook · Prepare Spells' : gyM === 'cast' ? 'Spellbook · cast a spell' : 'Spellbook'} onPress={() => (gyOpen = !gyOpen)} />
 	{:else if myPower === 'snorri'}
 		<SnorriRunes {size} runes={snRunes} {turnIdx} second={snSecond} ult={!!mine?.ultimate} canEdit={snEdit} canSecond={snCan2} fx={dashFx} phone={mobile} onDraft={snDraft} onSecond={snPickSecond} />
 	{/if}
@@ -1286,7 +1351,7 @@
 			{#if myAttack.discarded}<button class="act tohand" style={teamVars(myTeam)} on:click={() => answerAttack('defended')}>🛡 Defended</button>{/if}
 			<button class="act takeback" on:click={() => answerAttack('defeated')}>Defeated</button>
 		{:else if myForced}
-			<span class="waithost">{myForced.die ? 'Discard a card — or:' : 'Discard a card'}</span>
+			<span class="waithost">{myForced.die ? 'Discard a card — or:' : myForced.only === 'basic' ? 'Discard a basic card' : myForced.only === 'nonbasic' ? 'Discard a non-basic card' : 'Discard a card'}</span>
 			{#if myForced.die}<button class="act takeback" on:click={() => forceAnswer(clientId, 'defeated')}>Defeated</button>
 			{:else if mine && !mine.hand.length}<button class="act" on:click={() => forceAnswer(clientId, 'none')}>No card</button>{/if}
 		{:else if myForcing}
@@ -1838,6 +1903,10 @@
 	{/if}
 
 	<!-- the level-up / ultimate choice (the desktop deck has its own; this one serves the phone deck and the dash's Unlock) -->
+	{#if gyMine && gyOpen}
+		<div class="gywrap" class:dk={!mobile} class:ph={mobile}><SpellbookWindow bind:open={gyOpen} phone={mobile} ult={!!mine?.ultimate} wishes={gySt.wish ?? 0} book={gyBookL} gone={gySt.gone ?? []} struck={gySt.struck ?? []}
+			options={gyOpts} acting={gyActing} preparing={gyM === 'prepare'} picked={gyPick} nums={(id) => spellNums($ms, clientId, id)} follow={gyFollow} onPick={gyPickSpell} onStrike={gyStrikeGo} onForce={gyForceArm} onDrink={gyDrinkGo} /></div>
+	{/if}
 	{#if lvConfirm && mine && (mobile || !deckOpen)}
 		<div class="lvwrap" class:dk={!mobile}><LevelConfirm cs={mine} idx={lvConfirm.idx} kind={lvConfirm.kind} teamStyle={teamVars(myTeam)} onConfirm={confirmLevel} onCancel={() => (lvConfirm = null)} /></div>
 	{/if}
@@ -2530,6 +2599,11 @@
 	.runefix.dk { zoom: var(--uis, 1); }
 	.mrune { position: absolute; left: -4px; bottom: -3px; z-index: 1; display: grid; pointer-events: none; }
 	.lvwrap.dk { zoom: var(--uis, 1); } /* desktop: in design px, like the rest of the HUD */
+	/* Gydion's spellbook window: above the dash (desktop, in design px) / a sheet over the phone dash */
+	.gywrap { position: fixed; left: 0; right: 0; z-index: 27; display: flex; justify-content: center; pointer-events: none; }
+	.gywrap.dk { zoom: var(--uis, 1); bottom: 134px; }
+	.gywrap.ph { bottom: calc(100px + env(safe-area-inset-bottom, 0px)); }
+	.gywrap.ph > :global(*) { width: 100%; }
 	/* upgrades lie upside down, like on the table (item symbol upright) */
 	.dkcard :global(.cardface) { transition: transform .5s cubic-bezier(.3,.7,.2,1); }
 	.dkcard.zupg :global(.cardface), .dkzone.upg .dkcard :global(.cardface) { transform: rotate(180deg); }

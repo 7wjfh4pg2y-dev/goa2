@@ -11,7 +11,9 @@
 		short?: string;
 		/** the phone pill's shorter sub line (one line, no room for the full one) */
 		subShort?: string;
-		split?: { left: { label: string; run: () => void }; right: { label: string; run: () => void } } };
+		split?: { left: SplitHalf; right: SplitHalf } };
+	/** one half of a split ring: its own icon (an image) and background replace the Defended / Defeated look */
+	export type SplitHalf = { label: string; run: () => void; icon?: string; bg?: string };
 </script>
 
 <script lang="ts">
@@ -240,8 +242,8 @@
 			{#if order.split}
 				<div class="cap gob split">
 					<span class="gin">
-						<button class="half l" on:click={() => fire(order.split?.left.run)} title={order.split.left.label}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9.5C8 18.5 5 15.5 5 11V6z" /></svg><b>{order.split.left.label}</b></button>
-						<button class="half r" on:click={() => fire(order.split?.right.run)} title={order.split.right.label}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5a7 7 0 0 0-7 7c0 2.3 1.1 4 2.8 5v3.2h8.4v-3.2c1.7-1 2.8-2.7 2.8-5a7 7 0 0 0-7-7z" /><circle cx="9.3" cy="11" r="1.5" class="f" /><circle cx="14.7" cy="11" r="1.5" class="f" /></svg><b>{order.split.right.label}</b></button>
+						<button class="half l" style:background={order.split.left.bg} on:click={() => fire(order.split?.left.run)} title={order.split.left.label}>{#if order.split.left.icon}<img src={order.split.left.icon} alt="" />{:else}<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9.5C8 18.5 5 15.5 5 11V6z" /></svg>{/if}<b>{order.split.left.label}</b></button>
+						<button class="half r" style:background={order.split.right.bg} on:click={() => fire(order.split?.right.run)} title={order.split.right.label}>{#if order.split.right.icon}<img src={order.split.right.icon} alt="" />{:else}<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5a7 7 0 0 0-7 7c0 2.3 1.1 4 2.8 5v3.2h8.4v-3.2c1.7-1 2.8-2.7 2.8-5a7 7 0 0 0-7-7z" /><circle cx="9.3" cy="11" r="1.5" class="f" /><circle cx="14.7" cy="11" r="1.5" class="f" /></svg>{/if}<b>{order.split.right.label}</b></button>
 					</span>
 				</div>
 			{:else}
@@ -433,6 +435,7 @@
 	.half { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #fff; }
 	.half svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; }
 	.half svg .f { fill: currentColor; stroke: none; }
+	.half img { width: 22px; height: 22px; object-fit: contain; }
 	.half b { font-weight: 400; font-size: 6.6px; letter-spacing: 0; text-transform: uppercase; white-space: nowrap; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.7); }
 	.half.l { background: radial-gradient(circle at 80% 45%, color-mix(in srgb, var(--tc) 75%, #fff 10%), color-mix(in srgb, var(--tc) 50%, #000) 80%); }
 	.half.l { padding: 0 6px 0 2px; }

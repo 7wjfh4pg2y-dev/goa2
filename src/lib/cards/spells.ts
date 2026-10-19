@@ -23,3 +23,11 @@ export function castable(card: HeroCardJson | undefined): string[] {
 	if (!card) return [];
 	return [...card.description.matchAll(/"([^"]+)"/g)].map((m) => spellId(m[1])).filter((id) => BY_ID.has(id));
 }
+
+// ── the eight school symbols (cut from the printed card art, white on transparent) and their card colours ──
+const SCHOOL_ART = import.meta.glob('./images/spells/schools/*.png', { eager: true, import: 'default' }) as Record<string, string>
+export const SCHOOLS = ['cantrip', 'evocation', 'necromancy', 'abjuration', 'conjuration', 'enchantment', 'transmutation'] as const
+export const schoolIcon = (school: string) => SCHOOL_ART[`./images/spells/schools/${school.toLowerCase()}.png`] ?? ''
+/** a school's card colour (lower case: gold, red, green, blue, purple) */
+export const SCHOOL_COLOR: Record<string, string> = { cantrip: 'gold', evocation: 'red', necromancy: 'red', abjuration: 'green', conjuration: 'green', enchantment: 'blue', transmutation: 'blue', wish: 'purple' }
+export const schoolOf = (id: string) => spellOf(id)?.school.toLowerCase() ?? ''

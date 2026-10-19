@@ -109,7 +109,7 @@
 		</span>
 		{/if}
 		{#if order.split}
-			<span class="act split"><button class="h l" on:click={() => fire(order.split?.left.run)}>{order.split.left.label}</button><button class="h r" on:click={() => fire(order.split?.right.run)}>{order.split.right.label}</button></span>
+			<span class="act split"><button class="h l" style:background={order.split.left.bg} on:click={() => fire(order.split?.left.run)}>{order.split.left.label}</button><button class="h r" style:background={order.split.right.bg} on:click={() => fire(order.split?.right.run)}>{order.split.right.label}</button></span>
 		{:else if order.alt}
 			<!-- a second choice rides on the same pill: two thirds the main one (e.g. Waiting · hero), a third the other (Skip) -->
 			<span class="act joined {order.kind}">
