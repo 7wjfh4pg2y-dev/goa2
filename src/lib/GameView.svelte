@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { hasPower, emActing, warpSlots, crackNow, lineHexes, RE_REWIND, RE_WARP, RE_TEMPORAL, heroPidOf, bodiesOf, isDouble, crowdOn, crowdBonus, type TurnCtx } from '$lib/heropower';
+	import { hasPower, emActing, warpSlots, crackNow, lineHexes, RE_REWIND, RE_WARP, RE_TEMPORAL, heroPidOf, bodiesOf, isDouble, crowdOn, crowdBonus, crowdField, type TurnCtx } from '$lib/heropower';
 	import { afterUpdate, onDestroy } from 'svelte';
 	import { readable, type Readable } from 'svelte/store';
 	import BoardCanvas from '$lib/BoardCanvas.svelte';
@@ -794,9 +794,15 @@
 	$: defBadges = Object.keys(attacks).flatMap((t) => {
 		const r = minionDefense($ms, t);
 		if (!$ms.pieces?.[t]) return [];
+		const body = attacks[t]?.body && $ms.pieces?.[attacks[t].body!] ? attacks[t].body! : t;
+		// Razzle: each other one of her in Crowd Control's radius shows its +2 — grey (only if she plays the silver)
+		// until the silver is discarded as this defence, then lit and counted in the total
+		const crowd = crowdField($ms, t, body);
+		const total = r.total + (crowd.played ? 2 * crowd.ids.length : 0);
 		return [
-			...r.mods.map((m) => ({ id: m.id, text: m.d > 0 ? '+1' : '−1', tone: (m.d > 0 ? 'up' : 'down') as 'up' | 'down' })),
-			{ id: attacks[t]?.body && $ms.pieces?.[attacks[t].body!] ? attacks[t].body! : t, text: r.total > 0 ? `+${r.total}` : r.total < 0 ? `−${-r.total}` : '±0', tone: (r.total > 0 ? 'up' : r.total < 0 ? 'down' : 'even') as 'up' | 'down' | 'even', total: true }
+			...r.mods.map((m) => ({ id: m.id, text: m.d > 0 ? '+1' : '−1', tone: (m.d > 0 ? 'up' : 'down') as 'up' | 'down' | 'even' | 'ghost' })),
+			...crowd.ids.map((id) => ({ id, text: '+2', tone: (crowd.played ? 'up' : 'ghost') as 'up' | 'ghost' })),
+			{ id: body, text: total > 0 ? `+${total}` : total < 0 ? `−${-total}` : '±0', tone: (total > 0 ? 'up' : total < 0 ? 'down' : 'even') as 'up' | 'down' | 'even', total: true }
 		];
 	});
 	$: myDefMods = incoming ? minionDefense($ms, clientId).total : 0;

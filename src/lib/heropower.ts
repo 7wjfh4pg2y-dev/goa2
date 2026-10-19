@@ -520,6 +520,17 @@ export function crowdOn(s: S, pid: string): boolean {
 	if (!cs || cs.hero !== RZ || silver < 0) return false
 	return cs.hand.includes(silver) || (!!s.attacks?.[pid]?.discarded && cs.discard[cs.discard.length - 1] === silver)
 }
+/** Crowd Control on the board (public — it's geometry and the discard, never her hand): the others of her within its
+ *  radius (3 + Radius items) of the body attacked, and whether the silver was just discarded as this attack's defence */
+export function crowdField(s: S, pid: string, body: string): { ids: string[]; played: boolean } {
+	const cs = s.cards?.[pid], silver = silverIdx(RZ)
+	if (!cs || cs.hero !== RZ || silver < 0) return { ids: [], played: false }
+	const of = s.pieces?.[body] ? body : pid, me = s.pieces?.[of]
+	if (!me) return { ids: [], played: false }
+	const r = (heroCards(RZ)[silver]?.modifierValue ?? 3) + (statDeltas(cs).radius ?? 0)
+	const ids = bodiesOf(s, pid).filter((p) => p.id !== of && cubeDist(hexCube(p.hex), hexCube(me.hex)) <= r).map((p) => p.id)
+	return { ids, played: !!s.attacks?.[pid]?.discarded && cs.discard[cs.discard.length - 1] === silver }
+}
 export function crowdBonus(s: S, pid: string, body: string): number {
 	const cs = s.cards?.[pid]
 	if (!cs || !crowdOn(s, pid)) return 0

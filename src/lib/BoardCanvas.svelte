@@ -74,7 +74,7 @@
 	 *  minion that counts, the total over the defender; upright whatever the board's turn, above the pieces */
 	/** a two-finger pinch never zooms (the phone's zoom lock — the wheel's buttons still do) */
 	export let zoomLock = false;
-	export let badges: Array<{ id: string; text: string; tone: 'up' | 'down' | 'even'; total?: boolean }> = [];
+	export let badges: Array<{ id: string; text: string; tone: 'up' | 'down' | 'even' | 'ghost'; total?: boolean }> = []; // ghost = would count (Razzle's Crowd Control before the silver is played)
 	export let inset: { t: number; b: number; l?: number; r?: number } | null = null;
 	/** extra drawings in board units (the openings' marks): `under` the pieces, `over` them; never hit-tested.
 	 *  They get the hex centre function, the hex size and the board's turn (to keep text upright). */
@@ -926,6 +926,7 @@
 	.bdg.up { --fill: linear-gradient(180deg, #47c46e, #17703a); } .bdg.up::before { background: #c9ffd9; }
 	.bdg.down { --fill: linear-gradient(180deg, #ef5a4a, #8f1d12); } .bdg.down::before { background: #ffd0c8; }
 	.bdg.even { --fill: linear-gradient(180deg, #8a96a6, #47505c); } .bdg.even::before { background: #e5e9ee; }
+	.bdg.ghost { --fill: linear-gradient(180deg, #6b7480, #3a4049); opacity: .62; } .bdg.ghost::before { background: #aeb6c0; } .bdg.ghost b { color: #e3e8ee; }
 	.bdg.tot::before { background: linear-gradient(180deg, #fff3cf, #d8b36a); }
 	.bfloat { position: absolute; left: 0; top: 0; width: 0; height: 0; }
 	.badges.bob .bfloat { animation: bdgbob 2.2s ease-in-out .35s infinite; }

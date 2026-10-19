@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { applyCardReq, transferSeat, turnOrder, turnKey, actingIdx, actorOf, minionDefense, respawnHero, type MatchState, type Piece } from './match'
 import { newPlayerCardState } from './cards/cardstate'
 import { heroCards } from './cards/deck'
-import { equilibrium, canFlip, flipUsed, hasPower, canInscribe, activeRune, runesOf, secondRune, heldGolds, deckGolds, takaSwapKind, mateOffer, canReverse, warpOffer, capsuleOffer, nkPower, canLaugh, laughTargets, nkSwapsLeft, nkSlots, doubtNow, crackNow, lineHexes, rzPower, rzRemoves, rzTwin, facesInUse, rzSpawnsLeft, rzLeft, bodiesOf, isDouble, heroPidOf, crowdBonus, pieceDist, type Rune, type TurnCtx } from './heropower'
+import { equilibrium, canFlip, flipUsed, hasPower, canInscribe, activeRune, runesOf, secondRune, heldGolds, deckGolds, takaSwapKind, mateOffer, canReverse, warpOffer, capsuleOffer, nkPower, canLaugh, laughTargets, nkSwapsLeft, nkSlots, doubtNow, crackNow, lineHexes, rzPower, rzRemoves, rzTwin, crowdField, facesInUse, rzSpawnsLeft, rzLeft, bodiesOf, isDouble, heroPidOf, crowdBonus, pieceDist, type Rune, type TurnCtx } from './heropower'
 import { goldsOf, isHidden, type PlayerCardState } from './cards/cardstate'
 import { draftable, isLabHero, FOUR_STAR_LAB, FOUR_STAR_LIVE, HEROES } from './heroes'
 import { isFullGame, type Journal } from './recorder'
@@ -651,6 +651,10 @@ describe('Razzle: her doubles — spawn, faces, remove / promote, Crowd Control,
 		// discarded as THIS attack's defence: the reminder stays on (Defended +2)
 		const used = { ...out, attacks: { R: { by: 'B', defending: true, at: 1, discarded: true } }, cards: { ...out.cards, R: { ...out.cards!.R, discard: [...out.cards!.R.discard, crowd] } } } as MatchState
 		expect(crowdBonus(used, 'R', 'R')).toBe(2)
+		// on the board (public): her others in radius of the body attacked; lit once the silver is this attack's discard
+		expect(crowdField(x, 'R', 'R').ids).toEqual(['R~1']) // R~2 is far away
+		expect(crowdField(x, 'R', 'R').played).toBe(false)
+		expect(crowdField(used, 'R', 'R').played).toBe(true)
 		// as a skill: her silver acting → Remove doubles
 		const sk = actingAs({ ...x, cards: { ...x.cards, R: { ...x.cards!.R, pending: crowd, hand: x.cards!.R.hand.filter((i) => i !== crowd) } } } as MatchState, 'R')
 		expect(rzPower(sk, 'R', tc(sk))).toBe('clear')
