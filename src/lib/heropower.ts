@@ -7,6 +7,7 @@ import { basicsOf, goldsOf, silverIdx, statDeltas, PASS, type PlayerCardState } 
 import { hexCube, cubeDist } from './zones'
 import { hexNeighbour } from './board/hexgeo'
 import { detectDuration, endOf, type Effect } from './effects'
+import { GY, applyGydion, castsAttack, type GyState, type GyS } from './gydion'
 
 export type Team = 'orange' | 'blue'
 /** one player's power state; each hero uses its own fields */
@@ -59,6 +60,8 @@ export type PowerState = {
 	rzx?: string
 	/** Emmitt: he plays just one card this turn (`turnKey`) — Alternative Timelines declined */
 	one?: string
+	/** Gydion: his spellbook (gydion.ts) */
+	gy?: GyState
 }
 export type NkColor = 'GOLD' | 'SILVER' | 'RED' | 'BLUE' | 'GREEN'
 export const NK_COLORS: NkColor[] = ['GOLD', 'SILVER', 'RED', 'BLUE', 'GREEN']
@@ -66,7 +69,7 @@ export const NK_COLORS: NkColor[] = ['GOLD', 'SILVER', 'RED', 'BLUE', 'GREEN']
 export type NkEnemy = { pid: string; hero: string; name: string; player: string; dist: number | null; prev: number | null; prevHidden: boolean
 	/** every turn slot I–IV as it stands (this turn's = the card in play), and whether Laughter may swap it */
 	cards: { t: number; idx: number | null; hidden: boolean; ok: boolean; now: boolean }[] }
-export type PowerReq = { kind: 'power'; pid: string; op: 'ignatiaFlip' | 'snorriInscribe' | 'snorriSecond' | 'takaSwap' | 'mateSwap' | 'emReverse' | 'emWarp' | 'warpSwap' | 'capsule' | 'nkLaugh' | 'nkSwap' | 'nkName' | 'nkCrack' | 'nkGrip' | 'rzSpawn' | 'rzRemove' | 'rzClear' | 'rzRetrieve' | 'rzTwin' | 'emCommit2' | 'emUncommit2' | 'emKeep' | 'emOne';
+export type PowerReq = { kind: 'power'; pid: string; op: 'ignatiaFlip' | 'snorriInscribe' | 'snorriSecond' | 'takaSwap' | 'mateSwap' | 'emReverse' | 'emWarp' | 'warpSwap' | 'capsule' | 'nkLaugh' | 'nkSwap' | 'nkName' | 'nkCrack' | 'nkGrip' | 'rzSpawn' | 'rzRemove' | 'rzClear' | 'rzRetrieve' | 'rzTwin' | 'emCommit2' | 'emUncommit2' | 'emKeep' | 'emOne' | 'gyPrepare' | 'gyWish' | 'gyCast' | 'gyStrike' | 'gyForce' | 'gyRaise' | 'gyDrink' | 'gyFix';
 	/** takaSwap: the gold card from his deck to take; mateSwap: the hand / discard card to swap in; warpSwap: the turn slot (0–3) */
 	idx?: number
 	/** mateSwap: where the swapped-in card comes from */
@@ -92,7 +95,13 @@ export type PowerReq = { kind: 'power'; pid: string; op: 'ignatiaFlip' | 'snorri
 	/** rzRemove: the body (piece id) to take off the board */
 	id?: string
 	/** emKeep: which of the two cards stays in play (1 = the first committed, 2 = the second) */
-	which?: number }
+	which?: number
+	/** gyCast: the spell; gyFix: the spell put back in (on) / taken out of the book */
+	spell?: string
+	/** gyStrike: the spells Find Familiar strikes (up to three) */
+	spells?: string[]
+	/** gyFix: the Wish count */
+	wish?: number }
 /** what the engine knows about the turn in play */
 export type TurnCtx = { key: string; round: number; turnIdx: number; order: string[]; at: number; tieBreaker: Team; revealed: boolean
 	/** each player's team (for "a friendly hero") */
@@ -104,7 +113,7 @@ type S = { battlePhase?: boolean; levelPhase?: boolean; cards?: Record<string, P
 	pieces?: Record<string, { id: string; hex: string; kind?: string; team?: string; token?: string; owner?: string; hero?: string; face?: number; attachedTo?: string }> }
 
 /** heroes with their own dash button */
-export const POWER_HEROES = ['ignatia', 'snorri', 'takahide', 'emmitt', 'nebkher', 'razzle']
+export const POWER_HEROES = ['ignatia', 'snorri', 'takahide', 'emmitt', 'nebkher', 'razzle', 'gydion']
 export const hasPower = (hero: string | undefined | null) => !!hero && POWER_HEROES.includes(hero)
 
 // ── Ignatia ──
@@ -227,7 +236,7 @@ export function takaHit(prev: S, next: S, req: { kind: string; pid?: string }, c
 	const by = ctx.order[ctx.at]
 	const cs = by ? next.cards?.[by] : undefined
 	// Takahide's swap reds, and Emmitt's golds ("After the attack: next turn…")
-	if (!by || !ctx.revealed || !(offerOf(cs) || (cs?.hero === EMM && RE_REVERSE.test(cardText(cs, cs.pending))) || (cs?.hero === RZ && (RE_AFTER.test(cardText(cs, cs.pending)) || (!!cs.ultimate && heroCards(RZ)[cs.pending ?? -1]?.primaryAction === 'ATTACK'))))) return null
+	if (!by || !ctx.revealed || !(offerOf(cs) || (cs?.hero === EMM && RE_REVERSE.test(cardText(cs, cs.pending))) || (cs?.hero === RZ && (RE_AFTER.test(cardText(cs, cs.pending)) || (!!cs.ultimate && heroCards(RZ)[cs.pending ?? -1]?.primaryAction === 'ATTACK'))) || (cs?.hero === GY && castsAttack(next as GyS, by, ctx)))) return null
 	const mark = `${ctx.key}:${ctx.at}`
 	if (next.power?.[by]?.hit === mark) return null
 	const c = next.lastClash, d = next.lastDefeat
@@ -613,6 +622,7 @@ function applyRazzle(s: S, req: PowerReq, ctx: TurnCtx): Record<string, unknown>
 
 export function applyPower(s: S & { tieTurn?: { key: string; coin: Team } | null; acting?: { key: string; idx: number; done?: string[]; pin?: string[] } | null }, req: PowerReq, ctx: TurnCtx) {
 	if (req.op.startsWith('rz')) return applyRazzle(s, req, ctx)
+	if (req.op.startsWith('gy')) return applyGydion(s as GyS, req, ctx)
 	if (req.op === 'nkLaugh') {
 		if (!canLaugh(s, req.pid, ctx)) return {}
 		const targets = laughTargets(s, req.pid, ctx)

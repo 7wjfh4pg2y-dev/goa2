@@ -13,6 +13,7 @@
 // broken by `updatedAt`) wins. For a handful of players nudging a shared
 // tracker this is robust and easy to reason about.
 
+import { spellName, type GyNews } from './gydion'
 import { applyPower, syncPowers, takaHit, hasPower, isDouble, RZ, rzTwin, twinBars, timelinePick, wantsSecond, runeLine, RUNE_NAME, reversedTurn, trackDiscards, illusionForce, NEB, type NkNews, type PowerReq, type PowerState, type TurnCtx } from './heropower'
 import { teamName, aMinion } from './teams'
 import { hexCube, cubeDist } from './zones'
@@ -459,7 +460,9 @@ export interface MatchState {
 	/** NebKher's latest act (laugh / steal / swap / doubt / crack): every screen plays its toast + laugh burst once */
 	nkNews?: NkNews | null
 	/** forced discards, keyed by the hero who must discard: who forces it, and whether it's "…or die" */
-	forced?: Record<string, { by: string; die: boolean; at: number }>
+	forced?: Record<string, { by: string; die: boolean; at: number; only?: 'basic' | 'nonbasic' }>
+	/** what Gydion just cast (everyone's toast; gydion.ts) */
+	gyNews?: GyNews | null
 	/** the latest lane push — every client plays the "wave advances" splash when `id` changes */
 	pushNews?: PushNews | null
 	/** the latest minion battle — every client plays the battle splash when `id` changes */
@@ -1627,6 +1630,17 @@ export function joinMatch(
 			const who = req.pid === local.host && req.target ? req.target : req.pid, before = local.cards?.[who], after = patch.cards[who]
 			const name = (i: number | null | undefined) => (i != null && i >= 0 ? heroCards(after?.hero ?? '')[i]?.name : null) ?? 'a card'
 			if (before && after) note(who, `keeps ${name(after.pending)} and takes ${name(req.which === 1 ? before.pending2 : before.pending)} back (Alternative Timelines)${who !== req.pid ? ' — host' : ''}`)
+		}
+		if (req.kind === 'power' && req.op.startsWith('gy') && Object.keys(patch).length) {
+			const sn = (id?: string) => spellName(id ?? '')
+			if (req.op === 'gyPrepare') note(req.pid, 'prepares his spells — every spell is back in the spellbook')
+			if (req.op === 'gyWish') { const w = (patch.power as Record<string, PowerState>)?.[req.pid]?.gy?.wish ?? 0; note(req.pid, `casts Wish (${w} of 3)${patch.wonBy ? ' — the third Wish!' : ''} instead of preparing his spells`) }
+			if (req.op === 'gyCast') { const p2 = patch.power as Record<string, PowerState> | undefined; note(req.pid, `casts ${sn(req.spell)}${p2?.[req.pid]?.gy?.cast?.wish ? ' (Wish)' : ''}${req.spell === 'midas-touch' && patch.cards ? ` — +${(patch.cards[req.pid]?.coins ?? 0) - (local.cards?.[req.pid]?.coins ?? 0)} coins` : ''}${req.spell === 'energy-drain' && patch.life ? ' — his team regains a Life counter' : ''}`) }
+			if (req.op === 'gyStrike') note(req.pid, req.spells?.length ? `removes ${req.spells.map(sn).join(', ')} from his spellbook (Find Familiar)` : 'removes no spells (Find Familiar)')
+			if (req.op === 'gyForce' && req.target) { const f = (patch.forced as MatchState['forced'])?.[req.target]; note(req.pid, `makes ${nameOf(req.target)} discard ${f?.only === 'basic' ? 'a basic card' : f?.only === 'nonbasic' ? 'a non-basic card' : 'a card'}, if able`) }
+			if (req.op === 'gyRaise') note(req.pid, 'raises a minion from the dead (Create Undead)')
+			if (req.op === 'gyDrink' && req.idx != null) note(req.pid, `retrieves ${heroCards('gydion')[req.idx]?.name ?? 'a card'} from his discard (Vampiric Touch)`)
+			if (req.op === 'gyFix' && req.target) note(req.pid, `fixed ${nameOf(req.target)}'s spellbook (host)`)
 		}
 		if (req.kind === 'power' && req.op === 'rzRetrieve' && patch.cards && req.idx != null) note(req.pid, `retrieves ${heroCards(RZ)[req.idx]?.name ?? 'a card'} from her discard`)
 		if (req.kind === 'clearAround' && patch.pieces) { const n = Object.keys(local.pieces ?? {}).length - Object.keys(patch.pieces).length; note(req.pid, `cleared ${n} token${n === 1 ? '' : 's'} next to them`) }
