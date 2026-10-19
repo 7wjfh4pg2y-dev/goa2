@@ -225,15 +225,28 @@ export function startBattle(s: MatchState): Partial<MatchState> {
 	return { ...settled, ...pushed, battle: b.remove > 0 ? b : null }
 }
 
+/** After a minion left the board while a battle is open (`s` = the state before, `pieces` = after): a loser's minion
+ *  from the zone counts towards the removals whichever way it went (Remove for the battle, a plain Remove or
+ *  Defeat — the host can take an immune heavy off by hand); what is still owed never exceeds what the loser has
+ *  left in the zone; nothing owed → the battle is over and the push check runs (an emptied zone pushes —
+ *  on a beach, into the throne). */
+export function battleSettle(s: MatchState, pieces: Record<string, Piece>, pieceId: string): Partial<MatchState> {
+	const b = s.battle
+	const after: MatchState = { ...s, pieces }
+	if (!b || !b.loser) return { pieces, ...pushCheck(after) }
+	const m = s.pieces?.[pieceId]
+	const counted = !!m && m.kind === 'minion' && m.team === b.loser && inZone(s, m.hex)
+	const remove = Math.min(b.remove - (counted ? 1 : 0), zoneMinions(after, b.loser).length)
+	if (remove > 0) return { pieces, battle: { ...b, remove }, ...pushCheck(after) }
+	return { pieces, battle: null, ...pushCheck({ ...after, battle: null }) }
+}
+
 /** The loser takes a minion off for the battle; the last one done → push check. */
 export function battleRemove(s: MatchState, pieceId: string): Partial<MatchState> {
 	if (!canBattleRemove(s, pieceId)) return {}
 	const pieces = { ...s.pieces }
 	delete pieces[pieceId]
-	const remove = s.battle!.remove - 1
-	if (remove > 0) return { pieces, battle: { ...s.battle!, remove } }
-	const after: MatchState = { ...s, pieces, battle: null }
-	return { pieces, battle: null, ...pushCheck(after) }
+	return battleSettle(s, pieces, pieceId)
 }
 
 /** Let the game take off the rest (melee first, heavies last). */
@@ -242,7 +255,8 @@ export function battleAuto(s: MatchState): Partial<MatchState> {
 	let patch: Partial<MatchState> = {}
 	for (let guard = 0; cur.battle && cur.battle.remove > 0 && guard < 50; guard++) {
 		const id = autoPick(cur)
-		if (!id) break
+		// nothing of theirs left to take (an older game stuck owing a removal): close the battle and push
+		if (!id) { if (!zoneMinions(cur, cur.battle.loser ?? undefined).length) patch = { ...patch, ...battleSettle(cur, cur.pieces, '') }; break }
 		const p = battleRemove(cur, id)
 		patch = { ...patch, ...p }
 		cur = { ...cur, ...p }

@@ -19,7 +19,7 @@ import { teamName, aMinion } from './teams'
 import { hexCube, cubeDist } from './zones'
 import { tokenExpiry, sweepTokens, statusFrom, isTurret } from './tokens'
 import { expireEffects, type Effect } from './effects'
-import { startBattle, pushCheck, battleRemove, battleAuto, battleResult, laneNotes, heavyImmune, type Battle, type PushNews } from './battle'
+import { startBattle, pushCheck, battleRemove, battleSettle, battleAuto, battleResult, laneNotes, heavyImmune, type Battle, type PushNews } from './battle'
 import { get, writable, type Readable } from 'svelte/store'
 import { supabase, checkSocket } from './supabase'
 import { tabClientId } from './identity'
@@ -268,7 +268,7 @@ function applyCardReqBase(s: MatchState, req: Exclude<CardReq, PowerReq>): Parti
 		// an immune heavy can't be touched (the host can still override for card exceptions)
 		if (heavyImmune(s, req.piece) && req.pid !== s.host) return {}
 		const off = minionOff(s, req.pid, req.piece, req.kind === 'defeatMinion')
-		return off.pieces ? { ...off, ...pushCheck({ ...s, ...off }) } : off
+		return off.pieces ? { ...off, ...battleSettle({ ...s, cards: off.cards ?? s.cards }, off.pieces, req.piece) } : off
 	}
 	if (req.kind === 'defeatHero') return defeatHero(s, req.pid, req.target, req.keepCard)
 	if (req.kind === 'removeHero') return removeHero(s, req.pid)

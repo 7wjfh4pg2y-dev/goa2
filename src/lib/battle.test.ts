@@ -97,6 +97,36 @@ describe('the minion lane', () => {
 		expect(p.waves).toBe(4)
 	})
 
+	it('on the last beach a battle that ends in an emptied zone wins — even when the heavy came off by hand first', () => {
+		// a wave on the Titans' beach, the Titans down to a melee and their heavy: 5 : 2 → remove 2
+		const wave = spawnWave(M, 'Blue Beach', {}, 't').minions
+		const blue = Object.values(wave).filter((p) => p.team === 'blue')
+		const keep = new Set([blue.find((p) => p.role === 'heavy')!.id, blue.find((p) => p.role === 'melee')!.id])
+		const pieces = Object.fromEntries(Object.entries(wave).filter(([, p]) => p.team === 'orange' || keep.has(p.id)))
+		const base = game({ lane: 2, pieces })
+		const b0 = { ...base, ...battlePatch(base) }
+		expect(b0.battle).toMatchObject({ orange: 5, blue: 2, loser: 'blue', remove: 2 })
+		const heavy = zoneMinions(b0, 'blue').find((m) => m.role === 'heavy')!
+		const melee = zoneMinions(b0, 'blue').find((m) => m.role === 'melee')!
+		// the host takes the heavy off with a plain Remove: it counts, one owed
+		let s = { ...b0, ...applyCardReq(b0, { kind: 'removeMinion', pid: 'H', piece: heavy.id }) }
+		expect(s.battle).toMatchObject({ remove: 1 })
+		s = { ...s, ...applyCardReq(s, { kind: 'battleRemove', pid: 'B', piece: melee.id }) }
+		expect(s.battle).toBeNull()
+		expect(s.wonBy).toMatchObject({ team: 'orange' })
+		// the usual way (melee, then the heavy) wins too
+		let u = { ...b0, ...applyCardReq(b0, { kind: 'battleRemove', pid: 'B', piece: melee.id }) }
+		u = { ...u, ...applyCardReq(u, { kind: 'battleRemove', pid: 'B', piece: heavy.id }) }
+		expect(u.wonBy).toMatchObject({ team: 'orange' })
+		// a minion defeated during the battle counts as well; owing more than is left is capped
+		const d = { ...b0, battle: { ...b0.battle!, remove: 5 } }
+		const dd = { ...d, ...applyCardReq(d, { kind: 'defeatMinion', pid: 'O', piece: melee.id }) }
+		expect(dd.battle).toMatchObject({ remove: 1 })
+		// a game already stuck (owes 1, nothing left): Let the game choose closes it and wins
+		const stuck = { ...b0, pieces: Object.fromEntries(Object.entries(b0.pieces).filter(([, p]) => p.team !== 'blue')), battle: { ...b0.battle!, remove: 1 } }
+		expect(applyCardReq(stuck, { kind: 'battleAuto', pid: 'B' }).wonBy).toMatchObject({ team: 'orange' })
+	})
+
 	it('a push: wave off, zone cleared, zone moves towards the loser, a new wave spawns', () => {
 		const s = drop(game(), 6, 'orange') // orange has nothing left in the Center
 		const p = pushLane(s, 'blue')
