@@ -15,7 +15,7 @@
 	import { SPELLS, spellOf, schoolIcon, SCHOOL_COLOR } from '$lib/cards/spells'
 	import { heroLogo, portraitCss } from '$lib/heroes'
 	import { BOOK, type SpellNums } from '$lib/gydion'
-	import { fly } from 'svelte/transition'
+	import { fly, fade } from 'svelte/transition'
 
 	export let open = false
 	export let phone = false
@@ -94,22 +94,9 @@
 		: acting ? `${acting.name} isn't attuned to this one.` : 'Browse freely: invoke a spell when one of your casting cards is acting.'
 	// THE ETHER: every spell out of the book (all 21 before the first Prepare), stacked
 	$: ether = prepared ? gone : [...BOOK, ...gone.filter((x) => !BOOK.includes(x))]
-	let eIdx = 0, eBig = false, eTap: ReturnType<typeof setTimeout> | null = null
+	let eIdx = 0, eBig = false
 	$: if (eIdx >= ether.length) eIdx = Math.max(0, ether.length - 1)
 	$: eId = ether[eIdx] ?? ''
-	const eTilt = (id: string) => { let h = 0; for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) | 0; return ((h % 7) - 3) * 0.8 }
-	/** hover: the pointer's place across the pile picks the card */
-	function eScrub(e: PointerEvent) {
-		if (e.pointerType !== 'mouse' || !ether.length) return
-		const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
-		eIdx = Math.max(0, Math.min(ether.length - 1, Math.floor(((e.clientX - r.left) / r.width) * ether.length)))
-	}
-	/** tap: the next card (a double tap opens it large); a mouse double-clicks */
-	function eDown(e: PointerEvent) {
-		if (e.pointerType === 'mouse' || !ether.length) return
-		if (eTap) { clearTimeout(eTap); eTap = null; eBig = true; return }
-		eTap = setTimeout(() => { eTap = null; eIdx = (eIdx + 1) % ether.length }, 260)
-	}
 	const eStep = (d: number) => { if (ether.length) eIdx = (eIdx + d + ether.length) % ether.length }
 	function eKey(e: KeyboardEvent) {
 		if (!eBig) return
@@ -195,18 +182,23 @@
 
 <!-- the ether's stack: hover / tap shuffles, a double-click (double tap) opens it large -->
 {#snippet pile()}
+	<!-- a tidy deck: the card on top, straight edges behind it for the rest; ‹ › and the pips (one per spell, in its
+	     school's colour) move through it — hover a pip on desktop, tap on a phone; the card itself opens it large -->
 	{#if ether.length}
-		<div class="erow">
-			<div class="pile" style="--n:{ether.length}" role="button" tabindex="0" aria-label="The ether — {ether.length} spells" on:pointermove={eScrub} on:pointerdown={eDown} on:dblclick={() => (eBig = true)}
-				on:keydown={(e) => { if (e.key === 'Enter') eBig = true; else if (e.key === 'ArrowRight') eStep(1); else if (e.key === 'ArrowLeft') eStep(-1) }}>
-				{#each ether as id, i (id)}
-					<span class="pc" class:top={i === eIdx} style="--i:{i};--z:{i === eIdx ? 99 : i};--r:{eTilt(id)}deg;background-image:url({spellOf(id)?.art})" in:fly={{ y: -26, duration: 320 }} out:fly={{ y: -46, duration: 380, delay: Math.min(i, 20) * 22 }}></span>
-				{/each}
+		<div class="erow" role="group" aria-label="The ether — {ether.length} spells">
+			<div class="deck" out:fly={{ y: -40, duration: 420 }}>
+				{#each Array(Math.min(3, ether.length - 1)) as _, k}<span class="edge" style="--k:{k + 1}"></span>{/each}
+				{#key eId}<button class="ecard" style="background-image:url({spellOf(eId)?.art})" on:click={() => (eBig = true)} title="Read {spellOf(eId)?.name}" in:fade={{ duration: 140 }}></button>{/key}
 			</div>
 			<div class="einfo">
-				{#if eId}<span class="pn">{@render mi(school(eId), COL[SCHOOL_COLOR[school(eId)]])}<b>{spellOf(eId)?.name}</b></span>
-					<small class="est">{eWhat(eId)} · {eIdx + 1} of {ether.length}</small>{/if}
-				<small class="ehint">{phone ? 'Tap to shuffle · double-tap to read' : 'Hover to shuffle · double-click to read'}</small>
+				<span class="pn">{@render mi(school(eId), COL[SCHOOL_COLOR[school(eId)]])}<b>{spellOf(eId)?.name}</b></span>
+				<div class="enavr">
+					<button class="enav sm" on:click={() => eStep(-1)} aria-label="Previous" disabled={ether.length < 2}>‹</button>
+					<small class="est">{eWhat(eId)} · {eIdx + 1} of {ether.length}</small>
+					<button class="enav sm" on:click={() => eStep(1)} aria-label="Next" disabled={ether.length < 2}>›</button>
+				</div>
+				<div class="pips">{#each ether as id, i (id)}<button class="pip" class:on={i === eIdx} style="--c:{COL[SCHOOL_COLOR[school(id)] ?? 'gold']}" title={spellOf(id)?.name} aria-label={spellOf(id)?.name}
+					on:pointerenter={(e) => { if (e.pointerType === 'mouse') eIdx = i }} on:click={() => (eIdx = i)}></button>{/each}</div>
 			</div>
 		</div>
 	{:else}<em class="none">The ether is still — every spell is in the book.</em>{/if}
@@ -381,16 +373,22 @@
 	.gx2 i { display: inline-flex; align-items: center; gap: 6px; font: 500 12px system-ui; font-style: normal; color: #bccbd9; padding: 3px 10px 3px 6px; border-radius: 99px; background: rgba(2, 11, 22, 0.55); border: 1px solid rgba(255, 255, 255, 0.11); }
 	.gx2 i :global(.mi) { width: 14px; height: 14px; }
 	.gx2 b { color: #f5f1e8; }
-	/* the ether: a loose stack, the focused card lifted on top */
-	.erow { display: flex; align-items: center; gap: 18px; min-height: 104px; }
-	.pile { position: relative; flex: none; width: calc(128px + min(16px, 300px / var(--n)) * (var(--n) - 1)); height: 104px; cursor: pointer; touch-action: manipulation; outline: none; }
-	.pc { position: absolute; left: calc(min(16px, 300px / var(--n)) * var(--i)); top: 12px; width: 128px; aspect-ratio: 1192 / 831; border-radius: 7px; background: #000 center/cover; z-index: var(--z);
-		border: 1px solid rgba(255, 255, 255, 0.16); box-shadow: -3px 3px 8px rgba(0, 0, 0, 0.55); transform: rotate(var(--r)); filter: brightness(0.55) saturate(0.7); transition: transform 0.16s ease, filter 0.16s; }
-	.pc.top { transform: translateY(-12px) rotate(0deg) scale(1.06); filter: none; border-color: rgba(216, 179, 106, 0.8); box-shadow: 0 8px 18px rgba(0, 0, 0, 0.6), 0 0 14px rgba(185, 140, 245, 0.35); }
-	.einfo { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-	.einfo .pn b { font-size: 15px; }
-	.est { font-size: 12px; color: #c9b4ef; }
-	.ehint { font-size: 11.5px; color: #8a9fb3; }
+	/* the ether: a tidy deck + pips */
+	.erow { display: flex; align-items: center; gap: 22px; min-height: 104px; }
+	.deck { position: relative; flex: none; width: 128px; aspect-ratio: 1192 / 831; margin: 0 12px 0 0; }
+	.edge { position: absolute; inset: 0; border-radius: 7px; background: linear-gradient(135deg, #2a1f44, #120d22); border: 1px solid rgba(185, 140, 245, 0.35);
+		transform: translate(calc(var(--k) * 4px), calc(var(--k) * -4px)); opacity: calc(1 - var(--k) * 0.22); z-index: calc(4 - var(--k)); }
+	.ecard { position: absolute; inset: 0; z-index: 5; padding: 0; border-radius: 7px; background: #000 center/cover; border: 1px solid rgba(216, 179, 106, 0.75); cursor: zoom-in;
+		box-shadow: 0 6px 14px rgba(0, 0, 0, 0.55), 0 0 14px rgba(185, 140, 245, 0.25); }
+	.einfo { display: flex; flex-direction: column; gap: 6px; min-width: 0; flex: 1; }
+	.einfo .pn b { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.enavr { display: flex; align-items: center; gap: 8px; }
+	.est { font-size: 12px; color: #c9b4ef; min-width: 0; white-space: nowrap; }
+	.enav.sm { width: 26px; height: 26px; font-size: 17px; padding: 0 0 2px; }
+	.enav:disabled { opacity: 0.3; cursor: default; }
+	.pips { display: flex; flex-wrap: wrap; gap: 5px; max-width: 330px; }
+	.pip { width: 9px; height: 9px; padding: 0; border-radius: 50%; border: 0; background: var(--c); opacity: 0.4; cursor: pointer; transition: transform 0.12s, opacity 0.12s; }
+	.pip.on { opacity: 1; transform: scale(1.45); box-shadow: 0 0 0 1.5px #0b1422, 0 0 6px var(--c); }
 	.htag { font: 700 10px/16px system-ui; letter-spacing: 0.12em; text-transform: uppercase; padding: 0 7px; border-radius: 5px; background: #d8b36a; color: #1b1204; }
 	.wst { width: 22px; height: 22px; margin: 0 5px; border-radius: 50%; border: 1px solid rgba(216, 179, 106, 0.5); background: rgba(2, 11, 22, 0.55); color: #f4dfa8; font: 700 13px/1 system-ui; cursor: pointer; padding: 0; }
 	.wst:disabled { opacity: 0.35; cursor: default; }
@@ -414,8 +412,9 @@
 	.ph .wx { margin-left: auto; width: 28px; height: 28px; }
 	.pws { display: inline-flex; align-items: center; font-size: 12px; color: #e3d3ff; }
 	.psheet .erow { gap: 10px; }
-	.psheet .pile { width: calc(112px + min(10px, 150px / var(--n)) * (var(--n) - 1)); height: 92px; }
-	.psheet .pc { width: 112px; left: calc(min(10px, 150px / var(--n)) * var(--i)); }
+	.psheet .deck { width: 118px; margin-right: 10px; }
+	.psheet .pip { width: 11px; height: 11px; }
+	.psheet .pips { gap: 6px; }
 	.psheet .einfo .pn b { font-size: 13px; }
 	.ptabs { display: flex; gap: 4px; }
 	.ptabs button { position: relative; flex: 1; height: 32px; border-radius: 7px; background: rgba(2, 11, 22, 0.55); border: 0; border-bottom: 3px solid var(--c, #d8b36a); display: flex; gap: 4px; align-items: center; justify-content: center; cursor: pointer; }
