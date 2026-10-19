@@ -9,7 +9,7 @@
 	import type { Readable } from 'svelte/store';
 	import type { MatchSession, MatchState, Player } from '$lib/match';
 	import { teamForSeat, colorHex, battlePatch, levelPatch, canRespawn, turnPlan, claimable, actingIdx, actorOf, turnOrder, teamOf, turnKey as keyOfTurn } from '$lib/match';
-	import { hasPower, equilibrium, canFlip, flipUsed, runesOf, secondRune, canInscribe, canSecond, RUNES, takaSwapKind, mateOffer, canReverse, nextTurnKey, reversedTurn, warpOffer, warpSlots, capsuleOffer, RE_REVERSE, RE_TEMPORAL, nkPower, laughed, laughTargets, nkSwapsLeft, nkSlots, nkCardAt, prevCard, doubtNow, crackNow, pieceDist, rzPower, rzSpawnsLeft, rzLeft, facesInUse, crowdBonus, type NkColor, type NkEnemy, type Rune, type TurnCtx } from '$lib/heropower';
+	import { hasPower, equilibrium, canFlip, flipUsed, runesOf, secondRune, canInscribe, canSecond, RUNES, takaSwapKind, mateOffer, canReverse, nextTurnKey, reversedTurn, warpOffer, warpSlots, capsuleOffer, RE_REVERSE, RE_TEMPORAL, nkPower, laughed, laughTargets, nkSwapsLeft, nkSlots, nkCardAt, prevCard, doubtNow, crackNow, pieceDist, rzPower, rzRemoves, rzTwin, rzSpawnsLeft, rzLeft, bodiesOf, crowdBonus, type NkColor, type NkEnemy, type Rune, type TurnCtx } from '$lib/heropower';
 	import EmmittClock from '$lib/hud2/EmmittClock.svelte';
 	import TakaGold from '$lib/hud2/TakaGold.svelte';
 	import IgnatiaCoin from '$lib/hud2/IgnatiaCoin.svelte';
@@ -280,12 +280,30 @@
 	$: nkKind = myPower === 'nebkher' && !battlePhase ? nkPower($ms, clientId, pctx) : null;
 	// ── Razzle: her doubles (heropower.ts) — what her card acting opens, her faces on the board, what's left to do ──
 	$: rzKind = myPower === 'razzle' && !battlePhase ? rzPower($ms, clientId, pctx) : null;
-	$: rzFaces = myPower === 'razzle' ? facesInUse($ms, clientId) : [0];
+	// her bodies (main first) as {id, face}; what her card allows besides: take bodies off (her reds, after the attack),
+	// Twin Strike (her ultimate, after an attack)
+	$: rzBodies = myPower === 'razzle' ? bodiesOf($ms, clientId).map((p) => ({ id: p.id, face: p.face ?? 0 })) : [];
+	$: rzRem = myPower === 'razzle' && !battlePhase ? rzRemoves($ms, clientId, pctx) : null;
+	$: rzTw = myPower === 'razzle' && !battlePhase ? rzTwin($ms, clientId, pctx) : null;
 	$: rzN = rzKind === 'spawn' ? rzSpawnsLeft($ms, clientId, pctx) : rzKind === 'retrieve' ? rzLeft($ms, clientId, pctx) : 0;
-	let rzOpen = false, rzNo = '';
-	function rzSkip() { rzNo = fxKey; rzOpen = false; onArmDouble(null); }
+	// each prompt has its own × (one card may offer several: Into Thin Air's removal, then Twin Strike)
+	let rzOpen = false, rzNo: string[] = [];
+	const rzSkipped = (what: string, key: string, no: string[]) => no.includes(`${key}:${what}`);
+	function rzSkip(what: string) { rzNo = [...rzNo.filter((k) => k.startsWith(fxKey + ':')), `${fxKey}:${what}`]; rzOpen = false; onArmDouble(null); }
 	const rzRetrieve = (idx: number) => session.cardAction({ kind: 'power', pid: clientId, op: 'rzRetrieve', idx });
 	const rzClear = () => session.cardAction({ kind: 'power', pid: clientId, op: 'rzClear' });
+	const rzTwinGo = () => session.cardAction({ kind: 'power', pid: clientId, op: 'rzTwin' });
+	// a body taken off from her panel waits on the ring for a yes (her own piece hands its place to a double)
+	let rzArm: { label: string; sub: string; run: () => void } | null = null;
+	function rzRemoveBody(id: string) {
+		rzArm = { label: 'Remove', sub: id === clientId ? 'This one · a double takes over' : 'This one of you', run: () => session.cardAction({ kind: 'power', pid: clientId, op: 'rzRemove', id }) };
+		rzOpen = false; armed = null; playedArm = null; orderArm = null; powerArm = null;
+	}
+	function rzRemoveAll() {
+		rzArm = { label: 'Remove all', sub: 'Into Thin Air', run: () => session.cardAction({ kind: 'removeHero', pid: clientId }) };
+		rzOpen = false; armed = null; playedArm = null; orderArm = null; powerArm = null;
+	}
+	$: if (rzArm && !rzRem) rzArm = null;
 	// the shelf's face put down unplaced when the chance has gone (the card moved on, all out)
 	$: if (placingDouble != null && rzKind !== 'spawn') onArmDouble(null);
 	// Crowd Control as a defence: +2 for each other one of her near the body attacked — her own reminder (silver in hand)
@@ -1071,6 +1089,7 @@
 			if (nudgeLeft > 0) return { label: 'Nudge', sub: `in ${Math.ceil(nudgeLeft / 1000)} s`, kind: 'off', cancel: drop };
 			return { label: 'Nudge', sub: who, kind: 'go', pulse: true, run: () => { session.nudge(a.pid); drop(); }, cancel: drop };
 		}
+		if (rzArm) { const a = rzArm; return { label: a.label, sub: a.sub, kind: 'bad', pulse: true, run: () => { a.run(); rzArm = null; }, cancel: () => (rzArm = null) }; }
 		if (powerArm) { const a = powerArm; return { label: a.label, sub: a.sub, kind: 'go', pulse: true, card: a.op === 'takaSwap' || a.op === 'mateSwap', run: () => { session.cardAction({ kind: 'power', pid: clientId, op: a.op, order: a.order, target: a.target, idx: a.idx, src: a.src, dir: a.dir, color: a.color }); powerArm = null; if (a.target) { runeFor = null; goldFor = null; } }, cancel: () => { powerArm = null; if (a.target) { runeFor = null; goldFor = null; } } }; }
 		// Time Warp names you: pick a resolved slot, then the ring swaps it in
 		if (warpOff && mine) {
@@ -1108,12 +1127,16 @@
 			// your card names a lingering effect: on your turn the ring asks first (× = no effect), then End turn
 			// Diabolical Laughter: the laugh comes first ('if you do' — the swaps wait for it); × = no laugh this card
 			if (actor === clientId && nkKind === 'laugh' && !nkLaughed && nkNoLaugh !== fxKey) return { label: 'Laugh', sub: nkTargets.length ? `${nkTargets.length} must discard` : 'Diabolically', kind: 'go', tint: true, pulse: true, run: () => session.cardAction({ kind: 'power', pid: clientId, op: 'nkLaugh' }), cancel: nkSkipLaugh };
-			// Razzle: her card's chance comes first (× = not this time): spawn doubles · Crowd Control · retrieve
-			if (actor === clientId && rzKind && rzNo !== fxKey) {
-				if (rzKind === 'spawn') return placingDouble != null ? { label: 'Place', sub: 'Tap a space', kind: 'wait', cancel: () => onArmDouble(null) }
-					: { label: 'Spawn', sub: `${rzN} left`, kind: 'go', tint: true, pulse: true, run: () => (rzOpen = true), cancel: rzSkip };
-				if (rzKind === 'clear') return { label: 'Remove doubles', sub: 'Crowd Control', kind: 'go', tint: true, pulse: true, run: rzClear, cancel: rzSkip };
-				return { label: 'Retrieve', sub: `${rzN} card${rzN === 1 ? '' : 's'}`, kind: 'go', tint: true, pulse: true, run: () => (rzOpen = true), cancel: rzSkip };
+			// Razzle: her card's chances come first, each with its own × (not this time): spawn doubles · retrieve ·
+			// take bodies off · Crowd Control — then Twin Strike (her ultimate) once the attack has ended
+			if (actor === clientId && myPower === 'razzle') {
+				if (rzKind === 'spawn' && !rzSkipped('spawn', fxKey, rzNo)) return placingDouble != null ? { label: 'Place', sub: 'Tap a space', kind: 'wait', cancel: () => onArmDouble(null) }
+					: { label: 'Spawn', sub: `${rzN} left`, kind: 'go', tint: true, pulse: true, run: () => (rzOpen = true), cancel: () => rzSkip('spawn') };
+				if (rzKind === 'retrieve' && !rzSkipped('retrieve', fxKey, rzNo)) return { label: 'Retrieve', sub: `${rzN} card${rzN === 1 ? '' : 's'}`, kind: 'go', tint: true, pulse: true, run: () => (rzOpen = true), cancel: () => rzSkip('retrieve') };
+				if (rzRem && !rzSkipped('remove', fxKey, rzNo)) return { label: 'Remove', sub: rzRem === 'all' ? 'Any of you' : 'Some of you', kind: 'go', tint: true, pulse: true, run: () => (rzOpen = true), cancel: () => rzSkip('remove') };
+				if (rzKind === 'clear' && !rzSkipped('clear', fxKey, rzNo)) return { label: 'Remove doubles', sub: 'Crowd Control', kind: 'go', tint: true, pulse: true, run: rzClear, cancel: () => rzSkip('clear') };
+				if (rzTw === 'offer' && !rzSkipped('twin', fxKey, rzNo)) return { label: 'Twin Strike', sub: 'Attack again', kind: 'go', tint: true, pulse: true, run: rzTwinGo, cancel: () => rzSkip('twin') };
+				if (rzTw === 'live' && !rzSkipped('twin', fxKey, rzNo)) return { label: 'Twin Strike', sub: 'Another of you · another target', kind: 'wait', cancel: () => rzSkip('twin') };
 			}
 			// his Name a colour / Crack cards: the ring opens his panel instead (confirming there switches the effect on)
 			if (fxAsking && actor === clientId && (nkKind === 'name' || nkKind === 'crack')) return { label: nkKind === 'name' ? 'Name' : 'Crack', sub: nkKind === 'name' ? 'a colour' : 'reality', kind: 'go', tint: true, pulse: true, run: () => (nkOpen = true), cancel: fxNo };
@@ -1154,8 +1177,8 @@
 		<NebkherEye {size} phone={mobile} fx={dashFx} ult={!!mine?.ultimate} kind={nkKind} doubt={nkDoubt} enemies={nkEnemies} laughed={nkLaughed} swapsLeft={nkLeft} stolen={nkStolen}
 			targets={nkTargets.map((t) => heroName(cards[t]?.hero ?? ''))} crackDir={nkCrackDir} crackPick={nkCrackPick} namePick={nkNamePick} bind:open={nkOpen} onLaugh={nkArmLaugh} onSwap={nkSwapNow} onName={nkName} onCrack={nkCrackSet} onSteal={nkStealSet} onRead={nkRead} />
 	{:else if myPower === 'razzle'}
-		<RazzleTop {size} phone={mobile} fx={dashFx} sparkle={$boardPrefs.sparkle} ult={!!mine?.ultimate} kind={rzKind} faces={rzFaces} left={rzN} discard={mine?.discard ?? []} picking={placingDouble}
-			bind:open={rzOpen} onFace={onArmDouble} onClear={rzClear} onRetrieve={rzRetrieve} />
+		<RazzleTop {size} phone={mobile} fx={dashFx} sparkle={$boardPrefs.sparkle} ult={!!mine?.ultimate} kind={rzKind} bodies={rzBodies} left={rzN} discard={mine?.discard ?? []} picking={placingDouble}
+			removes={rzRem} twin={rzTw} bind:open={rzOpen} onFace={onArmDouble} onClear={rzClear} onRetrieve={rzRetrieve} onRemove={rzRemoveBody} onRemoveAll={rzRemoveAll} onTwin={rzTwinGo} />
 	{:else if myPower === 'snorri'}
 		<SnorriRunes {size} runes={snRunes} {turnIdx} second={snSecond} ult={!!mine?.ultimate} canEdit={snEdit} canSecond={snCan2} fx={dashFx} phone={mobile} onDraft={snDraft} onSecond={snPickSecond} />
 	{/if}

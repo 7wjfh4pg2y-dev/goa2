@@ -13,7 +13,7 @@
 // broken by `updatedAt`) wins. For a handful of players nudging a shared
 // tracker this is robust and easy to reason about.
 
-import { applyPower, syncPowers, takaHit, hasPower, isDouble, RZ, runeLine, RUNE_NAME, reversedTurn, trackDiscards, illusionForce, NEB, type NkNews, type PowerReq, type PowerState, type TurnCtx } from './heropower'
+import { applyPower, syncPowers, takaHit, hasPower, isDouble, RZ, rzTwin, twinBars, runeLine, RUNE_NAME, reversedTurn, trackDiscards, illusionForce, NEB, type NkNews, type PowerReq, type PowerState, type TurnCtx } from './heropower'
 import { teamName, aMinion } from './teams'
 import { hexCube, cubeDist } from './zones'
 import { tokenExpiry, sweepTokens, statusFrom, isTurret } from './tokens'
@@ -172,7 +172,14 @@ export const actorOf = (s: MatchState): string | null => turnOrder(s)[actingIdx(
 const powerCtx = (x: MatchState): TurnCtx => ({ key: turnKey(x), round: x.round, turnIdx: x.turn - 1, order: turnOrder(x), at: actingIdx(x), tieBreaker: x.tieBreaker, revealed: x.revealAt != null && Date.now() >= x.revealAt,
 	teams: Object.fromEntries(Object.keys(x.cards ?? {}).map((pid) => [pid, teamOf(x, pid)])) })
 export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
-	const patch = req.kind === 'power' ? (applyPower(s, req, powerCtx(s)) as Partial<MatchState>) : applyCardReqBase(s, req as Exclude<CardReq, PowerReq>)
+	// Razzle's Twin Strike: the repeat may not hit the unit the first attack hit
+	const twinOn = (req.kind === 'attack' || req.kind === 'defeatMinion' || req.kind === 'defeatHero') && s.cards?.[req.pid]?.hero === RZ ? twinBars(s, req.pid, powerCtx(s)) : null
+	if (twinOn && (req as { target?: string }).target === twinOn) return {}
+	const patch0 = req.kind === 'power' ? (applyPower(s, req, powerCtx(s)) as Partial<MatchState>) : applyCardReqBase(s, req as Exclude<CardReq, PowerReq>)
+	// …and once her next attack starts, the repeat is spent
+	const spend = Object.keys(patch0).length > 0 && (req.kind === 'attack' || req.kind === 'defeatMinion' || req.kind === 'defeatHero') && s.cards?.[req.pid]?.hero === RZ && rzTwin(s, req.pid, powerCtx(s)) === 'live'
+	const pw0 = patch0.power ?? s.power ?? {}
+	const patch: Partial<MatchState> = spend ? { ...patch0, power: { ...pw0, [req.pid]: { ...pw0[req.pid], twin: { ...s.power![req.pid].twin!, live: false } } } } : patch0
 	if (!Object.keys(patch).length) return patch
 	const next = { ...s, ...patch }
 	if (!Object.values(next.cards ?? {}).some((c) => hasPower(c.hero))) return patch
@@ -1611,6 +1618,7 @@ export function joinMatch(
 		if (req.kind === 'power' && req.op === 'rzSpawn' && patch.pieces) note(req.pid, 'spawns a double (Stunt Doubles)')
 		if (req.kind === 'power' && req.op === 'rzRemove' && patch.pieces) note(req.pid, 'takes one of her bodies off the board')
 		if (req.kind === 'power' && req.op === 'rzClear' && patch.pieces) note(req.pid, 'calls every double back (Crowd Control)')
+		if (req.kind === 'power' && req.op === 'rzTwin' && patch.power) note(req.pid, 'strikes again with another one of her (Twin Strike)')
 		if (req.kind === 'power' && req.op === 'rzRetrieve' && patch.cards && req.idx != null) note(req.pid, `retrieves ${heroCards(RZ)[req.idx]?.name ?? 'a card'} from her discard`)
 		if (req.kind === 'clearAround' && patch.pieces) { const n = Object.keys(local.pieces ?? {}).length - Object.keys(patch.pieces).length; note(req.pid, `cleared ${n} token${n === 1 ? '' : 's'} next to them`) }
 		if (req.kind === 'spawn' && patch.pieces) note(req.pid, 'entered the battlefield')

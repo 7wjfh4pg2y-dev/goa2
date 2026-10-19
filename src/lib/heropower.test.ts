@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { applyCardReq, transferSeat, turnOrder, turnKey, actingIdx, actorOf, minionDefense, respawnHero, type MatchState, type Piece } from './match'
 import { newPlayerCardState } from './cards/cardstate'
 import { heroCards } from './cards/deck'
-import { equilibrium, canFlip, flipUsed, hasPower, canInscribe, activeRune, runesOf, secondRune, heldGolds, deckGolds, takaSwapKind, mateOffer, canReverse, warpOffer, capsuleOffer, nkPower, canLaugh, laughTargets, nkSwapsLeft, nkSlots, doubtNow, crackNow, lineHexes, rzPower, rzRemoves, rzSpawnsLeft, rzLeft, bodiesOf, isDouble, heroPidOf, crowdBonus, pieceDist, type Rune, type TurnCtx } from './heropower'
+import { equilibrium, canFlip, flipUsed, hasPower, canInscribe, activeRune, runesOf, secondRune, heldGolds, deckGolds, takaSwapKind, mateOffer, canReverse, warpOffer, capsuleOffer, nkPower, canLaugh, laughTargets, nkSwapsLeft, nkSlots, doubtNow, crackNow, lineHexes, rzPower, rzRemoves, rzTwin, facesInUse, rzSpawnsLeft, rzLeft, bodiesOf, isDouble, heroPidOf, crowdBonus, pieceDist, type Rune, type TurnCtx } from './heropower'
 import { goldsOf, isHidden, type PlayerCardState } from './cards/cardstate'
 import { draftable, isLabHero, FOUR_STAR_LAB, FOUR_STAR_LIVE, HEROES } from './heroes'
 import { isFullGame, type Journal } from './recorder'
@@ -579,6 +579,10 @@ describe('Razzle: her doubles — spawn, faces, remove / promote, Crowd Control,
 		x = go(x, pw(x, 'R', 'rzSpawn', { hex: '3_4', face: 2 }))
 		x = { ...x, pieces: { ...x.pieces, bt: { id: 'bt', hex: '3_3', team: 'blue', kind: 'token', token: 'marker_bounty', owner: 'B', attachedTo: 'R~1' } } } as MatchState
 		expect(statusFrom(x.pieces).R?.bounty).toBe(1) // a marker on a double is on HER
+		expect(pw(x, 'R', 'rzRemove', { id: 'R~1' })).toEqual({}) // her gold doesn't take bodies off
+		// Hit and Gone after its attack: as many as she likes, never the last
+		const hg = afterAttack(actingAs(rg(named('Hit and Gone')), 'R'))
+		x = { ...hg, pieces: x.pieces } as MatchState
 		const one = go(x, pw(x, 'R', 'rzRemove', { id: 'R~1' }))
 		expect(bodiesOf(one, 'R').length).toBe(2)
 		expect(one.pieces.bt.attachedTo).toBe('R') // the marker stays on HER
@@ -592,6 +596,46 @@ describe('Razzle: her doubles — spawn, faces, remove / promote, Crowd Control,
 		const all = go(x, applyCardReq(x, { kind: 'removeHero', pid: 'R' } as never))
 		expect(Object.keys(all.pieces).filter((k) => k.startsWith('R'))).toEqual([])
 		expect(all.defeated?.R).toBeTruthy()
+		// Phantom Strike: ONE of her
+		const ph = afterAttack(actingAs(rg(phantom), 'R'))
+		const p3 = { ...ph, pieces: { ...ph.pieces, 'R~1': { ...ph.pieces.R, id: 'R~1', hex: '3_3', face: 1, owner: 'R' }, 'R~2': { ...ph.pieces.R, id: 'R~2', hex: '3_4', face: 2, owner: 'R' } } } as MatchState
+		const p1 = go(p3, pw(p3, 'R', 'rzRemove', { id: 'R~1' }))
+		expect(bodiesOf(p1, 'R').length).toBe(2)
+		expect(rzRemoves(p1, 'R', tc(p1))).toBe(null)
+		expect(pw(p1, 'R', 'rzRemove', { id: 'R~2' })).toEqual({})
+		// her portrait went with her own piece: it is back on the shelf for the next Stunt Doubles
+		const sd = afterAttack(actingAs(rg(gold), 'R'))
+		const back = { ...sd, pieces: promo.pieces } as MatchState
+		expect(facesInUse(back, 'R')).toEqual([2])
+		expect(go(back, pw(back, 'R', 'rzSpawn', { hex: '4_4', face: 0 })).pieces['R~1']?.face).toBe(0)
+	})
+	it('none of her board moves touch her cards (hand, turn slots, discard stay put)', () => {
+		const played = { turns: [named('Alleyoop'), named('Tightrope'), null, null], discard: [named('Rummage')] } as Partial<PlayerCardState>
+		const hg = afterAttack(actingAs(rg(named('Hit and Gone'), {}, played), 'R'))
+		let x = { ...hg, pieces: { ...hg.pieces, 'R~1': { ...hg.pieces.R, id: 'R~1', hex: '3_3', face: 1, owner: 'R' }, 'R~2': { ...hg.pieces.R, id: 'R~2', hex: '3_4', face: 2, owner: 'R' } } } as MatchState
+		const before = JSON.stringify(x.cards!.R)
+		x = go(x, pw(x, 'R', 'rzRemove', { id: 'R' })) // her own piece: a double takes over
+		x = go(x, pw(x, 'R', 'rzRemove', { id: 'R~2' }))
+		expect(JSON.stringify(x.cards!.R)).toBe(before)
+		expect(bodiesOf(x, 'R').length).toBe(1)
+	})
+	it('Twin Strike (her ultimate): after an attack another of her repeats it once, on a different unit', () => {
+		const into = { ultimate: true } as Partial<PlayerCardState>
+		const two = (x: MatchState) => ({ ...x, pieces: { ...x.pieces, 'R~1': { ...x.pieces.R, id: 'R~1', hex: '6_6', face: 1, owner: 'R' }, C: { id: 'C', hex: '7_6', team: 'blue', kind: 'hero', hero: 'arien' } } }) as MatchState
+		const s0 = two(actingAs(rg(phantom, {}, into), 'R'))
+		expect(rzTwin(s0, 'R', tc(s0))).toBe(null) // not before the attack
+		const x = go(s0, applyCardReq(s0, { kind: 'attack', pid: 'R', target: 'B' }))
+		const y = go(x, applyCardReq(x, { kind: 'attackResolve', pid: 'H', target: 'B', result: 'defended' } as never))
+		expect(rzTwin(y, 'R', tc(y))).toBe('offer')
+		const t = go(y, pw(y, 'R', 'rzTwin'))
+		expect(rzTwin(t, 'R', tc(t))).toBe('live')
+		expect(applyCardReq(t, { kind: 'attack', pid: 'R', target: 'B' })).toEqual({}) // not the same unit
+		const t2 = go(t, applyCardReq(t, { kind: 'attack', pid: 'R', target: 'C', body: 'R~1' } as never))
+		expect(t2.attacks?.C?.by).toBe('R')
+		expect(rzTwin(t2, 'R', tc(t2))).toBe(null) // spent
+		// without the ultimate, or alone on the board: nothing
+		const solo = afterAttack(actingAs(rg(phantom, {}, into), 'R'))
+		expect(rzTwin(solo, 'R', tc(solo))).toBe(null)
 	})
 	it('Crowd Control: as a skill every other one of her leaves; as a defence +2 for each other one within 3 — only while it is in her hand', () => {
 		let x = afterAttack(actingAs(rg(gold), 'R'))

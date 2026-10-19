@@ -50,6 +50,13 @@ export type PowerState = {
 	rzs?: { mark: string; n: number }
 	/** Razzle: the discarded cards Rummage / Ransack took back for this acting card */
 	rzr?: { mark: string; n: number }
+	/** what the acting card's attack ended on (`key:at` mark + the unit) — Razzle's Twin Strike targets a DIFFERENT one */
+	hitOn?: { mark: string; id: string }
+	/** Razzle's ultimate (Twin Strike) for this acting card: `live` = another one of her may repeat the attack now;
+	 *  `first` = the unit the first attack hit (not a target again); spent once her next attack starts */
+	twin?: { mark: string; first?: string; live: boolean }
+	/** Razzle: she took a body off for this acting card (Phantom Strike allows one) */
+	rzx?: string
 }
 export type NkColor = 'GOLD' | 'SILVER' | 'RED' | 'BLUE' | 'GREEN'
 export const NK_COLORS: NkColor[] = ['GOLD', 'SILVER', 'RED', 'BLUE', 'GREEN']
@@ -57,7 +64,7 @@ export const NK_COLORS: NkColor[] = ['GOLD', 'SILVER', 'RED', 'BLUE', 'GREEN']
 export type NkEnemy = { pid: string; hero: string; name: string; player: string; dist: number | null; prev: number | null; prevHidden: boolean
 	/** every turn slot I–IV as it stands (this turn's = the card in play), and whether Laughter may swap it */
 	cards: { t: number; idx: number | null; hidden: boolean; ok: boolean; now: boolean }[] }
-export type PowerReq = { kind: 'power'; pid: string; op: 'ignatiaFlip' | 'snorriInscribe' | 'snorriSecond' | 'takaSwap' | 'mateSwap' | 'emReverse' | 'emWarp' | 'warpSwap' | 'capsule' | 'nkLaugh' | 'nkSwap' | 'nkName' | 'nkCrack' | 'nkGrip' | 'rzSpawn' | 'rzRemove' | 'rzClear' | 'rzRetrieve';
+export type PowerReq = { kind: 'power'; pid: string; op: 'ignatiaFlip' | 'snorriInscribe' | 'snorriSecond' | 'takaSwap' | 'mateSwap' | 'emReverse' | 'emWarp' | 'warpSwap' | 'capsule' | 'nkLaugh' | 'nkSwap' | 'nkName' | 'nkCrack' | 'nkGrip' | 'rzSpawn' | 'rzRemove' | 'rzClear' | 'rzRetrieve' | 'rzTwin';
 	/** takaSwap: the gold card from his deck to take; mateSwap: the hand / discard card to swap in; warpSwap: the turn slot (0–3) */
 	idx?: number
 	/** mateSwap: where the swapped-in card comes from */
@@ -87,7 +94,7 @@ export type TurnCtx = { key: string; round: number; turnIdx: number; order: stri
 	/** each player's team (for "a friendly hero") */
 	teams?: Record<string, Team | null> }
 type S = { cards?: Record<string, PlayerCardState>; power?: Record<string, PowerState>; effects?: Effect[]; host?: string
-	lastClash?: { id: string; kind: string; by: string; out: string } | null; lastDefeat?: { id: string; by: string } | null
+	lastClash?: { id: string; kind: string; by: string; v?: string; out: string } | null; lastDefeat?: { id: string; by: string; victim?: string } | null
 	attacks?: Record<string, { discarded?: boolean } | undefined>; forced?: Record<string, unknown>
 	turnDisc?: { key: string; by: Record<string, number[]> } | null
 	pieces?: Record<string, { id: string; hex: string; kind?: string; team?: string; token?: string; owner?: string; hero?: string; face?: number; attachedTo?: string }> }
@@ -216,14 +223,17 @@ export function takaHit(prev: S, next: S, req: { kind: string; pid?: string }, c
 	const by = ctx.order[ctx.at]
 	const cs = by ? next.cards?.[by] : undefined
 	// Takahide's swap reds, and Emmitt's golds ("After the attack: next turn…")
-	if (!by || !ctx.revealed || !(offerOf(cs) || (cs?.hero === EMM && RE_REVERSE.test(cardText(cs, cs.pending))) || (cs?.hero === RZ && RE_AFTER.test(cardText(cs, cs.pending))))) return null
+	if (!by || !ctx.revealed || !(offerOf(cs) || (cs?.hero === EMM && RE_REVERSE.test(cardText(cs, cs.pending))) || (cs?.hero === RZ && (RE_AFTER.test(cardText(cs, cs.pending)) || (!!cs.ultimate && heroCards(RZ)[cs.pending ?? -1]?.primaryAction === 'ATTACK'))))) return null
 	const mark = `${ctx.key}:${ctx.at}`
 	if (next.power?.[by]?.hit === mark) return null
 	const c = next.lastClash, d = next.lastDefeat
 	const hit = (req.kind === 'defeatMinion' && req.pid === by)
 		|| (!!c && c.id !== prev.lastClash?.id && c.by === by && c.kind === 'attack' && (c.out === 'defended' || c.out === 'died'))
 		|| (!!d && d.id !== prev.lastDefeat?.id && d.by === by)
-	return hit ? { ...next.power, [by]: { ...next.power?.[by], hit: mark } } : null
+	if (!hit) return null
+	// what it hit: the hero the attack ended on, the hero defeated, or the minion
+	const on = req.kind === 'defeatMinion' ? (req as { target?: string }).target : c && c.id !== prev.lastClash?.id && c.by === by ? c.v : d?.victim
+	return { ...next.power, [by]: { ...next.power?.[by], hit: mark, ...(on ? { hitOn: { mark, id: on } } : {}) } }
 }
 /** Ready for War: once his ultimate is on, the silver goes back to the deck and every gold comes into his hand (and the
  *  other way round if the ultimate is taken back). The new card state, or null when nothing changes. */
@@ -444,6 +454,8 @@ export function bodiesOf(s: S, pid: string): Body[] {
 	if (!main) return []
 	return [main, ...Object.values(s.pieces ?? {}).filter((p) => p.kind === 'hero' && p.owner === pid && p.id !== pid)]
 }
+/** her four faces: 0 = her portrait, 1–3 = her card paintings; whichever no body wears waits on her shelf */
+export const RZ_FACES = [0, 1, 2, 3]
 /** the faces her bodies wear now (0 = her portrait) */
 export const facesInUse = (s: S, pid: string) => bodiesOf(s, pid).map((p) => p.face ?? 0)
 /** how many others of her stand within `r` of the body `of` */
@@ -477,11 +489,24 @@ export function rzPower(s: S, pid: string, ctx: TurnCtx): 'spawn' | 'clear' | 'r
  *  every one of her ('all' — not a defeat). Nothing else of hers offers the board's Remove pills. */
 export const RE_REMOVE_SOME = /may\s+remove\s+(one|one\s+or\s+more)\s+of\s+you/i
 export const RE_REMOVE_ALL = /including\s+all\s+of\s+you/i
+const RE_REMOVE_ONE = /may\s+remove\s+one\s+of\s+you/i
 export function rzRemoves(s: S, pid: string, ctx: TurnCtx): 'some' | 'all' | null {
 	if (s.cards?.[pid]?.hero !== RZ || !s.pieces?.[pid] || s.power?.[pid]?.hit !== markOf(ctx)) return null
 	if (heroActing(s, ctx, RZ, RE_REMOVE_ALL) === pid) return 'all'
+	// Phantom Strike takes ONE of her off; Hit and Gone as many as she likes but the last
+	if (heroActing(s, ctx, RZ, RE_REMOVE_ONE) === pid && s.power?.[pid]?.rzx === markOf(ctx)) return null
 	return heroActing(s, ctx, RZ, RE_REMOVE_SOME) === pid && bodiesOf(s, pid).length > 1 ? 'some' : null
 }
+/** Twin Strike (her ultimate): after an attack of hers, another one of her may repeat it once on a different unit.
+ *  'offer' = it may start now, 'live' = started — her next attack is the repeat; null = nothing */
+export function rzTwin(s: S, pid: string, ctx: TurnCtx): 'offer' | 'live' | null {
+	const cs = s.cards?.[pid], mark = markOf(ctx), pw = s.power?.[pid]
+	if (cs?.hero !== RZ || !cs.ultimate || !s.pieces?.[pid] || ctx.order[ctx.at] !== pid || !ctx.revealed) return null
+	if (pw?.twin?.mark === mark) return pw.twin.live ? 'live' : null
+	return pw?.hit === mark && heroCards(RZ)[cs.pending ?? -1]?.primaryAction === 'ATTACK' && bodiesOf(s, pid).length > 1 ? 'offer' : null
+}
+/** the unit Twin Strike may not hit (the first attack's target), while the repeat is live */
+export const twinBars = (s: S, pid: string, ctx: TurnCtx) => (rzTwin(s, pid, ctx) === 'live' ? s.power?.[pid]?.twin?.first ?? null : null)
 /** doubles her gold may still spawn for this card */
 export const rzSpawnsLeft = (s: S, pid: string, ctx: TurnCtx) => Math.max(0, Math.min(3 - cnt(s.power?.[pid]?.rzs, markOf(ctx)), RZ_MAX - bodiesOf(s, pid).length))
 /** discarded cards still to take back for this card */
@@ -509,7 +534,7 @@ function applyRazzle(s: S, req: PowerReq, ctx: TurnCtx): Record<string, unknown>
 	const pid = req.pid, mark = markOf(ctx)
 	if (req.op === 'rzSpawn') {
 		const main = s.pieces?.[pid], face = req.face, hex = req.hex
-		if (rzPower(s, pid, ctx) !== 'spawn' || !main || !hex || face == null || ![1, 2, 3].includes(face) || facesInUse(s, pid).includes(face)) return {}
+		if (rzPower(s, pid, ctx) !== 'spawn' || !main || !hex || face == null || !RZ_FACES.includes(face) || facesInUse(s, pid).includes(face)) return {}
 		// a free space: nothing standing there (markers ride on heroes, they don't take a space)
 		if (Object.values(s.pieces ?? {}).some((p) => p.hex === hex && !p.attachedTo)) return {}
 		let n = 1
@@ -524,20 +549,28 @@ function applyRazzle(s: S, req: PowerReq, ctx: TurnCtx): Record<string, unknown>
 		const id = req.id
 		const owner = id ? heroPidOf(s.pieces?.[id]) : null
 		if (!id || !owner || s.cards?.[owner]?.hero !== RZ || (req.pid !== owner && req.pid !== s.host)) return {}
+		// her own call: only while Phantom Strike / Hit and Gone / Into Thin Air allow it (the host may any time)
+		if (req.pid !== s.host && !rzRemoves(s, owner, ctx)) return {}
 		const bodies = bodiesOf(s, owner)
 		if (bodies.length < 2) return {}
-		if (id !== owner) return { pieces: dropBodies(s.pieces!, [id], owner) }
+		const took = req.pid === owner ? { power: { ...s.power, [owner]: { ...s.power?.[owner], rzx: mark } } } : {}
+		if (id !== owner) return { pieces: dropBodies(s.pieces!, [id], owner), ...took }
 		// her own piece goes: the first double steps into it (her pid keeps a body on the board)
 		const d = bodies[1]
 		const pieces = dropBodies(s.pieces!, [d.id], owner)
 		pieces[owner] = { ...pieces[owner], hex: d.hex, face: d.face ?? 0 }
-		return { pieces }
+		return { pieces, ...took }
 	}
 	if (req.op === 'rzClear') {
 		// Crowd Control as a skill: every other one of her leaves (her own piece stays)
 		if (rzPower(s, pid, ctx) !== 'clear') return {}
 		const ids = bodiesOf(s, pid).slice(1).map((p) => p.id)
 		return ids.length ? { pieces: dropBodies(s.pieces!, ids, pid) } : {}
+	}
+	if (req.op === 'rzTwin') {
+		if (rzTwin(s, pid, ctx) !== 'offer') return {}
+		const on = s.power?.[pid]?.hitOn
+		return { power: { ...s.power, [pid]: { ...s.power?.[pid], twin: { mark, first: on?.mark === mark ? on.id : undefined, live: true } } } }
 	}
 	if (req.op === 'rzRetrieve') {
 		const cs = s.cards?.[pid], idx = req.idx

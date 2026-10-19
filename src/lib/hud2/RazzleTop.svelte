@@ -2,12 +2,16 @@
 	// Razzle's dash button — the BIG TOP JUGGLER (the user's pick, 2026-10-18, artifact "Razzle's Big Top"): her circus
 	// tent seen from above, cyan and magenta stripes with a gold star on the king pole, and a ring of her star balls
 	// round it — one ball for each of her on the board (dotted rings for the empty places). While one of her cards
-	// opens something (Stunt Doubles after the attack, Crowd Control, Rummage / Ransack after the attack) the colours
-	// come up, the tent turns slowly clockwise and the ring of balls orbits ANTICLOCKWISE while each ball spins
-	// clockwise. Ultimate (Twin Strike): Velvet & Gold's plum and gold tent with Royal Big Top's balls, and small gold /
-	// pink / lilac / silver sparkles (their own switch: Effects → Sparkles). Motion = the Dashboard switch.
-	// A tap opens her panel: the shelf of faces for a double (Stunt Doubles), Remove doubles (Crowd Control), her
-	// discard to retrieve from (Rummage / Ransack), else who of her is on the board.
+	// offers something (Stunt Doubles, Crowd Control, Rummage / Ransack, Phantom Strike / Hit and Gone / Into Thin Air,
+	// Twin Strike) the colours come up, the tent turns slowly clockwise and the ring of balls orbits ANTICLOCKWISE while
+	// each ball spins clockwise. Ultimate (Twin Strike): Velvet & Gold's plum and gold tent with Royal Big Top's balls —
+	// dim at rest like any idle button; lit, with small gold / pink / lilac / silver sparkles (their own switch:
+	// Effects → Sparkles), only while something is on offer. Motion = the Dashboard switch.
+	// A tap opens her panel, the same every time (the user, 2026-10-19: one place for everything she can do): her four
+	// faces — the ones on the board (a red × takes that one of her off while her red allows it) and the ones waiting on
+	// her shelf (lit while Stunt Doubles spawns: tap one, then a space) — and her moves, greyed until their card comes:
+	// Remove all (Into Thin Air) · Call back (Crowd Control) · Retrieve (Rummage / Ransack, her discard opens below) ·
+	// Twin Strike (her ultimate).
 	import Card from '$lib/cards/Card.svelte'
 	import { heroCards } from '$lib/cards/deck'
 	import { altFace, portraitCss } from '$lib/heroes'
@@ -19,19 +23,26 @@
 	export let ult = false
 	/** what the card acting opens now (null = rest) */
 	export let kind: 'spawn' | 'clear' | 'retrieve' | null = null
-	/** the faces of her bodies on the board (0 = her portrait), her own piece first */
-	export let faces: number[] = [0]
+	/** her bodies on the board (her own piece first) and the face each wears (0 = her portrait) */
+	export let bodies: { id: string; face: number }[] = []
 	/** doubles left to spawn / cards left to retrieve for this card */
 	export let left = 0
 	/** her discard (Rummage / Ransack) */
 	export let discard: number[] = []
 	/** the face picked off the shelf, waiting for its space on the board */
 	export let picking: number | null = null
+	/** her red after its attack: take some of her off ('some' — never the last) or any, all of her too ('all') */
+	export let removes: 'some' | 'all' | null = null
+	/** Twin Strike: 'offer' = may start, 'live' = her next attack is the repeat */
+	export let twin: 'offer' | 'live' | null = null
 	/** the panel is open (bound: the action ring opens it) */
 	export let open = false
 	export let onFace: (face: number | null) => void = () => {}
 	export let onClear: () => void = () => {}
 	export let onRetrieve: (idx: number) => void = () => {}
+	export let onRemove: (id: string) => void = () => {}
+	export let onRemoveAll: () => void = () => {}
+	export let onTwin: () => void = () => {}
 
 	const f = (n: number) => n.toFixed(1)
 	const star = (cx: number, cy: number, R: number, r: number) => { let d = ''; for (let i = 0; i < 10; i++) { const rr = i % 2 ? r : R, a = ((i * 36 - 90) * Math.PI) / 180; d += (i ? 'L' : 'M') + f(cx + rr * Math.cos(a)) + ' ' + f(cy + rr * Math.sin(a)) } return d + 'Z' }
@@ -47,25 +58,29 @@
 	// 14 small glints in four colours (gold · pink · lilac · silver), staggered so a few are always lit
 	const SPK_C = ['#f2c95a', '#ff6fc8', '#c9a2ff', '#e8ecf5']
 	const SPARKS = Array.from({ length: 14 }, (_, i) => { const a = (i * 137.5 * Math.PI) / 180, r = 30 + ((i * 53) % 19); return { x: 50 + r * Math.cos(a), y: 50 + r * Math.sin(a), d: (i * 0.37) % 1.5, c: SPK_C[i % 4] } })
-	const FACE_NAME = ['Razzle', 'Alleyoop', 'Hit and Gone', "Aaaand it's gone!"]
+	const FACES = [0, 1, 2, 3]
 	const faceCss = (n: number) => (n ? `background-image:url('${altFace('razzle', n)}');background-size:cover;background-position:center;` : portraitCss('razzle'))
 
 	$: z = phone ? size - 5 : size
 	$: slotW = Math.ceil(z * (phone ? 1.32 : 1.66))
-	$: live = !!kind
-	$: count = Math.max(1, Math.min(4, faces.length))
-	$: title = kind === 'spawn' ? 'Stunt Doubles' : kind === 'clear' ? 'Crowd Control' : kind === 'retrieve' ? 'Retrieve' : 'Razzle'
-	$: tip = kind === 'spawn' ? 'Spawn a double' : kind === 'clear' ? 'Crowd Control: every other one of you leaves' : kind === 'retrieve' ? 'Take a discarded card back' : `${count} of you on the board`
+	$: count = Math.max(1, Math.min(4, bodies.length))
+	$: spawning = kind === 'spawn' && left > 0
+	$: canTake = (removes === 'some' || removes === 'all') && bodies.length > 1
+	$: live = !!kind || !!removes || !!twin
+	$: tip = kind === 'spawn' ? 'Stunt Doubles: spawn a double' : kind === 'clear' ? 'Crowd Control: call every double back' : kind === 'retrieve' ? 'Take a discarded card back'
+		: removes ? 'Take one of you off the board' : twin === 'offer' ? 'Twin Strike: attack again with another one of you' : twin === 'live' ? 'Twin Strike: attack a different unit' : `${count} of you on the board`
+	$: hint = spawning ? 'Pick a face · then a space' : kind === 'retrieve' ? `Retrieve · ${left} left` : canTake ? (removes === 'all' ? 'Tap × to take one off · or Remove all' : 'Tap × to take one off') : ''
+	$: bodyOf = (n: number) => bodies.find((b) => b.face === n)
 	// the move the panel was opened for is over (the last retrieve, the card ended): fold it away
-	let wasKind = kind
-	$: if (kind !== wasKind) { if (wasKind && !kind) open = false; wasKind = kind }
+	let wasLive = live
+	$: if (live !== wasLive) { if (wasLive && !live) open = false; wasLive = live }
 	function pick(n: number) { const off = picking === n; onFace(off ? null : n); if (!off) open = false }
 	const onKey = (e: KeyboardEvent) => { if (open && e.key === 'Escape') open = false }
 </script>
 
 <svelte:window on:keydown={onKey} />
 <span class="rz" class:ph={phone} style="--s:{z}px; width:{slotW}px">
-	<span class="u" class:on={live} class:ult class:fx class:sparkle={sparkle && ult}>
+	<span class="u" class:on={live} class:ult class:fx class:sparkle={sparkle && ult && live}>
 		<span class="lay glow"></span>
 		<button class="btn" class:ready={live} class:open on:click={() => (open = !open)} title={tip} aria-label={tip}>
 			<span class="tent">{@html TENT}</span>
@@ -75,29 +90,38 @@
 				{#if i < count}<span class="ball" style="left:{f(x)}%;top:{f(y)}%">{@html BALL(i)}</span>
 				{:else}<span class="vac" style="left:{f(x)}%;top:{f(y)}%"></span>{/if}
 			{/each}
-			{#if sparkle && ult}
+			{#if sparkle && ult && live}
 				{#each SPARKS as k, i (i)}<span class="spk" style="left:{f(k.x)}%;top:{f(k.y)}%;--sp:{k.c};animation-delay:-{f(k.d)}s">{@html SPARK}</span>{/each}
 			{/if}
 		</span>
 	</span>
 	{#if open}
-		<div class="nw" class:ph={phone} role="dialog" tabindex="-1" aria-label={title} on:click|stopPropagation on:keydown|stopPropagation={(e) => e.key === 'Escape' && (open = false)}>
+		<div class="nw" class:ph={phone} role="dialog" tabindex="-1" aria-label="Razzle" on:click|stopPropagation on:keydown|stopPropagation={(e) => e.key === 'Escape' && (open = false)}>
 			<div class="np">
-				<div class="nh"><b>{title}</b>{#if kind === 'spawn' || kind === 'retrieve'}<em>{left} left</em>{/if}<button class="nx" on:click={() => (open = false)} aria-label="Close">✕</button></div>
-				{#if kind === 'spawn'}
-					<div class="rule"><span>Pick a face · then a space</span></div>
-					<div class="faces">
-						{#each [1, 2, 3] as n (n)}
-							{@const out = faces.includes(n)}
-							<button class="fc" class:on={picking === n} disabled={out || left <= 0} on:click={() => pick(n)} title={out ? `${FACE_NAME[n]} — on the board` : FACE_NAME[n]}>
-								<span class="face" style={faceCss(n)}></span><small>{out ? 'On the board' : FACE_NAME[n]}</small>
+				<div class="nh"><b>Razzle</b><em>{count} / 4 on the board</em><button class="nx" on:click={() => (open = false)} aria-label="Close">✕</button></div>
+				<div class="faces">
+					{#each FACES as n (n)}
+						{@const b = bodyOf(n)}
+						{#if b}
+							<span class="fc board" title="On the board">
+								<span class="face" style={faceCss(n)}></span>
+								{#if canTake}<button class="fx-x" on:click={() => onRemove(b.id)} title="Take this one of you off the board" aria-label="Take this one off">✕</button>{/if}
+							</span>
+						{:else}
+							<button class="fc shelf" class:lit={spawning} class:on={picking === n} disabled={!spawning} on:click={() => pick(n)} title={spawning ? 'Spawn this double' : 'On the shelf'}>
+								<span class="face" style={faceCss(n)}></span>{#if spawning}<i class="plus">+</i>{/if}
 							</button>
-						{/each}
-					</div>
-				{:else if kind === 'clear'}
-					<div class="faces">{#each faces as n, i (i)}<span class="fc still"><span class="face" style={faceCss(n)}></span></span>{/each}</div>
-					<button class="go" on:click={() => { onClear(); open = false }}>Remove doubles</button>
-				{:else if kind === 'retrieve'}
+						{/if}
+					{/each}
+				</div>
+				<div class="slot">{hint}</div>
+				<div class="acts">
+					<button class="act" disabled={removes !== 'all'} on:click={onRemoveAll} title="Into Thin Air: every one of you leaves — not a defeat">Remove all</button>
+					<button class="act" disabled={kind !== 'clear' || bodies.length < 2} on:click={() => { onClear(); open = false }} title="Crowd Control: every other one of you leaves">Call back</button>
+					<button class="act" class:sel={kind === 'retrieve'} disabled={kind !== 'retrieve'} title="Rummage / Ransack: take a discarded card back">Retrieve</button>
+					{#if ult}<button class="act ultb" disabled={twin !== 'offer'} on:click={() => { onTwin(); open = false }} title="Twin Strike: another one of you repeats the attack on a different unit">{twin === 'live' ? 'Striking…' : 'Twin Strike'}</button>{/if}
+				</div>
+				{#if kind === 'retrieve'}
 					{#if discard.length}
 						<div class="cards" style="--n:{Math.min(discard.length, 6)}">
 							{#each discard as idx (idx)}
@@ -105,9 +129,6 @@
 							{/each}
 						</div>
 					{:else}<div class="none">Your discard is empty</div>{/if}
-				{:else}
-					<div class="rule"><span>On the board</span><em>{count} / 4</em></div>
-					<div class="faces">{#each faces as n, i (i)}<span class="fc still"><span class="face" style={faceCss(n)}></span><small>{FACE_NAME[n]}</small></span>{/each}</div>
 				{/if}
 			</div>
 		</div>
@@ -123,7 +144,9 @@
 		--k1: #8a5677; --k2: #573548; --k3: #4f7f8c; --k4: #4a3a63; --kr: #8a7a52; --bs: #8a7a52; --g: transparent; }
 	.ph .u { --pd: 1.3; }
 	.u.on { --a: #2fe0f2; --b: #ff3fa8; --a2: #0f9fb4; --b2: #b71a72; --gd: #f2c95a; --k1: #ff3fa8; --k2: #b71a72; --k3: #2fe0f2; --k4: #7a3fc0; --kr: #f2c95a; --bs: #f2c95a; --g: #ff3fa8; }
-	.u.ult { --a: #5a1f7a; --b: #f2c95a; --a2: #3a1050; --b2: #b8902e; --gd: #ff3fa8;
+	.u.ult { --a: #3f2352; --b: #8a7547; --a2: #2a1638; --b2: #5e4d2c; --gd: #8a5677;
+		--k1: #8a5677; --k2: #573548; --k3: #6a4f8c; --k4: #3e2a5c; --kr: #8a7547; --bs: #8a7547; --g: transparent; }
+	.u.ult.on { --a: #5a1f7a; --b: #f2c95a; --a2: #3a1050; --b2: #b8902e; --gd: #ff3fa8;
 		--k1: #ff3fa8; --k2: #b71a72; --k3: #a65cff; --k4: #5b2596; --kr: #f2c95a; --bs: #f2c95a; --g: #b45cff; }
 	.lay { position: absolute; left: calc(var(--s) * -0.5); top: calc(var(--s) * -0.5); width: calc(var(--s) * 2); height: calc(var(--s) * 2); pointer-events: none; display: block; }
 	.glow { border-radius: 50%; background: radial-gradient(circle closest-side, transparent 34%, var(--g) 54%, transparent 76%); opacity: 0; }
@@ -164,20 +187,25 @@
 	.nh b { flex: 1; font-size: 14px; font-weight: normal; color: #ffb3dd; letter-spacing: 0.02em; white-space: nowrap; }
 	.nh em { font-style: normal; font-size: 12px; color: var(--brass-hi); white-space: nowrap; }
 	.nx { flex: none; width: 24px; height: 24px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.18); background: rgba(0, 0, 0, 0.25); color: #c9d4df; font-size: 11px; cursor: pointer; }
-	.rule { display: flex; align-items: baseline; gap: 8px; font-size: 11px; color: #a99bb8; letter-spacing: 0.06em; text-transform: uppercase; padding-top: 6px; border-top: 1px solid rgba(255, 79, 176, 0.25); }
-	.rule em { font-style: normal; color: var(--brass-hi); margin-left: auto; text-transform: none; letter-spacing: 0.02em; }
-	.faces { display: flex; gap: 8px; justify-content: center; }
-	.fc { width: 74px; flex: none; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 5px 0 4px; border-radius: 10px; border: 1px solid transparent; background: none; color: #f2e6f6; cursor: pointer; }
-	.fc.still { cursor: default; width: 64px; }
-	.fc .face { width: 52px; height: 52px; border-radius: 50%; display: block; box-shadow: 0 0 0 2px rgba(255, 79, 176, 0.6); background-color: #1a0d26; }
-	.fc small { max-width: 72px; font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-	.fc:hover:not(:disabled):not(.still) { border-color: rgba(255, 79, 176, 0.4); }
-	.fc.on { border-color: #ffb3dd; background: rgba(255, 79, 176, 0.14); }
-	.fc:disabled { cursor: default; opacity: 0.42; }
-	.go { align-self: center; height: 30px; padding: 0 16px; border-radius: 15px; border: 0; cursor: pointer; color: #1b1204; font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; background: linear-gradient(180deg, #f4dfa8, #d8b36a); }
+	.faces { display: flex; gap: 10px; justify-content: center; }
+	.fc { position: relative; width: 56px; height: 56px; flex: none; display: grid; place-items: center; padding: 0; border-radius: 50%; border: 0; background: none; color: #f2e6f6; }
+	.fc .face { width: 52px; height: 52px; border-radius: 50%; display: block; background-color: #1a0d26; }
+	.fc.board .face { box-shadow: 0 0 0 2px #f2c95a, 0 0 8px rgba(242, 201, 90, 0.35); }
+	.fc.shelf .face { box-shadow: 0 0 0 1.5px rgba(255, 79, 176, 0.45); opacity: 0.38; filter: grayscale(0.6); }
+	.fc.shelf.lit { cursor: pointer; }
+	.fc.shelf.lit .face { opacity: 1; filter: none; box-shadow: 0 0 0 2px #ff3fa8, 0 0 10px rgba(255, 63, 168, 0.5); }
+	.fc.shelf.on .face { box-shadow: 0 0 0 3px #ffb3dd, 0 0 12px rgba(255, 63, 168, 0.7); }
+	.fc.shelf:disabled { cursor: default; }
+	.plus { position: absolute; right: -2px; bottom: -2px; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-size: 13px; line-height: 1; color: #1b1204; background: linear-gradient(180deg, #f4dfa8, #d8b36a); }
+	.fx-x { position: absolute; right: -3px; top: -3px; width: 20px; height: 20px; padding: 0; border-radius: 50%; border: 1px solid #ffc9c2; background: #a32025; color: #fff; font-size: 10px; line-height: 1; cursor: pointer; }
+	.slot { height: 14px; font-size: 11px; line-height: 14px; color: #a99bb8; letter-spacing: 0.06em; text-transform: uppercase; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.acts { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; padding-top: 7px; border-top: 1px solid rgba(255, 79, 176, 0.25); }
+	.act { height: 30px; padding: 0 9px; border-radius: 15px; border: 1px solid rgba(242, 201, 90, 0.75); cursor: pointer; color: #1b1204; font: inherit; font-size: 12px; letter-spacing: 0.05em; text-transform: uppercase; white-space: nowrap; background: linear-gradient(180deg, #f4dfa8, #d8b36a); }
+	.act.ultb:not(:disabled) { color: #fff; border-color: #ffb3dd; background: linear-gradient(180deg, #b45cff, #6a1fa8); }
+	.act.sel { box-shadow: 0 0 0 2px #ffb3dd; }
+	.act:disabled { cursor: default; color: #8f849c; border-color: rgba(255, 255, 255, 0.12); background: rgba(255, 255, 255, 0.05); }
+	.act.sel:disabled { color: #1b1204; border-color: rgba(242, 201, 90, 0.75); background: linear-gradient(180deg, #f4dfa8, #d8b36a); }
 	.cards { display: grid; grid-template-columns: repeat(var(--n, 6), 64px); gap: 6px; max-width: 420px; justify-content: center; }
-	.nw.ph .fc { width: 100px; }
-	.nw.ph .fc small { max-width: 98px; }
 	.nw.ph .cards { max-width: none; grid-template-columns: repeat(auto-fill, 64px); }
 	.cd { aspect-ratio: 1192 / 1664; padding: 0; border: 0; border-radius: 5px; overflow: hidden; background: none; cursor: pointer; }
 	.cd:disabled { opacity: 0.45; cursor: default; }

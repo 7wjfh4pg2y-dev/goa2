@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { hasPower, emActing, warpSlots, crackNow, lineHexes, RE_REWIND, RE_WARP, RE_TEMPORAL, heroPidOf, bodiesOf, isDouble, rzRemoves, type TurnCtx } from '$lib/heropower';
+	import { hasPower, emActing, warpSlots, crackNow, lineHexes, RE_REWIND, RE_WARP, RE_TEMPORAL, heroPidOf, bodiesOf, isDouble, type TurnCtx } from '$lib/heropower';
 	import { afterUpdate, onDestroy } from 'svelte';
 	import { readable, type Readable } from 'svelte/store';
 	import BoardCanvas from '$lib/BoardCanvas.svelte';
@@ -220,7 +220,6 @@
 	type Fam = 'fight' | 'move' | 'off' | 'power';
 	type Pill = { label: string; fam: Fam; run?: () => void; kind?: 'go' | 'bad' | 'rem' | 'move' | 'imm' | 'force' | 'swap' | 'time'; coin?: number; off?: boolean; title?: string };
 	$: if (!selPieceId) carryingSel = false;
-	$: rzRem = ownHeroSel && turnCtx ? rzRemoves($ms, clientId, turnCtx) : null;
 	$: pills = !hud2 || !selPiece || ringAsk || carryingSel || swapFrom ? [] : forceMenu ? ([
 		{ label: 'Discard', fam: 'fight', kind: 'force', run: () => forceSel(false), title: 'They discard a card' },
 		{ label: 'Discard or die', fam: 'fight', kind: 'bad', coin: heroDefeatSummary($ms, clientId, selHero ?? '').coins, run: () => forceSel(true), title: 'They discard a card — or are defeated (you take the rewards)' },
@@ -239,10 +238,8 @@
 		canFlip ? { label: selPiece.faceDown ? 'Flip — reveal' : 'Flip face down', fam: 'power', run: flipMine } : null,
 		ownHeroSel && ownAttack && selPiece.id === clientId ? { label: `Clear${clearCount ? ` ${clearCount}` : ''}`, fam: 'power', off: !clearCount, run: startClear, title: 'Your attack card: remove tokens next to your hero' } : null,
 		ownHeroSel ? { label: 'Defeated', fam: 'off', kind: 'bad', run: selfDefeatAsk, title: 'You were defeated (not by an Attack): choose who gets the reward' } : null,
-		// Razzle's bodies: only her reds offer them, after the attack — Phantom Strike / Hit and Gone take one of her off,
-		// Into Thin Air every one of her; the host may take another player's double off any time
-		ownHeroSel && myBodies > 1 && rzRem ? { label: 'Remove', fam: 'off', kind: 'rem', run: bodyRemoveAsk, title: 'Take this one of you off the board' } : null,
-		ownHeroSel && myBodies > 1 && rzRem === 'all' ? { label: 'Remove all', fam: 'off', kind: 'rem', run: selfRemoveAsk, title: 'Every one of you leaves the board — not a defeat; back with your next card' } : null,
+		// Razzle with doubles takes her bodies off from her hero button's panel (her reds, after the attack); the host may
+		// take another player's double off any time
 		ownHeroSel && myBodies <= 1 ? { label: 'Remove', fam: 'off', kind: 'rem', run: selfRemoveAsk, title: 'A card effect takes your hero off the board — back with your next card' } : null,
 		!ownHeroSel && iAmHost && isDouble(selPiece) ? { label: 'Remove', fam: 'off', kind: 'rem', run: bodyRemoveAsk, title: 'Take this double off the board' } : null,
 		canBattleSel ? { label: 'For the battle', fam: 'off', kind: 'rem', run: battleTakeSel, title: 'Remove it for the minion battle' } : null,
@@ -1187,8 +1184,7 @@
 			{/if}
 			{#if ownHeroSel}
 				{#if ownAttack && selPiece.id === clientId}<button class="piedefeat" on:click={startClear} disabled={!clearCount} title="Clear instead of attacking: choose which tokens next to you leave the board">Clear{clearCount ? ` (${clearCount})` : ''}</button>{/if}
-				{#if myBodies > 1 && rzRem}<button class="piedel" on:click={bodyRemoveAsk} title="Take this one of you off the board">Remove</button>{/if}
-				{#if myBodies <= 1 || rzRem === 'all'}<button class="piedel" on:click={selfRemoveAsk} title="A card effect takes your hero off the board — no rewards; back with your next card">{myBodies > 1 ? 'Remove all' : 'Remove'}</button>{/if}
+				{#if myBodies <= 1}<button class="piedel" on:click={selfRemoveAsk} title="A card effect takes your hero off the board — no rewards; back with your next card">Remove</button>{/if}
 				<button class="piedel" on:click={selfDefeatAsk} title="You were defeated (not by an Attack): choose who gets the reward">☠ Defeat</button>
 			{/if}
 			{#if !ownHeroSel && iAmHost && isDouble(selPiece)}<button class="piedel" on:click={bodyRemoveAsk} title="Take this double off the board">Remove</button>{/if}
