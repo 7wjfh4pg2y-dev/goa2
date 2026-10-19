@@ -1179,8 +1179,8 @@
 		// Alternative Timelines: after the first card, a second? (× = just one this turn)
 		if (em2Wants && mine) {
 			if (em2Arm != null) return { label: 'Commit', sub: `${heroCards(mine.hero)[em2Arm]?.name ?? ''} · 2nd`, kind: 'go', pulse: true, run: em2Commit, cancel: () => (em2Arm = null) };
-			if (em2Mode) return { label: 'Second card', sub: 'Pick from hand', kind: 'wait', cancel: () => (em2Mode = false) };
-			return { label: 'Second card', sub: 'Alternative Timelines', kind: 'go', pulse: true, run: em2Start, cancel: em2One };
+			if (em2Mode) return { label: 'Second card', sub: 'Pick from hand', kind: 'wait', cancel: () => (em2Mode = false), alt: { label: 'Take back', run: takeBack } };
+			return { label: 'Second card', sub: 'Alternative Timelines', kind: 'go', pulse: true, run: em2Start, cancel: em2One, alt: { label: 'Take back', run: takeBack } };
 		}
 		if (myReady) return { label: 'Take back', sub: mine?.pending2 != null ? 'Both cards' : `${readyCount} of ${seatedWithCards.length} in`, kind: 'quiet', run: takeBack };
 		if (armed != null && armedKind === 'commit' && canCommit && mine) return { label: 'Commit', sub: heroCards(mine.hero)[armed]?.name, card: true, kind: 'go', pulse: true, run: commitArmed, cancel: () => (armed = null) };

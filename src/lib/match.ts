@@ -181,6 +181,8 @@ export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 	const pw0 = patch0.power ?? s.power ?? {}
 	const patch: Partial<MatchState> = spend ? { ...patch0, power: { ...pw0, [req.pid]: { ...pw0[req.pid], twin: { ...s.power![req.pid].twin!, live: false } } } } : patch0
 	if (!Object.keys(patch).length) return patch
+	// Alternative Timelines: a take back starts his turn over — both cards are back, and 'just one' is forgotten
+	if (req.kind === 'uncommit' && s.power?.[req.pid]?.one) patch.power = { ...(patch.power ?? s.power), [req.pid]: { ...s.power[req.pid], one: undefined } }
 	const next = { ...s, ...patch }
 	if (!Object.values(next.cards ?? {}).some((c) => hasPower(c.hero))) return patch
 	// Takahide's "after the attack" swap opens once his acting card has hit

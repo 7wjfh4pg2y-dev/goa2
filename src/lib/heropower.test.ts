@@ -745,6 +745,13 @@ describe("Emmitt's ultimate (Alternative Timelines): two cards face down, both r
 		const two = go(s, pw(s, 'E', 'emCommit2', { idx: c2 }))
 		expect(wantsSecond(two, 'E', c)).toBe(false)
 		expect(wantsSecond(g(false), 'E', c)).toBe(false) // no ultimate: never asked
+		// a take back (before the reveal) starts it over: both cards back, and he is asked again
+		const both = go(two, applyCardReq(two, { kind: 'uncommit', pid: 'E' } as never))
+		expect(both.cards!.E.hand).toEqual(expect.arrayContaining([c1, c2]))
+		const oneBack = go(one, applyCardReq(one, { kind: 'uncommit', pid: 'E' } as never))
+		expect(oneBack.power?.E?.one).toBeUndefined()
+		const again = go(oneBack, applyCardReq(oneBack, { kind: 'commit', pid: 'E', idx: c1 } as never))
+		expect(wantsSecond(again, 'E', c)).toBe(true)
 	})
 	it('revealed: nobody acts until he keeps one; the other goes back to his hand', () => {
 		const s0 = go(g(), pw(g(), 'E', 'emCommit2', { idx: c2 }))
