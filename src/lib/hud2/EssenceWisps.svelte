@@ -11,7 +11,7 @@
 	let wisps: Wisp[] = []
 	let flash: { key: number; x: number; y: number; c: string; delay: number } | null = null
 	let timer: ReturnType<typeof setTimeout> | null = null
-	const TRAIL = [0, 1, 2, 3]
+	const TRAIL = [0, 1, 2, 3, 4, 5, 6] // the head + six sparks a beat behind each other (a longer tail, the user 2026-10-19)
 
 	/** from = his token, to = where they are absorbed (screen px), colors = one per spell */
 	export function play(from: Pt, to: Pt, colors: string[]) {
@@ -43,7 +43,7 @@
 	}
 	/** a Svelte action: run the flight on a span (the trail = the same flight a beat behind) */
 	function fly(node: HTMLElement, a: { w: Wisp; k: number }) {
-		const an = node.animate(a.w.frames, { duration: a.w.dur, delay: a.w.delay + a.k * 45, fill: 'both' })
+		const an = node.animate(a.w.frames, { duration: a.w.dur, delay: a.w.delay + a.k * 32, fill: 'both' })
 		return { destroy: () => an.cancel() }
 	}
 	onDestroy(() => { if (timer) clearTimeout(timer) })
@@ -59,8 +59,8 @@
 <style>
 	.ess { position: fixed; inset: 0; z-index: 58; pointer-events: none; overflow: hidden; }
 	.w { position: absolute; left: 0; top: 0; width: 0; height: 0; opacity: 0; }
-	.w i { position: absolute; width: calc(20px - var(--k) * 3.5px); height: calc(20px - var(--k) * 3.5px); left: calc(-10px + var(--k) * 1.75px); top: calc(-10px + var(--k) * 1.75px); border-radius: 50%;
-		background: radial-gradient(circle, #fff 0 18%, var(--c) 45%, transparent 72%); opacity: calc(0.75 - var(--k) * 0.16); }
+	.w i { position: absolute; width: calc(20px - var(--k) * 2.2px); height: calc(20px - var(--k) * 2.2px); left: calc(-10px + var(--k) * 1.1px); top: calc(-10px + var(--k) * 1.1px); border-radius: 50%;
+		background: radial-gradient(circle, #fff 0 18%, var(--c) 45%, transparent 72%); opacity: calc(0.8 - var(--k) * 0.11); }
 	.w.hd i { background: radial-gradient(circle, #fff 0 22%, var(--c) 48%, transparent 74%); opacity: 1; }
 	.w.hd i::before { content: ''; position: absolute; inset: -140%; border-radius: 50%; background: radial-gradient(circle, color-mix(in srgb, var(--c) 55%, transparent) 0, transparent 66%); }
 	.fl { position: absolute; width: 90px; height: 90px; margin: -45px; border-radius: 50%; opacity: 0; transform: scale(0.2);
