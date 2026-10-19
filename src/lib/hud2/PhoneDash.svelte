@@ -113,12 +113,12 @@
 		{:else if order.alt}
 			<!-- a second choice rides on the same pill: two thirds the main one (e.g. Waiting · hero), a third the other (Skip) -->
 			<span class="act joined {order.kind}">
-				<button class="m" disabled={!order.run} on:click={() => fire(order.run)}><b>{order.short ?? order.label}</b>{#if order.sub && !order.card}<small>{order.sub}</small>{/if}</button>
+				<button class="m" disabled={!order.run} on:click={() => fire(order.run)}><b>{order.short ?? order.label}</b>{#if order.sub && !order.card}<small>{order.subShort ?? order.sub}</small>{/if}</button>
 				<button class="o" on:click={() => fire(order.alt?.run)}>{order.alt.label}</button>
 			</span>
 		{:else}
-			<button class="act {order.kind}" class:tinted={!!ringColor && (order.kind !== 'bad' || !!order.tint)} style={ringColor ? `--rc:${ringColor}` : ''} class:pulse={order.pulse} class:snug={!!order.cancel && ((order.short ?? order.label).length > 5 || (order.short ?? order.label).length + (order.card ? 0 : order.sub?.length ?? 0) > 9)} disabled={!order.run} on:click={() => fire(order.run)}>
-				<b>{order.short ?? order.label}</b>{#if order.sub && !order.card}<small>{order.sub}</small>{/if}
+			<button class="act {order.kind}" class:tinted={!!ringColor && (order.kind !== 'bad' || !!order.tint)} style={ringColor ? `--rc:${ringColor}` : ''} class:pulse={order.pulse} class:snug={!!order.cancel && ((order.short ?? order.label).length > 5 || (order.short ?? order.label).length + (order.card ? 0 : (order.subShort ?? order.sub)?.length ?? 0) > 9)} disabled={!order.run} on:click={() => fire(order.run)}>
+				<b>{order.short ?? order.label}</b>{#if order.sub && !order.card}<small>{order.subShort ?? order.sub}</small>{/if}
 			</button>
 		{/if}
 		{#if order.cancel}<button class="px" on:click={order.cancel} aria-label="Cancel"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17" /></svg></button>{/if}

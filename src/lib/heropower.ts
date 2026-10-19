@@ -513,13 +513,17 @@ export const rzSpawnsLeft = (s: S, pid: string, ctx: TurnCtx) => Math.max(0, Mat
 export const rzLeft = (s: S, pid: string, ctx: TurnCtx) => Math.max(0, rzRetrievals(s, pid) - cnt(s.power?.[pid]?.rzr, markOf(ctx)))
 /** Crowd Control as a defence: +2 for each other one of her in radius (3 + Area items) of the body attacked — her own
  *  reminder, only while the silver is in her hand */
+/** her Crowd Control can count now: in her hand (she may still defend with it), or just discarded as this attack's
+ *  defence — the reminder shows (+0 too) only then */
+export function crowdOn(s: S, pid: string): boolean {
+	const cs = s.cards?.[pid], silver = silverIdx(RZ)
+	if (!cs || cs.hero !== RZ || silver < 0) return false
+	return cs.hand.includes(silver) || (!!s.attacks?.[pid]?.discarded && cs.discard[cs.discard.length - 1] === silver)
+}
 export function crowdBonus(s: S, pid: string, body: string): number {
 	const cs = s.cards?.[pid]
-	if (!cs || cs.hero !== RZ) return 0
+	if (!cs || !crowdOn(s, pid)) return 0
 	const silver = silverIdx(RZ)
-	// in hand (she may still defend with it), or just discarded as this attack's defence
-	const used = !!s.attacks?.[pid]?.discarded && cs.discard[cs.discard.length - 1] === silver
-	if (silver < 0 || !(cs.hand.includes(silver) || used)) return 0
 	const c = heroCards(RZ)[silver]
 	return 2 * othersNear(s, pid, s.pieces?.[body] ? body : pid, (c?.modifierValue ?? 3) + (statDeltas(cs).radius ?? 0))
 }

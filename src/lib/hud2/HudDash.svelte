@@ -9,6 +9,8 @@
 		cancel?: () => void;
 		/** a shorter word for the phone pill (it shares one line with the ×) */
 		short?: string;
+		/** the phone pill's shorter sub line (one line, no room for the full one) */
+		subShort?: string;
 		split?: { left: { label: string; run: () => void }; right: { label: string; run: () => void } } };
 </script>
 

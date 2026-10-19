@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { hasPower, emActing, warpSlots, crackNow, lineHexes, RE_REWIND, RE_WARP, RE_TEMPORAL, heroPidOf, bodiesOf, isDouble, type TurnCtx } from '$lib/heropower';
+	import { hasPower, emActing, warpSlots, crackNow, lineHexes, RE_REWIND, RE_WARP, RE_TEMPORAL, heroPidOf, bodiesOf, isDouble, crowdOn, crowdBonus, type TurnCtx } from '$lib/heropower';
 	import { afterUpdate, onDestroy } from 'svelte';
 	import { readable, type Readable } from 'svelte/store';
 	import BoardCanvas from '$lib/BoardCanvas.svelte';
@@ -768,6 +768,8 @@
 	$: attacks = $ms.attacks ?? {};
 	// you're under attack until it's answered (Defeated, or Defended once you've discarded — the action button)
 	$: incoming = attacks[clientId] ?? null;
+	// Razzle: what her Crowd Control would add — her own reminder, on her notice only (silver in hand)
+	$: myCrowd = incoming && crowdOn($ms, clientId) ? crowdBonus($ms, clientId, incoming.body ?? clientId) : null;
 	// forced discards: the demand on you, and the one you made
 	$: forcedMe = $ms.forced?.[clientId] ?? null;
 	// the notice says its piece for 5 s, fades (`akout`), then leaves the page — its burst and glow kept animating
@@ -1059,7 +1061,7 @@
 				</div>
 				<div class="aktitle"><i></i>Under attack<i></i></div>
 				<div class="akwho"><b>{heroOf(incoming.by)}</b><em>{playerName(incoming.by)}</em></div>
-				<div class="akhint">{incoming.discarded ? 'Defended or defeated?' : temporalIn ? 'Defend with Initiative' : 'Discard to defend'}{#if myDefMods} · <span class:up={myDefMods > 0} class="akmods">Minions {myDefMods > 0 ? `+${myDefMods}` : `−${-myDefMods}`}</span>{/if}</div>
+				<div class="akhint">{incoming.discarded ? 'Defended or defeated?' : temporalIn ? 'Defend with Initiative' : 'Discard to defend'}{#if myDefMods} · <span class:up={myDefMods > 0} class="akmods">Minions {myDefMods > 0 ? `+${myDefMods}` : `−${-myDefMods}`}</span>{/if}{#if myCrowd != null} · <span class="akmods up" title="Crowd Control: +2 for each other one of you in its radius — only you see this">Crowd Control +{myCrowd}</span>{/if}</div>
 			</div>
 		</div>
 	{/if}

@@ -9,7 +9,7 @@
 	import type { Readable } from 'svelte/store';
 	import type { MatchSession, MatchState, Player } from '$lib/match';
 	import { teamForSeat, colorHex, battlePatch, levelPatch, canRespawn, turnPlan, claimable, actingIdx, actorOf, turnOrder, teamOf, turnKey as keyOfTurn } from '$lib/match';
-	import { hasPower, equilibrium, canFlip, flipUsed, runesOf, secondRune, canInscribe, canSecond, RUNES, takaSwapKind, mateOffer, canReverse, nextTurnKey, reversedTurn, warpOffer, warpSlots, capsuleOffer, RE_REVERSE, RE_TEMPORAL, nkPower, laughed, laughTargets, nkSwapsLeft, nkSlots, nkCardAt, prevCard, doubtNow, crackNow, pieceDist, rzPower, rzRemoves, rzTwin, rzSpawnsLeft, rzLeft, bodiesOf, crowdBonus, type NkColor, type NkEnemy, type Rune, type TurnCtx } from '$lib/heropower';
+	import { hasPower, equilibrium, canFlip, flipUsed, runesOf, secondRune, canInscribe, canSecond, RUNES, takaSwapKind, mateOffer, canReverse, nextTurnKey, reversedTurn, warpOffer, warpSlots, capsuleOffer, RE_REVERSE, RE_TEMPORAL, nkPower, laughed, laughTargets, nkSwapsLeft, nkSlots, nkCardAt, prevCard, doubtNow, crackNow, pieceDist, rzPower, rzRemoves, rzTwin, rzSpawnsLeft, rzLeft, bodiesOf, crowdBonus, crowdOn, type NkColor, type NkEnemy, type Rune, type TurnCtx } from '$lib/heropower';
 	import EmmittClock from '$lib/hud2/EmmittClock.svelte';
 	import TakaGold from '$lib/hud2/TakaGold.svelte';
 	import IgnatiaCoin from '$lib/hud2/IgnatiaCoin.svelte';
@@ -307,7 +307,8 @@
 	// the shelf's face put down unplaced when the chance has gone (the card moved on, all out)
 	$: if (placingDouble != null && rzKind !== 'spawn') onArmDouble(null);
 	// Crowd Control as a defence: +2 for each other one of her near the body attacked — her own reminder (silver in hand)
-	$: rzCrowd = myPower === 'razzle' && myAttack ? crowdBonus($ms, clientId, myAttack.body ?? clientId) : 0;
+	$: rzCrowdOn = myPower === 'razzle' && !!myAttack && crowdOn($ms, clientId);
+	$: rzCrowd = rzCrowdOn && myAttack ? crowdBonus($ms, clientId, myAttack.body ?? clientId) : 0;
 	$: nkLaughed = myPower === 'nebkher' && laughed($ms, clientId, pctx);
 	$: nkTargets = nkKind === 'laugh' && mine?.ultimate ? laughTargets($ms, clientId, pctx) : [];
 	$: nkDoubt = myPower === 'nebkher' ? doubtNow($ms, clientId, pctx) : null;
@@ -963,7 +964,7 @@
 		const t = e.target as Element | null;
 		if (handUp && !t?.closest?.('.tray')) handUp = false;
 		if (bannerOpen != null && !t?.closest?.('.bstack, .pvwrap, .pvbar, .scrim2')) bannerOpen = null;
-		if (discOpen && !t?.closest?.('.discwrap')) discOpen = null;
+		if (discOpen && !t?.closest?.('.discwrap, .discpop, .dw.pile')) discOpen = null; // (the 2.0 dash's pile + its pop-up count as inside)
 		// token shelf: close on any outside click — except the click that drops a held token
 		if (radiusOpen && !t?.closest?.('.radwrap')) radiusOpen = false;
 		if (tokenDrawer && !t?.closest?.('.tokwrap') && !(holdingToken && t?.closest?.('.board-wrap, .placehint'))) tokenDrawer = false;
@@ -1102,8 +1103,8 @@
 		if (iMustEnter) return { label: 'Spawn hero', kind: 'team', pulse: true, run: onEnter };
 		// attacked: Defeated until you discard a card (your defence); then the ring splits — Defended | Defeated
 		if (myAttack) return myAttack.discarded
-			? { label: 'Defended', kind: 'team', split: { left: { label: rzCrowd ? `Defended +${rzCrowd}` : 'Defended', run: () => answerAttack('defended') }, right: { label: 'Defeated', run: () => answerAttack('defeated') } } }
-			: { label: 'Defeated', sub: temporal ? 'Defend with Initiative' : rzCrowd ? `Crowd Control +${rzCrowd}` : undefined, kind: 'bad', run: () => answerAttack('defeated') };
+			? { label: 'Defended', kind: 'team', split: { left: { label: rzCrowdOn ? `Defended +${rzCrowd}` : 'Defended', run: () => answerAttack('defended') }, right: { label: 'Defeated', run: () => answerAttack('defeated') } } }
+			: { label: 'Defeated', sub: temporal ? 'Defend with Initiative' : rzCrowdOn ? `Crowd Control +${rzCrowd}` : undefined, subShort: rzCrowdOn && !temporal ? `+${rzCrowd}` : undefined, kind: 'bad', run: () => answerAttack('defeated') };
 		// forced to discard: pick a card (it arms Discard, above); "…or die" can also take the defeat
 		if (myForced) return myForced.die
 			? { label: 'Defeated', sub: 'or discard', kind: 'bad', run: () => forceAnswer(clientId, 'defeated') }
