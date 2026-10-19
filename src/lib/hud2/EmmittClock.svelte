@@ -15,6 +15,8 @@
 	export let phone = false;
 	export let ready = false; // a tap loads Reverse time onto the ring
 	export let onPress: () => void = () => {};
+	/** a tip that wins over the mode's own (Alternative Timelines' second card) */
+	export let label = '';
 
 	const pt = (a: number, r: number) => { const t = ((a - 90) * Math.PI) / 180; return [100 + r * Math.cos(t), 100 + r * Math.sin(t)]; };
 	const ROM = ['XII', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI'];
@@ -22,7 +24,7 @@
 	const TICKS = Array.from({ length: 60 }, (_, i) => { const big = i % 5 === 0; const [x1, y1] = pt(i * 6, 84), [x2, y2] = pt(i * 6, big ? 91 : 88); return { x1, y1, x2, y2, big }; });
 	const uid = `emc${Math.random().toString(36).slice(2, 8)}`;
 	$: z = phone ? size - 7 : size;
-	$: tip = mode === 'rev' ? 'Time runs backwards this turn' : mode === 'green' ? (ready ? 'Reverse time — next turn, lower initiative acts first' : 'Time reversed next turn') : 'Emmitt';
+	$: tip = label ? label : mode === 'rev' ? 'Time runs backwards this turn' : mode === 'green' ? (ready ? 'Reverse time — next turn, lower initiative acts first' : 'Time reversed next turn') : 'Emmitt';
 </script>
 
 <button class="em {mode}" class:fx={fx && mode !== 'idle'} class:ph={phone} class:ready style="--z:{z}px" on:click={() => ready && onPress()} title={tip} aria-label={tip}>

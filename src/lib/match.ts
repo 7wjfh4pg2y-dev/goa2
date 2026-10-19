@@ -13,7 +13,7 @@
 // broken by `updatedAt`) wins. For a handful of players nudging a shared
 // tracker this is robust and easy to reason about.
 
-import { applyPower, syncPowers, takaHit, hasPower, isDouble, RZ, rzTwin, twinBars, runeLine, RUNE_NAME, reversedTurn, trackDiscards, illusionForce, NEB, type NkNews, type PowerReq, type PowerState, type TurnCtx } from './heropower'
+import { applyPower, syncPowers, takaHit, hasPower, isDouble, RZ, rzTwin, twinBars, timelinePick, wantsSecond, runeLine, RUNE_NAME, reversedTurn, trackDiscards, illusionForce, NEB, type NkNews, type PowerReq, type PowerState, type TurnCtx } from './heropower'
 import { teamName, aMinion } from './teams'
 import { hexCube, cubeDist } from './zones'
 import { tokenExpiry, sweepTokens, statusFrom, isTurret } from './tokens'
@@ -164,7 +164,7 @@ export function claimable(s: MatchState): string[] {
 /** How far this turn's acting has got (0 = the first card; the order's length = everyone has acted). */
 export const actingIdx = (s: MatchState) => (s.acting?.key === turnKey(s) ? s.acting.idx : 0)
 /** Whose card acts now (null once everyone has, or before anything is in play). */
-export const actorOf = (s: MatchState): string | null => turnOrder(s)[actingIdx(s)] ?? null
+export const actorOf = (s: MatchState): string | null => (timelinePick(s) ? null : turnOrder(s)[actingIdx(s)] ?? null) // nobody acts while Emmitt picks his card (Alternative Timelines)
 
 /** Apply a card instruction to the shared state, returning the patch to broadcast. */
 // the turn facts a 4★ power needs (heropower.ts can't import this file)
@@ -220,7 +220,7 @@ function applyCardReqBase(s: MatchState, req: Exclude<CardReq, PowerReq>): Parti
 	// one nobody is acting and the HOST moves on (Next turn — or, on turn 4, the Minion battle)
 	if (req.kind === 'endAct') {
 		const order = turnOrder(s), at = actingIdx(s)
-		if (at >= order.length || (req.pid !== order[at] && req.pid !== s.host)) return {}
+		if (timelinePick(s) || at >= order.length || (req.pid !== order[at] && req.pid !== s.host)) return {}
 		const key = turnKey(s)
 		const done = [...(s.acting?.key === key ? (s.acting.done ?? []) : order.slice(0, at)), order[at]]
 		// a card the coin chose between the teams: once it has acted, the coin flips (the plan keeps its course)
@@ -237,7 +237,7 @@ function applyCardReqBase(s: MatchState, req: Exclude<CardReq, PowerReq>): Parti
 		return { tieClaims: { key, order: [req.pid, ...prev] } }
 	}
 	if (req.kind === 'setAct') {
-		if (req.pid !== s.host) return {}
+		if (req.pid !== s.host || timelinePick(s)) return {}
 		return { acting: { key: turnKey(s), idx: Math.max(0, Math.min(turnOrder(s).length, req.idx)) } }
 	}
 	// host: lock each committed card into its turn slot, then move to the next turn;
@@ -1556,13 +1556,15 @@ export function joinMatch(
 		// running — don't restart while it holds); any non-committed state clears it,
 		// so the count starts fresh from 3 the next time they all commit. 'advance'
 		// starts a new turn, so it always clears the anchor.
-		if (patch.cards) {
+		if (patch.cards || (req.kind === 'power' && req.op === 'emOne')) {
 			const seats = patch.seats ?? local.seats
-			const withCards = playerList
-				.filter((p) => p.seat >= 0 && p.seat < seats)
-				.map((p) => patch.cards![p.id])
-				.filter(Boolean)
-			const allIn = withCards.length > 0 && withCards.every((cs) => cs.pending != null || cs.hand.length === 0)
+			const pc = patch.cards ?? local.cards ?? {}
+			const seatedIds = playerList.filter((p) => p.seat >= 0 && p.seat < seats && pc[p.id]).map((p) => p.id)
+			const fin = { ...local, ...patch } as MatchState, fctx = powerCtx(fin)
+			// Emmitt with his ultimate is in once he has a second card down too — or said 'just one' (asked only before
+			// the reveal: once the cards are up nothing un-reveals them)
+			const before = !(local.revealAt != null && Date.now() >= local.revealAt)
+			const allIn = seatedIds.length > 0 && seatedIds.every((pid) => { const cs = pc[pid]; return (cs.pending != null || cs.hand.length === 0) && !(before && wantsSecond(fin, pid, { ...fctx, revealed: false })) })
 			const keep = req.kind !== 'advance' && allIn
 			patch.revealAt = keep ? (local.revealAt ?? Date.now() + REVEAL_COUNTDOWN_MS) : null
 		}
@@ -1619,6 +1621,11 @@ export function joinMatch(
 		if (req.kind === 'power' && req.op === 'rzRemove' && patch.pieces) note(req.pid, 'takes one of her bodies off the board')
 		if (req.kind === 'power' && req.op === 'rzClear' && patch.pieces) note(req.pid, 'calls every double back (Crowd Control)')
 		if (req.kind === 'power' && req.op === 'rzTwin' && patch.power) note(req.pid, 'strikes again with another one of her (Twin Strike)')
+		if (req.kind === 'power' && req.op === 'emKeep' && patch.cards) {
+			const who = req.pid === local.host && req.target ? req.target : req.pid, before = local.cards?.[who], after = patch.cards[who]
+			const name = (i: number | null | undefined) => (i != null && i >= 0 ? heroCards(after?.hero ?? '')[i]?.name : null) ?? 'a card'
+			if (before && after) note(who, `keeps ${name(after.pending)} and takes ${name(req.which === 1 ? before.pending2 : before.pending)} back (Alternative Timelines)${who !== req.pid ? ' — host' : ''}`)
+		}
 		if (req.kind === 'power' && req.op === 'rzRetrieve' && patch.cards && req.idx != null) note(req.pid, `retrieves ${heroCards(RZ)[req.idx]?.name ?? 'a card'} from her discard`)
 		if (req.kind === 'clearAround' && patch.pieces) { const n = Object.keys(local.pieces ?? {}).length - Object.keys(patch.pieces).length; note(req.pid, `cleared ${n} token${n === 1 ? '' : 's'} next to them`) }
 		if (req.kind === 'spawn' && patch.pieces) note(req.pid, 'entered the battlefield')

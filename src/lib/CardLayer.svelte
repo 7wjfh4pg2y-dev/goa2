@@ -9,7 +9,7 @@
 	import type { Readable } from 'svelte/store';
 	import type { MatchSession, MatchState, Player } from '$lib/match';
 	import { teamForSeat, colorHex, battlePatch, levelPatch, canRespawn, turnPlan, claimable, actingIdx, actorOf, turnOrder, teamOf, turnKey as keyOfTurn } from '$lib/match';
-	import { hasPower, equilibrium, canFlip, flipUsed, runesOf, secondRune, canInscribe, canSecond, RUNES, takaSwapKind, mateOffer, canReverse, nextTurnKey, reversedTurn, warpOffer, warpSlots, capsuleOffer, RE_REVERSE, RE_TEMPORAL, nkPower, laughed, laughTargets, nkSwapsLeft, nkSlots, nkCardAt, prevCard, doubtNow, crackNow, pieceDist, rzPower, rzRemoves, rzTwin, rzSpawnsLeft, rzLeft, bodiesOf, crowdBonus, crowdOn, type NkColor, type NkEnemy, type Rune, type TurnCtx } from '$lib/heropower';
+	import { hasPower, equilibrium, canFlip, flipUsed, runesOf, secondRune, canInscribe, canSecond, RUNES, takaSwapKind, mateOffer, canReverse, nextTurnKey, reversedTurn, warpOffer, warpSlots, capsuleOffer, RE_REVERSE, RE_TEMPORAL, nkPower, laughed, laughTargets, nkSwapsLeft, nkSlots, nkCardAt, prevCard, doubtNow, crackNow, pieceDist, rzPower, rzRemoves, rzTwin, rzSpawnsLeft, rzLeft, bodiesOf, crowdBonus, crowdOn, canCommit2, wantsSecond, timelinePick, type NkColor, type NkEnemy, type Rune, type TurnCtx } from '$lib/heropower';
 	import EmmittClock from '$lib/hud2/EmmittClock.svelte';
 	import TakaGold from '$lib/hud2/TakaGold.svelte';
 	import IgnatiaCoin from '$lib/hud2/IgnatiaCoin.svelte';
@@ -167,7 +167,8 @@
 	export let areaW = 0, areaH = 0;
 	let winW = 1440, winH = 800;
 	$: vhPx = areaH || winH;
-	$: curtainFit = fitReveal(curtainRows.map((r) => r.length), vw, vhPx);
+	// a player with two cards up (Emmitt's ultimate) takes two places in the row
+	$: curtainFit = fitReveal(curtainRows.map((r) => r.reduce((n, p) => n + (viewCards[p.id]?.pending2 != null ? 2 : 1), 0)), vw, vhPx);
 	$: curtainCols = curtainFit.cols;
 	function fitReveal(counts: number[], w: number, h: number) {
 		const most = Math.max(1, ...counts), gap = Math.min(26, Math.max(16, w * 0.024));
@@ -189,7 +190,9 @@
 	const isReady = (cs: PlayerCardState) => cs.pending != null || cs.hand.length === 0;
 	// no cards left to play this turn ⇒ automatically skipped (the one reveal exception)
 	const isSkipped = (cs: PlayerCardState) => cs.pending == null && cs.hand.length === 0;
-	$: readyCount = seatedWithCards.filter((p) => isReady(cards[p.id])).length;
+	// Emmitt with his ultimate isn't in until his second card is down too (or he said 'just one') — the host arms the reveal
+	// the same way (match.ts); once the reveal is armed nothing here takes it back
+	$: readyCount = seatedWithCards.filter((p) => isReady(cards[p.id]) && !($ms.revealAt == null && wantsSecond($ms, p.id, { key: keyOfTurn($ms), revealed: false } as TurnCtx))).length;
 	// everyone in ⇒ the reveal is armed, but cards only flip face-up after a synced
 	// 3-2-1 countdown (host sets $ms.revealAt). Anyone can uncommit during it.
 	$: allCommitted = seatedWithCards.length > 0 && readyCount === seatedWithCards.length;
@@ -278,6 +281,19 @@
 	// NebKher: the power his card acting opens (Laughter · Mind Grip / Probe · a colour to name · the Crack), the enemy
 	// heroes his panel lists, the colour he named (public) and his Crack line
 	$: nkKind = myPower === 'nebkher' && !battlePhase ? nkPower($ms, clientId, pctx) : null;
+	// ── Emmitt's ultimate (Alternative Timelines): a second card face down, both revealed, then he returns one to his
+	// hand before anyone acts. The ring (and his clock) ask for the second card after the first; a hand tap arms it.
+	$: em2Wants = myPower === 'emmitt' && !!mine && wantsSecond($ms, clientId, { ...pctx, revealed });
+	$: em2Pick = timelinePick($ms);
+	let em2Mode = false, em2Arm: number | null = null, em2Ret: 1 | 2 | null = null;
+	$: if (!em2Wants && (em2Mode || em2Arm != null)) { em2Mode = false; em2Arm = null; }
+	$: if (em2Ret != null && !(em2Pick === clientId && revealed)) em2Ret = null;
+	$: tlCards = em2Pick === clientId && mine && mine.pending2 != null && mine.pending != null && mine.pending >= 0 ? [{ w: 1 as 1 | 2, ci: mine.pending }, { w: 2 as 1 | 2, ci: mine.pending2 }] : [];
+	function em2Start() { em2Mode = true; em2Arm = null; armed = null; handUp = true; }
+	const em2One = () => session.cardAction({ kind: 'power', pid: clientId, op: 'emOne' });
+	function em2Commit() { if (em2Arm != null) session.cardAction({ kind: 'power', pid: clientId, op: 'emCommit2', idx: em2Arm }); em2Arm = null; em2Mode = false; }
+	function em2Take(idx: number) { if (!em2Mode) return false; em2Arm = idx; return true; }
+	const em2Keep = (which: 1 | 2, target?: string) => session.cardAction({ kind: 'power', pid: clientId, op: 'emKeep', which, ...(target ? { target } : {}) });
 	// ── Razzle: her doubles (heropower.ts) — what her card acting opens, her faces on the board, what's left to do ──
 	$: rzKind = myPower === 'razzle' && !battlePhase ? rzPower($ms, clientId, pctx) : null;
 	// her bodies (main first) as {id, face}; what her card allows besides: take bodies off (her reds, after the attack),
@@ -413,7 +429,7 @@
 	};
 	// the phone's top bar shows the turn's state in its free middle: planning dots, or the acting order
 	export let phoneStatus: { planning: boolean; countdown: boolean; dots: { pid?: string; color: string; ok: boolean }[]; order: { pid?: string; portrait: string; color: string; team: string }[]; acting: number } | null = null;
-	$: phoneStatus = phone2 ? { planning: !revealed || levelPhase, countdown: countdownActive, dots: h2dots, order: h2order.map((e) => ({ pid: e.pid, portrait: e.portrait, color: e.color, team: e.team })), acting: actAt } : null;
+	$: phoneStatus = phone2 ? { planning: !revealed || levelPhase, countdown: countdownActive, dots: h2dots, order: h2order.map((e) => ({ pid: e.pid, portrait: e.portrait, color: e.color, team: e.team })), acting: em2Pick && revealed ? -1 : actAt } : null;
 	function endAct() { session.cardAction({ kind: 'endAct', pid: clientId }); }
 	// the host's notes for the match report (kept in the shared state, so the game record — and the next host — has them)
 	function addNote(text: string) {
@@ -957,6 +973,7 @@
 	// touch: the first tap on a tucked hand raises it; the next tap previews
 	function handCardClick(idx: number) {
 		if (autoRetract && !handUp) { handUp = true; return; }
+		if (em2Take(idx)) return;
 		preview(idx);
 	}
 	// tapping anywhere outside the hand tucks it away again
@@ -1052,12 +1069,14 @@
 	function armFor(kind: 'commit' | 'discard', idx: number) { armed = idx; armedKind = kind; selected = null; playedArm = null; orderArm = null; }
 	// Takahide's swap offer catches a hand pick from any hand style (fan, banners, the docked rack): true = taken
 	function mateTake(idx: number) {
+		if (em2Take(idx)) return true;
 		if (!mateOff || (powerArm?.op === 'mateSwap' && powerArm.idx === idx)) return false;
 		armMateSwap(idx, 'hand');
 		return true;
 	}
 	function handCardClick2(idx: number) {
 		if (autoRetract && !handUp && !dockHand) { handUp = true; return; }
+		if (em2Take(idx)) return; // Alternative Timelines: this one is the second card
 		// Takahide offers a swap: a hand card goes in for the card you have in play (the ring confirms)
 		if (mateOff && !(powerArm?.op === 'mateSwap' && powerArm.idx === idx)) { armMateSwap(idx, 'hand'); return; }
 		if (canCommit && armed !== idx) { armed = idx; armedKind = 'commit'; playedArm = null; orderArm = null; return; }
@@ -1121,6 +1140,14 @@
 				: { label: 'All done', sub: 'Next round?', kind: 'go', run: () => askNext(true) };
 		}
 		if (revealed) {
+			// Alternative Timelines: both his cards are up — nobody acts until he returns one to his hand
+			if (em2Pick) {
+				if (em2Pick === clientId && mine) {
+					if (em2Ret) { const keep = em2Ret === 1 ? mine.pending2 : mine.pending; return { label: 'Keep', sub: keep != null ? heroCards(mine.hero)[keep]?.name : '', card: true, kind: 'go', pulse: true, run: () => { em2Keep(em2Ret === 1 ? 2 : 1); em2Ret = null; }, cancel: () => (em2Ret = null) }; }
+					return { label: 'Return', sub: 'Pick a card', kind: 'wait' };
+				}
+				return { label: 'Waiting', sub: `${heroName(cards[em2Pick]?.hero ?? '')} · choosing`, kind: 'wait', alt: iAmHost ? { label: 'Keep the first', run: () => em2Keep(1, em2Pick!) } : undefined };
+			}
 			// Emmitt's gold: Reverse time? (× = not this time)
 			if (emAsk && actor === clientId) return { label: 'Reverse time', short: 'Reverse', sub: 'Next turn', card: true /* the phone pill keeps just the label */, kind: 'go', tint: true, pulse: true, run: () => session.cardAction({ kind: 'power', pid: clientId, op: 'emReverse' }), cancel: declineEm };
 			// Time Capsule / Future Proof: take back this turn's discards? (× = no)
@@ -1149,7 +1176,13 @@
 			if (!iAmHost) return { label: 'Waiting', sub: 'Host', kind: 'wait' };
 			return isFinalTurn ? { label: 'Minion battle', kind: 'next', run: startBattle } : { label: 'Next turn', kind: 'next', run: onAdvanceTurn };
 		}
-		if (myReady) return { label: 'Take back', sub: `${readyCount} of ${seatedWithCards.length} in`, kind: 'quiet', run: takeBack };
+		// Alternative Timelines: after the first card, a second? (× = just one this turn)
+		if (em2Wants && mine) {
+			if (em2Arm != null) return { label: 'Commit', sub: `${heroCards(mine.hero)[em2Arm]?.name ?? ''} · 2nd`, kind: 'go', pulse: true, run: em2Commit, cancel: () => (em2Arm = null) };
+			if (em2Mode) return { label: 'Second card', sub: 'Pick from hand', kind: 'wait', cancel: () => (em2Mode = false) };
+			return { label: 'Second card', sub: 'Alternative Timelines', kind: 'go', pulse: true, run: em2Start, cancel: em2One };
+		}
+		if (myReady) return { label: 'Take back', sub: mine?.pending2 != null ? 'Both cards' : `${readyCount} of ${seatedWithCards.length} in`, kind: 'quiet', run: takeBack };
 		if (armed != null && armedKind === 'commit' && canCommit && mine) return { label: 'Commit', sub: heroCards(mine.hero)[armed]?.name, card: true, kind: 'go', pulse: true, run: commitArmed, cancel: () => (armed = null) };
 		if (mine && !mine.hand.length) return { label: 'Waiting', kind: 'wait' };
 		if (!mine) return { label: 'Watching', sub: `${readyCount} of ${seatedWithCards.length} in`, kind: 'wait' };
@@ -1173,7 +1206,7 @@
 	{:else if myPower === 'takahide' && mine}
 		<TakaGold {size} cs={mine} kind={tkKind} {turnIdx} fx={dashFx} phone={mobile} onPick={tkPick} />
 	{:else if myPower === 'emmitt'}
-		<EmmittClock {size} phone={mobile} mode={emMode} fx={dashFx} />
+		<EmmittClock {size} phone={mobile} mode={em2Wants || (mine?.pending2 != null && !revealed) ? 'green' : emMode} fx={dashFx} ready={em2Wants} onPress={em2Start} label={em2Wants ? 'Alternative Timelines: play a second card' : ''} />
 	{:else if myPower === 'nebkher'}
 		<NebkherEye {size} phone={mobile} fx={dashFx} ult={!!mine?.ultimate} kind={nkKind} doubt={nkDoubt} enemies={nkEnemies} laughed={nkLaughed} swapsLeft={nkLeft} stolen={nkStolen}
 			targets={nkTargets.map((t) => heroName(cards[t]?.hero ?? ''))} crackDir={nkCrackDir} crackPick={nkCrackPick} namePick={nkNamePick} bind:open={nkOpen} onLaugh={nkArmLaugh} onSwap={nkSwapNow} onName={nkName} onCrack={nkCrackSet} onSteal={nkStealSet} onRead={nkRead} />
@@ -1411,7 +1444,7 @@
 		<div class="h2helm">
 			<div class="h2order" style="top:{orderTop}px">
 				<HudOrder planning={!revealed || levelPhase} title={levelPhase ? 'Levelling' : 'Planning'} doneWord={levelPhase ? 'done' : 'ready'} countdown={countdownActive ? countdownLabel : ''} dots={h2dots} order={h2order} bonus={itemBonus} tieArt={icon(`tiebreaker_${$ms.tieBreaker}`)}
-					compact={cOrder} runeAt={runeNow} reversed={turnReversed} me={clientId} small={h2order.length > 4} acting={actAt} canPoint={iAmHost} onPoint={pickOrder} onNudge={armNudge} onRead={(pid, hid, idx) => (examine = { hid, idx, pid })} />
+					compact={cOrder} runeAt={runeNow} reversed={turnReversed} me={clientId} small={h2order.length > 4} acting={em2Pick && revealed ? -1 : actAt} canPoint={iAmHost} onPoint={pickOrder} onNudge={armNudge} onRead={(pid, hid, idx) => (examine = { hid, idx, pid })} />
 			</div>
 			{#if platesTop}
 				<!-- nameplates either side of the compact top bar: the enemy on the left, your team on the right (you last) -->
@@ -1809,6 +1842,21 @@
 		<div class="lvwrap" class:dk={!mobile}><LevelConfirm cs={mine} idx={lvConfirm.idx} kind={lvConfirm.kind} teamStyle={teamVars(myTeam)} onConfirm={confirmLevel} onCancel={() => (lvConfirm = null)} /></div>
 	{/if}
 
+	<!-- Alternative Timelines: both his cards are up; he taps the one to RETURN to his hand, the ring confirms the keep -->
+	{#if tlCards.length && revealed && !curtain && mine}
+		<div class="tlpick" class:ph={mobile}>
+			<div class="tlh"><b>Alternative Timelines</b><span>Tap the card to return to your hand</span></div>
+			<div class="tlcards">
+				{#each tlCards as t (t.w)}
+					<button class="tlc" class:ret={em2Ret === t.w} class:keep={em2Ret != null && em2Ret !== t.w} on:click={() => (em2Ret = em2Ret === t.w ? null : t.w)}>
+						<Card heroId={mine.hero} card={heroCards(mine.hero)[t.ci]} />
+						<em class="tlt">{em2Ret === t.w ? 'Return to hand' : em2Ret != null ? 'Keep' : ''}</em>
+					</button>
+				{/each}
+			</div>
+		</div>
+	{/if}
+
 	<!-- ───────── centered preview of a picked hand card ───────── -->
 	{#if mine && selected != null}
 		<div class="pvscrim" on:click={closePreview} on:keydown={(e) => e.key === 'Escape' && closePreview()} role="presentation"></div>
@@ -2154,11 +2202,15 @@
 					{#each row as p (p.id)}
 						{@const cs = viewCards[p.id]}
 						{@const idx = cs.pending}
-						<div class="cc" style="--tint:{teamTint(p)}">
+						<div class="cc" class:dbl={cs.pending2 != null} style="--tint:{teamTint(p)}">
 							{#if idx != null && idx !== PASS}
-								<div class="cc-flip" class:up={curtainFlip}>
-									<div class="cc-face cc-back"><CardBack hero={cs.hero} /></div>
-									<div class="cc-face cc-front"><Card heroId={cs.hero} card={heroCards(cs.hero)[idx]} /></div>
+								<div class="ccpair">
+									{#each cs.pending2 != null ? [idx, cs.pending2] : [idx] as ci, k (k)}
+										<div class="cc-flip" class:up={curtainFlip}>
+											<div class="cc-face cc-back"><CardBack hero={cs.hero} /></div>
+											<div class="cc-face cc-front"><Card heroId={cs.hero} card={heroCards(cs.hero)[ci]} /></div>
+										</div>
+									{/each}
 								</div>
 							{:else}
 								<div class="cc-flip skip">—</div>
@@ -2522,6 +2574,26 @@
 	.cc-row { display: flex; flex-wrap: wrap; justify-content: center; gap: calc(var(--gap) * 1.2) var(--gap); max-width: calc(var(--cols) * var(--cw) + (var(--cols) - 1) * var(--gap) + 1px); }
 	/* the face-up card grows 4% (the flip's scale), i.e. 2% of its height past its foot: the gap leaves room for that */
 	.cc { display: flex; flex-direction: column; align-items: center; gap: calc(8px + var(--cw) * 0.03); perspective: 1300px; width: var(--cw); }
+	/* Alternative Timelines: the two cards side by side over the board (the dash and its ring stay free below) */
+	.tlpick { position: fixed; left: 50%; top: 45%; transform: translate(-50%, -50%); z-index: 45; pointer-events: auto; display: flex; flex-direction: column; align-items: center; gap: 12px;
+		padding: 16px 18px 14px; border-radius: 16px; background: rgba(6, 21, 38, 0.97); border: 1px solid rgba(65, 174, 89, 0.6); box-shadow: 0 18px 44px rgba(0, 0, 0, 0.6); color: #e8eef5; }
+	.tlh { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+	.tlh b { font-weight: 400; font-size: 20px; color: #9ff0b4; letter-spacing: .03em; }
+	.tlh span { font-size: 13px; color: #9fb0c2; }
+	.tlcards { display: flex; gap: 18px; }
+	.tlc { position: relative; width: min(21vw, 27vh, 260px); aspect-ratio: 1192 / 1664; padding: 0; border: 0; border-radius: 5%; background: none; cursor: pointer; transition: transform .18s, opacity .18s; }
+	.tlc :global(.cardface) { display: block; width: 100%; height: 100%; border-radius: 5%; box-shadow: 0 0 0 2px rgba(255,255,255,.18); }
+	.tlc:hover { transform: translateY(-4px); }
+	.tlc.ret { opacity: .55; transform: translateY(10px) scale(.94); }
+	.tlc.ret :global(.cardface) { box-shadow: 0 0 0 3px #e5484d; }
+	.tlc.keep :global(.cardface) { box-shadow: 0 0 0 3px #41ae59, 0 0 18px rgba(65,174,89,.55); }
+	.tlt { position: absolute; left: 50%; bottom: -12px; transform: translateX(-50%); white-space: nowrap; font-style: normal; font-size: 13px; padding: 2px 10px; border-radius: 999px; background: rgba(6, 21, 38, 0.95); }
+	.tlt:empty { display: none; }
+	.tlc.ret .tlt { color: #ffc9c2; border: 1px solid #e5484d; } .tlc.keep .tlt { color: #bff5cc; border: 1px solid #41ae59; }
+	.tlpick.ph { top: 42%; width: calc(100vw - 16px); padding: 12px 10px; }
+	.tlpick.ph .tlc { width: min(42vw, 30vh); }
+	.cc.dbl { width: calc(var(--cw) * 2 + var(--gap)); }
+	.ccpair { display: flex; gap: var(--gap); }
 	.cc-flip { width: var(--cw); aspect-ratio: 1192 / 1664; position: relative; transform-style: preserve-3d; transition: transform .7s cubic-bezier(.34,.08,.2,1); }
 	.cc-face { box-shadow: 0 12px 30px rgba(0,0,0,.6); }
 	.cc-flip.up { transform: rotateY(180deg) scale(1.04); }

@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest'
 import { applyCardReq, transferSeat, turnOrder, turnKey, actingIdx, actorOf, minionDefense, respawnHero, type MatchState, type Piece } from './match'
 import { newPlayerCardState } from './cards/cardstate'
 import { heroCards } from './cards/deck'
-import { equilibrium, canFlip, flipUsed, hasPower, canInscribe, activeRune, runesOf, secondRune, heldGolds, deckGolds, takaSwapKind, mateOffer, canReverse, warpOffer, capsuleOffer, nkPower, canLaugh, laughTargets, nkSwapsLeft, nkSlots, doubtNow, crackNow, lineHexes, rzPower, rzRemoves, rzTwin, crowdField, facesInUse, rzSpawnsLeft, rzLeft, bodiesOf, isDouble, heroPidOf, crowdBonus, pieceDist, type Rune, type TurnCtx } from './heropower'
-import { goldsOf, isHidden, type PlayerCardState } from './cards/cardstate'
+import { equilibrium, canFlip, flipUsed, hasPower, canInscribe, activeRune, runesOf, secondRune, heldGolds, deckGolds, takaSwapKind, mateOffer, canReverse, warpOffer, capsuleOffer, nkPower, canLaugh, laughTargets, nkSwapsLeft, nkSlots, doubtNow, crackNow, lineHexes, rzPower, rzRemoves, rzTwin, crowdField, wantsSecond, facesInUse, rzSpawnsLeft, rzLeft, bodiesOf, isDouble, heroPidOf, crowdBonus, pieceDist, type Rune, type TurnCtx } from './heropower'
+import { goldsOf, isHidden, repairCards, revealTurn, endRound, type PlayerCardState } from './cards/cardstate'
 import { draftable, isLabHero, FOUR_STAR_LAB, FOUR_STAR_LIVE, HEROES } from './heroes'
 import { isFullGame, type Journal } from './recorder'
 import { statusFrom } from './tokens'
@@ -705,4 +705,69 @@ describe('Razzle: her doubles — spawn, faces, remove / promote, Crowd Control,
 		const x = { ...rg(gold), pieces: { ...rg(gold).pieces, 'R~1': { id: 'R~1', hex: '9_8', team: 'orange', kind: 'hero', hero: 'razzle', owner: 'R', face: 1 } } } as MatchState
 		expect(pieceDist(x, 'M', 'R')).toBe(1)
 	})
+})
+
+describe("Emmitt's ultimate (Alternative Timelines): two cards face down, both revealed, he keeps one before anyone acts", () => {
+	const EC = heroCards('emmitt'), AC = heroCards('arien')
+	const hand = newPlayerCardState('emmitt').hand
+	const [c1, c2] = hand
+	function g(ult = true, revealAt: number | null = null): MatchState {
+		const e = { ...newPlayerCardState('emmitt'), ultimate: ult, hand: hand.filter((i) => i !== c1), pending: c1 }
+		const b = { ...newPlayerCardState('arien'), pending: 0 }
+		return {
+			round: 1, turn: 2, seats: 2, life: { orange: 6, blue: 6 }, tieBreaker: 'orange', revealAt, host: 'H',
+			pieces: { E: { id: 'E', hex: '1_1', team: 'orange', kind: 'hero', hero: 'emmitt' }, B: { id: 'B', hex: '5_5', team: 'blue', kind: 'hero', hero: 'arien' } },
+			cards: { E: e, B: b }
+		} as unknown as MatchState
+	}
+	const pw = (s: MatchState, pid: string, op: string, more: Record<string, unknown> = {}) => applyCardReq(s, { kind: 'power', pid, op, ...more } as never)
+	const go = (s: MatchState, p: Partial<MatchState>) => ({ ...s, ...p }) as MatchState
+	it('the second card goes face down only with the ultimate, after the first, before the reveal', () => {
+		expect(pw(g(false), 'E', 'emCommit2', { idx: c2 })).toEqual({})
+		expect(pw(g(true, 0), 'E', 'emCommit2', { idx: c2 })).toEqual({}) // already revealed
+		const s = go(g(), pw(g(), 'E', 'emCommit2', { idx: c2 }))
+		expect(s.cards!.E.pending2).toBe(c2)
+		expect(s.cards!.E.hand).not.toContain(c2)
+		expect(pw(s, 'E', 'emCommit2', { idx: hand[2] })).toEqual({}) // only one more
+		// taking the second back, or the first (both go back), before the reveal
+		expect(go(s, pw(s, 'E', 'emUncommit2')).cards!.E.hand).toContain(c2)
+		const un = go(s, applyCardReq(s, { kind: 'uncommit', pid: 'E' } as never))
+		expect(un.cards!.E.pending).toBe(null)
+		expect(un.cards!.E.pending2 ?? null).toBe(null)
+		expect(un.cards!.E.hand).toEqual(expect.arrayContaining([c1, c2]))
+	})
+	it("the reveal waits for his second card — or his 'just one'", () => {
+		const s = g()
+		const c = { key: turnKey(s), revealed: false } as TurnCtx
+		expect(wantsSecond(s, 'E', c)).toBe(true)
+		const one = go(s, pw(s, 'E', 'emOne'))
+		expect(wantsSecond(one, 'E', c)).toBe(false)
+		const two = go(s, pw(s, 'E', 'emCommit2', { idx: c2 }))
+		expect(wantsSecond(two, 'E', c)).toBe(false)
+		expect(wantsSecond(g(false), 'E', c)).toBe(false) // no ultimate: never asked
+	})
+	it('revealed: nobody acts until he keeps one; the other goes back to his hand', () => {
+		const s0 = go(g(), pw(g(), 'E', 'emCommit2', { idx: c2 }))
+		const s = { ...s0, revealAt: 0 } as MatchState
+		expect(actorOf(s)).toBe(null)
+		expect(applyCardReq(s, { kind: 'endAct', pid: 'H' } as never)).toEqual({})
+		expect(pw(s, 'B', 'emKeep', { which: 1 })).toEqual({}) // not B's
+		const k = go(s, pw(s, 'E', 'emKeep', { which: 2 }))
+		expect(k.cards!.E.pending).toBe(c2)
+		expect(k.cards!.E.pending2 ?? null).toBe(null)
+		expect(k.cards!.E.hand).toContain(c1)
+		expect(actorOf(k)).not.toBe(null)
+		// the host may choose for someone away
+		expect(go(s, pw(s, 'H', 'emKeep', { which: 1, target: 'E' })).cards!.E.pending).toBe(c1)
+	})
+	it('no card is ever lost: the round end, the turn lock and the repair all know the second card', () => {
+		const s = go(g(), pw(g(), 'E', 'emCommit2', { idx: c2 })).cards!.E
+		const all = (x: typeof s) => [...x.hand, ...x.turns.filter((i) => i != null), ...(x.pending != null && x.pending >= 0 ? [x.pending] : []), ...(x.pending2 != null ? [x.pending2] : []), ...x.discard] as number[]
+		expect(all(repairCards(s)).sort()).toEqual(all(s).sort())
+		const locked = revealTurn(s, 1)
+		expect(locked.turns[1]).toBe(c1)
+		expect(locked.hand).toContain(c2)
+		expect(endRound(s).hand).toEqual(expect.arrayContaining([c1, c2]))
+	})
+	void EC; void AC
 })

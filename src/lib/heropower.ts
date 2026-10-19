@@ -57,6 +57,8 @@ export type PowerState = {
 	twin?: { mark: string; first?: string; live: boolean }
 	/** Razzle: she took a body off for this acting card (Phantom Strike allows one) */
 	rzx?: string
+	/** Emmitt: he plays just one card this turn (`turnKey`) — Alternative Timelines declined */
+	one?: string
 }
 export type NkColor = 'GOLD' | 'SILVER' | 'RED' | 'BLUE' | 'GREEN'
 export const NK_COLORS: NkColor[] = ['GOLD', 'SILVER', 'RED', 'BLUE', 'GREEN']
@@ -64,7 +66,7 @@ export const NK_COLORS: NkColor[] = ['GOLD', 'SILVER', 'RED', 'BLUE', 'GREEN']
 export type NkEnemy = { pid: string; hero: string; name: string; player: string; dist: number | null; prev: number | null; prevHidden: boolean
 	/** every turn slot I–IV as it stands (this turn's = the card in play), and whether Laughter may swap it */
 	cards: { t: number; idx: number | null; hidden: boolean; ok: boolean; now: boolean }[] }
-export type PowerReq = { kind: 'power'; pid: string; op: 'ignatiaFlip' | 'snorriInscribe' | 'snorriSecond' | 'takaSwap' | 'mateSwap' | 'emReverse' | 'emWarp' | 'warpSwap' | 'capsule' | 'nkLaugh' | 'nkSwap' | 'nkName' | 'nkCrack' | 'nkGrip' | 'rzSpawn' | 'rzRemove' | 'rzClear' | 'rzRetrieve' | 'rzTwin';
+export type PowerReq = { kind: 'power'; pid: string; op: 'ignatiaFlip' | 'snorriInscribe' | 'snorriSecond' | 'takaSwap' | 'mateSwap' | 'emReverse' | 'emWarp' | 'warpSwap' | 'capsule' | 'nkLaugh' | 'nkSwap' | 'nkName' | 'nkCrack' | 'nkGrip' | 'rzSpawn' | 'rzRemove' | 'rzClear' | 'rzRetrieve' | 'rzTwin' | 'emCommit2' | 'emUncommit2' | 'emKeep' | 'emOne';
 	/** takaSwap: the gold card from his deck to take; mateSwap: the hand / discard card to swap in; warpSwap: the turn slot (0–3) */
 	idx?: number
 	/** mateSwap: where the swapped-in card comes from */
@@ -88,12 +90,14 @@ export type PowerReq = { kind: 'power'; pid: string; op: 'ignatiaFlip' | 'snorri
 	/** rzSpawn: which of her faces it wears (1–3 = her card paintings; 0 = her portrait) */
 	face?: number
 	/** rzRemove: the body (piece id) to take off the board */
-	id?: string }
+	id?: string
+	/** emKeep: which of the two cards stays in play (1 = the first committed, 2 = the second) */
+	which?: number }
 /** what the engine knows about the turn in play */
 export type TurnCtx = { key: string; round: number; turnIdx: number; order: string[]; at: number; tieBreaker: Team; revealed: boolean
 	/** each player's team (for "a friendly hero") */
 	teams?: Record<string, Team | null> }
-type S = { cards?: Record<string, PlayerCardState>; power?: Record<string, PowerState>; effects?: Effect[]; host?: string
+type S = { battlePhase?: boolean; levelPhase?: boolean; cards?: Record<string, PlayerCardState>; power?: Record<string, PowerState>; effects?: Effect[]; host?: string
 	lastClash?: { id: string; kind: string; by: string; v?: string; out: string } | null; lastDefeat?: { id: string; by: string; victim?: string } | null
 	attacks?: Record<string, { discarded?: boolean } | undefined>; forced?: Record<string, unknown>
 	turnDisc?: { key: string; by: Record<string, number[]> } | null
@@ -260,6 +264,17 @@ export function readyForWar(cs: PlayerCardState, applied: boolean): PlayerCardSt
 // unresolved card for one of their resolved ones (their pick). Time Capsule / Future Proof: he and his friends may take
 // back every card they discarded this turn. Temporal Punch / Slam / Judgment: the defender uses Initiative (a note).
 const EMM = 'emmitt'
+/** Alternative Timelines (his ultimate): with his first card face down this turn he may put a second one face down
+ *  too (before the reveal); both are revealed, and before anyone acts he keeps one and retrieves the other. */
+export function canCommit2(s: S, pid: string, ctx: TurnCtx): boolean {
+	const cs = s.cards?.[pid]
+	return !!cs && cs.hero === EMM && cs.ultimate && !ctx.revealed && !s.battlePhase && !s.levelPhase
+		&& cs.pending != null && cs.pending >= 0 && cs.pending2 == null && cs.hand.length > 0
+}
+/** he may still add a second card and hasn't said 'just one': the reveal waits for him */
+export const wantsSecond = (s: S, pid: string, ctx: TurnCtx) => canCommit2(s, pid, ctx) && s.power?.[pid]?.one !== ctx.key
+/** a player still holds two cards in play (revealed or not): nobody acts until he has chosen */
+export const timelinePick = (s: S): string | null => Object.keys(s.cards ?? {}).find((pid) => s.cards![pid].pending2 != null) ?? null
 // (the card text, with the '>' line marks of its 'Choose one' options taken out)
 export const cardText = (cs: PlayerCardState | undefined, idx: number | null | undefined) => (cs && idx != null && idx >= 0 ? (heroCards(cs.hero)[idx]?.description ?? '').replace(/>/g, ' ') : '')
 /** the card Emmitt has acting now, by what it says */
@@ -646,6 +661,29 @@ export function applyPower(s: S & { tieTurn?: { key: string; coin: Team } | null
 		const again = s.power?.[req.pid]?.crack?.key === ctx.key
 		const fx = withCardFx(s, req.pid, ctx)
 		return { ...(fx ? { effects: fx } : {}), power: { ...s.power, [req.pid]: { ...s.power?.[req.pid], crack: { key: ctx.key, hex, dir: req.dir } } }, ...(again ? {} : { nkNews: nkNewsOf('crack', req.pid) }) }
+	}
+	if (req.op === 'emCommit2') {
+		const cs = s.cards?.[req.pid], idx = req.idx
+		if (!cs || !canCommit2(s, req.pid, ctx) || idx == null || !cs.hand.includes(idx)) return {}
+		return { cards: { ...s.cards, [req.pid]: { ...cs, hand: cs.hand.filter((i) => i !== idx), pending2: idx } } }
+	}
+	if (req.op === 'emOne') {
+		if (!canCommit2(s, req.pid, ctx)) return {}
+		return { power: { ...s.power, [req.pid]: { ...s.power?.[req.pid], one: ctx.key } } }
+	}
+	if (req.op === 'emUncommit2') {
+		const cs = s.cards?.[req.pid]
+		if (!cs || cs.pending2 == null || ctx.revealed) return {}
+		return { cards: { ...s.cards, [req.pid]: { ...cs, hand: [...cs.hand, cs.pending2].sort((a, b) => a - b), pending2: null } } }
+	}
+	if (req.op === 'emKeep') {
+		// after the reveal: one of the two stays in play, the other goes back to the hand (the host may choose for
+		// a player who is away)
+		const who = req.pid === s.host && req.target ? req.target : req.pid
+		const cs = s.cards?.[who]
+		if (!cs || cs.pending2 == null || cs.pending == null || cs.pending < 0 || !ctx.revealed || (req.which !== 1 && req.which !== 2)) return {}
+		const keep = req.which === 1 ? cs.pending : cs.pending2, back = req.which === 1 ? cs.pending2 : cs.pending
+		return { cards: { ...s.cards, [who]: { ...cs, pending: keep, pending2: null, hand: [...cs.hand, back].sort((a, b) => a - b) } } }
 	}
 	if (req.op === 'emReverse') {
 		const who = req.target ?? req.pid

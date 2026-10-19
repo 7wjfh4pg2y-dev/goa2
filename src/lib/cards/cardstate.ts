@@ -47,6 +47,9 @@ export interface PlayerCardState {
 	basics?: number[]
 	/** Cards lying FACE DOWN in a turn slot or the discard (Takahide's Bushido): only their owner sees which. */
 	hidden?: number[]
+	/** Emmitt's ultimate (Alternative Timelines): a SECOND face-down card for this turn. Both are revealed together;
+	 *  before anyone acts he retrieves one of them (heropower `emKeep`). Never outlives the turn. */
+	pending2?: number | null
 }
 
 /** A place a card can live in a player's collection. */
@@ -213,8 +216,8 @@ export function commitCard(s: PlayerCardState, idx: number): PlayerCardState {
 
 /** Ready up with no card (nothing to play / choosing to pass this turn). */
 export function passTurn(s: PlayerCardState): PlayerCardState {
-	const back = s.pending != null && s.pending !== PASS ? [s.pending] : []
-	return { ...s, hand: [...s.hand, ...back].sort((a, b) => a - b), pending: PASS }
+	const back = [...(s.pending != null && s.pending !== PASS ? [s.pending] : []), ...(s.pending2 != null ? [s.pending2] : [])]
+	return { ...s, hand: [...s.hand, ...back].sort((a, b) => a - b), pending: PASS, pending2: null }
 }
 
 /** Reveal on the shared count-of-three: a real card lands in its slot; a pass clears. */
@@ -227,8 +230,10 @@ export function revealPlayer(s: PlayerCardState, turn: number): PlayerCardState 
 /** Take back the face-down card before reveal (returns it to hand). */
 export function uncommit(s: PlayerCardState): PlayerCardState {
 	if (s.pending == null) return s
-	if (s.pending === PASS) return { ...s, pending: null }
-	return { ...s, hand: [...s.hand, s.pending].sort((a, b) => a - b), pending: null }
+	// the second card (Emmitt's ultimate) goes back with the first
+	const two = s.pending2 != null ? [s.pending2] : []
+	if (s.pending === PASS) return { ...s, hand: [...s.hand, ...two].sort((a, b) => a - b), pending: null, pending2: null }
+	return { ...s, hand: [...s.hand, s.pending, ...two].sort((a, b) => a - b), pending: null, pending2: null }
 }
 
 /** Reveal: lock the pending card into its turn slot (it already left the hand at commit). */
@@ -237,9 +242,11 @@ export function revealTurn(s: PlayerCardState, turn: number): PlayerCardState {
 	const turns = s.turns.slice()
 	const old = turns[turn]
 	turns[turn] = s.pending
-	// never write over a card already in the slot (it would vanish): it goes back to the hand
-	const hand = old != null && old !== s.pending ? [...s.hand, old].sort((a, b) => a - b) : s.hand
-	return { ...s, turns, hand, pending: null }
+	// never write over a card already in the slot (it would vanish): it goes back to the hand — and a second card
+	// still face down (Emmitt's ultimate, never chosen) returns to the hand too
+	const back = [...(old != null && old !== s.pending ? [old] : []), ...(s.pending2 != null ? [s.pending2] : [])]
+	const hand = back.length ? [...s.hand, ...back].sort((a, b) => a - b) : s.hand
+	return { ...s, turns, hand, pending: null, pending2: null }
 }
 
 /** Defend / effect-discard: spend a card from hand this round. */
@@ -281,11 +288,13 @@ export function undiscard(s: PlayerCardState, idx: number): PlayerCardState {
 export function endRound(s: PlayerCardState): PlayerCardState {
 	const back = [...s.turns.filter((x): x is number => x != null), ...s.discard]
 	if (s.pending != null && s.pending !== PASS) back.push(s.pending)
+	if (s.pending2 != null) back.push(s.pending2)
 	return repairCards({
 		...s,
 		hand: [...s.hand, ...back].sort((a, b) => a - b),
 		turns: Array(TURNS_PER_ROUND).fill(null),
 		pending: null,
+		pending2: null,
 		discard: [],
 		hidden: undefined
 	})
@@ -300,7 +309,7 @@ export function endRound(s: PlayerCardState): PlayerCardState {
 export function repairCards(s: PlayerCardState): PlayerCardState {
 	const cards = heroCards(s.hero)
 	const placed = new Set<number>([...s.hand, ...s.discard, ...s.removed, ...s.upgrade,
-		...s.turns.filter((x): x is number => x != null), ...(s.pending != null && s.pending >= 0 ? [s.pending] : [])])
+		...s.turns.filter((x): x is number => x != null), ...(s.pending != null && s.pending >= 0 ? [s.pending] : []), ...(s.pending2 != null ? [s.pending2] : [])])
 	const basic = new Set([...goldsOf(s.hero), silverIdx(s.hero)])
 	const owned = new Set<number>([...basicsOf(s), ...startingHand(s.hero).filter((i) => !basic.has(i))])
 	cards.forEach((c, i) => { if ((c.level ?? 1) >= 2 && c.color !== 'PURPLE' && s.upgrade.includes(twinOf(s.hero, i))) owned.add(i) })
