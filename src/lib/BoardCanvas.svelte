@@ -462,6 +462,9 @@
 	}
 	// mouse hover over a piece: its name floats above it
 	let hoverName: { text: string; color: string; x: number; y: number } | null = null;
+	// a piece just picked keeps no hover name (its actions take that space); the next pointer move brings names back
+	const dropName = (_sel: unknown) => (hoverName = null);
+	$: dropName(selected);
 	function trackName(e: PointerEvent) {
 		if (e.pointerType !== 'mouse' || dragId || placing) { hoverName = null; return; }
 		const id = (e.target as Element)?.closest?.('[data-piece]')?.getAttribute('data-piece');

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { applyCardReq, transferSeat, turnOrder, turnKey, actingIdx, actorOf, minionDefense, respawnHero, type MatchState, type Piece } from './match'
 import { newPlayerCardState } from './cards/cardstate'
 import { heroCards } from './cards/deck'
-import { equilibrium, canFlip, flipUsed, hasPower, canInscribe, activeRune, runesOf, secondRune, heldGolds, deckGolds, takaSwapKind, mateOffer, canReverse, warpOffer, capsuleOffer, nkPower, canLaugh, laughTargets, nkSwapsLeft, nkSlots, doubtNow, crackNow, lineHexes, rzPower, rzSpawnsLeft, rzLeft, bodiesOf, isDouble, heroPidOf, crowdBonus, pieceDist, type Rune, type TurnCtx } from './heropower'
+import { equilibrium, canFlip, flipUsed, hasPower, canInscribe, activeRune, runesOf, secondRune, heldGolds, deckGolds, takaSwapKind, mateOffer, canReverse, warpOffer, capsuleOffer, nkPower, canLaugh, laughTargets, nkSwapsLeft, nkSlots, doubtNow, crackNow, lineHexes, rzPower, rzRemoves, rzSpawnsLeft, rzLeft, bodiesOf, isDouble, heroPidOf, crowdBonus, pieceDist, type Rune, type TurnCtx } from './heropower'
 import { goldsOf, isHidden, type PlayerCardState } from './cards/cardstate'
 import { draftable, isLabHero, FOUR_STAR_LAB, FOUR_STAR_LIVE, HEROES } from './heroes'
 import { isFullGame, type Journal } from './recorder'
@@ -612,6 +612,24 @@ describe('Razzle: her doubles — spawn, faces, remove / promote, Crowd Control,
 		expect(rzPower(sk, 'R', tc(sk))).toBe('clear')
 		const cl = go(sk, pw(sk, 'R', 'rzClear'))
 		expect(bodiesOf(cl, 'R').map((p) => p.id)).toEqual(['R'])
+	})
+	it('her reds offer the Remove pills only after their attack: Phantom Strike / Hit and Gone some of her, Into Thin Air all of her', () => {
+		const into = named('Into Thin Air'), hit = named('Hit and Gone')
+		const two = (x: MatchState) => ({ ...x, pieces: { ...x.pieces, 'R~1': { ...x.pieces.R, id: 'R~1', hex: '5_6', face: 1, owner: 'R' } } }) as MatchState
+		for (const [card, want] of [[phantom, 'some'], [hit, 'some'], [into, 'all']] as const) {
+			const s = two(actingAs(rg(card), 'R'))
+			expect(rzRemoves(s, 'R', tc(s))).toBe(null) // before the attack
+			const x = two(afterAttack(actingAs(rg(card), 'R')))
+			expect(rzRemoves(x, 'R', tc(x))).toBe(want)
+		}
+		// one body: Phantom Strike has nothing to take, Into Thin Air still takes her off (not a defeat)
+		const one = afterAttack(actingAs(rg(phantom), 'R'))
+		expect(rzRemoves(one, 'R', tc(one))).toBe(null)
+		const oneAll = afterAttack(actingAs(rg(into), 'R'))
+		expect(rzRemoves(oneAll, 'R', tc(oneAll))).toBe('all')
+		// any other card of hers: nothing
+		const g = two(afterAttack(actingAs(rg(gold), 'R')))
+		expect(rzRemoves(g, 'R', tc(g))).toBe(null)
 	})
 	it('a seat handed to a new id takes her doubles along (they follow their owner)', () => {
 		let x = afterAttack(actingAs(rg(gold), 'R'))

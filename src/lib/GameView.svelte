@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { hasPower, emActing, warpSlots, crackNow, lineHexes, RE_REWIND, RE_WARP, RE_TEMPORAL, heroPidOf, bodiesOf, isDouble, type TurnCtx } from '$lib/heropower';
+	import { hasPower, emActing, warpSlots, crackNow, lineHexes, RE_REWIND, RE_WARP, RE_TEMPORAL, heroPidOf, bodiesOf, isDouble, rzRemoves, type TurnCtx } from '$lib/heropower';
 	import { afterUpdate, onDestroy } from 'svelte';
 	import { readable, type Readable } from 'svelte/store';
 	import BoardCanvas from '$lib/BoardCanvas.svelte';
@@ -214,35 +214,63 @@
 		l: (platesTop ? 40 : $boardPrefs.compact ? 372 : 372) * lay.s,
 		r: (platesTop && $boardPrefs.cLog ? 40 : 372) * lay.s
 	} : null;
-	// a piece's pills ring its token: [immune] then the actions, clockwise from 12 o'clock
-	const CLOCK = [0, 90, 180, 270, 45, 135, 225, 315];
-	type Pill = { label: string; run?: () => void; kind?: 'go' | 'bad' | 'rem' | 'move' | 'imm' | 'force' | 'swap' | 'time'; coin?: number; off?: boolean; title?: string };
+	// a piece's pills sit on four sides of its token, one family a side — Fight on top, Move right, Off the board below,
+	// card Powers left — so each kind of action is always in the same place; an empty side borrows one from the fullest
+	// (the opposite side first), and the rows / columns are placed so nothing can overlap (see `fanOf`)
+	type Fam = 'fight' | 'move' | 'off' | 'power';
+	type Pill = { label: string; fam: Fam; run?: () => void; kind?: 'go' | 'bad' | 'rem' | 'move' | 'imm' | 'force' | 'swap' | 'time'; coin?: number; off?: boolean; title?: string };
 	$: if (!selPieceId) carryingSel = false;
+	$: rzRem = ownHeroSel && turnCtx ? rzRemoves($ms, clientId, turnCtx) : null;
 	$: pills = !hud2 || !selPiece || ringAsk || carryingSel || swapFrom ? [] : forceMenu ? ([
-		{ label: 'Discard', kind: 'force', run: () => forceSel(false), title: 'They discard a card' },
-		{ label: 'Discard or die', kind: 'bad', coin: heroDefeatSummary($ms, clientId, selHero ?? '').coins, run: () => forceSel(true), title: 'They discard a card — or are defeated (you take the rewards)' },
-		{ label: 'Back', run: () => (forceMenu = false) }
+		{ label: 'Discard', fam: 'fight', kind: 'force', run: () => forceSel(false), title: 'They discard a card' },
+		{ label: 'Discard or die', fam: 'fight', kind: 'bad', coin: heroDefeatSummary($ms, clientId, selHero ?? '').coins, run: () => forceSel(true), title: 'They discard a card — or are defeated (you take the rewards)' },
+		{ label: 'Back', fam: 'off', run: () => (forceMenu = false) }
 	] as Pill[]) : ([
-		selImmune ? { label: 'Immune', kind: 'imm', title: 'Heavy minions can\'t be moved, defeated or removed while another minion of their team is in the battle zone' } : null,
-		selMovable ? { label: 'Move', kind: 'move', run: moveSel, title: 'Pick it up — click a hex to put it down (or drag the piece)' } : null,
-		selSwappable ? { label: 'Swap', kind: 'swap', run: startSwap, title: 'Swap places with another piece' } : null,
-		canRewindSel ? { label: 'Rewind', kind: 'time', run: rewindSel, title: 'Back to the Future: back to where they stood as the turn began' } : null,
-		canWarpSel ? { label: 'Warp', kind: 'time', run: warpSel, title: 'Time Warp: they swap their card in play for one of their resolved cards' } : null,
-		canFlip ? { label: selPiece.faceDown ? 'Flip — reveal' : 'Flip face down', run: flipMine } : null,
-		canDefeatSel && selPiece.kind === 'hero' ? { label: attacks[selHero ?? ''] ? 'Under attack…' : 'Attack', kind: 'go', off: !!attacks[selHero ?? ''], run: () => attackSel('attack') } : null,
-		canDefeatSel && selPiece.kind === 'hero' ? { label: 'Defeat', kind: 'bad', coin: heroDefeatSummary($ms, clientId, selHero ?? '').coins, run: () => attackSel('defeat'), title: 'Not an attack: defeat them outright — same rewards' } : null,
-		canDefeatSel && selPiece.kind === 'hero' ? { label: $ms.forced?.[selHero ?? ''] ? 'Discarding…' : 'Forced discard', kind: 'force', off: !!$ms.forced?.[selHero ?? ''], run: () => (forceMenu = true), title: 'A card makes them discard (or be defeated)' } : null,
-		canDefeatSel && selPiece.kind !== 'hero' && (!selImmune || iAmHost) ? { label: 'Defeat', kind: 'bad', coin: minionCoins(selPiece.role), run: defeatSel } : null,
-		ownHeroSel && ownAttack && selPiece.id === clientId ? { label: `Clear${clearCount ? ` ${clearCount}` : ''}`, off: !clearCount, run: startClear } : null,
-		ownHeroSel ? { label: 'Defeated', kind: 'bad', run: selfDefeatAsk, title: 'You were defeated (not by an Attack): choose who gets the reward' } : null,
-		// Razzle with doubles: take THIS one of her off (Phantom Strike, Hit and Gone…) — or every one of her (Into Thin Air)
-		ownHeroSel && myBodies > 1 ? { label: 'Remove', kind: 'rem', run: bodyRemoveAsk, title: 'Take this one of you off the board' } : null,
-		ownHeroSel ? { label: myBodies > 1 ? 'Remove all' : 'Remove', kind: 'rem', run: selfRemoveAsk, title: myBodies > 1 ? 'Every one of you leaves the board — not a defeat; back with your next card' : 'A card effect takes your hero off the board — back with your next card' } : null,
-		// the host may take a body of Razzle's off for her
-		!ownHeroSel && iAmHost && isDouble(selPiece) ? { label: 'Remove', kind: 'rem', run: bodyRemoveAsk, title: 'Take this double off the board' } : null,
-		canBattleSel ? { label: 'Remove for the battle', kind: 'rem', run: battleTakeSel } : null,
-		canRemoveSel && selPiece.kind !== 'hero' && (!selImmune || iAmHost) ? { label: 'Remove', kind: 'rem', run: openRemove } : null
+		selImmune ? { label: 'Immune', fam: 'fight', kind: 'imm', title: 'Heavy minions can\'t be moved, defeated or removed while another minion of their team is in the battle zone' } : null,
+		canDefeatSel && selPiece.kind === 'hero' ? { label: attacks[selHero ?? ''] ? 'Under attack…' : 'Attack', fam: 'fight', kind: 'go', off: !!attacks[selHero ?? ''], run: () => attackSel('attack') } : null,
+		canDefeatSel && selPiece.kind === 'hero' ? { label: 'Defeat', fam: 'fight', kind: 'bad', coin: heroDefeatSummary($ms, clientId, selHero ?? '').coins, run: () => attackSel('defeat'), title: 'Not an attack: defeat them outright — same rewards' } : null,
+		canDefeatSel && selPiece.kind === 'hero' ? { label: $ms.forced?.[selHero ?? ''] ? 'Discarding…' : 'Forced discard', fam: 'fight', kind: 'force', off: !!$ms.forced?.[selHero ?? ''], run: () => (forceMenu = true), title: 'A card makes them discard (or be defeated)' } : null,
+		canDefeatSel && selPiece.kind !== 'hero' && (!selImmune || iAmHost) ? { label: 'Defeat', fam: 'fight', kind: 'bad', coin: minionCoins(selPiece.role), run: defeatSel } : null,
+		selMovable ? { label: 'Move', fam: 'move', kind: 'move', run: moveSel, title: 'Pick it up — click a hex to put it down (or drag the piece)' } : null,
+		selSwappable ? { label: 'Swap', fam: 'move', kind: 'swap', run: startSwap, title: 'Swap places with another piece' } : null,
+		// powers come from the card in play: Emmitt's Rewind / Warp, Min's mines, the attack card's Clear (tokens next to you)
+		canRewindSel ? { label: 'Rewind', fam: 'power', kind: 'time', run: rewindSel, title: 'Back to the Future: back to where they stood as the turn began' } : null,
+		canWarpSel ? { label: 'Warp', fam: 'power', kind: 'time', run: warpSel, title: 'Time Warp: they swap their card in play for one of their resolved cards' } : null,
+		canFlip ? { label: selPiece.faceDown ? 'Flip — reveal' : 'Flip face down', fam: 'power', run: flipMine } : null,
+		ownHeroSel && ownAttack && selPiece.id === clientId ? { label: `Clear${clearCount ? ` ${clearCount}` : ''}`, fam: 'power', off: !clearCount, run: startClear, title: 'Your attack card: remove tokens next to your hero' } : null,
+		ownHeroSel ? { label: 'Defeated', fam: 'off', kind: 'bad', run: selfDefeatAsk, title: 'You were defeated (not by an Attack): choose who gets the reward' } : null,
+		// Razzle's bodies: only her reds offer them, after the attack — Phantom Strike / Hit and Gone take one of her off,
+		// Into Thin Air every one of her; the host may take another player's double off any time
+		ownHeroSel && myBodies > 1 && rzRem ? { label: 'Remove', fam: 'off', kind: 'rem', run: bodyRemoveAsk, title: 'Take this one of you off the board' } : null,
+		ownHeroSel && myBodies > 1 && rzRem === 'all' ? { label: 'Remove all', fam: 'off', kind: 'rem', run: selfRemoveAsk, title: 'Every one of you leaves the board — not a defeat; back with your next card' } : null,
+		ownHeroSel && myBodies <= 1 ? { label: 'Remove', fam: 'off', kind: 'rem', run: selfRemoveAsk, title: 'A card effect takes your hero off the board — back with your next card' } : null,
+		!ownHeroSel && iAmHost && isDouble(selPiece) ? { label: 'Remove', fam: 'off', kind: 'rem', run: bodyRemoveAsk, title: 'Take this double off the board' } : null,
+		canBattleSel ? { label: 'For the battle', fam: 'off', kind: 'rem', run: battleTakeSel, title: 'Remove it for the minion battle' } : null,
+		canRemoveSel && selPiece.kind !== 'hero' && (!selImmune || iAmHost) ? { label: 'Remove', fam: 'off', kind: 'rem', run: openRemove } : null
 	].filter(Boolean) as Pill[]);
+	$: fan = fanOf(pills);
+	const PILL_H = 32, PILL_GAP = 6;
+	const SIDES: [Fam, string][] = [['fight', 'top'], ['move', 'right'], ['off', 'bottom'], ['power', 'left']];
+	/** the pills by side; empty sides borrow the last pill of the fullest side (the opposite one first) for balance */
+	function fanOf(list: Pill[]) {
+		const side: Record<Fam, Pill[]> = { fight: [], move: [], off: [], power: [] };
+		for (const p of list) side[p.fam].push(p);
+		const opp: Record<Fam, Fam> = { fight: 'off', off: 'fight', move: 'power', power: 'move' };
+		for (let moved = true; moved; ) {
+			moved = false;
+			for (const f of ['power', 'off', 'move', 'fight'] as Fam[]) {
+				if (side[f].length) continue;
+				const donors = (Object.keys(side) as Fam[]).filter((d) => side[d].length > 1 && !(d === 'fight' && side[d][side[d].length - 1].kind === 'imm'))
+					.sort((a, b) => side[b].length - side[a].length || (b === opp[f] ? 1 : 0) - (a === opp[f] ? 1 : 0));
+				if (!donors.length) continue;
+				side[f].push(side[donors[0]].pop()!); moved = true;
+			}
+		}
+		// the side columns are centred on the token; the top / bottom rows clear the token AND the taller column
+		const n = Math.max(side.move.length, side.power.length);
+		const colH = n ? n * PILL_H + (n - 1) * PILL_GAP : 0;
+		return { ...side, half: colH / 2 + PILL_GAP };
+	}
 	const touchOnly = typeof matchMedia !== 'undefined' && matchMedia('(hover: none)').matches;
 	$: glowZone = boardLook === 'island' && $boardPrefs.zone && !$ms.wonBy ? battleZone($ms) : null;
 
@@ -1159,8 +1187,8 @@
 			{/if}
 			{#if ownHeroSel}
 				{#if ownAttack && selPiece.id === clientId}<button class="piedefeat" on:click={startClear} disabled={!clearCount} title="Clear instead of attacking: choose which tokens next to you leave the board">Clear{clearCount ? ` (${clearCount})` : ''}</button>{/if}
-				{#if myBodies > 1}<button class="piedel" on:click={bodyRemoveAsk} title="Take this one of you off the board">Remove</button>{/if}
-				<button class="piedel" on:click={selfRemoveAsk} title="A card effect takes your hero off the board — no rewards; back with your next card">{myBodies > 1 ? 'Remove all' : 'Remove'}</button>
+				{#if myBodies > 1 && rzRem}<button class="piedel" on:click={bodyRemoveAsk} title="Take this one of you off the board">Remove</button>{/if}
+				{#if myBodies <= 1 || rzRem === 'all'}<button class="piedel" on:click={selfRemoveAsk} title="A card effect takes your hero off the board — no rewards; back with your next card">{myBodies > 1 ? 'Remove all' : 'Remove'}</button>{/if}
 				<button class="piedel" on:click={selfDefeatAsk} title="You were defeated (not by an Attack): choose who gets the reward">☠ Defeat</button>
 			{/if}
 			{#if !ownHeroSel && iAmHost && isDouble(selPiece)}<button class="piedel" on:click={bodyRemoveAsk} title="Take this double off the board">Remove</button>{/if}
@@ -1205,15 +1233,18 @@
 						<button class="pp x" on:click={closeConfirm} aria-label="Cancel">✕</button>
 					</div>
 				{:else if pills.length}
-					<div class="h2pills" style="left:{tipPos.x / lay.s}px; top:{tipPos.cy / lay.s}px; --r:{tipPos.r / lay.s + 6}px">
-						{#each pills as pl, k (pl.label + k)}
-							{@const a = CLOCK[k] ?? 0}
-							<span class="pslot" style="--x:{Math.sin((a * Math.PI) / 180).toFixed(3)}; --y:{(-Math.cos((a * Math.PI) / 180)).toFixed(3)}">
-								{#if pl.kind === 'imm'}<span class="pp imm" title={pl.title}>Immune</span>
-								{:else}<button class="pp {pl.kind ?? ''}" disabled={pl.off} on:click={() => pl.run?.()} title={pl.title}>{pl.label}{#if pl.coin != null}<i class="gc"></i>{pl.coin}{/if}</button>{/if}
-							</span>
+					<div class="h2pills" style="left:{tipPos.x / lay.s}px; top:{tipPos.cy / lay.s}px; --r:{tipPos.r / lay.s + 6}px; --half:{fan.half}px">
+						{#each SIDES as [f, at] (f)}
+							{#if fan[f].length}
+								<div class="pside {at}">
+									{#each fan[f] as pl, k (pl.label + k)}
+										{#if pl.kind === 'imm'}<span class="pp imm" title={pl.title}>Immune</span>
+										{:else}<button class="pp {pl.kind ?? ''}" disabled={pl.off} on:click={() => pl.run?.()} title={pl.title}>{pl.label}{#if pl.coin != null}<i class="gc"></i>{pl.coin}{/if}</button>{/if}
+									{/each}
+								</div>
+							{/if}
 						{/each}
-						{#if touchOnly && selLabel}<span class="pname" style:color={teamText(selPiece)}>{selLabel}</span>{/if}
+						{#if touchOnly && selLabel}<span class="pname" class:low={fan.off.length > 0} style:color={teamText(selPiece)}>{selLabel}</span>{/if}
 					</div>
 				{/if}
 			{/if}
@@ -1916,7 +1947,15 @@
 	.h2corner .cdot.connected { background: #22c55e; } .h2corner .cdot.closed { background: #ef4444; }
 	.h2badge { position: absolute; left: -6px; top: -6px; min-width: 18px; height: 18px; border-radius: 9px; display: grid; place-items: center; font-weight: 400; font-size: 11px; color: #fff; background: #dc2626; }
 	.h2pills { position: absolute; z-index: 10; width: 0; height: 0; }
-	.pslot { position: absolute; left: calc(var(--x) * var(--r)); top: calc(var(--y) * var(--r)); transform: translate(calc(-50% + var(--x) * 50%), calc(-50% + var(--y) * 50%)); }
+	/* four sides: the columns hug the token's left / right, centred on it; the rows sit above / below both the token
+	   and the taller column (--half), so no two pills can meet */
+	.pside { position: absolute; display: flex; gap: 6px; }
+	.pside.left, .pside.right { flex-direction: column; top: 0; transform: translateY(-50%); }
+	.pside.right { left: var(--r); align-items: flex-start; }
+	.pside.left { right: var(--r); align-items: flex-end; }
+	.pside.top, .pside.bottom { left: 0; flex-direction: row; }
+	.pside.top { bottom: max(var(--r), var(--half)); transform: translateX(-50%); }
+	.pside.bottom { top: max(var(--r), var(--half)); transform: translateX(-50%); }
 	.pp { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 13px; border-radius: 999px; font: inherit; font-size: 14px; line-height: 1; white-space: nowrap; cursor: pointer; pointer-events: auto;
 		color: #f5f1e8; background: rgba(8, 22, 38, 0.95); border: 1px solid var(--line); box-shadow: 0 6px 14px rgba(0, 0, 0, 0.55); }
 	.pp:hover:not(:disabled) { background: rgba(26, 52, 80, 0.97); }
@@ -1932,6 +1971,7 @@
 	.pp.x { width: 32px; padding: 0; justify-content: center; color: #bccbd9; }
 	.pp.imm { cursor: default; color: #2a2f38; letter-spacing: .04em; text-shadow: 0 1px 0 rgba(255,255,255,.6); background: linear-gradient(180deg, #ffffff, #d4d9df 48%, #a3acb7); border: 2px solid #d9a845; box-shadow: 0 0 0 1px #6b4a10, 0 2px 6px rgba(0,0,0,.45), inset 0 1px 0 #fff; }
 	.h2top .gc { display: inline-block; width: 15px; height: 15px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff2c0, #e2b54f 60%, #a8792a); box-shadow: 0 0 0 1px #6b4a14; }
+	.pname.low { top: calc(max(var(--r), var(--half)) + 40px); }
 	.pname { position: absolute; left: 0; top: calc(var(--r) + 46px); transform: translateX(-50%); padding: 3px 10px; border-radius: 999px; font-size: 12px; white-space: nowrap; background: rgba(6, 21, 38, 0.92); text-transform: capitalize; }
 	.h2conf { position: absolute; z-index: 10; transform: translate(-50%, -100%); display: flex; align-items: center; gap: 8px; padding: 5px 5px 5px 12px; border-radius: 999px; white-space: nowrap; pointer-events: auto;
 		background: rgba(8, 22, 38, 0.97); border: 1px solid var(--line); box-shadow: 0 8px 18px rgba(0, 0, 0, 0.6); font-size: 14px; color: #f5f1e8; }

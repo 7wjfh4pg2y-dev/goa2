@@ -473,6 +473,15 @@ export function rzPower(s: S, pid: string, ctx: TurnCtx): 'spawn' | 'clear' | 'r
 	if (heroActing(s, ctx, RZ, RE_RETRIEVE) === pid) return hit && rzLeft(s, pid, ctx) > 0 && (s.cards?.[pid]?.discard.length ?? 0) > 0 ? 'retrieve' : null
 	return null
 }
+/** her red after its attack: Phantom Strike / Hit and Gone take bodies off but leave one ('some'); Into Thin Air may take
+ *  every one of her ('all' — not a defeat). Nothing else of hers offers the board's Remove pills. */
+export const RE_REMOVE_SOME = /may\s+remove\s+(one|one\s+or\s+more)\s+of\s+you/i
+export const RE_REMOVE_ALL = /including\s+all\s+of\s+you/i
+export function rzRemoves(s: S, pid: string, ctx: TurnCtx): 'some' | 'all' | null {
+	if (s.cards?.[pid]?.hero !== RZ || !s.pieces?.[pid] || s.power?.[pid]?.hit !== markOf(ctx)) return null
+	if (heroActing(s, ctx, RZ, RE_REMOVE_ALL) === pid) return 'all'
+	return heroActing(s, ctx, RZ, RE_REMOVE_SOME) === pid && bodiesOf(s, pid).length > 1 ? 'some' : null
+}
 /** doubles her gold may still spawn for this card */
 export const rzSpawnsLeft = (s: S, pid: string, ctx: TurnCtx) => Math.max(0, Math.min(3 - cnt(s.power?.[pid]?.rzs, markOf(ctx)), RZ_MAX - bodiesOf(s, pid).length))
 /** discarded cards still to take back for this card */
