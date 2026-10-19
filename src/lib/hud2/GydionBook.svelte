@@ -39,7 +39,7 @@
 		const lit = (s: string) => (m === 'loaded' || m === 'open' ? true : m === 'picked' || m === 'cast' ? s === sc : false)
 		const op = m === 'idle' ? 0.4 : spellC ? 0.95 : 0.7, w = m === 'idle' ? 0.7 : spellC ? 1.1 : 0.9
 		const ln = (p: number[], q: number[], c = web, ww = w) => `<line x1="${f(p[0])}" y1="${f(p[1])}" x2="${f(q[0])}" y2="${f(q[1])}" stroke="${c}" stroke-width="${ww}"/>`
-		return `<svg viewBox="0 0 120 120">
+		return `<svg viewBox="-9 -9 138 138">
 			<circle cx="60" cy="60" r="55" fill="none" stroke="${ring}" stroke-width="${m === 'idle' ? 1.4 : 2}" opacity="${m === 'idle' ? (u ? 0.6 : 0.8) : 1}"/>
 			<circle cx="60" cy="60" r="63" fill="none" stroke="${ring}" stroke-width="1" opacity="${m === 'idle' ? 0.3 : 0.55}" stroke-dasharray="2 4"/>
 			${m !== 'idle' ? `<circle cx="60" cy="60" r="59" fill="none" stroke="${ring}" stroke-width="5" opacity=".35" class="br"/>` : ''}
@@ -69,7 +69,7 @@
 			${awake && sc ? `<image href="${schoolIcon(sc)}" x="-5" y="2" width="10" height="10" filter="url(#gyb-t-${sch(sc)})"/>` : `<path d="M-4 6 q2 2 4 0 q2 2 4 0 M-3 10 q1.5 1.5 3 0 q1.5 1.5 3 0" stroke="#3d2c1b" stroke-width=".8" fill="none"/>`}
 			<path d="M-6 17 l2 -2 M-2 17 l1 -2 M2 17 l-1 -2 M6 17 l-2 -2" stroke="#d8b36a" stroke-width="1"/></g>`
 	}
-	const closed = (m: string, sc: string | null, u: boolean) => `<svg viewBox="0 0 120 120">
+	const closed = (m: string, sc: string | null, u: boolean) => `<svg viewBox="-9 -9 138 138">
 		<rect x="37" y="28" width="50" height="66" rx="4" fill="#c9b994"/>
 		<rect x="33" y="26" width="50" height="67" rx="5" fill="#f2ece0" stroke="#d8b36a" stroke-width="1.5"/>
 		<rect x="33" y="26" width="8" height="67" rx="2.5" fill="#b8a77f" opacity=".55"/>
@@ -77,7 +77,7 @@
 		<rect x="81" y="54" width="6" height="9" rx="1.5" fill="#d8b36a"/>
 		<g transform="translate(61 60) scale(1.32) translate(-60 -62)">${owl(m, sc, u)}</g></svg>`
 	const opened = (sc: string | null, n: number) => { const k = sch(sc) ? COL[sch(sc)!] : '#d8b36a'
-		return `<svg viewBox="0 0 120 120"><g transform="translate(60 62) scale(.88) translate(-60 -62)">
+		return `<svg viewBox="-9 -9 138 138"><g transform="translate(60 62) scale(.88) translate(-60 -62)">
 		<circle cx="60" cy="58" r="24" fill="${k}" opacity=".45" class="br" filter="url(#gyb-soft)"/>
 		<path d="M24 42 Q42 35 60 41 Q78 35 96 42 V84 Q78 77 60 83 Q42 77 24 84 Z" fill="#3b2618" stroke="#d8b36a" stroke-width="1.2"/>
 		<path d="M29 44 Q44 38 59 44 V78 Q44 72 29 78 Z" fill="#efe3c6"/><path d="M91 44 Q76 38 61 44 V78 Q76 72 91 78 Z" fill="#e6d6b2"/>
@@ -87,7 +87,8 @@
 		${sc ? `<image href="${schoolIcon(sc)}" x="65" y="48" width="22" height="22" filter="url(#gyb-t-${sch(sc)})"/>` : `<image href="${logo}" x="65" y="48" width="22" height="22" opacity=".8"/>`}</g></svg>` }
 	const WISPS = [[7, 0], [9.5, -3.2], [12, -7.4]]
 
-	$: S = phone ? size + 8 : Math.round(size * 1.5)
+	// the box holds the WHOLE wheel (the sigils and the dashed ring reach r 68 of the 120-unit drawing → a 138 view)
+	$: S = phone ? Math.round((size + 8) * 1.15) : Math.round(size * 1.6)
 	$: isOpen = mode === 'open' || mode === 'picked'
 	$: spin = mode === 'picked' || mode === 'cast'
 	$: motes = isOpen && !!school ? (COL[sch(school) ?? ''] ?? '#d8b36a') : ''
@@ -112,7 +113,8 @@
 
 <style>
 	.gyb { position: relative; width: var(--s); height: var(--s); padding: 0; border: 0; background: none; cursor: pointer; flex: none; }
-	.gyb.ph { margin: -4px -2px; }
+	.gyb:not(.ph) { margin: calc((52px - var(--s)) / 2) 0; } /* centred in the dash's 52 px power slot */
+	.gyb.ph { margin: -7px -5px; }
 	.gyb > span { position: absolute; inset: 0; pointer-events: none; }
 	.gyb :global(svg) { width: 100%; height: 100%; overflow: visible; display: block; }
 	.wh { z-index: 1; }
@@ -133,7 +135,7 @@
 	.wisp:not(.lit) { opacity: 0.5; }
 	.wo { position: absolute; left: 50%; top: 50%; width: 0; height: 0; animation: gyspin var(--t) linear infinite, gywz calc(var(--w) * 2) step-end infinite; animation-delay: var(--dl), var(--dl); z-index: 3; }
 	.wr { position: absolute; left: 0; top: 0; animation: gyweave var(--w) ease-in-out infinite alternate; animation-delay: var(--dl); }
-	@keyframes gyweave { from { transform: translateX(calc(var(--s) * 0.34)); } to { transform: translateX(calc(var(--s) * 0.58)); } }
+	@keyframes gyweave { from { transform: translateX(calc(var(--s) * 0.3)); } to { transform: translateX(calc(var(--s) * 0.5)); } }
 	@keyframes gywz { 0% { z-index: 3; } 50% { z-index: 0; } }
 	.hd .wp { position: absolute; width: calc(var(--s) * 0.05); height: calc(var(--s) * 0.05); margin: calc(var(--s) * -0.025); border-radius: 50%;
 		background: radial-gradient(circle, #fff 0 30%, #ead9ff 45%, #b98cf5 70%, rgba(185, 140, 245, 0) 100%); animation: gytw 1.7s ease-in-out infinite; animation-delay: var(--dl); }
@@ -152,5 +154,5 @@
 	.gyb.still .wh, .gyb.still :global(.br), .gyb.still .mote, .gyb.still .wo, .gyb.still .wr, .gyb.still .wp { animation: none; }
 	.gyb.still .tr { display: none; }
 	.gyb.still .wo { transform: rotate(var(--a)); }
-	.gyb.still .wr { transform: translateX(calc(var(--s) * 0.46)); }
+	.gyb.still .wr { transform: translateX(calc(var(--s) * 0.4)); }
 </style>

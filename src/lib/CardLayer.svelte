@@ -462,6 +462,12 @@
 	// the host fixing a Snorri's runes from the Game lobby
 	let runeFor: string | null = null;
 	let runeDraft: Rune[] = [...RUNES];
+	// the host fixes a Gydion's spellbook (☰ Game lobby → Book): each spell between the book and the ether, the Wish count
+	let bookFor: string | null = null, bookOpen = false;
+	export function openBookFor(pid: string) { if ($ms.host !== clientId || cards[pid]?.hero !== 'gydion') return; bookFor = pid; bookOpen = true; }
+	$: if (!bookOpen) bookFor = null;
+	$: bookSt = bookFor ? gyOf($ms, bookFor) : {};
+	const gyFix = (more: Record<string, unknown>) => session.cardAction({ kind: 'power', pid: clientId, op: 'gyFix', target: bookFor, ...more } as never);
 	export function openRunesFor(pid: string) { if ($ms.host !== clientId || cards[pid]?.hero !== 'snorri') return; runeFor = pid; runeDraft = [...(runesOf($ms, pid) ?? RUNES)]; }
 	$: if (runeFor) { const o = runeDraft, cur = runesOf($ms, runeFor); const same = !!cur && cur.join() === o.join();
 		if (same) { if (powerArm?.target) powerArm = null; } else if (powerArm?.order?.join() !== o.join() || powerArm?.target !== runeFor) powerArm = { op: 'snorriInscribe', label: 'Inscribe', sub: 'host', order: [...o], target: runeFor }; }
@@ -1088,7 +1094,7 @@
 	$: orderTop = cTop ? 62 : 100;
 	$: colTop = orderTop + (cOrder ? 30 : 60) + (cOrder ? 26 : 34);
 	// the Chronicle in the corner: beside the dash when there's room, else just above its left end
-	$: DASH_W = 900 + (myPower === 'takahide' ? 84 : myPower === 'snorri' ? 100 : myPower === 'emmitt' ? 104 : myPower === 'ignatia' ? 92 : myPower === 'nebkher' ? 136 : myPower === 'razzle' ? 94 : myPower === 'gydion' ? 80 : myPower ? 60 : 0); // the dash's width (design px) without the ultimate's compartment (+ a 4★ hero's button)
+	$: DASH_W = 900 + (myPower === 'takahide' ? 84 : myPower === 'snorri' ? 100 : myPower === 'emmitt' ? 104 : myPower === 'ignatia' ? 92 : myPower === 'nebkher' ? 136 : myPower === 'razzle' ? 94 : myPower === 'gydion' ? 85 : myPower ? 60 : 0); // the dash's width (design px) without the ultimate's compartment (+ a 4★ hero's button)
 	$: myUltOpen = !!mine && myUlt >= 0 && (mine.ultimate || ultReady);
 	$: logRoom = canvasW / 2 - DASH_W / 2 - 14 - (myUltOpen ? 96 : 0) - 36;
 	$: logBeside = logRoom >= 220;
@@ -1214,7 +1220,7 @@
 				if (rzRem && !rzSkipped('remove', fxKey, rzNo)) return { label: 'Remove', sub: rzRem === 'all' ? 'Any of you' : 'Some of you', kind: 'go', tint: true, pulse: true, run: () => (rzOpen = true), cancel: () => rzSkip('remove') };
 				if (rzKind === 'clear' && !rzSkipped('clear', fxKey, rzNo)) return { label: 'Remove doubles', sub: 'Crowd Control', kind: 'go', tint: true, pulse: true, run: rzClear, cancel: () => rzSkip('clear') };
 				if (rzTw === 'offer' && !rzSkipped('twin', fxKey, rzNo)) return { label: 'Twin Strike', sub: 'Attack again', kind: 'go', tint: true, pulse: true, run: rzTwinGo, cancel: () => rzSkip('twin') };
-				if (rzTw === 'live' && !rzSkipped('twin', fxKey, rzNo)) return { label: 'Twin Strike', sub: 'Another of you · another target', kind: 'wait', cancel: () => rzSkip('twin') };
+				if (rzTw === 'live' && !rzSkipped('twin', fxKey, rzNo)) return { label: 'Twin Strike', sub: 'Another body · new target', kind: 'wait', cancel: () => rzSkip('twin') };
 			}
 			// Gydion: Prepare (or Wish) on his silver · Cast on a casting card (the book opens) · then the spell's follow-up;
 			// each has its own × (not this time)
@@ -1905,7 +1911,12 @@
 	<!-- the level-up / ultimate choice (the desktop deck has its own; this one serves the phone deck and the dash's Unlock) -->
 	{#if gyMine && gyOpen}
 		<div class="gywrap" class:dk={!mobile} class:ph={mobile}><SpellbookWindow bind:open={gyOpen} phone={mobile} ult={!!mine?.ultimate} wishes={gySt.wish ?? 0} book={gyBookL} gone={gySt.gone ?? []} struck={gySt.struck ?? []}
-			options={gyOpts} acting={gyActing} preparing={gyM === 'prepare'} picked={gyPick} nums={(id) => spellNums($ms, clientId, id)} follow={gyFollow} onPick={gyPickSpell} onStrike={gyStrikeGo} onForce={gyForceArm} onDrink={gyDrinkGo} /></div>
+			prepared={!!gySt.prep} options={gyOpts} acting={gyActing} preparing={gyM === 'prepare'} picked={gyPick} nums={(id) => spellNums($ms, clientId, id)} follow={gyFollow} onPick={gyPickSpell} onStrike={gyStrikeGo} onForce={gyForceArm} onDrink={gyDrinkGo} /></div>
+	{/if}
+	{#if bookFor && bookOpen && cards[bookFor]}
+		<div class="gywrap host" class:dk={!mobile} class:ph={mobile}><SpellbookWindow bind:open={bookOpen} phone={mobile} host={pidName(bookFor)} ult={!!cards[bookFor].ultimate} wishes={bookSt.wish ?? 0}
+			book={bookSpells($ms, bookFor)} gone={bookSt.gone ?? []} struck={bookSt.struck ?? []} prepared={!!bookSt.prep} nums={(id) => spellNums($ms, bookFor ?? '', id)}
+			onFix={(spell, on) => gyFix({ spell, on })} onWish={(n) => gyFix({ wish: n })} /></div>
 	{/if}
 	{#if lvConfirm && mine && (mobile || !deckOpen)}
 		<div class="lvwrap" class:dk={!mobile}><LevelConfirm cs={mine} idx={lvConfirm.idx} kind={lvConfirm.kind} teamStyle={teamVars(myTeam)} onConfirm={confirmLevel} onCancel={() => (lvConfirm = null)} /></div>

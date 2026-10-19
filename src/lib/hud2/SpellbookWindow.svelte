@@ -1,9 +1,12 @@
 <script lang="ts">
 	// Gydion's spellbook window (the user's design, 2026-10-19, artifact "Gydion's Spellbook"; only his screen shows it).
 	// Desktop: one colour at a time — a tab per colour (its schools' symbols, spells left, a dot where the acting card can
-	// cast), that colour's schools as rows of three readable cards (Cantrips · Wish: Wish in the middle of the second row
-	// between two arcane circles, sealed until The Archwizard), a big preview with Cast on the right, and along the bottom
-	// GONE FROM THE BOOK (every cast and struck spell, plus what Sunburst / Dimension Door / Midas' Touch are worth now).
+	// cast), that colour's schools as rows of three readable cards (Cantrips — '· Wish' and a violet tab once he is The
+	// Archwizard: Wish in the middle of the second row between two arcane circles, sealed until then), a big preview with
+	// Invoke on the right, and along the bottom THE ETHER (2026-10-19, the user's ask): every spell out of the book — all
+	// 21 before the first Prepare, then each spent / struck one — as a STACK; hover (or tap) shuffles through it, a
+	// double-click opens it large with ‹ › to shuffle; plus what Sunburst / Dimension Door / Midas' Touch are worth now.
+	// Host mode (`host` = whose book, from the Game lobby's Book): every spell toggles between the book and the ether.
 	// After a cast, the right column turns into that spell's follow-up: strike up to three spells (Find Familiar), make a
 	// hero discard (Burning Hands, Cloud Kill, Energy Drain), take a discard back (Vampiric Touch).
 	// Phone: a sheet — the tabs (+ Gone), three cards a row, the picked spell's line with Cast; tap it again to read it.
@@ -11,7 +14,8 @@
 	import { heroCards } from '$lib/cards/deck'
 	import { SPELLS, spellOf, schoolIcon, SCHOOL_COLOR } from '$lib/cards/spells'
 	import { heroLogo, portraitCss } from '$lib/heroes'
-	import type { SpellNums } from '$lib/gydion'
+	import { BOOK, type SpellNums } from '$lib/gydion'
+	import { fly } from 'svelte/transition'
 
 	export let open = false
 	export let phone = false
@@ -36,9 +40,15 @@
 	export let onStrike: (ids: string[]) => void = () => {}
 	export let onForce: (pid: string) => void = () => {}
 	export let onDrink: (idx: number) => void = () => {}
+	/** the book has been prepared at least once (before that every spell drifts in the ether) */
+	export let prepared = true
+	/** host mode: whose book this is (their name); null = his own */
+	export let host: string | null = null
+	export let onFix: (id: string, on: boolean) => void = () => {}
+	export let onWish: (n: number) => void = () => {}
 
 	const COL: Record<string, string> = { gold: '#e0b440', red: '#d8443c', green: '#41ae59', blue: '#3d7be0', purple: '#9a5ce0', silver: '#c3ccd6' }
-	const TABS: [string, string[], string][] = [['gold', ['cantrip', 'wish'], 'Cantrips · Wish'], ['red', ['evocation', 'necromancy'], 'Evocation · Necromancy'], ['green', ['abjuration', 'conjuration'], 'Abjuration · Conjuration'], ['blue', ['enchantment', 'transmutation'], 'Enchantment · Transmutation']]
+	const TABS0: [string, string[], string][] = [['gold', ['cantrip', 'wish'], 'Cantrips'], ['red', ['evocation', 'necromancy'], 'Evocation · Necromancy'], ['green', ['abjuration', 'conjuration'], 'Abjuration · Conjuration'], ['blue', ['enchantment', 'transmutation'], 'Enchantment · Transmutation']]
 	const school = (id: string) => spellOf(id)?.school.toLowerCase() ?? ''
 	const cap = (s: string) => s[0].toUpperCase() + s.slice(1)
 	const logo = heroLogo('gydion')
@@ -57,30 +67,66 @@
 	}
 	$: if (!open) wasOpen = false
 	$: if (follow?.kind !== 'strike') ticks = []
-	function firstOf(t: string) { const ss = TABS.find((x) => x[0] === t)![1]; return SPELLS.find((x) => ss.includes(school(x.id)) && (x.id !== 'wish' || ult))?.id ?? 'fireball' }
-	function goTab(t: string) { tab = t; sel = options.find((id) => TABS.find((x) => x[0] === t)![1].includes(school(id))) ?? firstOf(t); zoom = false }
-	const tabCount = (ss: string[]) => { const ids = SPELLS.filter((x) => ss.includes(school(x.id)) && (x.id !== 'wish' || ult)); return { left: ids.filter((x) => book.includes(x.id)).length, all: ids.length, can: ids.some((x) => options.includes(x.id)) } }
+	function firstOf(t: string) { const ss = TABS0.find((x) => x[0] === t)![1]; return SPELLS.find((x) => ss.includes(school(x.id)) && (x.id !== 'wish' || ult))?.id ?? 'fireball' }
+	function goTab(t: string) { tab = t; sel = options.find((id) => TABS0.find((x) => x[0] === t)![1].includes(school(id))) ?? firstOf(t); zoom = false }
+	// reactive (it reads book / options / ult): a plain function called from the template would not refresh
+	$: tabCount = (ss: string[]) => { const ids = SPELLS.filter((x) => ss.includes(school(x.id)) && (x.id !== 'wish' || ult)); return { left: ids.filter((x) => book.includes(x.id)).length, all: ids.length, can: ids.some((x) => options.includes(x.id)) } }
 	function tap(id: string) {
 		if (follow?.kind === 'strike') { if (book.includes(id) && id !== 'wish' && id !== follow.spell) ticks = ticks.includes(id) ? ticks.filter((x) => x !== id) : ticks.length < 3 ? [...ticks, id] : ticks; sel = id; return }
+		// a tap on any spell but the loaded one unloads it, unless that spell loads in its place (below)
+		if (picked && picked !== id && !options.includes(id)) onPick(null)
 		// phone: a second tap reads the card — but a castable spell not yet on the ring loads first
 		if (phone && sel === id && (picked === id || !options.includes(id))) { zoom = !zoom; return }
 		sel = id
 		zoom = false
-		// a spell the card can cast loads onto the ring at once (the ring confirms it); any other just previews
+		// a spell the card can cast loads onto the ring at once (the ring confirms it); any other just previews — and
+		// unloads whatever was on the ring, so a spell is never left loaded behind another one (the user, 2026-10-19)
 		if (options.includes(id)) onPick(id)
 	}
 	$: selSpell = spellOf(sel)
 	$: selGone = !book.includes(sel)
-	$: why = sel === 'wish'
-		? !ult ? 'Sealed until The Archwizard.' : preparing && book.includes('wish') ? `Cast Wish instead of preparing your spells. ${wishes} of 3 cast.` : !book.includes('wish') ? 'Cast this cycle: back with Prepare Spells.' : 'Cast from Prepare Spells, instead of refilling the book.'
-		: !book.length && !gone.length ? 'The book is empty: Prepare Spells first.'
-		: selGone ? (struck.includes(sel) ? 'Struck by Find Familiar: back with Prepare Spells.' : 'Already cast: back with Prepare Spells.')
-		: options.includes(sel) ? `${acting?.name ?? 'Wish'} can cast this.`
-		: acting ? `${acting.name} can't cast this one.` : 'Browse freely: cast when one of your casting cards is acting.'
+	$: why = host ? (book.includes(sel) ? 'In the book.' : sel === 'wish' && !ult ? 'Sealed until The Archwizard.' : 'Drifting in the ether.')
+		: sel === 'wish'
+		? !ult ? 'Sealed until The Archwizard.' : preparing && book.includes('wish') ? `Wish instead of preparing your spells. ${wishes} of 3 wished.` : !book.includes('wish') ? 'Wished for — drifting in the ether.' : 'Wished for from Prepare Spells, instead of refilling the book.'
+		: !prepared ? 'The book is empty: Prepare Spells draws the spells in from the ether.'
+		: selGone ? (struck.includes(sel) ? 'Struck by Find Familiar — drifting in the ether.' : 'Spent — drifting in the ether.')
+		: options.includes(sel) ? `${acting?.name ?? 'Wish'} is attuned to this spell.`
+		: acting ? `${acting.name} isn't attuned to this one.` : 'Browse freely: invoke a spell when one of your casting cards is acting.'
+	// THE ETHER: every spell out of the book (all 21 before the first Prepare), stacked
+	$: ether = prepared ? gone : [...BOOK, ...gone.filter((x) => !BOOK.includes(x))]
+	let eIdx = 0, eBig = false, eTap: ReturnType<typeof setTimeout> | null = null
+	$: if (eIdx >= ether.length) eIdx = Math.max(0, ether.length - 1)
+	$: eId = ether[eIdx] ?? ''
+	const eTilt = (id: string) => { let h = 0; for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) | 0; return ((h % 7) - 3) * 0.8 }
+	/** hover: the pointer's place across the pile picks the card */
+	function eScrub(e: PointerEvent) {
+		if (e.pointerType !== 'mouse' || !ether.length) return
+		const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
+		eIdx = Math.max(0, Math.min(ether.length - 1, Math.floor(((e.clientX - r.left) / r.width) * ether.length)))
+	}
+	/** tap: the next card (a double tap opens it large); a mouse double-clicks */
+	function eDown(e: PointerEvent) {
+		if (e.pointerType === 'mouse' || !ether.length) return
+		if (eTap) { clearTimeout(eTap); eTap = null; eBig = true; return }
+		eTap = setTimeout(() => { eTap = null; eIdx = (eIdx + 1) % ether.length }, 260)
+	}
+	const eStep = (d: number) => { if (ether.length) eIdx = (eIdx + d + ether.length) % ether.length }
+	function eKey(e: KeyboardEvent) {
+		if (!eBig) return
+		if (e.key === 'ArrowRight') eStep(1); else if (e.key === 'ArrowLeft') eStep(-1); else if (e.key === 'Escape') eBig = false; else return
+		e.stopPropagation(); e.preventDefault()
+	}
+	$: if (!ether.length || !open) eBig = false
+	$: eWhat = (id: string) => (!prepared && BOOK.includes(id) ? 'Unprepared' : struck.includes(id) ? 'Struck' : id === 'wish' ? 'Wished' : 'Spent')
 	const numLine = (n: SpellNums) => [n.attack != null && `Attack ${n.attack}`, n.move != null && `Move ${n.move}`, n.range != null && `Range ${n.range}`, n.radius != null && `Radius ${n.radius}`, n.coins != null && `+${n.coins} coins`].filter(Boolean) as string[]
 	$: g = gone.length
+	// the cantrips' tab: 'Cantrips' — with The Archwizard 'Cantrips · Wish' on a violet tab
+	$: TABS = TABS0.map(([c, ss, l]) => (c === 'gold' ? [c, ult ? ss : ['cantrip'], ult ? 'Cantrips · Wish' : l] : [c, ss, l]) as [string, string[], string])
 	$: tabs = TABS
 	$: cur = TABS.find((x) => x[0] === tab) ?? TABS[1]
+	$: curBody = TABS0.find((x) => x[0] === tab) ?? TABS0[1] // the body keeps the sealed Wish row
+	/** a tab's colour: the cantrips' gold turns violet with the ultimate */
+	$: tabCol = (c: string) => COL[c === 'gold' && ult ? 'purple' : c]
 </script>
 
 {#snippet mi(s: string, c: string, cls = '')}<span class="mi {cls}" style="--ic:{c};--m:url({schoolIcon(s)})"></span>{/snippet}
@@ -91,7 +137,7 @@
 	{@const tick = ticks.includes(id)}
 	<button class="sp" class:out class:can class:dim={!out && !can && follow?.kind !== 'strike'} class:sel={sel === id} class:pk={picked === id} class:tick
 		style="background-image:url({spellOf(id)?.art})" on:click={() => tap(id)} title={spellOf(id)?.name}>
-		{#if tick}<span class="tag tk">Strike</span>{:else if out}<span class="tag">{struck.includes(id) ? 'Struck' : 'Cast'}</span>{:else if can}<span class="tag cc">Can cast</span>{/if}
+		{#if tick}<span class="tag tk">Strike</span>{:else if out}<span class="tag">{eWhat(id)}</span>{:else if can}<span class="tag cc">Attuned</span>{/if}
 	</button>
 {/snippet}
 
@@ -112,7 +158,7 @@
 {#snippet wishRow()}
 	{@const sealed = !ult}
 	<div class="school">
-		<div class="sh">{@render mi('wish', COL.purple)}Wish<small>{sealed ? 'Sealed until The Archwizard' : preparing && book.includes('wish') ? 'Cast it instead of preparing' : 'Cast from Prepare Spells'}</small></div>
+		<div class="sh">{@render mi('wish', COL.purple)}Wish<small>{sealed ? 'Sealed until The Archwizard' : preparing && book.includes('wish') ? 'Wish instead of preparing' : 'Wished for from Prepare Spells'}</small></div>
 		<div class="wishrow">
 			<div class="arc">{@render arcane(false, !sealed)}</div>
 			{#if sealed}
@@ -127,7 +173,7 @@
 	{#if follow}
 		{@const sp = spellOf(follow.spell)}
 		<div class="fu">
-			<div class="fh">{@render mi(school(follow.spell), COL[SCHOOL_COLOR[school(follow.spell)]])}<b>{sp?.name}</b><small>cast</small></div>
+			<div class="fh">{@render mi(school(follow.spell), COL[SCHOOL_COLOR[school(follow.spell)]])}<b>{sp?.name}</b><small>invoked</small></div>
 			{#if follow.kind === 'strike'}
 				<p>Find Familiar: tap up to three other spells in the book to strike them (they leave face up).</p>
 				<div class="fbtns"><button class="castbtn" on:click={() => onStrike(ticks)}>{ticks.length ? `Strike ${ticks.length}` : 'Strike none'}</button>{#if ticks.length}<button class="ghost" on:click={() => (ticks = [])}>Clear</button>{/if}</div>
@@ -142,23 +188,48 @@
 	{/if}
 {/snippet}
 
+{#snippet scaling(short: boolean)}
+	{#if short}<div class="gx2 ph2"><i>Sunburst <b>+{g}/+{g}</b></i><i>Dim. Door <b>+{g}</b></i><i>Midas <b>+{Math.floor(g / 2)}</b></i></div>
+	{:else}<span class="gx2"><i>{@render mi('evocation', COL.red)}Sunburst <b>+{g} Attack · +{g} Range</b></i><i>{@render mi('conjuration', COL.green)}Dimension Door <b>Radius +{g}</b></i><i>{@render mi('transmutation', COL.blue)}Midas' Touch <b>+{Math.floor(g / 2)} coins</b></i></span>{/if}
+{/snippet}
+
+<!-- the ether's stack: hover / tap shuffles, a double-click (double tap) opens it large -->
+{#snippet pile()}
+	{#if ether.length}
+		<div class="erow">
+			<div class="pile" style="--n:{ether.length}" role="button" tabindex="0" aria-label="The ether — {ether.length} spells" on:pointermove={eScrub} on:pointerdown={eDown} on:dblclick={() => (eBig = true)}
+				on:keydown={(e) => { if (e.key === 'Enter') eBig = true; else if (e.key === 'ArrowRight') eStep(1); else if (e.key === 'ArrowLeft') eStep(-1) }}>
+				{#each ether as id, i (id)}
+					<span class="pc" class:top={i === eIdx} style="--i:{i};--z:{i === eIdx ? 99 : i};--r:{eTilt(id)}deg;background-image:url({spellOf(id)?.art})" in:fly={{ y: -26, duration: 320 }} out:fly={{ y: -46, duration: 380, delay: Math.min(i, 20) * 22 }}></span>
+				{/each}
+			</div>
+			<div class="einfo">
+				{#if eId}<span class="pn">{@render mi(school(eId), COL[SCHOOL_COLOR[school(eId)]])}<b>{spellOf(eId)?.name}</b></span>
+					<small class="est">{eWhat(eId)} · {eIdx + 1} of {ether.length}</small>{/if}
+				<small class="ehint">{phone ? 'Tap to shuffle · double-tap to read' : 'Hover to shuffle · double-click to read'}</small>
+			</div>
+		</div>
+	{:else}<em class="none">The ether is still — every spell is in the book.</em>{/if}
+{/snippet}
+
 {#if open}
 	{#if !phone}
 		<div class="sbw" role="dialog" aria-label="Spellbook">
 			<div class="hd">
-				<div class="tt"><img src={logo} alt="" /><b>Spellbook</b></div>
-				<span class="meta"><b>{book.filter((x) => x !== 'wish').length}</b> in the book · <b>{gone.length - struck.length}</b> cast · <b>{struck.length}</b> struck</span>
-				<span class="meta acting">{#if acting}Acting <b style="color:{COL[acting.color] ?? '#fff'}">{acting.name}</b>{:else}Browsing · nothing to cast now{/if}</span>
+				<div class="tt"><img src={logo} alt="" /><b>{host ? `${host}'s spellbook` : 'Spellbook'}</b>{#if host}<span class="htag">Host</span>{/if}</div>
+				<span class="meta"><b>{book.filter((x) => x !== 'wish').length}</b> in the book · <b>{ether.length}</b> in the ether{#if struck.length} · <b>{struck.length}</b> struck{/if}</span>
+				{#if host}<span class="meta acting">{#if ult}Wishes <button class="wst" disabled={wishes <= 0} on:click={() => onWish(wishes - 1)}>−</button><b>{wishes}</b> of 3<button class="wst" disabled={wishes >= 2} on:click={() => onWish(wishes + 1)}>+</button>{:else}Tap a spell to move it{/if}</span>
+				{:else}<span class="meta acting">{#if acting}Acting <b style="color:{COL[acting.color] ?? '#fff'}">{acting.name}</b>{:else}Browsing · nothing to invoke now{/if}</span>{/if}
 				<button class="wx" on:click={() => (open = false)} aria-label="Close">✕</button>
 			</div>
 			<div class="tabs2">
 				{#each tabs as [c, ss, label]}{@const n = tabCount(ss)}
-					<button class="tab2" class:on={c === tab} style="--c:{COL[c]}" on:click={() => goTab(c)}><span class="ics">{#each ss as s}{@render mi(s, COL[c])}{/each}</span><span class="tl">{label}</span><span class="lf">{n.left}/{n.all}</span>{#if n.can}<i class="dot"></i>{/if}</button>
+					<button class="tab2" class:on={c === tab} style="--c:{tabCol(c)}" on:click={() => goTab(c)}><span class="ics">{#each ss as s}{@render mi(s, s === 'wish' ? COL.purple : COL[c])}{/each}</span><span class="tl">{label}</span><span class="lf">{n.left}/{n.all}</span>{#if n.can}<i class="dot"></i>{/if}</button>
 				{/each}
 			</div>
 			<div class="sbody">
 				<div class="slist">
-					{#each cur[1] as s}
+					{#each curBody[1] as s}
 						{#if s === 'wish'}{@render wishRow()}{:else}
 							{@const ids = inSchool(s)}
 							<div class="school">
@@ -168,55 +239,68 @@
 						{/if}
 					{/each}
 				</div>
-				{#if follow}{@render followUp()}{:else}
+				{#if follow && !host}{@render followUp()}{:else}
 					<div class="pv2">
 						<div class="big" style="background-image:url({selSpell?.art})"></div>
 						{#if selSpell}<div class="pn">{@render mi(school(sel), COL[SCHOOL_COLOR[school(sel)]])}<b>{selSpell.name}</b><small>{cap(school(sel))}</small></div>{/if}
 						<div class="live">{#each numLine(nums(sel)) as t}<span>{t}</span>{/each}</div>
 						<div class="why">{why}</div>
-						{#if options.includes(sel)}<button class="castbtn" class:on={picked === sel} on:click={() => onPick(picked === sel ? null : sel)}>{picked === sel ? 'On the ring · confirm there' : `Cast ${selSpell?.name}`}</button>{/if}
+						{#if host}{#if sel !== 'wish' || ult}<button class="castbtn" class:out={book.includes(sel)} on:click={() => onFix(sel, !book.includes(sel))}>{book.includes(sel) ? 'Send to the ether' : 'Return to the book'}</button>{/if}
+						{:else if options.includes(sel)}<button class="castbtn" class:on={picked === sel} on:click={() => onPick(picked === sel ? null : sel)}>{picked === sel ? 'Channelling · release it on the ring' : `Invoke ${selSpell?.name}`}</button>{/if}
 					</div>
 				{/if}
 			</div>
 			<div class="gone">
-				<div class="gh"><b>Gone from the book</b><span class="gn">{g}</span>
-					<span class="gx2"><i>{@render mi('evocation', COL.red)}Sunburst <b>+{g} Attack · +{g} Range</b></i><i>{@render mi('conjuration', COL.green)}Dimension Door <b>Radius +{g}</b></i><i>{@render mi('transmutation', COL.blue)}Midas' Touch <b>+{Math.floor(g / 2)} coins</b></i></span></div>
-				<div class="glist">
-					{#each gone as id}<button class="gc" class:st={struck.includes(id)} class:sel={sel === id} style="background-image:url({spellOf(id)?.art})" on:click={() => { goTab(tabOf(id)); sel = id }}><span>{struck.includes(id) ? 'Struck' : 'Cast'}</span></button>{:else}<em class="none">{book.length ? 'Nothing cast yet this cycle.' : 'The book is empty: Prepare Spells fills it.'}</em>{/each}
-					{#if gone.length}<span class="ghint">Back in the book with Prepare Spells</span>{/if}
-				</div>
+				<div class="gh"><b>The Ether</b><span class="gn">{ether.length}</span>{#if prepared}{@render scaling(false)}{/if}</div>
+				{@render pile()}
 			</div>
 		</div>
 	{:else}
 		<div class="psheet" role="dialog" aria-label="Spellbook">
-			<div class="ph"><img src={logo} alt="" /><b>Spellbook · {book.filter((x) => x !== 'wish').length}</b>{#if acting}<small style="color:{COL[acting.color] ?? '#fff'}">{acting.name}</small>{/if}<button class="wx" on:click={() => (open = false)} aria-label="Close">✕</button></div>
+			<div class="ph"><img src={logo} alt="" /><b>{host ? `${host}'s book` : 'Spellbook'} · {book.filter((x) => x !== 'wish').length}</b>{#if host}{#if ult}<span class="pws"><button class="wst" disabled={wishes <= 0} on:click={() => onWish(wishes - 1)}>−</button>Wish {wishes}<button class="wst" disabled={wishes >= 2} on:click={() => onWish(wishes + 1)}>+</button></span>{/if}{:else if acting}<small style="color:{COL[acting.color] ?? '#fff'}">{acting.name}</small>{/if}<button class="wx" on:click={() => (open = false)} aria-label="Close">✕</button></div>
 			<div class="ptabs">
-				{#each tabs as [c, ss]}{@const n = tabCount(ss)}<button class:on={c === tab} style="--c:{COL[c]}" on:click={() => goTab(c)}>{#each ss as s}{@render mi(s, COL[c])}{/each}{#if n.can}<i class="dot"></i>{/if}</button>{/each}
-				<button class="gtab" class:on={tab === 'gone'} on:click={() => (tab = 'gone')}>Gone {g}</button>
+				{#each tabs as [c, ss]}{@const n = tabCount(ss)}<button class:on={c === tab} style="--c:{tabCol(c)}" on:click={() => goTab(c)}>{#each ss as s}{@render mi(s, s === 'wish' ? COL.purple : COL[c])}{/each}{#if n.can}<i class="dot"></i>{/if}</button>{/each}
+				<button class="gtab" class:on={tab === 'gone'} on:click={() => (tab = 'gone')}>Ether {ether.length}</button>
 			</div>
-			{#if follow && follow.kind !== 'strike'}{@render followUp()}
+			{#if follow && follow.kind !== 'strike' && !host}{@render followUp()}
 			{:else if zoom}
 				<button class="zoomed" style="background-image:url({selSpell?.art})" on:click={() => (zoom = false)} aria-label="Back"></button>
 			{:else if tab === 'gone'}
-				<div class="gx2 ph2"><i>Sunburst <b>+{g}/+{g}</b></i><i>Dim. Door <b>+{g}</b></i><i>Midas <b>+{Math.floor(g / 2)}</b></i></div>
-				<div class="pgrid">{#each gone as id}<button class="sp" class:out={true} style="background-image:url({spellOf(id)?.art})" on:click={() => { sel = id; zoom = true }}><span class="tag">{struck.includes(id) ? 'Struck' : 'Cast'}</span></button>{:else}<em class="none">Nothing gone yet.</em>{/each}</div>
+				{#if prepared}{@render scaling(true)}{/if}
+				{@render pile()}
 			{:else}
 				<div class="pgrid">
-					{#each cur[1] as s}
+					{#each curBody[1] as s}
 						{#if s === 'wish'}{#if ult}{@render spellBtn('wish')}{:else}<button class="sp wish locked" disabled style="background-image:url({spellOf('wish')?.art})"><span class="seal">{@render mi('wish', '#d9c2ff', 'big')}<em>Sealed</em></span></button>{/if}
 						{:else}{#each inSchool(s) as x}{@render spellBtn(x.id)}{/each}{/if}
 					{/each}
 				</div>
 			{/if}
 			<!-- Find Familiar strikes from the grid itself: its bar sits under it -->
-			{#if follow?.kind === 'strike'}{@render followUp()}{/if}
-			{#if !follow && tab !== 'gone'}
+			{#if follow?.kind === 'strike' && !host}{@render followUp()}{/if}
+			{#if (!follow || host) && tab !== 'gone'}
 				<div class="pfoot"><span class="pn">{#if selSpell}{@render mi(school(sel), COL[SCHOOL_COLOR[school(sel)]])}<b>{selSpell.name}</b>{/if}<small>{numLine(nums(sel)).join(' · ')}</small></span>
-					{#if options.includes(sel)}<button class="castbtn" on:click={() => onPick(picked === sel ? null : sel)}>{picked === sel ? 'On the ring' : 'Cast'}</button>{:else}<small class="why">{zoom ? 'Tap to go back' : 'Tap again to read'}</small>{/if}</div>
+					{#if host}{#if sel !== 'wish' || ult}<button class="castbtn" on:click={() => onFix(sel, !book.includes(sel))}>{book.includes(sel) ? 'To the ether' : 'To the book'}</button>{/if}
+					{:else if options.includes(sel)}<button class="castbtn" on:click={() => onPick(picked === sel ? null : sel)}>{picked === sel ? 'Channelling' : 'Invoke'}</button>{:else}<small class="why">{zoom ? 'Tap to go back' : 'Tap again to read'}</small>{/if}</div>
 			{/if}
 		</div>
 	{/if}
+	<!-- the ether, large: ‹ › (← →) shuffle, Esc / a tap outside closes -->
+	{#if eBig && eId}
+		<div class="epv" class:ph={phone} role="dialog" tabindex="-1" aria-label="The ether" on:pointerdown|self={() => (eBig = false)}>
+			<div class="epc">
+				<div class="ebig" style="background-image:url({spellOf(eId)?.art})"></div>
+				<div class="ebar">
+					<button class="enav" on:click={() => eStep(-1)} aria-label="Previous">‹</button>
+					<span class="pn">{@render mi(school(eId), COL[SCHOOL_COLOR[school(eId)]])}<b>{spellOf(eId)?.name}</b><small>{eWhat(eId)} · {eIdx + 1} / {ether.length}</small></span>
+					<button class="enav" on:click={() => eStep(1)} aria-label="Next">›</button>
+					<button class="wx" on:click={() => (eBig = false)} aria-label="Close">✕</button>
+				</div>
+			</div>
+		</div>
+	{/if}
 {/if}
+<svelte:window on:keydown|capture={eKey} />
 
 <style>
 	.mi { display: inline-block; flex: none; width: 18px; height: 18px; background: var(--ic, #fff); -webkit-mask: var(--m) center/contain no-repeat; mask: var(--m) center/contain no-repeat; }
@@ -297,12 +381,29 @@
 	.gx2 i { display: inline-flex; align-items: center; gap: 6px; font: 500 12px system-ui; font-style: normal; color: #bccbd9; padding: 3px 10px 3px 6px; border-radius: 99px; background: rgba(2, 11, 22, 0.55); border: 1px solid rgba(255, 255, 255, 0.11); }
 	.gx2 i :global(.mi) { width: 14px; height: 14px; }
 	.gx2 b { color: #f5f1e8; }
-	.glist { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; min-height: 70px; }
-	.gc { position: relative; width: 100px; aspect-ratio: 1192 / 831; border-radius: 6px; background: #000 center/cover; border: 1px solid rgba(255, 255, 255, 0.11); cursor: pointer; padding: 0; }
-	.gc.st { filter: brightness(0.6) saturate(0.6); }
-	.gc.sel { outline: 2px solid #fff; outline-offset: 1px; }
-	.gc span { position: absolute; right: 3px; bottom: 3px; font: 700 8px/12px system-ui; letter-spacing: 0.06em; text-transform: uppercase; padding: 0 4px; border-radius: 4px; background: rgba(0, 0, 0, 0.78); color: #bccbd9; }
-	.ghint { font-size: 12px; color: #8a9fb3; margin-left: 6px; }
+	/* the ether: a loose stack, the focused card lifted on top */
+	.erow { display: flex; align-items: center; gap: 18px; min-height: 104px; }
+	.pile { position: relative; flex: none; width: calc(128px + min(16px, 300px / var(--n)) * (var(--n) - 1)); height: 104px; cursor: pointer; touch-action: manipulation; outline: none; }
+	.pc { position: absolute; left: calc(min(16px, 300px / var(--n)) * var(--i)); top: 12px; width: 128px; aspect-ratio: 1192 / 831; border-radius: 7px; background: #000 center/cover; z-index: var(--z);
+		border: 1px solid rgba(255, 255, 255, 0.16); box-shadow: -3px 3px 8px rgba(0, 0, 0, 0.55); transform: rotate(var(--r)); filter: brightness(0.55) saturate(0.7); transition: transform 0.16s ease, filter 0.16s; }
+	.pc.top { transform: translateY(-12px) rotate(0deg) scale(1.06); filter: none; border-color: rgba(216, 179, 106, 0.8); box-shadow: 0 8px 18px rgba(0, 0, 0, 0.6), 0 0 14px rgba(185, 140, 245, 0.35); }
+	.einfo { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+	.einfo .pn b { font-size: 15px; }
+	.est { font-size: 12px; color: #c9b4ef; }
+	.ehint { font-size: 11.5px; color: #8a9fb3; }
+	.htag { font: 700 10px/16px system-ui; letter-spacing: 0.12em; text-transform: uppercase; padding: 0 7px; border-radius: 5px; background: #d8b36a; color: #1b1204; }
+	.wst { width: 22px; height: 22px; margin: 0 5px; border-radius: 50%; border: 1px solid rgba(216, 179, 106, 0.5); background: rgba(2, 11, 22, 0.55); color: #f4dfa8; font: 700 13px/1 system-ui; cursor: pointer; padding: 0; }
+	.wst:disabled { opacity: 0.35; cursor: default; }
+	.castbtn.out { background: rgba(185, 140, 245, 0.2); color: #e3d3ff; border: 1px solid rgba(185, 140, 245, 0.6); }
+	.epv { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; background: rgba(2, 8, 16, 0.72); pointer-events: auto; }
+	.epc { width: 860px; max-width: calc(100vw / var(--uis, 1) - 60px); display: flex; flex-direction: column; gap: 10px; }
+	.ebig { width: 100%; aspect-ratio: 1192 / 831; border-radius: 16px; background: #000 center/contain no-repeat; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7), 0 0 30px rgba(185, 140, 245, 0.25); }
+	.ebar { display: flex; align-items: center; gap: 12px; color: #f5f1e8; }
+	.ebar .pn { flex: 1; justify-content: center; }
+	.ebar .pn small { margin-left: 8px; color: #c9b4ef; }
+	.enav { width: 42px; height: 42px; border-radius: 50%; border: 1px solid rgba(216, 179, 106, 0.5); background: rgba(2, 11, 22, 0.75); color: #f4dfa8; font: 700 24px/1 system-ui; cursor: pointer; padding: 0 0 3px; }
+	.epv.ph .epc { width: calc(100vw - 20px); max-width: none; }
+	.epv.ph .ebar .pn b { font-size: 13px; }
 	/* phone sheet */
 	.psheet { display: flex; flex-direction: column; gap: 7px; padding: 10px 10px 12px; color: #f5f1e8; font-family: system-ui, sans-serif; pointer-events: auto;
 		background: linear-gradient(180deg, #0f2a44, #06182a); border-top: 1px solid rgba(216, 179, 106, 0.45); border-radius: 16px 16px 0 0; }
@@ -311,6 +412,11 @@
 	.ph b { font-size: 14px; color: #f4dfa8; }
 	.ph small { font-size: 11px; }
 	.ph .wx { margin-left: auto; width: 28px; height: 28px; }
+	.pws { display: inline-flex; align-items: center; font-size: 12px; color: #e3d3ff; }
+	.psheet .erow { gap: 10px; }
+	.psheet .pile { width: calc(112px + min(10px, 150px / var(--n)) * (var(--n) - 1)); height: 92px; }
+	.psheet .pc { width: 112px; left: calc(min(10px, 150px / var(--n)) * var(--i)); }
+	.psheet .einfo .pn b { font-size: 13px; }
 	.ptabs { display: flex; gap: 4px; }
 	.ptabs button { position: relative; flex: 1; height: 32px; border-radius: 7px; background: rgba(2, 11, 22, 0.55); border: 0; border-bottom: 3px solid var(--c, #d8b36a); display: flex; gap: 4px; align-items: center; justify-content: center; cursor: pointer; }
 	.ptabs button.on { background: rgba(255, 255, 255, 0.1); }

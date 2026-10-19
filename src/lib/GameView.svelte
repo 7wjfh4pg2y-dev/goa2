@@ -5,8 +5,9 @@
 	import BoardCanvas from '$lib/BoardCanvas.svelte';
 	import CardLayer from '$lib/CardLayer.svelte';
 	import SpellToast from '$lib/hud2/SpellToast.svelte';
+	import EssenceWisps from '$lib/hud2/EssenceWisps.svelte';
 	import { castNow as gyCastNow, guardNow, castsAttack, spellNums } from '$lib/gydion';
-	import { schoolIcon } from '$lib/cards/spells';
+	import { schoolIcon, schoolOf, SCHOOL_COLOR } from '$lib/cards/spells';
 	const guardIcon = schoolIcon('abjuration');
 	import DefeatSplash from '$lib/DefeatSplash.svelte';
 	import BattleSplash from '$lib/BattleSplash.svelte';
@@ -163,6 +164,7 @@
 	function openDeckFor(id: string) { if (iAmHost && id) cardLayer?.openDeckFor(id); }
 	function openRunesFor(id: string) { if (iAmHost && id) cardLayer?.openRunesFor(id); }
 	function openGoldFor(id: string) { if (iAmHost && id) cardLayer?.openGoldFor(id); }
+	function openBookFor(id: string) { if (iAmHost && id) cardLayer?.openBookFor(id); }
 
 	$: boardPieces = Object.values($ms.pieces).map((p) => ({
 		id: p.id, hex: effectiveHex($ms.pieces, p), team: p.team, role: p.role, token: p.token === 'companion' ? undefined : p.token,
@@ -347,7 +349,8 @@
 			// Razzle's ultimate: the sparkles round her own dash button (only to her)
 			...($ms.cards?.[clientId]?.hero === 'razzle' ? [{ id: 'sparkle', label: 'Sparkles', icon: ICON.cue, on: $boardPrefs.sparkle, title: `The sparkles round your button (ultimate): ${$boardPrefs.sparkle ? 'on' : 'off'}`, act: () => boardPrefs.set({ sparkle: !$boardPrefs.sparkle }) }] : []),
 			// Gydion's cast toast (only while a Gydion plays)
-			...(Object.values($ms.cards ?? {}).some((c) => c.hero === 'gydion') ? [{ id: 'spells', label: 'Spells', icon: ICON.cue, on: $boardPrefs.spells, title: `Gydion's spell toast: ${$boardPrefs.spells ? 'on' : 'off'}`, act: () => boardPrefs.set({ spells: !$boardPrefs.spells }) }] : []),
+			...(Object.values($ms.cards ?? {}).some((c) => c.hero === 'gydion') ? [{ id: 'spells', label: 'Spells', icon: ICON.cue, on: $boardPrefs.spells, title: `Gydion's spell toast: ${$boardPrefs.spells ? 'on' : 'off'}`, act: () => boardPrefs.set({ spells: !$boardPrefs.spells }) },
+				{ id: 'essence', label: 'Essence', icon: ICON.cue, on: $boardPrefs.essence, title: `Prepare Spells' essence wisps: ${$boardPrefs.essence ? 'on' : 'off'}`, act: () => boardPrefs.set({ essence: !$boardPrefs.essence }) }] : []),
 			...(Object.values($ms.cards ?? {}).some((c) => c.hero === 'nebkher') ? [{ id: 'laugh', label: 'Laugh', icon: ICON.laugh, on: $boardPrefs.laugh, title: `NebKher's laugh bursting from his token: ${$boardPrefs.laugh ? 'on' : 'off'}`, act: () => boardPrefs.set({ laugh: !$boardPrefs.laugh }) }] : []),
 			// a 4★ hero's dash button effects (Ignatia's flames, …): one switch for all of them
 			...((hud2 || phone2) && hasPower($ms.cards?.[clientId]?.hero) ? [{ id: 'dash', label: 'Dashboard', icon: ICON.dash, on: $boardPrefs.dash, title: `Your hero button's effects: ${$boardPrefs.dash ? 'on' : 'off'}`, act: () => boardPrefs.set({ dash: !$boardPrefs.dash }) }] : []),
@@ -431,9 +434,18 @@
 	let spellToast: SpellToast, gySeen: string | null = $ms.gyNews?.id ?? null;
 	$: gyNews = $ms.gyNews ?? null;
 	$: if (gyNews && gyNews.id !== gySeen) playGy(gyNews);
+	let essence: EssenceWisps;
+	const ESS: Record<string, string> = { gold: '#ffd25e', red: '#ff5a4e', green: '#4fe07a', blue: '#5b9bff', purple: '#c08cff' };
 	function playGy(n: NonNullable<typeof gyNews>) {
 		gySeen = n.id;
-		if (Math.abs(Date.now() - n.at) > 10000 || !$boardPrefs.spells) return;
+		if (Math.abs(Date.now() - n.at) > 10000) return;
+		// Prepare: a wisp per spell coming back, out of his token and into his grimoire (his screen) / his token (everyone else's)
+		if (n.spell === 'prepare' && n.moved?.length && $boardPrefs.essence) {
+			const p = board?.clientPos(n.by);
+			const book = n.by === clientId ? (document.querySelector('.gyb') as HTMLElement | null)?.getBoundingClientRect() : null;
+			if (p) essence?.play({ x: p.x, y: p.y }, book && book.width ? { x: book.left + book.width / 2, y: book.top + book.height / 2 } : { x: p.x, y: p.y }, n.moved.map((id) => ESS[SCHOOL_COLOR[schoolOf(id)] ?? 'gold'] ?? ESS.gold));
+		}
+		if (!$boardPrefs.spells) return;
 		const nm = spellNums($ms, n.by, n.spell);
 		const line = [nm.attack != null && `Attack ${nm.attack}`, nm.move != null && `Move ${nm.move}`, nm.range != null && `Range ${nm.range}`, nm.radius != null && `Radius ${nm.radius}`, nm.coins != null && `+${nm.coins} coins`].filter(Boolean).join(' · ');
 		spellToast?.play(n.spell, line, n.wish ?? 0);
@@ -1166,6 +1178,7 @@
 		{/if}
 	<NebkherSplash bind:this={nkSplash} phone={mobile} />
 	<SpellToast bind:this={spellToast} phone={mobile} />
+	<EssenceWisps bind:this={essence} />
 	<LaughBurst bind:this={nkBurst} x={nkX} y={nkY} size={nkR} ult={nkUlt} />
 	<BattleSplash news={battleNews} {mobile} myTeam={viewTeam} onDone={() => (battleDoneId = battleNews?.id ?? null)} />
 	<!-- a push (mid-turn, or from the battle) waits for the battle splash to finish -->
@@ -1290,7 +1303,7 @@
 		{#if lobbyOpen}
 			<GameLobby {room} conn={connLabel($status)} connClass={$status} seats={seatRows} watchers={spectators} requests={seatRequests} host={iAmHost} {clientId} {mySeat} myRequest={myRequestSeat}
 				colorOf={(id) => colorHex($players.find((p) => p.id === id)?.color ?? '')}
-				onKick={kickSeat} onSit={requestSeat} onResolve={resolveSeat} onGive={giveSeat} hostId={$ms.host} onHost={passHost} onDeck={mobile ? null : openDeckFor} onRunes={openRunesFor} onGold={openGoldFor} onLeave={() => { lobbyOpen = false; askLeave(); }} onEnd={endGame} onClose={() => (lobbyOpen = false)} />
+				onKick={kickSeat} onSit={requestSeat} onResolve={resolveSeat} onGive={giveSeat} hostId={$ms.host} onHost={passHost} onDeck={mobile ? null : openDeckFor} onRunes={openRunesFor} onGold={openGoldFor} onBook={openBookFor} onLeave={() => { lobbyOpen = false; askLeave(); }} onEnd={endGame} onClose={() => (lobbyOpen = false)} />
 		{/if}
 	{/if}
 
@@ -1430,7 +1443,7 @@
 		{#if lobbyOpen}
 			<GameLobby phone {room} conn={connLabel($status)} connClass={$status} seats={seatRows} watchers={spectators} requests={seatRequests} host={iAmHost} {clientId} {mySeat} myRequest={myRequestSeat}
 				colorOf={(id) => colorHex($players.find((p) => p.id === id)?.color ?? '')} {log} canUndo={$canUndo} onUndo={() => session.undo()}
-				onKick={kickSeat} onSit={requestSeat} onResolve={resolveSeat} onGive={giveSeat} hostId={$ms.host} onHost={passHost} onDeck={mobile ? null : openDeckFor} onRunes={openRunesFor} onGold={openGoldFor} onLeave={() => { lobbyOpen = false; askLeave(); }} onEnd={endGame} onClose={() => (lobbyOpen = false)} />
+				onKick={kickSeat} onSit={requestSeat} onResolve={resolveSeat} onGive={giveSeat} hostId={$ms.host} onHost={passHost} onDeck={mobile ? null : openDeckFor} onRunes={openRunesFor} onGold={openGoldFor} onBook={openBookFor} onLeave={() => { lobbyOpen = false; askLeave(); }} onEnd={endGame} onClose={() => (lobbyOpen = false)} />
 		{/if}
 	{/if}
 	{#if mobile}

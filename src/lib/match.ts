@@ -1640,7 +1640,7 @@ export function joinMatch(
 			if (req.op === 'gyForce' && req.target) { const f = (patch.forced as MatchState['forced'])?.[req.target]; note(req.pid, `makes ${nameOf(req.target)} discard ${f?.only === 'basic' ? 'a basic card' : f?.only === 'nonbasic' ? 'a non-basic card' : 'a card'}, if able`) }
 			if (req.op === 'gyRaise') note(req.pid, 'raises a minion from the dead (Create Undead)')
 			if (req.op === 'gyDrink' && req.idx != null) note(req.pid, `retrieves ${heroCards('gydion')[req.idx]?.name ?? 'a card'} from his discard (Vampiric Touch)`)
-			if (req.op === 'gyFix' && req.target) note(req.pid, `fixed ${nameOf(req.target)}'s spellbook (host)`)
+			if (req.op === 'gyFix' && req.target) note(req.pid, req.spell ? (req.on ? `put ${spellName(req.spell)} back in ${nameOf(req.target)}'s spellbook (host)` : `sent ${nameOf(req.target)}'s ${spellName(req.spell)} to the ether (host)`) : req.wish != null ? `set ${nameOf(req.target)}'s Wishes to ${req.wish} (host)` : `fixed ${nameOf(req.target)}'s spellbook (host)`)
 		}
 		if (req.kind === 'power' && req.op === 'rzRetrieve' && patch.cards && req.idx != null) note(req.pid, `retrieves ${heroCards(RZ)[req.idx]?.name ?? 'a card'} from her discard`)
 		if (req.kind === 'clearAround' && patch.pieces) { const n = Object.keys(local.pieces ?? {}).length - Object.keys(patch.pieces).length; note(req.pid, `cleared ${n} token${n === 1 ? '' : 's'} next to them`) }

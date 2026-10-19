@@ -169,7 +169,8 @@ export const canDrink = (s: GyS, pid: string, ctx: GyCtx) =>
 	castNow(s, pid, ctx) === 'vampiric-touch' && gyOf(s, pid).retr !== markOf(ctx) && s.power?.[pid]?.hit === markOf(ctx) && (s.cards?.[pid]?.discard.length ?? 0) > 0
 
 /** news for everyone's toast */
-export type GyNews = { id: string; by: string; spell: string; wish?: number; at: number }
+/** a cast / Prepare / Wish, for everyone's toast; `moved` = the spells Prepare brought back into the book (the essence wisps) */
+export type GyNews = { id: string; by: string; spell: string; wish?: number; moved?: string[]; at: number }
 const newsOf = (by: string, spell: string, more: Partial<GyNews> = {}): GyNews => ({ id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, by, spell, at: Date.now(), ...more })
 
 /** give back one spent Life counter (the first spent token turns full again) */
@@ -193,7 +194,9 @@ export function applyGydion(s: GyS, req: GyReq, ctx: GyCtx): Record<string, unkn
 		let next: GyState = { ...h }
 		if (req.spell && (BOOK.includes(req.spell) || req.spell === 'wish')) {
 			const gone = h.gone ?? []
-			next = req.on ? { ...next, prep: req.spell === 'wish' ? next.prep : true, gone: gone.filter((x) => x !== req.spell), struck: (h.struck ?? []).filter((x) => x !== req.spell) }
+			// a spell put into a book never prepared: just that one comes in — every other spell stays out (in the ether)
+			const base = req.on && req.spell !== 'wish' && !h.prep ? [...new Set([...BOOK, ...gone])] : gone
+			next = req.on ? { ...next, prep: req.spell === 'wish' ? next.prep : true, gone: base.filter((x) => x !== req.spell), struck: (h.struck ?? []).filter((x) => x !== req.spell) }
 				: gone.includes(req.spell) ? next : { ...next, gone: [...gone, req.spell] }
 		}
 		if (req.wish != null) next = { ...next, wish: Math.max(0, Math.min(2, Math.round(req.wish))) }
@@ -203,7 +206,8 @@ export function applyGydion(s: GyS, req: GyReq, ctx: GyCtx): Record<string, unkn
 	if (req.op === 'gyPrepare') {
 		if (!canPrepare(s, pid, ctx)) return {}
 		// every spell back in the book; Shield ends (it's cancelled when its card returns)
-		return put({ ...g, prep: true, gone: [], struck: [], silver: mark, guard: (g.guard ?? []).filter((x) => x.spell !== 'shield') }, { gyNews: newsOf(pid, 'prepare') })
+		const out = g.gone ?? [], moved = g.prep ? out : [...BOOK, ...out.filter((x) => !BOOK.includes(x))]
+		return put({ ...g, prep: true, gone: [], struck: [], silver: mark, guard: (g.guard ?? []).filter((x) => x.spell !== 'shield') }, { gyNews: newsOf(pid, 'prepare', { moved }) })
 	}
 	if (req.op === 'gyWish') {
 		if (!canWish(s, pid, ctx)) return {}

@@ -124,6 +124,36 @@
 	// the small line under it (a card's name): whole words first, a near-fit shrinks, a long word is hyphenated
 	$: subFit = fitText(order.sub ?? '', 66, 9, 0.68, 2, 6.5);
 	$: words = packed.lines;
+	// the estimate above can be off for a wide word in the poster font: after it renders, MEASURE the words and the small
+	// line against the circle (each box's corners must sit inside it, a little in from the rim) and shrink both together
+	// until they do — no message ever peeks out of the ring (the user, 2026-10-19: "All done · Next round?")
+	function ringFit(node: HTMLElement, _dep: unknown) {
+		const run = () => {
+			// the word(s) and the small line shrink separately: a long card name never makes the main word tiny
+			const k = { fk: 1, fs: 1 };
+			node.style.setProperty('--fk', '1');
+			node.style.setProperty('--fs', '1');
+			for (let i = 0; i < 16; i++) {
+				const c = node.getBoundingClientRect();
+				if (!c.width) return;
+				const R = c.width / 2 - c.width * 0.06, cx = c.left + c.width / 2, cy = c.top + c.height / 2;
+				const out = (el: Element | null) => {
+					const r = el?.getBoundingClientRect();
+					return !!r && r.width > 0 && [[r.left, r.top], [r.right, r.top], [r.left, r.bottom], [r.right, r.bottom]].some(([x, y]) => Math.hypot(x - cx, y - cy) > R);
+				};
+				const ob = out(node.querySelector(':scope > b')), os = out(node.querySelector('small'));
+				if (!ob && !os) return;
+				// the small line sits low, where the circle is narrow: when it spills, it gives way first (to 2/3), then the words make room above it
+				if (os && (k.fs > 0.66 || k.fk <= 0.75)) k.fs *= 0.93; else if (os) k.fk *= 0.93;
+				if (ob) k.fk *= 0.93;
+				node.style.setProperty('--fk', k.fk.toFixed(3));
+				node.style.setProperty('--fs', k.fs.toFixed(3));
+			}
+		};
+		run();
+		document.fonts?.ready.then(run).catch(() => {});
+		return { update: () => run() };
+	}
 	$: labelFs = packed.fs;
 	// the kept-up banner row: as many a line as fit at a readable width (220+), centred, wrapping upward
 	$: fit = Math.max(1, Math.min(hand.length, Math.floor((rowMax + 8) / 228))); // the most a line can hold
@@ -248,11 +278,11 @@
 				</div>
 			{:else}
 			<button class="cap gob {order.kind}" class:tinted={!!ringColor && (order.kind !== 'bad' || !!order.tint)} style={ringColor ? `--rc:${ringColor}` : ''} class:pulse={order.pulse} disabled={!order.run} on:click={() => fire(order.run)}>
-				<span class="gin">
+				<span class="gin" use:ringFit={[order.label, order.sub, labelFs]}>
 					{#if order.kind === 'next' && !ringColor}<span class="lava" aria-hidden="true"><i class="lb"></i><i class="lo"></i><i class="lb2"></i><i class="lo2"></i></span>{/if}
 					<i></i>
-					<b style="font-size:{labelFs.toFixed(1)}px">{#each words as w, i (i)}{#if i}<br />{/if}{w}{/each}</b>
-					<span class="gsub">{#if order.sub}<small style="font-size:{subFit.fs.toFixed(1)}px">{#each subFit.lines as l, i (i)}{#if i}<br />{/if}{l}{/each}</small>{/if}</span>
+					<b style="font-size:calc({labelFs.toFixed(1)}px * var(--fk, 1))">{#each words as w, i (i)}{#if i}<br />{/if}{w}{/each}</b>
+					<span class="gsub">{#if order.sub}<small style="font-size:calc({subFit.fs.toFixed(1)}px * var(--fs, 1))">{#each subFit.lines as l, i (i)}{#if i}<br />{/if}{l}{/each}</small>{/if}</span>
 				</span>
 			</button>
 			{/if}
@@ -392,7 +422,7 @@
 		background: radial-gradient(circle at 50% 35%, #1d3d60, #0b1d33 70%, #06111f); box-shadow: inset 0 0 0 2px #0a1a2c, inset 0 6px 14px rgba(0, 0, 0, 0.6); color: var(--brass-hi); }
 	.gin b { font-weight: 400; line-height: 1.05; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; text-shadow: 0 1px 6px rgba(0, 0, 0, 0.7); }
 	.gsub { align-self: start; width: 66%; padding-top: 4px; }
-	.gin small { display: block; white-space: nowrap; font-size: 9px; line-height: 1.2; letter-spacing: 0.05em; text-transform: uppercase; text-align: center; color: #bccbd9; }
+	.gin small { display: inline-block; white-space: nowrap; font-size: 9px; line-height: 1.2; letter-spacing: 0.05em; text-transform: uppercase; text-align: center; color: #bccbd9; }
 	/* silver: every action without a colour of its own (a card's colour or the team's takes over — see .tinted / .team) */
 	.gob.go .gin, .gob.quiet .gin { background: radial-gradient(circle at 50% 32%, #ffffff, #c9d1db 40%, #7c8796 80%, #55606e); color: #13202f; }
 	.gob.go .gin b, .gob.quiet .gin b { text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6); }

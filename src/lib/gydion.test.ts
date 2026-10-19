@@ -65,6 +65,10 @@ describe('Gydion: the spellbook', () => {
 		expect(canPrepare(x, 'G', tc(x))).toBe(false)
 		expect(pw(x, 'G', 'gyPrepare')).toEqual({})
 		expect(x.log?.at(-1)?.text ?? '').toBe('') // the log is the session's job, not the engine's
+		// the news carries the spells that came in (the essence wisps): the first Prepare = the whole book
+		expect((x.gyNews as { moved?: string[] }).moved).toEqual(BOOK)
+		const later = actingAs(gg(SILVER, {}, { ...book(['fireball', 'shield']), round: 2 }), 'G')
+		expect((pw(later, 'G', 'gyPrepare').gyNews as { moved?: string[] }).moved).toEqual(['fireball', 'shield'])
 	})
 	it('a casting card casts only the spells it names, still in the book, once', () => {
 		const s = actingAs(gg(LEVO, {}, book(['burning-hands'])), 'G')
@@ -273,6 +277,10 @@ describe('Gydion: the host fix, and nothing for other heroes', () => {
 		expect(inBook(y, 'G', 'sunburst')).toBe(false)
 		const z = go(y, pw(y, 'H', 'gyFix', { target: 'G', wish: 5 }))
 		expect(gyOf(z, 'G').wish).toBe(2) // never a win by hand
+		// a book never prepared: putting one spell in brings only that one
+		const e = actingAs(gg(GEVO), 'G')
+		const one = go(e, pw(e, 'H', 'gyFix', { target: 'G', spell: 'fireball', on: true }))
+		expect(bookSpells(one, 'G')).toEqual(['fireball'])
 	})
 	it("another hero's gy requests are refused", () => {
 		const s = actingAs(gg(GEVO, {}, book()), 'B')
