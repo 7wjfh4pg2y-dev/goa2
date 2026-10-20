@@ -106,6 +106,8 @@ describe('Snorri: Inscribe the Runes (his silver) — a rune under each turn slo
 		expect(canInscribe(s, 'S', ctx(s))).toBe(true)
 		const p = inscribe(s)
 		expect(p.power?.S?.runes).toEqual(order)
+		// everyone's banner of the runes
+		expect(p.snNews).toMatchObject({ by: 'S', order })
 		// another card, or someone else acting, or before the reveal: refused
 		const red = actingAs(sg(sRed === 0 ? 1 : 0), 'S')
 		expect(inscribe(red)).toEqual({})

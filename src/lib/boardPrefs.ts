@@ -11,8 +11,8 @@ import { writable } from 'svelte/store'
 // corner, as tall as the dash
 // wisps: the spirit swirl on hexes to act on (spawn points, minions to remove, …); off = a still glowing hex
 // dash: the 4★ heroes' own dash buttons' effects (Ignatia's flames, …) — one switch for all of them
-export type BoardPrefs = { dash: boolean; rims: boolean; zone: boolean; sea: boolean; look: 'island' | 'classic'; hud: '2.0' | 'classic'; compact: boolean; cTop: boolean; cOrder: boolean; cLog: boolean; beam: boolean; wisps: boolean; zoomLock: boolean; turnCue: boolean; laugh: boolean; sparkle: boolean; spells: boolean; essence: boolean; emToast: boolean; emClock: boolean }
-export const DEFAULT_PREFS: BoardPrefs = { dash: true, rims: true, zone: true, sea: true, look: 'island', hud: '2.0', compact: false, cTop: false, cOrder: false, cLog: false, beam: true, wisps: true, zoomLock: false, turnCue: true, laugh: true, sparkle: true, spells: true, essence: true, emToast: true, emClock: true }
+export type BoardPrefs = { dash: boolean; rims: boolean; zone: boolean; sea: boolean; look: 'island' | 'classic'; hud: '2.0' | 'classic'; compact: boolean; cTop: boolean; cOrder: boolean; cLog: boolean; beam: boolean; wisps: boolean; zoomLock: boolean; turnCue: boolean; laugh: boolean; sparkle: boolean; spells: boolean; essence: boolean; emToast: boolean; emClock: boolean; snInscribe: boolean; runeFlare: boolean }
+export const DEFAULT_PREFS: BoardPrefs = { dash: true, rims: true, zone: true, sea: true, look: 'island', hud: '2.0', compact: false, cTop: false, cOrder: false, cLog: false, beam: true, wisps: true, zoomLock: false, turnCue: true, laugh: true, sparkle: true, spells: true, essence: true, emToast: true, emClock: true, snInscribe: true, runeFlare: true }
 const VERSION = 2
 const KEY = 'goa2-board-prefs'
 
@@ -40,6 +40,8 @@ export function readPrefs(raw: string | null): BoardPrefs {
 			essence: fx.essence !== false, // Prepare Spells' wisps (EssenceWisps.svelte)
 			emToast: fx.emToast !== false, // Emmitt's 'the sands will turn' toast (EmmittSplash.svelte)
 			emClock: fx.emClock !== false, // the reversed turn's hourglass (TimeSplash.svelte)
+			snInscribe: fx.snInscribe !== false, // Snorri's 'inscribes the runes' banner (SnorriSplash.svelte)
+			runeFlare: fx.runeFlare !== false, // a rune flaring as it becomes active (RuneMark.svelte)
 			sparkle: fx.sparkle !== false // Razzle's ultimate: the sparkles round her dash button (RazzleTop.svelte)
 		}
 	} catch {

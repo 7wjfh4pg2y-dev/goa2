@@ -13,6 +13,7 @@
 	import BattleSplash from '$lib/BattleSplash.svelte';
 	import NebkherSplash from '$lib/hud2/NebkherSplash.svelte';
 	import EmmittSplash from '$lib/hud2/EmmittSplash.svelte';
+	import SnorriSplash from '$lib/hud2/SnorriSplash.svelte';
 	import LaughBurst from '$lib/hud2/LaughBurst.svelte';
 	import PushSplash from '$lib/PushSplash.svelte';
 	import VictorySplash from '$lib/VictorySplash.svelte';
@@ -352,6 +353,8 @@
 			// Gydion's cast toast (only while a Gydion plays)
 			...(Object.values($ms.cards ?? {}).some((c) => c.hero === 'gydion') ? [{ id: 'spells', label: 'Spells', icon: ICON.cue, on: $boardPrefs.spells, title: `Gydion's spell toast: ${$boardPrefs.spells ? 'on' : 'off'}`, act: () => boardPrefs.set({ spells: !$boardPrefs.spells }) },
 				{ id: 'essence', label: 'Essence', icon: ICON.cue, on: $boardPrefs.essence, title: `Prepare Spells' essence wisps: ${$boardPrefs.essence ? 'on' : 'off'}`, act: () => boardPrefs.set({ essence: !$boardPrefs.essence }) }] : []),
+			...(Object.values($ms.cards ?? {}).some((c) => c.hero === 'snorri') ? [{ id: 'snInscribe', label: 'Runes', icon: ICON.cue, on: $boardPrefs.snInscribe, title: `Snorri's 'inscribes the runes' banner: ${$boardPrefs.snInscribe ? 'on' : 'off'}`, act: () => boardPrefs.set({ snInscribe: !$boardPrefs.snInscribe }) },
+				{ id: 'runeFlare', label: 'Ignite', icon: ICON.cue, on: $boardPrefs.runeFlare, title: `A rune flaring as it becomes active: ${$boardPrefs.runeFlare ? 'on' : 'off'}`, act: () => boardPrefs.set({ runeFlare: !$boardPrefs.runeFlare }) }] : []),
 			...(Object.values($ms.cards ?? {}).some((c) => c.hero === 'emmitt') ? [{ id: 'emToast', label: 'Reverse', icon: ICON.cue, on: $boardPrefs.emToast, title: `Emmitt's 'next turn runs backwards' toast: ${$boardPrefs.emToast ? 'on' : 'off'}`, act: () => boardPrefs.set({ emToast: !$boardPrefs.emToast }) },
 				{ id: 'emClock', label: 'Clock', icon: ICON.cue, on: $boardPrefs.emClock, title: `The reversed turn's hourglass: ${$boardPrefs.emClock ? 'on' : 'off'}`, act: () => boardPrefs.set({ emClock: !$boardPrefs.emClock }) }] : []),
 			...(Object.values($ms.cards ?? {}).some((c) => c.hero === 'nebkher') ? [{ id: 'laugh', label: 'Laugh', icon: ICON.laugh, on: $boardPrefs.laugh, title: `NebKher's laugh bursting from his token: ${$boardPrefs.laugh ? 'on' : 'off'}`, act: () => boardPrefs.set({ laugh: !$boardPrefs.laugh }) }] : []),
@@ -426,6 +429,10 @@
 	$: nkNews = $ms.nkNews ?? null;
 	$: if (nkNews && nkNews.id !== nkSeen) playNk(nkNews);
 	// Emmitt turned the next turn round: everyone's toast, each id once, never on joining (Effects → Reverse)
+	// Snorri inscribed his runes: everyone's banner, each id once (Effects → Runes)
+	let snSplash: SnorriSplash, snSeen: string | null = $ms.snNews?.id ?? null;
+	$: snNews = $ms.snNews ?? null;
+	$: if (snNews && snNews.id !== snSeen) { snSeen = snNews.id; if (Math.abs(Date.now() - snNews.at) < 10000 && $boardPrefs.snInscribe) snSplash?.play(snNews.order); }
 	let emSplash: EmmittSplash, emSeen: string | null = $ms.emNews?.id ?? null;
 	$: emNews = $ms.emNews ?? null;
 	$: if (emNews && emNews.id !== emSeen) { emSeen = emNews.id; if (Math.abs(Date.now() - emNews.at) < 10000 && $boardPrefs.emToast) emSplash?.play(); }
@@ -1185,6 +1192,7 @@
 		{/if}
 	<NebkherSplash bind:this={nkSplash} phone={mobile} />
 	<EmmittSplash bind:this={emSplash} phone={mobile} />
+	<SnorriSplash bind:this={snSplash} phone={mobile} />
 	<SpellToast bind:this={spellToast} phone={mobile} />
 	<EssenceWisps bind:this={essence} />
 	<LaughBurst bind:this={nkBurst} x={nkX} y={nkY} size={nkR} ult={nkUlt} />

@@ -372,6 +372,8 @@ export function nkPower(s: S, pid: string, ctx: TurnCtx): 'laugh' | 'grip' | 'na
 const markOf = (ctx: TurnCtx) => `${ctx.key}:${ctx.at}`
 /** what NebKher just did, for everyone's toast + laugh burst (GameView plays each id once) */
 /** Emmitt set next turn to run backwards (Reverse Time / Tear in Time): every screen plays its toast once; `key` = the reversed turn */
+/** Snorri inscribed his runes (his silver): everyone's banner of the four runes, once per id */
+export type SnNews = { id: string; by: string; order: Rune[]; at: number }
 export type EmNews = { id: string; by: string; key: string; at: number }
 const emNewsOf = (by: string, key: string): EmNews => ({ id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, by, key, at: Date.now() })
 export type NkNews = { id: string; kind: 'laugh' | 'steal' | 'swap' | 'doubt' | 'crack'; by: string; detail?: string; ult?: boolean; at: number
@@ -780,7 +782,7 @@ export function applyPower(s: S & { tieTurn?: { key: string; coin: Team } | null
 		const prev = s.power?.[who] ?? {}
 		// a second rune that is now the active one is no longer "inactive": drop it
 		const second = prev.second && prev.second.key === ctx.key && req.order[ctx.turnIdx] !== prev.second.rune ? prev.second : undefined
-		return { power: { ...s.power, [who]: { ...prev, runes: [...req.order], second } } }
+		return { power: { ...s.power, [who]: { ...prev, runes: [...req.order], second } }, ...(byHost ? {} : { snNews: { id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, by: who, order: [...req.order], at: Date.now() } as SnNews }) }
 	}
 	if (req.op === 'snorriSecond') {
 		if (!canSecond(s, req.pid, ctx)) return {}

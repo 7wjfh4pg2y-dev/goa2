@@ -13,6 +13,14 @@
 	import SpellToast from '$lib/hud2/SpellToast.svelte';
 	import EmmittSplash from '$lib/hud2/EmmittSplash.svelte';
 	import TimeSplash from '$lib/hud2/TimeSplash.svelte';
+	import SnorriSplash from '$lib/hud2/SnorriSplash.svelte';
+	import RuneMark from '$lib/hud2/RuneMark.svelte';
+	import TokenWave from '$lib/hud2/TokenWave.svelte';
+	import TakaSwapToast from '$lib/hud2/TakaSwapToast.svelte';
+	import ReadyForWar from '$lib/hud2/ReadyForWar.svelte';
+	import GoldThread from '$lib/hud2/GoldThread.svelte';
+	import EquilibriumSwirl from '$lib/hud2/EquilibriumSwirl.svelte';
+	import ChaosFlip from '$lib/hud2/ChaosFlip.svelte';
 	import IgnatiaCoin from '$lib/hud2/IgnatiaCoin.svelte';
 	import SnorriRunes from '$lib/hud2/SnorriRunes.svelte';
 	import TakaGold from '$lib/hud2/TakaGold.svelte';
@@ -103,6 +111,14 @@
 	$: tkCs = { ...newPlayerCardState('takahide'), ultimate: tkUlt } as PlayerCardState;
 	let emMode: 'idle' | 'run' | 'green' | 'rev' = 'idle';
 	let emSplash: EmmittSplash, timeSplash: TimeSplash;
+	let snSplash: SnorriSplash;
+	let tokWave: TokenWave, tkToast: TakaSwapToast, rfw: ReadyForWar, thread: GoldThread, eqSwirl: EquilibriumSwirl, chaos: ChaosFlip;
+	let tkTok: HTMLElement, tkMate: HTMLElement, igTok: HTMLElement, tkFrom = 0;
+	const mid = (el: HTMLElement) => { const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width }; };
+	function goldWave() { const m = mid(tkTok); tokWave.play(m.x, m.y, m.w); }
+	function swapToast() { const a = tkFrom, b = (tkFrom + 1) % 3; tkFrom = b; tkToast.play(a, b); goldWave(); }
+	function sake() { thread.play(mid(tkTok), mid(tkMate)); }
+	function eq() { const m = mid(igTok); eqSwirl.play(m.x, m.y, m.w); }
 	let nkKind: 'laugh' | 'grip' | 'name' | 'crack' | null = null, nkDoubt: NkColor | null = null, nkUltB = false;
 	let rzN = 1, rzUlt = false, rzSparkle = true, rzKind: 'spawn' | 'clear' | 'retrieve' | null = null;
 	$: rzBodies = Array.from({ length: rzN }, (_, i) => ({ id: i ? `p~${i}` : 'p', face: i }));
@@ -298,7 +314,13 @@
 			</div>
 			<!-- Ignatia -->
 			<div class="hc">
-				<div class="hh"><span class="pt" style={portraitCss('ignatia')}></span><b>Ignatia</b><small>coin · tomoe ring</small></div>
+				<div class="hh"><span class="pt" style={portraitCss('ignatia')}></span><b>Ignatia</b><small>demo: equilibrium swirl · chaos flip</small></div>
+				<div class="row sm nkrow">
+					<span class="nktok ig" bind:this={igTok} style={portraitCss('ignatia')}></span>
+					<button on:click={eq}>Equilibrium swirl</button>
+					<button class="b" on:click={() => chaos.play('blue')}>Chaos → Titans</button>
+					<button class="o" on:click={() => chaos.play('orange')}>Chaos → Atlanteans</button>
+				</div>
 				<div class="stage"><span class="dbtn"><IgnatiaCoin size={46} face={igFace} split={igSplit} ult={igUlt} ready={igReady} used={igUsed} flames={fourFx} art={coinArt} /></span></div>
 				<div class="row sm">
 					<button on:click={() => (igFace = igFace === 'orange' ? 'blue' : 'orange')}>Coin: {igFace === 'orange' ? 'Atlanteans' : 'Titans'}</button>
@@ -310,7 +332,12 @@
 			</div>
 			<!-- Snorri -->
 			<div class="hc">
-				<div class="hh"><span class="pt" style={portraitCss('snorri')}></span><b>Snorri</b><small>rune circle</small></div>
+				<div class="hh"><span class="pt" style={portraitCss('snorri')}></span><b>Snorri</b><small>inscribe banner · rune ignite · rune circle</small></div>
+				<div class="row sm">
+					<button on:click={() => snSplash.play(snRunes ?? [...RUNES])}>Inscribe banner</button>
+					<span class="rrow">{#each snRunes ?? RUNES as r, t (t)}<RuneMark rune={r} size={30} on={t === snTurn} second={!!snSecond && snSecond === r} fx={fourFx} />{/each}</span>
+				</div>
+				<p class="note">Turn ↓ = the next rune ignites (brass) · Second rune = it ignites in violet</p>
 				<div class="stage"><span class="dbtn"><SnorriRunes size={48} runes={snRunes} turnIdx={snTurn} second={snSecond} ult={snUlt} canEdit={snEdit} canSecond={snCan2} fx={fourFx} /></span></div>
 				<div class="row sm">
 					<button class:off={!snRunes} on:click={() => (snRunes = snRunes ? null : [...RUNES])}>Inscribed</button>
@@ -322,7 +349,15 @@
 			</div>
 			<!-- Takahide -->
 			<div class="hc">
-				<div class="hh"><span class="pt" style={portraitCss('takahide')}></span><b>Takahide</b><small>three golds · sun-rayed halo</small></div>
+				<div class="hh"><span class="pt" style={portraitCss('takahide')}></span><b>Takahide</b><small>demo: gold wave · swap · ready for war · saké</small></div>
+				<div class="row sm nkrow">
+					<span class="nktok tk" bind:this={tkTok} style={portraitCss('takahide')}></span>
+					<button on:click={goldWave}>Gold wave</button>
+					<button on:click={swapToast}>Gold swap toast</button>
+					<button class="t" on:click={() => rfw.play()}>Ready for War splash</button>
+					<button on:click={sake}>Hold my Saké</button>
+					<span class="nktok tk2" bind:this={tkMate} style={portraitCss('brogan')}></span>
+				</div>
 				<div class="stage"><span class="dbtn"><TakaGold size={48} cs={tkCs} kind={tkKind} fx={fourFx} /></span></div>
 				<div class="row sm">
 					<button class:off={tkKind !== null} on:click={() => (tkKind = null)}>rest</button>
@@ -370,6 +405,13 @@
 <SpellToast bind:this={spellToast} phone={mobile} />
 <EmmittSplash bind:this={emSplash} phone={mobile} />
 <TimeSplash bind:this={timeSplash} phone={mobile} />
+<SnorriSplash bind:this={snSplash} phone={mobile} />
+<TokenWave bind:this={tokWave} />
+<TakaSwapToast bind:this={tkToast} phone={mobile} />
+<ReadyForWar bind:this={rfw} phone={mobile} />
+<GoldThread bind:this={thread} />
+<EquilibriumSwirl bind:this={eqSwirl} />
+<ChaosFlip bind:this={chaos} phone={mobile} art={coinArt} />
 <LaughBurst bind:this={nkBurst} x={bx} y={by} size={56} ult={nkUlt} />
 {#if won}
 	{#key won}<VictorySplash round={stats.rounds} team={won.team} reason={won.reason} myTeam={me} {mobile} {stats} onClose={() => (won = null)} />{/key}
@@ -393,6 +435,10 @@
 	.note { margin: -2px 0 10px; text-align: center; font-size: .78rem; color: #cbd5e1; }
 	.nkrow { align-items: center; gap: 14px; margin-top: 28px !important; }
 	.gybook { margin-left: auto; display: flex; }
+	.rrow { display: inline-flex; gap: 10px; align-items: center; padding: 0 6px; }
+	.nktok.tk { box-shadow: 0 0 0 3px #ef7d22, 0 0 0 6px #e8c24a; }
+	.nktok.tk2 { margin-left: auto; box-shadow: 0 0 0 3px #ef7d22, 0 0 0 6px #6ab0ff; }
+	.nktok.ig { box-shadow: 0 0 0 3px #2f7fe6, 0 0 0 6px #ef7d22; }
 	.nktok.gy { box-shadow: 0 0 0 3px #2f7fe6, 0 0 0 6px #e8e8e8; }
 	.nktok { width: 56px; height: 56px; border-radius: 50%; display: block; background-color: #0b1b30; box-shadow: 0 0 0 3px #ef7d22, 0 0 0 6px #7a4292; }
 	.four { width: min(1180px, 100%); box-sizing: border-box; }
