@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { applyCardReq, transferSeat, turnOrder, turnKey, actingIdx, actorOf, minionDefense, respawnHero, type MatchState, type Piece } from './match'
 import { newPlayerCardState } from './cards/cardstate'
 import { heroCards } from './cards/deck'
-import { equilibrium, canFlip, flipUsed, hasPower, canInscribe, activeRune, runesOf, secondRune, heldGolds, deckGolds, takaSwapKind, mateOffer, canReverse, warpOffer, capsuleOffer, nkPower, canLaugh, laughTargets, nkSwapsLeft, nkSlots, doubtNow, crackNow, lineHexes, rzPower, rzRemoves, rzTwin, crowdField, wantsSecond, facesInUse, rzSpawnsLeft, rzLeft, bodiesOf, isDouble, heroPidOf, crowdBonus, pieceDist, type Rune, type TurnCtx } from './heropower'
+import { equilibrium, canFlip, flipUsed, hasPower, canInscribe, activeRune, runesOf, secondRune, heldGolds, deckGolds, takaSwapKind, mateOffer, canReverse, warpOffer, capsuleOffer, nkPower, canLaugh, laughTargets, nkSwapsLeft, nkSlots, doubtNow, crackNow, lineHexes, rzPower, rzRemoves, rzTwin, crowdField, wantsSecond, facesInUse, rzSpawnsLeft, rzLeft, bodiesOf, isDouble, heroPidOf, crowdBonus, pieceDist, comicNewsOf, type Rune, type TurnCtx } from './heropower'
 import { goldsOf, isHidden, repairCards, revealTurn, endRound, type PlayerCardState } from './cards/cardstate'
 import { draftable, isLabHero, FOUR_STAR_LAB, FOUR_STAR_LIVE, HEROES } from './heroes'
 import { isFullGame, type Journal } from './recorder'
@@ -805,4 +805,61 @@ describe("Emmitt's ultimate (Alternative Timelines): two cards face down, both r
 		expect(endRound(s).hand).toEqual(expect.arrayContaining([c1, c2]))
 	})
 	void EC; void AC
+})
+
+describe("Razzle's comic bursts (comicNewsOf)", () => {
+	// r = Razzle (orange, a double r~1), e = an enemy hero, m = an orange teammate, bm = a blue minion
+	const base = () => ({
+		cards: { r: { hero: 'razzle' }, e: { hero: 'brogan' }, m: { hero: 'arien' } } as never,
+		pieces: {
+			r: { id: 'r', hex: '5_5', kind: 'hero', team: 'orange' }, 'r~1': { id: 'r~1', hex: '6_5', kind: 'hero', team: 'orange', owner: 'r' },
+			e: { id: 'e', hex: '9_9', kind: 'hero', team: 'blue' }, m: { id: 'm', hex: '4_4', kind: 'hero', team: 'orange' },
+			bm: { id: 'bm', hex: '8_8', kind: 'minion', team: 'blue' }, om: { id: 'om', hex: '3_3', kind: 'minion', team: 'orange' }
+		},
+		attacks: {} as Record<string, { by?: string; body?: string; at?: number }>,
+		lastClash: null as null | { id: string; kind: string; by: string; v?: string; out: string },
+		lastDefeat: null as null | { id: string; by: string; victim?: string }
+	})
+	const m = (x: ReturnType<typeof comicNewsOf>) => (x ? `${x.moment}@${x.hex}` : null)
+	it('an attack opening: on her = attacked over the body hit; by her = attacks over the target', () => {
+		const s = base()
+		expect(m(comicNewsOf(s, { ...s, attacks: { r: { by: 'e', body: 'r~1', at: 1 } } }, { kind: 'attack', target: 'r' }))).toBe('attacked@6_5')
+		expect(m(comicNewsOf(s, { ...s, attacks: { e: { by: 'r', at: 1 } } }, { kind: 'attack', target: 'e' }))).toBe('attacks@9_9')
+		// a teammate's attack on someone else, or a refused / unchanged attack: nothing
+		expect(comicNewsOf(s, { ...s, attacks: { e: { by: 'm', at: 1 } } }, { kind: 'attack', target: 'e' })).toBeNull()
+		const open = { ...s, attacks: { e: { by: 'r', at: 1 } } }
+		expect(comicNewsOf(open, open, { kind: 'attack', target: 'e' })).toBeNull()
+	})
+	it('a hero defeated: by her = killHero over the fallen; she falls = defeated; others = nothing', () => {
+		const s = base()
+		expect(m(comicNewsOf(s, { ...s, lastDefeat: { id: 'd1', by: 'r', victim: 'e' }, lastClash: { id: 'c1', kind: 'attack', by: 'r', v: 'e', out: 'died' } }, { kind: 'attackResolve' }))).toBe('killHero@9_9')
+		expect(m(comicNewsOf(s, { ...s, lastDefeat: { id: 'd1', by: 'e', victim: 'r' } }, { kind: 'defeatHero' }))).toBe('defeated@5_5')
+		expect(comicNewsOf(s, { ...s, lastDefeat: { id: 'd1', by: 'm', victim: 'e' } }, { kind: 'defeatHero' })).toBeNull()
+		// the same news again (a later request) plays nothing
+		const done = { ...s, lastDefeat: { id: 'd1', by: 'r', victim: 'e' } }
+		expect(comicNewsOf(done, done, { kind: 'endAct' })).toBeNull()
+	})
+	it("an attack the defender's discard held: she survives = defended; hers blocked = blocked; forced discards and call-offs don't count", () => {
+		const s = { ...base(), attacks: { r: { by: 'e', body: 'r~1', at: 1 } } }
+		expect(m(comicNewsOf(s, { ...s, attacks: {}, lastClash: { id: 'c1', kind: 'attack', by: 'e', v: 'r', out: 'defended' } }, { kind: 'attackResolve' }))).toBe('defended@6_5')
+		const t = base()
+		expect(m(comicNewsOf(t, { ...t, lastClash: { id: 'c1', kind: 'attack', by: 'r', v: 'e', out: 'defended' } }, { kind: 'attackResolve' }))).toBe('blocked@9_9')
+		expect(comicNewsOf(t, { ...t, lastClash: { id: 'c1', kind: 'force', by: 'r', v: 'e', out: 'defended' } }, { kind: 'defend' })).toBeNull()
+		expect(comicNewsOf(t, { ...t, lastClash: { id: 'c1', kind: 'attack', by: 'r', v: 'e', out: 'cancel' } }, { kind: 'attackResolve' })).toBeNull()
+	})
+	it('only an enemy minion she defeats for coins: not a removal, not her own side, not someone else', () => {
+		const s = base()
+		const gone = (id: string) => { const p = { ...s.pieces } as Record<string, unknown>; delete p[id]; return { ...s, pieces: p as typeof s.pieces } }
+		expect(m(comicNewsOf(s, gone('bm'), { kind: 'defeatMinion', pid: 'r', piece: 'bm' }))).toBe('killMinion@8_8')
+		expect(comicNewsOf(s, gone('bm'), { kind: 'removeMinion', pid: 'r', piece: 'bm' })).toBeNull()
+		expect(comicNewsOf(s, gone('om'), { kind: 'defeatMinion', pid: 'r', piece: 'om' })).toBeNull()
+		expect(comicNewsOf(s, gone('bm'), { kind: 'defeatMinion', pid: 'm', piece: 'bm' })).toBeNull()
+		expect(comicNewsOf(s, s, { kind: 'defeatMinion', pid: 'r', piece: 'bm' })).toBeNull() // refused: still on the board
+	})
+	it('Twin Strike: once, when it switches on', () => {
+		const s = base()
+		const on = { ...s, power: { r: { twin: { mark: 'k', live: true } } } } as never
+		expect(m(comicNewsOf(s, on, { kind: 'power', pid: 'r', op: 'rzTwin' }))).toBe('twin@5_5')
+		expect(comicNewsOf(on, on, { kind: 'power', pid: 'r', op: 'rzTwin' })).toBeNull()
+	})
 })

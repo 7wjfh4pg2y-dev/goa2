@@ -14,7 +14,7 @@
 // tracker this is robust and easy to reason about.
 
 import { spellName, type GyNews } from './gydion'
-import { applyPower, syncPowers, takaHit, hasPower, isDouble, RZ, rzTwin, twinBars, timelinePick, wantsSecond, runeLine, RUNE_NAME, reversedTurn, trackDiscards, illusionForce, NEB, type NkNews, type EmNews, type SnNews, type FxNews, type PowerReq, type PowerState, type TurnCtx } from './heropower'
+import { applyPower, syncPowers, takaHit, comicNewsOf, hasPower, isDouble, RZ, rzTwin, twinBars, timelinePick, wantsSecond, runeLine, RUNE_NAME, reversedTurn, trackDiscards, illusionForce, NEB, type NkNews, type ComicNews, type EmNews, type SnNews, type FxNews, type PowerReq, type PowerState, type TurnCtx } from './heropower'
 import { teamName, aMinion } from './teams'
 import { hexCube, cubeDist } from './zones'
 import { tokenExpiry, sweepTokens, statusFrom, isTurret } from './tokens'
@@ -191,6 +191,8 @@ export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 	const marked = hit ? { ...patch, power: hit } : patch
 	const sync = syncPowers({ ...next, ...marked }, powerCtx(next))
 	const out = sync ? { ...marked, ...sync } : marked
+	// Razzle's comic bursts: the moment this request made, if any (written once, read by every screen)
+	if (Object.values(next.cards ?? {}).some((c) => c.hero === RZ)) { const cn = comicNewsOf(s, { ...next, ...out }, req as { kind: string }); if (cn) out.comicNews = cn }
 	// Emmitt: where everyone stood as the turn began, and what was discarded this turn
 	if (Object.values(next.cards ?? {}).some((c) => c.hero === 'emmitt')) {
 		const fin = { ...s, ...out } as MatchState
@@ -465,6 +467,8 @@ export interface MatchState {
 	snNews?: SnNews | null
 	/** Ignatia / Takahide moments (heropower FxNews): everyone's splash */
 	fxNews?: FxNews | null
+	/** Razzle's comic bursts: the last one, for everyone (heropower comicNewsOf) */
+	comicNews?: ComicNews | null
 	/** forced discards, keyed by the hero who must discard: who forces it, and whether it's "…or die" */
 	forced?: Record<string, { by: string; die: boolean; at: number; only?: 'basic' | 'nonbasic' }>
 	/** what Gydion just cast (everyone's toast; gydion.ts) */

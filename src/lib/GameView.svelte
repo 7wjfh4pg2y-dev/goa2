@@ -21,6 +21,7 @@
 	import ReadyForWar from '$lib/hud2/ReadyForWar.svelte';
 	import SnorriSplash from '$lib/hud2/SnorriSplash.svelte';
 	import LaughBurst from '$lib/hud2/LaughBurst.svelte';
+	import ComicBurst from '$lib/hud2/ComicBurst.svelte';
 	import PushSplash from '$lib/PushSplash.svelte';
 	import VictorySplash from '$lib/VictorySplash.svelte';
 	import ControlWheel, { type WheelItem } from '$lib/ControlWheel.svelte';
@@ -355,7 +356,7 @@
 			{ id: 'cue', label: 'Cue', icon: ICON.cue, on: $boardPrefs.turnCue, title: `The YOUR TURN cue when your card acts: ${$boardPrefs.turnCue ? 'on' : 'off'}`, act: () => boardPrefs.set({ turnCue: !$boardPrefs.turnCue }) },
 			// NebKher's laugh bursting out of his token (only while a NebKher plays)
 			// Razzle's ultimate: the sparkles round her own dash button (only to her)
-			...(Object.values($ms.cards ?? {}).some((c) => c.hero === 'razzle') ? [{ id: 'rzShuffle', label: 'Shuffle', icon: ICON.cue, on: $boardPrefs.rzShuffle, title: `Razzle's tokens shuffling when one of her is attacked: ${$boardPrefs.rzShuffle ? 'on' : 'off'}`, act: () => boardPrefs.set({ rzShuffle: !$boardPrefs.rzShuffle }) }] : []),
+			...(Object.values($ms.cards ?? {}).some((c) => c.hero === 'razzle') ? [{ id: 'rzComic', label: 'Comics', icon: ICON.cue, on: $boardPrefs.rzComic, title: `Razzle's comic bursts (POW!, BAM!…): ${$boardPrefs.rzComic ? 'on' : 'off'}`, act: () => boardPrefs.set({ rzComic: !$boardPrefs.rzComic }) }, { id: 'rzShuffle', label: 'Shuffle', icon: ICON.cue, on: $boardPrefs.rzShuffle, title: `Razzle's tokens shuffling when one of her is attacked: ${$boardPrefs.rzShuffle ? 'on' : 'off'}`, act: () => boardPrefs.set({ rzShuffle: !$boardPrefs.rzShuffle }) }] : []),
 			...($ms.cards?.[clientId]?.hero === 'razzle' ? [{ id: 'sparkle', label: 'Sparkles', icon: ICON.cue, on: $boardPrefs.sparkle, title: `The sparkles round your button (ultimate): ${$boardPrefs.sparkle ? 'on' : 'off'}`, act: () => boardPrefs.set({ sparkle: !$boardPrefs.sparkle }) }] : []),
 			// Gydion's cast toast (only while a Gydion plays)
 			...(Object.values($ms.cards ?? {}).some((c) => c.hero === 'gydion') ? [{ id: 'spells', label: 'Spells', icon: ICON.cue, on: $boardPrefs.spells, title: `Gydion's spell toast: ${$boardPrefs.spells ? 'on' : 'off'}`, act: () => boardPrefs.set({ spells: !$boardPrefs.spells }) },
@@ -872,7 +873,22 @@
 		rzSeen.add(k);
 		if ($ms.cards?.[t]?.hero !== 'razzle' || !$boardPrefs.rzShuffle || Date.now() - (a.at ?? 0) > 10000) continue;
 		const ids = bodiesOf($ms, t).map((b) => b.id);
-		if (ids.length > 1) board?.shuffle(ids);
+		const dur = ids.length > 1 ? board?.shuffle(ids) ?? 0 : 0;
+		if (dur) rzShufUntil = Date.now() + dur;
+	}
+	// Razzle's comic bursts: the engine writes `comicNews` once per real moment (heropower comicNewsOf — her own move,
+	// or what is done to her); every screen plays it once, never one older than 10 s or already there when we joined.
+	// Her 'attacked' waits for the shuffle to finish, so it bursts over the body hit once it is back on its space.
+	let comic: ComicBurst, comicSeen: string | null = $ms.comicNews?.id ?? null, rzShufUntil = 0;
+	$: comicNews = $ms.comicNews ?? null;
+	$: if (comicNews && comicNews.id !== comicSeen) { comicSeen = comicNews.id; playComic(comicNews); }
+	function playComic(n: NonNullable<typeof comicNews>) {
+		if (!$boardPrefs.rzComic || Date.now() - n.at > 10000) return;
+		// a tick later, so this turn's shuffle (its own reactive block) has started and set rzShufUntil
+		setTimeout(() => {
+			const wait = n.moment === 'attacked' ? Math.max(0, rzShufUntil - Date.now()) : 0;
+			setTimeout(() => { const p = board?.hexClient(n.hex); if (p) comic?.play(n.moment, p.x, p.y, p.r * 2); }, wait);
+		}, 0);
 	}
 	// forced discards: the demand on you, and the one you made
 	$: forcedMe = $ms.forced?.[clientId] ?? null;
@@ -1250,6 +1266,7 @@
 	<ReadyForWar bind:this={tkWar} phone={mobile} />
 	<SpellToast bind:this={spellToast} phone={mobile} />
 	<EssenceWisps bind:this={essence} />
+	<ComicBurst bind:this={comic} />
 	<LaughBurst bind:this={nkBurst} x={nkX} y={nkY} size={nkR} ult={nkUlt} />
 	<BattleSplash news={battleNews} {mobile} myTeam={viewTeam} onDone={() => (battleDoneId = battleNews?.id ?? null)} />
 	<!-- a push (mid-turn, or from the battle) waits for the battle splash to finish -->

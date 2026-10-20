@@ -92,7 +92,7 @@ export const COMICS: Record<ComicMoment, Comic[]> = {
 	attacks: [
 		make({ ...burst(14, 31, 162, 110, 0.7), fill: '#ffd83a', dot: '#ff8a00', lines: [['POW!', 106, 220, 32]], top: '#ff4a1c', bot: '#c90f0f', shine: '#ffd5a0', rot: -6, grow: 0.18 }),
 		make({ ...burst(12, 41), fill: '#e52421', dot: '#a30d0d', lines: [['BAM!', 106, 214, 32]], top: '#fff23a', bot: '#ffc000', rot: -9, grow: 0.16 }),
-		make({ ...puff(17, 13), fill: '#ffd93b', dot: '#ff4b2b', lines: [['WHAM!', 94, 248, 28]], top: '#ff3b2a', bot: '#b00000', shine: '#ffc0a0', rot: -8 })
+		make({ ...puff(17, 13), fill: '#3b7ff0', dot: '#1a4cb8', lines: [['WHAM!', 94, 248, 28]], top: '#fff23a', bot: '#ffb000', ext: '#d1121e', rot: -8 })
 	],
 	// Razzle defeats a hero (over the fallen hero; bigger, held longer)
 	killHero: [

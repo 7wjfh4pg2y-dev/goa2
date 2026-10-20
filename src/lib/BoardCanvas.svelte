@@ -142,11 +142,11 @@
 	let shuf: Record<string, { x: number; y: number }> = {};
 	let shufRaf = 0;
 	$: drawOff = Object.keys(shuf).length ? (() => { const o = { ...pieceOffset }; for (const id in shuf) { const a = pieceOffset[id] ?? { x: 0, y: 0 }; o[id] = { x: a.x + shuf[id].x, y: a.y + shuf[id].y }; } return o; })() : pieceOffset;
-	/** Shuffle these pieces like cups on a table (~1–1.6 s); returns false if fewer than two are on the board. */
-	export function shuffle(ids: string[], swapMs = 270): boolean {
+	/** Shuffle these pieces like cups on a table; returns how long it runs (ms), 0 if fewer than two are on the board. */
+	export function shuffle(ids: string[], swapMs = 270): number {
 		const toks = ids.map((id) => pieces.find((q) => q.id === id && !q.attachTo)).filter((p): p is NonNullable<typeof p> => !!p);
 		const n = toks.length;
-		if (n < 2 || typeof requestAnimationFrame === 'undefined') return false;
+		if (n < 2 || typeof requestAnimationFrame === 'undefined') return 0;
 		const home = toks.map((p) => { const b = centerOf(p.hex), o = pieceOffset[p.id] ?? { x: 0, y: 0 }; return { x: b.x + o.x, y: b.y + o.y }; });
 		// slot[i] = the home slot token i stands on; three random swaps, then the swaps that bring everyone home
 		const slot = toks.map((_, i) => i), at = (k: number) => slot.indexOf(k);
@@ -185,7 +185,7 @@
 			shufRaf = requestAnimationFrame(frame);
 		};
 		shufRaf = requestAnimationFrame(frame);
-		return true;
+		return total;
 	}
 
 	const isSpawn = (t: string) => t === 'spawnOrange' || t === 'spawnBlue';
@@ -350,6 +350,14 @@
 		const m = viewG?.getScreenCTM();
 		if (!p || !m) return null;
 		const c = centerOf(p.hex);
+		const pt = new DOMPoint(c.x, c.y).matrixTransform(m);
+		return { x: pt.x, y: pt.y, r: size * 0.8 * Math.hypot(m.a, m.b) };
+	}
+	/** Where a space sits on screen (client px) and a token's radius there — for effects over a space a piece has left. */
+	export function hexClient(hex: string): { x: number; y: number; r: number } | null {
+		const m = viewG?.getScreenCTM();
+		if (!m || !hex) return null;
+		const c = centerOf(hex);
 		const pt = new DOMPoint(c.x, c.y).matrixTransform(m);
 		return { x: pt.x, y: pt.y, r: size * 0.8 * Math.hypot(m.a, m.b) };
 	}

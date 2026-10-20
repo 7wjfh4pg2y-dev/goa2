@@ -110,7 +110,7 @@ export type TurnCtx = { key: string; round: number; turnIdx: number; order: stri
 	teams?: Record<string, Team | null> }
 type S = { battlePhase?: boolean; levelPhase?: boolean; cards?: Record<string, PlayerCardState>; power?: Record<string, PowerState>; effects?: Effect[]; host?: string
 	lastClash?: { id: string; kind: string; by: string; v?: string; out: string } | null; lastDefeat?: { id: string; by: string; victim?: string } | null
-	attacks?: Record<string, { discarded?: boolean } | undefined>; forced?: Record<string, unknown>
+	attacks?: Record<string, { discarded?: boolean; by?: string; body?: string; at?: number } | undefined>; forced?: Record<string, unknown>
 	turnDisc?: { key: string; by: Record<string, number[]> } | null
 	pieces?: Record<string, { id: string; hex: string; kind?: string; team?: string; token?: string; owner?: string; hero?: string; face?: number; attachedTo?: string }> }
 
@@ -380,6 +380,51 @@ const markOf = (ctx: TurnCtx) => `${ctx.key}:${ctx.at}`
  *  face up, so public) or by Bushido (secret: only that a swap happened), Ready for War */
 export type FxNews = { id: string; by: string; kind: 'eq' | 'flip' | 'swap' | 'bushido' | 'war'; to?: Team; from?: number; card?: number; at: number }
 const fxNewsOf = (kind: FxNews['kind'], by: string, more: Partial<FxNews> = {}): FxNews => ({ id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, kind, by, at: Date.now(), ...more })
+// ── Razzle's comic bursts ──
+export type ComicMoment = 'attacked' | 'attacks' | 'killHero' | 'killMinion' | 'defended' | 'blocked' | 'defeated' | 'twin'
+/** one comic burst for everyone: what happened and the space it bursts over */
+export type ComicNews = { id: string; moment: ComicMoment; hex: string; at: number }
+/** The Razzle moment a request made, read off the state before and after it (null = none). Only real events count:
+ *  a hero DEFEATED (by her → killHero; she falls → defeated — wins over the clash that ended in it), an ATTACK that
+ *  ended with the defender's discard holding (hers blocked / she survived; forced discards and called-off attacks
+ *  don't count), an attack OPENED between enemies (on her → attacked, over the body hit; by her → attacks), an enemy
+ *  minion DEFEATED by her for coins (a plain Remove or the minion battle don't count), and Twin Strike switched on. */
+export function comicNewsOf(prev: S, next: S, req: { kind: string; pid?: string; piece?: string; target?: string; op?: string }): ComicNews | null {
+	const rz = (pid?: string) => !!pid && (prev.cards?.[pid]?.hero ?? next.cards?.[pid]?.hero) === RZ
+	const teamOf = (pid: string) => prev.pieces?.[pid]?.team ?? next.pieces?.[pid]?.team
+	const enemies = (a: string, b: string) => { const ta = teamOf(a), tb = teamOf(b); return !!ta && !!tb && ta !== tb }
+	const hexOf = (id?: string) => (id ? prev.pieces?.[id]?.hex ?? next.pieces?.[id]?.hex : undefined)
+	const mk = (moment: ComicMoment, hex?: string): ComicNews | null => (hex ? { id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, moment, hex, at: Date.now() } : null)
+	const d = next.lastDefeat
+	if (d && d.id !== prev.lastDefeat?.id && d.victim) {
+		if (rz(d.by) && d.by !== d.victim && enemies(d.by, d.victim)) return mk('killHero', hexOf(d.victim))
+		if (rz(d.victim)) return mk('defeated', hexOf(prev.attacks?.[d.victim]?.body ?? d.victim))
+		return null
+	}
+	const c = next.lastClash
+	if (c && c.id !== prev.lastClash?.id && c.kind === 'attack' && c.out === 'defended' && c.v && enemies(c.by, c.v)) {
+		if (rz(c.v)) return mk('defended', hexOf(prev.attacks?.[c.v]?.body ?? c.v))
+		if (rz(c.by)) return mk('blocked', hexOf(c.v))
+		return null
+	}
+	if (req.kind === 'attack' && req.target) {
+		const was = prev.attacks?.[req.target], now = next.attacks?.[req.target]
+		if (!now?.by || (was && was.at === now.at) || !enemies(now.by, req.target)) return null
+		if (rz(req.target)) return mk('attacked', hexOf(now.body ?? req.target))
+		if (rz(now.by)) return mk('attacks', hexOf(req.target))
+		return null
+	}
+	if (req.kind === 'defeatMinion' && req.piece && rz(req.pid)) {
+		const m = prev.pieces?.[req.piece]
+		if (m?.kind === 'minion' && !next.pieces?.[req.piece] && m.team !== teamOf(req.pid!)) return mk('killMinion', m.hex)
+		return null
+	}
+	if (req.kind === 'power' && req.op === 'rzTwin' && rz(req.pid)) {
+		const t = next.power?.[req.pid!]?.twin, was = prev.power?.[req.pid!]?.twin
+		if (t?.live && !(was?.live && was.mark === t.mark)) return mk('twin', hexOf(req.pid))
+	}
+	return null
+}
 export type SnNews = { id: string; by: string; order: Rune[]; at: number }
 export type EmNews = { id: string; by: string; key: string; at: number }
 const emNewsOf = (by: string, key: string): EmNews => ({ id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, by, key, at: Date.now() })
