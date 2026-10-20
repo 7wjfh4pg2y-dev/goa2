@@ -55,7 +55,7 @@
 	/* a toast-sized banner under the top bar: his laughing face in a slanted window, three lines beside it */
 	.nks { position: fixed; left: 50%; top: calc(86px * var(--uis, 1)); z-index: 62; pointer-events: none; transform: translateX(-50%); animation: nkin var(--dur, 2.9s) cubic-bezier(0.2, 1.2, 0.4, 1) both; }
 	@keyframes nkin { 0% { opacity: 0; transform: translate(-50%, -24px) scale(0.92); } 10% { opacity: 1; transform: translate(-50%, 0) scale(1); } 86% { opacity: 1; transform: translate(-50%, 0); } 100% { opacity: 0; transform: translate(-50%, -14px); } }
-	.band { width: min(470px, 92vw); height: 96px; display: grid; grid-template-columns: 112px 1fr; align-items: center; overflow: hidden; border-radius: 12px;
+	.band { position: relative; width: min(470px, 92vw); height: 96px; display: grid; grid-template-columns: 112px 1fr; align-items: center; overflow: hidden; border-radius: 12px;
 		background: linear-gradient(90deg, rgba(10, 22, 12, 0.97), rgba(8, 16, 26, 0.97)); border: 1px solid rgba(201, 224, 74, 0.55); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5), 0 12px 30px rgba(0, 0, 0, 0.55), 0 0 22px rgba(201, 224, 74, 0.18); }
 	.ult .band { border-color: rgba(197, 140, 255, 0.65); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5), 0 12px 30px rgba(0, 0, 0, 0.55), 0 0 22px rgba(162, 75, 255, 0.25); }
 	.artbox { position: relative; height: 100%; overflow: hidden; clip-path: polygon(0 0, 100% 0, 84% 100%, 0 100%); }
@@ -64,7 +64,9 @@
 	/* one flicker of storm light over his face as it lands */
 	.flash { position: absolute; inset: 0; background: radial-gradient(circle at 60% 40%, rgba(235, 255, 160, 0.75), transparent 70%); opacity: 0; animation: nkfl 1.2s 0.15s steps(1) both; }
 	@keyframes nkfl { 0% { opacity: 0; } 6% { opacity: 1; } 12% { opacity: 0.15; } 18% { opacity: 0.8; } 28%, 100% { opacity: 0; } }
-	.edge { position: absolute; left: 92px; top: 0; bottom: 0; width: 3px; transform: skewX(-9deg); background: linear-gradient(180deg, #c9e04a, #3fd9c4); }
+	/* the divider follows the art window's slanted edge exactly: a 3 px strip cut with the same corners (100% → 84%) */
+	.edge { position: absolute; left: 0; top: 0; bottom: 0; width: 112px; background: linear-gradient(180deg, #c9e04a, #3fd9c4);
+		clip-path: polygon(calc(100% - 3px) 0, 100% 0, 84% 100%, calc(84% - 3px) 100%); }
 	.ult .edge { background: linear-gradient(180deg, #e3c2ff, #8c55d6); }
 	.copy { display: flex; flex-direction: column; gap: 2px; padding: 0 16px 0 6px; min-width: 0; }
 	.kick { font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase; color: #c9e04a; }
@@ -80,7 +82,7 @@
 	/* phones: under the phone's top bar, a little smaller */
 	.ph { top: 64px; }
 	.ph .band { height: 80px; grid-template-columns: 92px 1fr; }
-	.ph .edge { left: 76px; }
+	.ph .edge { width: 92px; }
 	.ph .title { font-size: 24px; }
 	.ph .title.long { font-size: 20px; }
 	.ph .sub { font-size: 12px; }

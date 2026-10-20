@@ -10,6 +10,15 @@
 	import LaughBurst from '$lib/hud2/LaughBurst.svelte';
 	import EssenceWisps from '$lib/hud2/EssenceWisps.svelte';
 	import GydionBook from '$lib/hud2/GydionBook.svelte';
+	import SpellToast from '$lib/hud2/SpellToast.svelte';
+	import IgnatiaCoin from '$lib/hud2/IgnatiaCoin.svelte';
+	import SnorriRunes from '$lib/hud2/SnorriRunes.svelte';
+	import TakaGold from '$lib/hud2/TakaGold.svelte';
+	import EmmittClock from '$lib/hud2/EmmittClock.svelte';
+	import NebkherEye from '$lib/hud2/NebkherEye.svelte';
+	import RazzleTop from '$lib/hud2/RazzleTop.svelte';
+	import { newPlayerCardState } from '$lib/cards/cardstate';
+	import { RUNES, type NkColor, type Rune } from '$lib/heropower';
 	import { BOOK } from '$lib/gydion';
 	import { schoolOf, SCHOOL_COLOR } from '$lib/cards/spells';
 	import { portraitCss } from '$lib/heroes';
@@ -81,6 +90,21 @@
 		const ids = [...BOOK].sort(() => Math.random() - 0.5).slice(0, n);
 		ess.play(c(gyTok), c(intoBook ? gyBook : gyTok), ids.map((id) => ESS[SCHOOL_COLOR[schoolOf(id)] ?? 'gold']));
 	}
+	// ── the 4★ heroes: every splash and every dash-button state (the user, 2026-10-20) ──
+	let fourFx = true; // the Dashboard switch (motion)
+	let spellToast: SpellToast;
+	const tbArt = import.meta.glob('/src/lib/cards/images/tiebreaker_*.png', { eager: true, import: 'default' }) as Record<string, string>;
+	const coinArt = (t: Team) => tbArt[`/src/lib/cards/images/tiebreaker_${t}.png`] ?? '';
+	let igFace: Team = 'orange', igSplit = false, igUlt = false, igReady = false, igUsed = false;
+	let snRunes: Rune[] | null = [...RUNES], snTurn = 0, snEdit = false, snCan2 = false, snSecond: Rune | null = null, snUlt = false;
+	let tkKind: 'gold' | 'bushido' | null = null, tkUlt = false;
+	$: tkCs = { ...newPlayerCardState('takahide'), ultimate: tkUlt } as PlayerCardState;
+	let emMode: 'idle' | 'run' | 'green' | 'rev' = 'idle';
+	let nkKind: 'laugh' | 'grip' | 'name' | 'crack' | null = null, nkDoubt: NkColor | null = null, nkUltB = false;
+	let rzN = 1, rzUlt = false, rzSparkle = true, rzKind: 'spawn' | 'clear' | 'retrieve' | null = null;
+	$: rzBodies = Array.from({ length: rzN }, (_, i) => ({ id: i ? `p~${i}` : 'p', face: i }));
+	let gyMode: 'idle' | 'loaded' | 'open' | 'picked' | 'cast' = 'idle', gySchool = 'evocation', gyUlt = false, gyWishes = 0;
+	const GY_SCHOOLS = ['cantrip', 'evocation', 'necromancy', 'abjuration', 'conjuration', 'enchantment', 'transmutation'];
 	let round = 2, turn = 1;
 
 	// sample battle reports: each is built from its list of hero defeats, so kills / deaths / assists add up
@@ -200,32 +224,6 @@
 		</div>
 	</section>
 	<section>
-		<h2>NebKher <small>(demo — not in games yet)</small></h2>
-		<div class="row">
-			<button on:click={() => nkSplash.play('laugh')}>He laughs</button>
-			<button on:click={() => nkSplash.play('laugh', '', true)}>He laughs (ultimate)</button>
-			<button on:click={() => nkSplash.play('steal', 'Stone Gaze')}>Steals your spell</button>
-			<button on:click={() => nkSplash.play('swap')}>Swaps your cards</button>
-			<button on:click={() => nkSplash.play('doubt', 'Red')}>Discard a colour</button>
-			<button on:click={() => nkSplash.play('crack')}>Cracks reality</button>
-		</div>
-		<div class="row nkrow">
-			<span class="nktok" bind:this={nkTok} style={portraitCss('nebkher')}></span>
-			<button on:click={laughBurst}>Laugh burst</button>
-			<button class:off={!nkUlt} on:click={() => (nkUlt = !nkUlt)}>Ultimate colours</button>
-		</div>
-	</section>
-	<section>
-		<h2>Gydion <small>(Prepare Spells — essence wisps)</small></h2>
-		<div class="row nkrow">
-			<span class="nktok gy" bind:this={gyTok} style={portraitCss('gydion')}></span>
-			<button on:click={() => wisps(21, false)}>First Prepare (21) → token</button>
-			<button on:click={() => wisps(4, false)}>4 spells → token</button>
-			<button on:click={() => wisps(21, true)}>21 → his book</button>
-			<span class="gybook" bind:this={gyBook} title="His dash grimoire"><GydionBook size={48} mode="loaded" /></span>
-		</div>
-	</section>
-	<section>
 		<h2>Turn / round</h2>
 		<div class="row">
 			<button on:click={() => { turn = turn % 4 + 1; turnSplash.play('turn', round, turn); }}>Next turn</button>
@@ -235,6 +233,120 @@
 			<button on:click={() => levelSplash.play('up', 7)}>Level up</button>
 			<button on:click={() => levelSplash.play('up', 18, true)}>Level up (ultimate in reach)</button>
 			<button on:click={() => levelSplash.play('pity', 1)}>Pity coin</button>
+		</div>
+	</section>
+
+	<!-- the 4★ heroes -->
+	<section class="four">
+		<h2>4★ heroes <small>(splashes, effects and every dash-button state)</small></h2>
+		<div class="row"><button class:off={!fourFx} on:click={() => (fourFx = !fourFx)}>Dashboard motion: {fourFx ? 'on' : 'off'}</button></div>
+		<div class="grid4">
+			<!-- Gydion -->
+			<div class="hc wide">
+				<div class="hh"><span class="pt" style={portraitCss('gydion')}></span><b>Gydion</b><small>spell toast · essence wisps · grimoire</small></div>
+				<div class="row sm">
+					<button on:click={() => spellToast.play('fireball', 'Attack 6 · Range 3')}>Fireball</button>
+					<button on:click={() => spellToast.play('shield', '')}>Shield</button>
+					<button on:click={() => spellToast.play('create-undead', 'Range 3')}>Create Undead</button>
+					<button on:click={() => spellToast.play('midas-touch', '+3 coins')}>Midas' Touch</button>
+					<button on:click={() => spellToast.play('polymorph', 'Range 3')}>Polymorph</button>
+					<button on:click={() => spellToast.play('prepare', '', 0, [...BOOK])}>Prepare (21)</button>
+					<button on:click={() => spellToast.play('prepare', '', 0, ['fireball', 'shield', 'polymorph', 'midas-touch'])}>Prepare (4)</button>
+					<button class="t" on:click={() => spellToast.play('wish', '', 1)}>Wish 1 of 3</button>
+					<button class="t" on:click={() => spellToast.play('wish', '', 3)}>The third Wish</button>
+				</div>
+				<div class="row sm nkrow">
+					<span class="nktok gy" bind:this={gyTok} style={portraitCss('gydion')}></span>
+					<button on:click={() => wisps(21, false)}>Wisps: 21 → token</button>
+					<button on:click={() => wisps(4, false)}>4 → token</button>
+					<button on:click={() => wisps(21, true)}>21 → his book</button>
+					<span class="gybook" bind:this={gyBook} title="His dash grimoire"><GydionBook size={48} mode={gyMode} school={gyMode === 'idle' ? null : gySchool} ult={gyUlt} wishes={gyWishes} left={14} fx={fourFx} /></span>
+				</div>
+				<div class="row sm">
+					{#each ['idle', 'loaded', 'open', 'picked', 'cast'] as m}<button class:off={gyMode !== m} on:click={() => (gyMode = m as typeof gyMode)}>{m}</button>{/each}
+					<select bind:value={gySchool}>{#each GY_SCHOOLS as s}<option value={s}>{s}</option>{/each}</select>
+					<button class:off={!gyUlt} on:click={() => (gyUlt = !gyUlt)}>Archwizard</button>
+					{#if gyUlt}<button on:click={() => (gyWishes = (gyWishes + 1) % 4)}>Wishes {gyWishes}</button>{/if}
+				</div>
+			</div>
+			<!-- NebKher -->
+			<div class="hc wide">
+				<div class="hh"><span class="pt" style={portraitCss('nebkher')}></span><b>NebKher</b><small>toasts · laugh burst · eye</small></div>
+				<div class="row sm">
+					<button on:click={() => nkSplash.play('laugh')}>He laughs</button>
+					<button class="t" on:click={() => nkSplash.play('laugh', '', true)}>He laughs (ultimate)</button>
+					<button on:click={() => nkSplash.play('steal', 'Stone Gaze')}>Steals your spell</button>
+					<button on:click={() => nkSplash.play('swap')}>Swaps your cards</button>
+					<button on:click={() => nkSplash.play('doubt', 'Red')}>Discard a colour</button>
+					<button on:click={() => nkSplash.play('crack')}>Cracks reality</button>
+				</div>
+				<div class="row sm nkrow">
+					<span class="nktok" bind:this={nkTok} style={portraitCss('nebkher')}></span>
+					<button on:click={laughBurst}>Laugh burst</button>
+					<button class:off={!nkUlt} on:click={() => (nkUlt = !nkUlt)}>Burst: ultimate colours</button>
+					<span class="dbtn"><NebkherEye size={48} fx={fourFx} ult={nkUltB} kind={nkKind} doubt={nkDoubt} /></span>
+				</div>
+				<div class="row sm">
+					<button class:off={nkKind !== null} on:click={() => (nkKind = null)}>rest</button>
+					{#each ['laugh', 'grip', 'name', 'crack'] as k}<button class:off={nkKind !== k} on:click={() => (nkKind = k as typeof nkKind)}>{k}</button>{/each}
+					<button class:off={!nkDoubt} on:click={() => (nkDoubt = nkDoubt ? null : 'RED')}>Doubt gem</button>
+					<button class:off={!nkUltB} on:click={() => (nkUltB = !nkUltB)}>Ultimate</button>
+				</div>
+			</div>
+			<!-- Ignatia -->
+			<div class="hc">
+				<div class="hh"><span class="pt" style={portraitCss('ignatia')}></span><b>Ignatia</b><small>coin · tomoe ring</small></div>
+				<div class="stage"><span class="dbtn"><IgnatiaCoin size={46} face={igFace} split={igSplit} ult={igUlt} ready={igReady} used={igUsed} flames={fourFx} art={coinArt} /></span></div>
+				<div class="row sm">
+					<button on:click={() => (igFace = igFace === 'orange' ? 'blue' : 'orange')}>Coin: {igFace === 'orange' ? 'Atlanteans' : 'Titans'}</button>
+					<button class:off={!igSplit} on:click={() => (igSplit = !igSplit)}>Equilibrium</button>
+					<button class:off={!igUlt} on:click={() => (igUlt = !igUlt)}>Ultimate</button>
+					<button class:off={!igReady} on:click={() => (igReady = !igReady)}>Can flip</button>
+					<button class:off={!igUsed} on:click={() => (igUsed = !igUsed)}>Flipped</button>
+				</div>
+			</div>
+			<!-- Snorri -->
+			<div class="hc">
+				<div class="hh"><span class="pt" style={portraitCss('snorri')}></span><b>Snorri</b><small>rune circle</small></div>
+				<div class="stage"><span class="dbtn"><SnorriRunes size={48} runes={snRunes} turnIdx={snTurn} second={snSecond} ult={snUlt} canEdit={snEdit} canSecond={snCan2} fx={fourFx} /></span></div>
+				<div class="row sm">
+					<button class:off={!snRunes} on:click={() => (snRunes = snRunes ? null : [...RUNES])}>Inscribed</button>
+					<button on:click={() => (snTurn = (snTurn + 1) % 4)}>Turn {['I', 'II', 'III', 'IV'][snTurn]}</button>
+					<button class:off={!snEdit} on:click={() => { snEdit = !snEdit; snCan2 = false; }}>Silver acting</button>
+					<button class:off={!snCan2} on:click={() => { snCan2 = !snCan2; snUlt = snCan2 || snUlt; snEdit = false; }}>Rune Mastery</button>
+					<button class:off={!snSecond} on:click={() => (snSecond = snSecond ? null : (snRunes ?? RUNES).find((r, i) => i !== snTurn) ?? null)}>Second rune</button>
+				</div>
+			</div>
+			<!-- Takahide -->
+			<div class="hc">
+				<div class="hh"><span class="pt" style={portraitCss('takahide')}></span><b>Takahide</b><small>three golds · sun-rayed halo</small></div>
+				<div class="stage"><span class="dbtn"><TakaGold size={48} cs={tkCs} kind={tkKind} fx={fourFx} /></span></div>
+				<div class="row sm">
+					<button class:off={tkKind !== null} on:click={() => (tkKind = null)}>rest</button>
+					<button class:off={tkKind !== 'gold'} on:click={() => (tkKind = 'gold')}>Gold acting</button>
+					<button class:off={tkKind !== 'bushido'} on:click={() => (tkKind = 'bushido')}>Bushido</button>
+					<button class:off={!tkUlt} on:click={() => (tkUlt = !tkUlt)}>Ready for War</button>
+				</div>
+			</div>
+			<!-- Emmitt -->
+			<div class="hc">
+				<div class="hh"><span class="pt" style={portraitCss('emmitt')}></span><b>Emmitt</b><small>hourglass clock</small></div>
+				<div class="stage"><span class="dbtn"><EmmittClock size={48} mode={emMode} fx={fourFx} /></span></div>
+				<div class="row sm">
+					{#each [['idle', 'Rest'], ['run', 'Time runs'], ['green', 'Can reverse'], ['rev', 'Reversed']] as [m, l]}<button class:off={emMode !== m} on:click={() => (emMode = m as typeof emMode)}>{l}</button>{/each}
+				</div>
+			</div>
+			<!-- Razzle -->
+			<div class="hc">
+				<div class="hh"><span class="pt" style={portraitCss('razzle')}></span><b>Razzle</b><small>big top · juggling balls</small></div>
+				<div class="stage"><span class="dbtn"><RazzleTop size={48} fx={fourFx} sparkle={rzSparkle} ult={rzUlt} kind={rzKind} bodies={rzBodies} left={4 - rzN} /></span></div>
+				<div class="row sm">
+					<button on:click={() => (rzN = rzN % 4 + 1)}>Bodies {rzN}</button>
+					<button class:off={rzKind !== 'spawn'} on:click={() => (rzKind = rzKind === 'spawn' ? null : 'spawn')}>Stunt Doubles</button>
+					<button class:off={!rzUlt} on:click={() => (rzUlt = !rzUlt)}>Royal Big Top</button>
+					<button class:off={!rzSparkle} on:click={() => (rzSparkle = !rzSparkle)}>Sparkles</button>
+				</div>
+			</div>
 		</div>
 	</section>
 </div>
@@ -248,6 +360,7 @@
 <LevelSplash bind:this={levelSplash} {mobile} />
 <NebkherSplash bind:this={nkSplash} phone={mobile} />
 <EssenceWisps bind:this={ess} />
+<SpellToast bind:this={spellToast} phone={mobile} />
 <LaughBurst bind:this={nkBurst} x={bx} y={by} size={56} ult={nkUlt} />
 {#if won}
 	{#key won}<VictorySplash round={stats.rounds} team={won.team} reason={won.reason} myTeam={me} {mobile} {stats} onClose={() => (won = null)} />{/key}
@@ -273,6 +386,20 @@
 	.gybook { margin-left: auto; display: flex; }
 	.nktok.gy { box-shadow: 0 0 0 3px #2f7fe6, 0 0 0 6px #e8e8e8; }
 	.nktok { width: 56px; height: 56px; border-radius: 50%; display: block; background-color: #0b1b30; box-shadow: 0 0 0 3px #ef7d22, 0 0 0 6px #7a4292; }
+	.four { width: min(1180px, 100%); box-sizing: border-box; }
+	.four h2 small { font-size: .7rem; letter-spacing: .1em; color: #9fb0c4; }
+	.grid4 { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; margin-top: 12px; }
+	.hc { padding: 12px; border-radius: 12px; background: rgba(4, 10, 20, .55); border: 1px solid rgba(255, 255, 255, .1); display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+	.hc.wide { grid-column: 1 / -1; }
+	.hh { display: flex; align-items: center; gap: 10px; }
+	.hh b { font-weight: normal; font-size: 1.15rem; }
+	.hh small { margin-left: auto; font-size: .72rem; color: #9fb0c4; letter-spacing: .05em; }
+	.pt { width: 34px; height: 34px; border-radius: 50%; background-color: #0b1b30; box-shadow: 0 0 0 2px #d8b36a; flex: none; }
+	.stage { height: 120px; display: grid; place-items: center; border-radius: 10px; background: linear-gradient(180deg, #13304f, #0a1a2e); }
+	.dbtn { pointer-events: none; display: inline-flex; align-items: center; justify-content: center; }
+	.row.sm button { padding: 5px 11px; font-size: .82rem; }
+	.row.sm select { font: inherit; font-size: .82rem; padding: 5px 8px; border-radius: 10px; background: rgba(0, 0, 0, .35); color: #fff; border: 1px solid rgba(255, 255, 255, .2); }
+	.hc .nkrow { margin-top: 18px !important; }
 	.custom label { display: flex; align-items: center; gap: 6px; font-size: .9rem; }
 	.custom input { width: 56px; padding: 6px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, .2); background: rgba(0, 0, 0, .35); color: #fff; font: inherit; }
 </style>

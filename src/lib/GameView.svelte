@@ -448,7 +448,7 @@
 		if (!$boardPrefs.spells) return;
 		const nm = spellNums($ms, n.by, n.spell);
 		const line = [nm.attack != null && `Attack ${nm.attack}`, nm.move != null && `Move ${nm.move}`, nm.range != null && `Range ${nm.range}`, nm.radius != null && `Radius ${nm.radius}`, nm.coins != null && `+${nm.coins} coins`].filter(Boolean).join(' · ');
-		spellToast?.play(n.spell, line, n.wish ?? 0);
+		spellToast?.play(n.spell, line, n.wish ?? 0, n.moved ?? []);
 	}
 	$: battleNews = $ms.battleNews ?? null;
 	$: battleSplashing = !!battleNews && battleNews.id !== battleDoneId && Date.now() - battleNews.at < 15000;
