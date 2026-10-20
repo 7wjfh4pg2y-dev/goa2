@@ -857,6 +857,20 @@ describe("Razzle's comic bursts (comicNewsOf)", () => {
 		;(s as { cards: unknown }).cards = { r: { ...newPlayerCardState('razzle'), discard: [silver === 0 ? 1 : 0] }, e: { hero: 'brogan' }, m: { hero: 'arien' } }
 		expect(m(comicNewsOf(s, { ...ended, cards: s.cards }, { kind: 'attackResolve' }))).toBe('defended@6_5')
 	})
+	it('her silver as the defence = tickets for the doubles it counts; another card or a second discard = none; dying after it = OOF!, never applause', () => {
+		const silver = heroCards('razzle').findIndex((c) => c.color === 'SILVER')
+		const other = silver === 0 ? 1 : 0
+		const rz = (discard: number[]) => ({ r: { ...newPlayerCardState('razzle'), discard }, e: { hero: 'brogan' }, m: { hero: 'arien' } })
+		const open = { ...base(), cards: rz([]) as never, attacks: { r: { by: 'e', body: 'r', at: 1 } } }
+		const disc = (d: number[]) => ({ ...open, cards: rz(d) as never, attacks: { r: { by: 'e', body: 'r', at: 1, discarded: true } } })
+		const t = comicNewsOf(open, disc([silver]), { kind: 'defend', pid: 'r' })
+		expect(t?.moment).toBe('tickets'); expect(t?.ids).toEqual(['r~1']); expect(t?.hexes).toEqual(['6_5'])
+		expect(comicNewsOf(open, disc([other]), { kind: 'defend', pid: 'r' })).toBeNull()
+		expect(comicNewsOf(disc([silver]), disc([silver, other]), { kind: 'defend', pid: 'r' })).toBeNull()
+		// the attack then kills her: the defeat wins — OOF!, no applause
+		const died = { ...disc([silver]), attacks: {}, lastDefeat: { id: 'd1', by: 'e', victim: 'r' }, lastClash: { id: 'c1', kind: 'attack', by: 'e', v: 'r', out: 'died' } }
+		expect(comicNewsOf(disc([silver]), died, { kind: 'attackResolve' })?.moment).toBe('defeated')
+	})
 	it('only an enemy minion she defeats for coins: not a removal, not her own side, not someone else', () => {
 		const s = base()
 		const gone = (id: string) => { const p = { ...s.pieces } as Record<string, unknown>; delete p[id]; return { ...s, pieces: p as typeof s.pieces } }

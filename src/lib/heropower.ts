@@ -381,12 +381,14 @@ const markOf = (ctx: TurnCtx) => `${ctx.key}:${ctx.at}`
 export type FxNews = { id: string; by: string; kind: 'eq' | 'flip' | 'swap' | 'bushido' | 'war'; to?: Team; from?: number; card?: number; at: number }
 const fxNewsOf = (kind: FxNews['kind'], by: string, more: Partial<FxNews> = {}): FxNews => ({ id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, kind, by, at: Date.now(), ...more })
 // ── Razzle's comic bursts ──
-export type ComicMoment = 'attacked' | 'attacks' | 'killHero' | 'killMinion' | 'defended' | 'blocked' | 'defeated' | 'twin' | 'poofIn' | 'poofOut' | 'applause'
+export type ComicMoment = 'attacked' | 'attacks' | 'killHero' | 'killMinion' | 'defended' | 'blocked' | 'defeated' | 'twin' | 'poofIn' | 'poofOut' | 'applause' | 'tickets'
 /** one comic burst for everyone: what happened and the space it bursts over */
 export type ComicNews = { id: string; moment: ComicMoment; hex: string; at: number
 	/** a poof: every space it bursts over, the bodies that came (hidden until the cloud covers them) and copies of the
 	 *  bodies that went (shown until it does) */
-	hexes?: string[]; came?: string[]; gone?: NonNullable<S['pieces']>[string][] }
+	hexes?: string[]; came?: string[]; gone?: NonNullable<S['pieces']>[string][]
+	/** Crowd Control's tickets: the doubles that add +2 (one ticket each) */
+	ids?: string[] }
 /** The Razzle moment a request made, read off the state before and after it (null = none). Only real events count:
  *  a hero DEFEATED (by her → killHero; she falls → defeated — wins over the clash that ended in it), an ATTACK that
  *  ended with the defender's discard holding (hers blocked / she survived — applause when her silver was the defence; forced discards and called-off attacks
@@ -423,6 +425,16 @@ export function comicNewsOf(prev: S, next: S, req: { kind: string; pid?: string;
 		if (rz(c.v)) { const body = prev.attacks?.[c.v]?.body ?? c.v; return mk(prev.attacks?.[c.v]?.discarded && crowdField(prev, c.v, body).played ? 'applause' : 'defended', hexOf(body)) }
 		if (rz(c.by)) return mk('blocked', hexOf(c.v))
 		return null
+	}
+	// her silver discarded as the defence to an attack on her (not a forced discard): one Crowd Control ticket for each
+	// double it counts — only the first time it becomes this attack's defence
+	if (req.kind === 'defend' && rz(req.pid) && next.attacks?.[req.pid!]?.discarded) {
+		const pid = req.pid!, body = next.attacks[pid]!.body ?? pid
+		const was = prev.attacks?.[pid]?.discarded ? crowdField(prev, pid, body).played : false
+		const now = crowdField(next, pid, body)
+		if (!now.played || was || !now.ids.length) return null
+		const n = mk('tickets', hexOf(body))
+		return n ? { ...n, ids: now.ids, hexes: now.ids.map((id) => hexOf(id)!).filter(Boolean) } : null
 	}
 	if (req.kind === 'attack' && req.target) {
 		const was = prev.attacks?.[req.target], now = next.attacks?.[req.target]

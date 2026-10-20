@@ -23,6 +23,8 @@
 	import LaughBurst from '$lib/hud2/LaughBurst.svelte';
 	import ComicBurst from '$lib/hud2/ComicBurst.svelte';
 	import ApplauseSign from '$lib/hud2/ApplauseSign.svelte';
+	import CrowdTicket from '$lib/hud2/CrowdTicket.svelte';
+	import { COMIC_TIMING } from '$lib/hud2/comic';
 	import PushSplash from '$lib/PushSplash.svelte';
 	import VictorySplash from '$lib/VictorySplash.svelte';
 	import ControlWheel, { type WheelItem } from '$lib/ControlWheel.svelte';
@@ -358,7 +360,7 @@
 			{ id: 'cue', label: 'Cue', icon: ICON.cue, on: $boardPrefs.turnCue, title: `The YOUR TURN cue when your card acts: ${$boardPrefs.turnCue ? 'on' : 'off'}`, act: () => boardPrefs.set({ turnCue: !$boardPrefs.turnCue }) },
 			// NebKher's laugh bursting out of his token (only while a NebKher plays)
 			// Razzle's ultimate: the sparkles round her own dash button (only to her)
-			...(Object.values($ms.cards ?? {}).some((c) => c.hero === 'razzle') ? [{ id: 'rzApplause', label: 'Applause', icon: ICON.cue, on: $boardPrefs.rzApplause, title: `The APPLAUSE sign when she survives an attack with her silver: ${$boardPrefs.rzApplause ? 'on' : 'off'}`, act: () => boardPrefs.set({ rzApplause: !$boardPrefs.rzApplause }) }, { id: 'rzPoof', label: 'Poof', icon: ICON.cue, on: $boardPrefs.rzPoof, title: `A comic smoke cloud as her doubles appear and vanish: ${$boardPrefs.rzPoof ? 'on' : 'off'}`, act: () => boardPrefs.set({ rzPoof: !$boardPrefs.rzPoof }) }, { id: 'rzComic', label: 'Comics', icon: ICON.cue, on: $boardPrefs.rzComic, title: `Razzle's comic bursts (POW!, BAM!…): ${$boardPrefs.rzComic ? 'on' : 'off'}`, act: () => boardPrefs.set({ rzComic: !$boardPrefs.rzComic }) }, { id: 'rzShuffle', label: 'Shuffle', icon: ICON.cue, on: $boardPrefs.rzShuffle, title: `Razzle's tokens shuffling when one of her is attacked: ${$boardPrefs.rzShuffle ? 'on' : 'off'}`, act: () => boardPrefs.set({ rzShuffle: !$boardPrefs.rzShuffle }) }] : []),
+			...(Object.values($ms.cards ?? {}).some((c) => c.hero === 'razzle') ? [{ id: 'rzTickets', label: 'Tickets', icon: ICON.cue, on: $boardPrefs.rzTickets, title: `Crowd Control's tickets landing on her doubles: ${$boardPrefs.rzTickets ? 'on' : 'off'}`, act: () => boardPrefs.set({ rzTickets: !$boardPrefs.rzTickets }) }, { id: 'rzApplause', label: 'Applause', icon: ICON.cue, on: $boardPrefs.rzApplause, title: `The APPLAUSE sign when she survives an attack with her silver: ${$boardPrefs.rzApplause ? 'on' : 'off'}`, act: () => boardPrefs.set({ rzApplause: !$boardPrefs.rzApplause }) }, { id: 'rzPoof', label: 'Poof', icon: ICON.cue, on: $boardPrefs.rzPoof, title: `A comic smoke cloud as her doubles appear and vanish: ${$boardPrefs.rzPoof ? 'on' : 'off'}`, act: () => boardPrefs.set({ rzPoof: !$boardPrefs.rzPoof }) }, { id: 'rzComic', label: 'Comics', icon: ICON.cue, on: $boardPrefs.rzComic, title: `Razzle's comic bursts (POW!, BAM!…): ${$boardPrefs.rzComic ? 'on' : 'off'}`, act: () => boardPrefs.set({ rzComic: !$boardPrefs.rzComic }) }, { id: 'rzShuffle', label: 'Shuffle', icon: ICON.cue, on: $boardPrefs.rzShuffle, title: `Razzle's tokens shuffling when one of her is attacked: ${$boardPrefs.rzShuffle ? 'on' : 'off'}`, act: () => boardPrefs.set({ rzShuffle: !$boardPrefs.rzShuffle }) }] : []),
 			...($ms.cards?.[clientId]?.hero === 'razzle' ? [{ id: 'sparkle', label: 'Sparkles', icon: ICON.cue, on: $boardPrefs.sparkle, title: `The sparkles round your button (ultimate): ${$boardPrefs.sparkle ? 'on' : 'off'}`, act: () => boardPrefs.set({ sparkle: !$boardPrefs.sparkle }) }] : []),
 			// Gydion's cast toast (only while a Gydion plays)
 			...(Object.values($ms.cards ?? {}).some((c) => c.hero === 'gydion') ? [{ id: 'spells', label: 'Spells', icon: ICON.cue, on: $boardPrefs.spells, title: `Gydion's spell toast: ${$boardPrefs.spells ? 'on' : 'off'}`, act: () => boardPrefs.set({ spells: !$boardPrefs.spells }) },
@@ -881,14 +883,42 @@
 	// Razzle's comic bursts: the engine writes `comicNews` once per real moment (heropower comicNewsOf — her own move,
 	// or what is done to her); every screen plays it once, never one older than 10 s or already there when we joined.
 	// Her 'attacked' waits for the shuffle to finish, so it bursts over the body hit once it is back on its space.
-	let applause: ApplauseSign, comic: ComicBurst, comicSeen: string | null = $ms.comicNews?.id ?? null, rzShufUntil = 0;
+	let tickets: CrowdTicket, applause: ApplauseSign, comic: ComicBurst, comicSeen: string | null = $ms.comicNews?.id ?? null, rzShufUntil = 0;
 	$: comicNews = $ms.comicNews ?? null;
 	$: if (comicNews && comicNews.id !== comicSeen) { comicSeen = comicNews.id; playComic(comicNews); }
 	// a poof: the cloud comes FIRST — a new double stays hidden, a leaving one stays drawn, until the cloud covers it
 	let poofHide: string[] = [], poofLinger: Piece[] = [];
+	// her moments play ONE AFTER ANOTHER, never on top of each other: shuffle → attacked → tickets → applause / OOF!.
+	// rzSlot books the next free stretch (not before `earliest`) and says how long to wait; a backlog > 6 s is dropped
+	let rzBusyUntil = 0, ticketWait: string[] = [];
+	function rzSlot(dur: number, earliest = 0): number {
+		const now = Date.now(), start = Math.max(now, rzBusyUntil, earliest);
+		if (start - now > 6000) return -1;
+		rzBusyUntil = start + dur + 150; // a breath between them: one pops away before the next pops in
+		return start - now;
+	}
+	function playTickets(n: NonNullable<typeof comicNews>) {
+		const ids = n.ids ?? [], STAGGER = 160;
+		// the shields stay grey until their ticket lands (set a microtask on: we're inside the reactive pass)
+		queueMicrotask(() => (ticketWait = [...ticketWait, ...ids]));
+		const lands = (id: string) => (ticketWait = ticketWait.filter((x) => x !== id));
+		setTimeout(() => {
+			const wait = rzSlot((ids.length - 1) * STAGGER + (tickets?.TICKET_MS ?? 1300));
+			if (wait < 0) { ids.forEach(lands); return; }
+			setTimeout(() => {
+				const at = ids.map((id) => ({ id, p: board?.clientPos(id) }))
+				// her doubles left the board meanwhile (she fell): no tickets, and the next moment needn't wait for them
+				if (!tickets || !at.some((x) => x.p)) { ids.forEach(lands); rzBusyUntil = Date.now(); return; }
+				at.forEach(({ id, p }, i) => { if (!p) { lands(id); return; } setTimeout(() => lands(id), tickets!.play(p.x, p.y, p.r * 2, i * STAGGER)); });
+			}, wait);
+			setTimeout(() => ids.forEach(lands), wait + ids.length * STAGGER + 2000); // whatever happens, they light
+		}, 0);
+	}
 	function playComic(n: NonNullable<typeof comicNews>) {
 		const poof = n.moment === 'poofIn' || n.moment === 'poofOut';
-		if (!(poof ? $boardPrefs.rzPoof : n.moment === 'applause' ? $boardPrefs.rzApplause : $boardPrefs.rzComic) || Date.now() - n.at > 10000) return;
+		const on = poof ? $boardPrefs.rzPoof : n.moment === 'applause' ? $boardPrefs.rzApplause : n.moment === 'tickets' ? $boardPrefs.rzTickets : $boardPrefs.rzComic;
+		if (!on || Date.now() - n.at > 10000) return;
+		if (n.moment === 'tickets') { playTickets(n); return; }
 		if (poof) {
 			const cover = (comic?.coverAt ?? 110) + 30;
 			// (a microtask later: set from inside this reactive pass, the earlier `boardPieces` block wouldn't re-run —
@@ -902,12 +932,14 @@
 		}
 		// a tick later, so this turn's shuffle (its own reactive block) has started and set rzShufUntil
 		setTimeout(() => {
-			const wait = n.moment === 'attacked' ? Math.max(0, rzShufUntil - Date.now()) : 0;
+			const dur = n.moment === 'applause' ? (applause?.SIGN_MS ?? 2000) : COMIC_TIMING[n.moment as Exclude<typeof n.moment, 'applause' | 'tickets'>].ms;
+			const wait = rzSlot(dur, n.moment === 'attacked' ? rzShufUntil : 0);
+			if (wait < 0) return;
 			setTimeout(() => {
 				const p = board?.hexClient(n.hex);
 				if (!p) return;
-				if (n.moment === 'applause') { if ($boardPrefs.rzApplause) applause?.play(p.x, p.y, p.r * 2); }
-				else comic?.play(n.moment as Exclude<typeof n.moment, 'applause'>, p.x, p.y, p.r * 2);
+				if (n.moment === 'applause') applause?.play(p.x, p.y, p.r * 2);
+				else comic?.play(n.moment as Exclude<typeof n.moment, 'applause' | 'tickets'>, p.x, p.y, p.r * 2);
 			}, wait);
 		}, 0);
 	}
@@ -939,10 +971,12 @@
 		// Razzle: each other one of her in Crowd Control's radius shows its +2 — grey (only if she plays the silver)
 		// until the silver is discarded as this defence, then lit and counted in the total
 		const crowd = crowdField($ms, t, body);
-		const total = r.total + (crowd.played ? 2 * crowd.ids.length : 0);
+		// a double whose Crowd Control ticket is still in the air stays grey (and out of the total) until it lands
+		const lit = (id: string) => crowd.played && !ticketWait.includes(id);
+		const total = r.total + 2 * crowd.ids.filter(lit).length;
 		return [
 			...r.mods.map((m) => ({ id: m.id, text: m.d > 0 ? '+1' : '−1', tone: (m.d > 0 ? 'up' : 'down') as 'up' | 'down' | 'even' | 'ghost' })),
-			...crowd.ids.map((id) => ({ id, text: '+2', tone: (crowd.played ? 'up' : 'ghost') as 'up' | 'ghost' })),
+			...crowd.ids.map((id) => ({ id, text: '+2', tone: (lit(id) ? 'up' : 'ghost') as 'up' | 'ghost' })),
 			{ id: body, text: total > 0 ? `+${total}` : total < 0 ? `−${-total}` : '±0', tone: (total > 0 ? 'up' : total < 0 ? 'down' : 'even') as 'up' | 'down' | 'even', total: true }
 		];
 	});
@@ -1289,6 +1323,7 @@
 	<EssenceWisps bind:this={essence} />
 	<ComicBurst bind:this={comic} />
 	<ApplauseSign bind:this={applause} />
+	<CrowdTicket bind:this={tickets} />
 	<LaughBurst bind:this={nkBurst} x={nkX} y={nkY} size={nkR} ult={nkUlt} />
 	<BattleSplash news={battleNews} {mobile} myTeam={viewTeam} onDone={() => (battleDoneId = battleNews?.id ?? null)} />
 	<!-- a push (mid-turn, or from the battle) waits for the battle splash to finish -->
