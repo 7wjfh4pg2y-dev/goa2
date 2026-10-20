@@ -24,7 +24,7 @@
 				<div class="copy">
 					<small class="kick"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12M6 21h12M7 3c0 5 4 6 5 9-1 3-5 4-5 9M17 3c0 5-4 6-5 9 1 3 5 4 5 9" /></svg>Reverse Time</small>
 					<b class="title">The sands will turn!</b>
-					<span class="sub">Next turn runs backwards — the lowest initiative strikes first</span>
+					<span class="sub">Next turn — initiative is reversed</span>
 				</div>
 			</div>
 		</div>
@@ -37,7 +37,7 @@
 	.band { position: relative; width: min(500px, 92vw); height: 96px; display: grid; grid-template-columns: 112px 1fr; align-items: center; overflow: hidden; border-radius: 12px;
 		background: linear-gradient(90deg, rgba(8, 26, 16, 0.97), rgba(26, 10, 28, 0.97)); border: 1px solid rgba(143, 240, 164, 0.55); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5), 0 12px 30px rgba(0, 0, 0, 0.55), 0 0 22px rgba(65, 174, 89, 0.22); }
 	.artbox { position: relative; height: 100%; overflow: hidden; clip-path: polygon(0 0, 100% 0, 84% 100%, 0 100%); }
-	.art { position: absolute; inset: 0; background-size: 230%; background-position: 50% 30%; animation: emart var(--dur, 3.2s) ease-out both; }
+	.art { position: absolute; inset: 0; background-size: 230%; background-position: 66% 24%; /* his face and the time sigil (the user, 2026-10-20) */ animation: emart var(--dur, 3.2s) ease-out both; }
 	@keyframes emart { from { transform: scale(1.2); } to { transform: scale(1); } }
 	/* a band of light runs BACKWARDS across the painting (right to left), the way time is about to go */
 	.sweep { position: absolute; top: 0; bottom: 0; left: 0; width: 40%; background: linear-gradient(100deg, transparent, rgba(255, 160, 230, 0.55), transparent); transform: translateX(260%) skewX(-12deg); animation: emsw 1s 0.3s ease-in-out both; }

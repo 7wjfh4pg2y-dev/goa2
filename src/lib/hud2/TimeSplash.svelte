@@ -1,13 +1,13 @@
 <script lang="ts">
 	// The reversed turn begins (2026-10-20, the user's ask): once the cards of a turn Emmitt reversed are revealed, his
-	// hourglass clock fills the middle of every screen — card-green, the face creeping ANTICLOCKWISE (a clock face reads
-	// backwards: that is time going on as normal) — then it stalls, the hourglass turns over, the clock goes magenta and
-	// spins CLOCKWISE, faster and faster, before it fades. The drawing is the dash button's (EmmittClock), large.
-	// ~4 s; transform / opacity only (two coloured copies cross-fade instead of animating a colour).
+	// hourglass clock fills the middle of every screen — card-green for 1 s, the face creeping ANTICLOCKWISE (a clock face
+	// reads backwards: that is time going on as normal) — then it stalls, the hourglass turns over, the clock goes magenta
+	// and spins CLOCKWISE, faster and faster, for 2.5 s before it fades. Hollow middle, only the magenta words. The drawing is the dash button's (EmmittClock), large.
+	// 3.5 s; transform / opacity only (two coloured copies cross-fade instead of animating a colour).
 	export let phone = false
 	let run = 0, on = false
 	let timer: ReturnType<typeof setTimeout> | null = null
-	const DURATION = 4200
+	const DURATION = 3500 // 1 s green, then 2.5 s magenta (the user, 2026-10-20)
 	export function play() {
 		on = false; run++
 		if (timer) clearTimeout(timer)
@@ -51,7 +51,6 @@
 				<span class="hg"><span class="lay g">{@render glass(PAL.g)}</span><span class="lay m">{@render glass(PAL.m)}</span></span>
 			</div>
 			<div class="cap">
-				<b class="c1">The hourglass turns…</b>
 				<b class="c2">Time runs backwards</b>
 				<small class="c3">This turn the lowest initiative acts first</small>
 			</div>
@@ -60,9 +59,9 @@
 {/if}
 
 <style>
-	.ts { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; align-content: center; gap: 18px; pointer-events: none; --s: clamp(220px, 34vmin, 340px); animation: tsout 4.2s linear both; }
+	.ts { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; align-content: center; gap: 18px; pointer-events: none; --s: clamp(220px, 34vmin, 340px); animation: tsout 3.5s linear both; }
 	.ts.ph { --s: min(62vw, 260px); }
-	@keyframes tsout { 0%, 86% { opacity: 1; } 100% { opacity: 0; } }
+	@keyframes tsout { 0%, 88% { opacity: 1; } 100% { opacity: 0; } }
 	.dim { position: absolute; inset: 0; background: radial-gradient(circle at 50% 46%, rgba(4, 10, 18, 0.72), rgba(4, 10, 18, 0.35) 55%, transparent 80%); animation: fadein 0.5s ease-out both; }
 	@keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
 	.clock { position: relative; width: var(--s); height: var(--s); animation: pop 0.6s cubic-bezier(0.2, 1.4, 0.4, 1) both; }
@@ -71,34 +70,32 @@
 	.lay { position: absolute; inset: 0; display: block; }
 	.lay :global(svg) { width: 100%; height: 100%; display: block; overflow: visible; }
 	/* green until the turn-over, magenta after (cross-faded copies) */
-	.lay.m, .halo.m { opacity: 0; animation: tom 0.5s 1.75s ease-out both; }
-	.lay.g, .halo.g { animation: tog 0.5s 1.75s ease-in both; }
+	.lay.m, .halo.m { opacity: 0; animation: tom 0.35s 0.95s ease-out both; }
+	.lay.g, .halo.g { animation: tog 0.35s 0.95s ease-in both; }
 	@keyframes tom { to { opacity: 1; } }
 	@keyframes tog { to { opacity: 0; } }
 	/* the face: anticlockwise at a walk → a stall → clockwise, faster and faster */
-	.rot { inset: 0; animation: spin 3.9s both; }
+	.rot { inset: 0; animation: spin 3.5s both; }
 	@keyframes spin {
 		0% { transform: rotate(0deg); animation-timing-function: linear; }
-		36% { transform: rotate(-95deg); animation-timing-function: ease-out; }
-		46% { transform: rotate(-112deg); animation-timing-function: cubic-bezier(0.5, 0, 0.9, 0.6); }
+		24% { transform: rotate(-70deg); animation-timing-function: ease-out; }
+		30% { transform: rotate(-82deg); animation-timing-function: cubic-bezier(0.5, 0, 0.9, 0.6); }
 		100% { transform: rotate(640deg); }
 	}
-	.disc { left: 25%; top: 25%; width: 50%; height: 50%; border-radius: 50%; background: radial-gradient(circle at 50% 40%, #1d3550, #08131f); box-shadow: inset 0 0 0 2px rgba(216, 179, 106, 0.55), 0 6px 18px rgba(0, 0, 0, 0.6); }
-	.hg { left: 31.5%; top: 31.5%; width: 37%; height: 37%; animation: flip 0.75s 1.5s cubic-bezier(0.5, -0.35, 0.45, 1.35) both; }
+	.disc { left: 25%; top: 25%; width: 50%; height: 50%; border-radius: 50%; box-shadow: inset 0 0 0 2px rgba(216, 179, 106, 0.55); } /* hollow, like the rest of the clock */
+	.hg { left: 31.5%; top: 31.5%; width: 37%; height: 37%; animation: flip 0.6s 0.75s cubic-bezier(0.5, -0.35, 0.45, 1.35) both; }
 	@keyframes flip { from { transform: rotate(0deg); } to { transform: rotate(180deg); } }
 	.halo { inset: -6%; border-radius: 50%; }
 	.halo.g { background: radial-gradient(circle, transparent 52%, rgba(65, 174, 89, 0.55) 62%, transparent 74%); }
 	.halo.m { background: radial-gradient(circle, transparent 52%, rgba(224, 64, 192, 0.6) 62%, transparent 74%); }
 	/* the turn-over sends a magenta shock ring out */
-	.ring { inset: 18%; border-radius: 50%; border: 3px solid #ffa0e6; opacity: 0; animation: shock 0.9s 1.85s ease-out both; }
-	@keyframes shock { 0% { opacity: 0.9; transform: scale(0.6); } 100% { opacity: 0; transform: scale(1.9); } }
+	.ring { inset: 18%; border-radius: 50%; border: 3px solid #ffa0e6; opacity: 0; animation: shock 0.9s 1.05s ease-out both; }
+	@keyframes shock { 0% { opacity: 0; transform: scale(0.6); } 4% { opacity: 0.9; } 100% { opacity: 0; transform: scale(1.9); } } /* starts unseen: a `both` fill holds the first frame through the delay */
 	.cap { position: relative; display: grid; justify-items: center; text-align: center; min-height: 64px; }
 	.cap b { grid-area: 1 / 1; font-weight: normal; font-size: clamp(22px, 3.4vmin, 34px); letter-spacing: 0.06em; text-transform: uppercase; -webkit-text-stroke: 1px #0a0610; paint-order: stroke fill; text-shadow: 0 2px 0 #000, 0 0 16px currentColor; }
-	.c1 { color: #b8f7c6; animation: cap1 1.9s 0.2s ease both; }
-	@keyframes cap1 { 0% { opacity: 0; transform: translateY(8px); } 25%, 75% { opacity: 1; transform: none; } 100% { opacity: 0; transform: translateY(-6px); } }
-	.c2 { color: #ffc4ef; animation: cap2 0.6s 1.95s cubic-bezier(0.2, 1.5, 0.4, 1) both; }
+	.c2 { color: #ffc4ef; animation: cap2 0.55s 1.05s cubic-bezier(0.2, 1.5, 0.4, 1) both; }
 	@keyframes cap2 { from { opacity: 0; transform: scale(1.4); } to { opacity: 1; transform: none; } }
-	.c3 { grid-area: 2 / 1; margin-top: 4px; font-size: 14px; color: #f2d9ec; text-shadow: 0 1px 3px #000; animation: fadein 0.5s 2.3s ease-out both; }
+	.c3 { grid-area: 2 / 1; margin-top: 4px; font-size: 14px; color: #f2d9ec; text-shadow: 0 1px 3px #000; animation: fadein 0.45s 1.35s ease-out both; }
 	.ph .c3 { font-size: 12px; }
 	@media (prefers-reduced-motion: reduce) { .ts *, .ts { animation-duration: 0.01s !important; animation-delay: 0s !important; } }
 </style>
