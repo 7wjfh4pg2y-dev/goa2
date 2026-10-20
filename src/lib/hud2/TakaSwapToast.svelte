@@ -1,6 +1,6 @@
 <script lang="ts">
 	// Takahide swaps his gold (DEMO on /splash-demo, 2026-10-20): a toast under the top bar — his sun halo turning behind,
-	// the old gold folding away and the new one swinging in with a sheen, 'The blade is drawn · A → B'. A Bushido swap
+	// the old gold folding away and the new one swinging in with a sheen; the words follow the gold he draws (Tiger / Butterfly / Bee). A Bushido swap
 	// in the game would show only a face-down card (the swap stays secret). ~3 s; transform / opacity only.
 	import { heroCards, backgroundSlug } from '$lib/cards/deck'
 	export let phone = false
@@ -13,6 +13,13 @@
 		if (timer) clearTimeout(timer)
 		requestAnimationFrame(() => { on = true; timer = setTimeout(() => (on = false), 3000) })
 	}
+	// what he says depends on the gold he draws (the user, 2026-10-20: one line per stance, in his voice)
+	const LINES: { re: RegExp; title: string; sub: string }[] = [
+		{ re: /tiger/i, title: 'The tiger wakes!', sub: 'Strike like a Tiger — no mercy' },
+		{ re: /butterfly/i, title: 'Drift on the wind!', sub: 'Float like a Butterfly — untouchable' },
+		{ re: /bee/i, title: 'Feel the sting!', sub: 'Sting like a Bee — swift, then gone' },
+	]
+	$: line = LINES.find((l) => l.re.test(golds[to]?.name ?? '')) ?? { title: 'The blade is drawn!', sub: '' }
 	const RAYS = Array.from({ length: 24 }, (_, i) => i * 15)
 </script>
 
@@ -27,8 +34,8 @@
 				</span>
 				<span class="copy">
 					<small>Takahide swaps his gold</small>
-					<b>The blade is drawn!</b>
-					<em>{golds[from]?.name ?? ''} → {golds[to]?.name ?? ''}</em>
+					<b>{line.title}</b>
+					<em>{line.sub || `${golds[from]?.name ?? ''} → ${golds[to]?.name ?? ''}`}</em>
 				</span>
 			</div>
 		</div>
@@ -58,4 +65,5 @@
 	.copy em { font-style: normal; font-size: 12.5px; color: #ecdcb8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 	.ph { top: 64px; }
 	.ph .copy b { font-size: 21px; }
+	.ph .copy em { white-space: normal; font-size: 12px; line-height: 1.2; }
 </style>
