@@ -847,6 +847,16 @@ describe("Razzle's comic bursts (comicNewsOf)", () => {
 		expect(comicNewsOf(t, { ...t, lastClash: { id: 'c1', kind: 'force', by: 'r', v: 'e', out: 'defended' } }, { kind: 'defend' })).toBeNull()
 		expect(comicNewsOf(t, { ...t, lastClash: { id: 'c1', kind: 'attack', by: 'r', v: 'e', out: 'cancel' } }, { kind: 'attackResolve' })).toBeNull()
 	})
+	it('she survives with her silver as the defence = applause instead of MISSED ME!', () => {
+		const silver = heroCards('razzle').findIndex((c) => c.color === 'SILVER')
+		const s = { ...base(), attacks: { r: { by: 'e', body: 'r~1', at: 1, discarded: true } } } as ReturnType<typeof base>
+		;(s as { cards: unknown }).cards = { r: { ...newPlayerCardState('razzle'), discard: [silver] }, e: { hero: 'brogan' }, m: { hero: 'arien' } }
+		const ended = { ...s, attacks: {}, lastClash: { id: 'c1', kind: 'attack', by: 'e', v: 'r', out: 'defended' } }
+		expect(m(comicNewsOf(s, ended, { kind: 'attackResolve' }))).toBe('applause@6_5')
+		// another card as the defence: MISSED ME!
+		;(s as { cards: unknown }).cards = { r: { ...newPlayerCardState('razzle'), discard: [silver === 0 ? 1 : 0] }, e: { hero: 'brogan' }, m: { hero: 'arien' } }
+		expect(m(comicNewsOf(s, { ...ended, cards: s.cards }, { kind: 'attackResolve' }))).toBe('defended@6_5')
+	})
 	it('only an enemy minion she defeats for coins: not a removal, not her own side, not someone else', () => {
 		const s = base()
 		const gone = (id: string) => { const p = { ...s.pieces } as Record<string, unknown>; delete p[id]; return { ...s, pieces: p as typeof s.pieces } }

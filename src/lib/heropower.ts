@@ -381,7 +381,7 @@ const markOf = (ctx: TurnCtx) => `${ctx.key}:${ctx.at}`
 export type FxNews = { id: string; by: string; kind: 'eq' | 'flip' | 'swap' | 'bushido' | 'war'; to?: Team; from?: number; card?: number; at: number }
 const fxNewsOf = (kind: FxNews['kind'], by: string, more: Partial<FxNews> = {}): FxNews => ({ id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, kind, by, at: Date.now(), ...more })
 // ── Razzle's comic bursts ──
-export type ComicMoment = 'attacked' | 'attacks' | 'killHero' | 'killMinion' | 'defended' | 'blocked' | 'defeated' | 'twin' | 'poofIn' | 'poofOut'
+export type ComicMoment = 'attacked' | 'attacks' | 'killHero' | 'killMinion' | 'defended' | 'blocked' | 'defeated' | 'twin' | 'poofIn' | 'poofOut' | 'applause'
 /** one comic burst for everyone: what happened and the space it bursts over */
 export type ComicNews = { id: string; moment: ComicMoment; hex: string; at: number
 	/** a poof: every space it bursts over, the bodies that came (hidden until the cloud covers them) and copies of the
@@ -389,7 +389,7 @@ export type ComicNews = { id: string; moment: ComicMoment; hex: string; at: numb
 	hexes?: string[]; came?: string[]; gone?: NonNullable<S['pieces']>[string][] }
 /** The Razzle moment a request made, read off the state before and after it (null = none). Only real events count:
  *  a hero DEFEATED (by her → killHero; she falls → defeated — wins over the clash that ended in it), an ATTACK that
- *  ended with the defender's discard holding (hers blocked / she survived; forced discards and called-off attacks
+ *  ended with the defender's discard holding (hers blocked / she survived — applause when her silver was the defence; forced discards and called-off attacks
  *  don't count), an attack OPENED between enemies (on her → attacked, over the body hit; by her → attacks), an enemy
  *  minion DEFEATED by her for coins (a plain Remove or the minion battle don't count), and Twin Strike switched on. */
 export function comicNewsOf(prev: S, next: S, req: { kind: string; pid?: string; piece?: string; target?: string; op?: string }): ComicNews | null {
@@ -419,7 +419,8 @@ export function comicNewsOf(prev: S, next: S, req: { kind: string; pid?: string;
 	}
 	const c = next.lastClash
 	if (c && c.id !== prev.lastClash?.id && c.kind === 'attack' && c.out === 'defended' && c.v && enemies(c.by, c.v)) {
-		if (rz(c.v)) return mk('defended', hexOf(prev.attacks?.[c.v]?.body ?? c.v))
+		// she survived: with her silver as the defence (Crowd Control) the crowd applauds, else MISSED ME!
+		if (rz(c.v)) { const body = prev.attacks?.[c.v]?.body ?? c.v; return mk(prev.attacks?.[c.v]?.discarded && crowdField(prev, c.v, body).played ? 'applause' : 'defended', hexOf(body)) }
 		if (rz(c.by)) return mk('blocked', hexOf(c.v))
 		return null
 	}

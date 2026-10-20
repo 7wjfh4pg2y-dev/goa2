@@ -22,6 +22,7 @@
 	import SnorriSplash from '$lib/hud2/SnorriSplash.svelte';
 	import LaughBurst from '$lib/hud2/LaughBurst.svelte';
 	import ComicBurst from '$lib/hud2/ComicBurst.svelte';
+	import ApplauseSign from '$lib/hud2/ApplauseSign.svelte';
 	import PushSplash from '$lib/PushSplash.svelte';
 	import VictorySplash from '$lib/VictorySplash.svelte';
 	import ControlWheel, { type WheelItem } from '$lib/ControlWheel.svelte';
@@ -357,7 +358,7 @@
 			{ id: 'cue', label: 'Cue', icon: ICON.cue, on: $boardPrefs.turnCue, title: `The YOUR TURN cue when your card acts: ${$boardPrefs.turnCue ? 'on' : 'off'}`, act: () => boardPrefs.set({ turnCue: !$boardPrefs.turnCue }) },
 			// NebKher's laugh bursting out of his token (only while a NebKher plays)
 			// Razzle's ultimate: the sparkles round her own dash button (only to her)
-			...(Object.values($ms.cards ?? {}).some((c) => c.hero === 'razzle') ? [{ id: 'rzPoof', label: 'Poof', icon: ICON.cue, on: $boardPrefs.rzPoof, title: `A comic smoke cloud as her doubles appear and vanish: ${$boardPrefs.rzPoof ? 'on' : 'off'}`, act: () => boardPrefs.set({ rzPoof: !$boardPrefs.rzPoof }) }, { id: 'rzComic', label: 'Comics', icon: ICON.cue, on: $boardPrefs.rzComic, title: `Razzle's comic bursts (POW!, BAM!…): ${$boardPrefs.rzComic ? 'on' : 'off'}`, act: () => boardPrefs.set({ rzComic: !$boardPrefs.rzComic }) }, { id: 'rzShuffle', label: 'Shuffle', icon: ICON.cue, on: $boardPrefs.rzShuffle, title: `Razzle's tokens shuffling when one of her is attacked: ${$boardPrefs.rzShuffle ? 'on' : 'off'}`, act: () => boardPrefs.set({ rzShuffle: !$boardPrefs.rzShuffle }) }] : []),
+			...(Object.values($ms.cards ?? {}).some((c) => c.hero === 'razzle') ? [{ id: 'rzApplause', label: 'Applause', icon: ICON.cue, on: $boardPrefs.rzApplause, title: `The APPLAUSE sign when she survives an attack with her silver: ${$boardPrefs.rzApplause ? 'on' : 'off'}`, act: () => boardPrefs.set({ rzApplause: !$boardPrefs.rzApplause }) }, { id: 'rzPoof', label: 'Poof', icon: ICON.cue, on: $boardPrefs.rzPoof, title: `A comic smoke cloud as her doubles appear and vanish: ${$boardPrefs.rzPoof ? 'on' : 'off'}`, act: () => boardPrefs.set({ rzPoof: !$boardPrefs.rzPoof }) }, { id: 'rzComic', label: 'Comics', icon: ICON.cue, on: $boardPrefs.rzComic, title: `Razzle's comic bursts (POW!, BAM!…): ${$boardPrefs.rzComic ? 'on' : 'off'}`, act: () => boardPrefs.set({ rzComic: !$boardPrefs.rzComic }) }, { id: 'rzShuffle', label: 'Shuffle', icon: ICON.cue, on: $boardPrefs.rzShuffle, title: `Razzle's tokens shuffling when one of her is attacked: ${$boardPrefs.rzShuffle ? 'on' : 'off'}`, act: () => boardPrefs.set({ rzShuffle: !$boardPrefs.rzShuffle }) }] : []),
 			...($ms.cards?.[clientId]?.hero === 'razzle' ? [{ id: 'sparkle', label: 'Sparkles', icon: ICON.cue, on: $boardPrefs.sparkle, title: `The sparkles round your button (ultimate): ${$boardPrefs.sparkle ? 'on' : 'off'}`, act: () => boardPrefs.set({ sparkle: !$boardPrefs.sparkle }) }] : []),
 			// Gydion's cast toast (only while a Gydion plays)
 			...(Object.values($ms.cards ?? {}).some((c) => c.hero === 'gydion') ? [{ id: 'spells', label: 'Spells', icon: ICON.cue, on: $boardPrefs.spells, title: `Gydion's spell toast: ${$boardPrefs.spells ? 'on' : 'off'}`, act: () => boardPrefs.set({ spells: !$boardPrefs.spells }) },
@@ -880,14 +881,14 @@
 	// Razzle's comic bursts: the engine writes `comicNews` once per real moment (heropower comicNewsOf — her own move,
 	// or what is done to her); every screen plays it once, never one older than 10 s or already there when we joined.
 	// Her 'attacked' waits for the shuffle to finish, so it bursts over the body hit once it is back on its space.
-	let comic: ComicBurst, comicSeen: string | null = $ms.comicNews?.id ?? null, rzShufUntil = 0;
+	let applause: ApplauseSign, comic: ComicBurst, comicSeen: string | null = $ms.comicNews?.id ?? null, rzShufUntil = 0;
 	$: comicNews = $ms.comicNews ?? null;
 	$: if (comicNews && comicNews.id !== comicSeen) { comicSeen = comicNews.id; playComic(comicNews); }
 	// a poof: the cloud comes FIRST — a new double stays hidden, a leaving one stays drawn, until the cloud covers it
 	let poofHide: string[] = [], poofLinger: Piece[] = [];
 	function playComic(n: NonNullable<typeof comicNews>) {
 		const poof = n.moment === 'poofIn' || n.moment === 'poofOut';
-		if (!(poof ? $boardPrefs.rzPoof : $boardPrefs.rzComic) || Date.now() - n.at > 10000) return;
+		if (!(poof ? $boardPrefs.rzPoof : n.moment === 'applause' ? $boardPrefs.rzApplause : $boardPrefs.rzComic) || Date.now() - n.at > 10000) return;
 		if (poof) {
 			const cover = (comic?.coverAt ?? 110) + 30;
 			// (a microtask later: set from inside this reactive pass, the earlier `boardPieces` block wouldn't re-run —
@@ -896,13 +897,18 @@
 				if (n.came?.length) { poofHide = [...poofHide, ...n.came]; setTimeout(() => (poofHide = poofHide.filter((id) => !n.came!.includes(id))), cover); }
 				if (n.gone?.length) { const g = n.gone as unknown as Piece[]; poofLinger = [...poofLinger, ...g]; setTimeout(() => (poofLinger = poofLinger.filter((q) => !g.includes(q))), cover); }
 			});
-			setTimeout(() => { for (const h of n.hexes ?? [n.hex]) { const p = board?.hexClient(h); if (p) comic?.play(n.moment, p.x, p.y, p.r * 2); } }, 0);
+			setTimeout(() => { for (const h of n.hexes ?? [n.hex]) { const p = board?.hexClient(h); if (p) comic?.play(n.moment as 'poofIn' | 'poofOut', p.x, p.y, p.r * 2); } }, 0);
 			return;
 		}
 		// a tick later, so this turn's shuffle (its own reactive block) has started and set rzShufUntil
 		setTimeout(() => {
 			const wait = n.moment === 'attacked' ? Math.max(0, rzShufUntil - Date.now()) : 0;
-			setTimeout(() => { const p = board?.hexClient(n.hex); if (p) comic?.play(n.moment, p.x, p.y, p.r * 2); }, wait);
+			setTimeout(() => {
+				const p = board?.hexClient(n.hex);
+				if (!p) return;
+				if (n.moment === 'applause') { if ($boardPrefs.rzApplause) applause?.play(p.x, p.y, p.r * 2); }
+				else comic?.play(n.moment as Exclude<typeof n.moment, 'applause'>, p.x, p.y, p.r * 2);
+			}, wait);
 		}, 0);
 	}
 	// forced discards: the demand on you, and the one you made
@@ -1282,6 +1288,7 @@
 	<SpellToast bind:this={spellToast} phone={mobile} />
 	<EssenceWisps bind:this={essence} />
 	<ComicBurst bind:this={comic} />
+	<ApplauseSign bind:this={applause} />
 	<LaughBurst bind:this={nkBurst} x={nkX} y={nkY} size={nkR} ult={nkUlt} />
 	<BattleSplash news={battleNews} {mobile} myTeam={viewTeam} onDone={() => (battleDoneId = battleNews?.id ?? null)} />
 	<!-- a push (mid-turn, or from the battle) waits for the battle splash to finish -->

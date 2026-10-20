@@ -30,6 +30,7 @@
 	import RazzleTop from '$lib/hud2/RazzleTop.svelte';
 	import ComicBurst from '$lib/hud2/ComicBurst.svelte';
 	import CrowdTicket from '$lib/hud2/CrowdTicket.svelte';
+	import ApplauseSign from '$lib/hud2/ApplauseSign.svelte';
 	import { COMIC_TIMING } from '$lib/hud2/comic';
 	import type { ComicMoment } from '$lib/hud2/comic';
 	import { newPlayerCardState } from '$lib/cards/cardstate';
@@ -131,19 +132,19 @@
 	// her own moments burst over her; the ones she does to someone else over the target
 	const COMIC_BTNS: [ComicMoment, string, 'me' | 'foe'][] = [['attacked', 'Attacked', 'me'], ['attacks', 'Attacks a hero', 'foe'], ['killHero', 'Defeats a hero', 'foe'], ['killMinion', 'Defeats a minion', 'foe'], ['defended', 'Survives', 'me'], ['blocked', 'Blocked', 'foe'], ['defeated', 'Defeated', 'me'], ['twin', 'Twin Strike', 'foe']];
 	// Crowd Control: a ticket flutters onto each double that adds +2 and its grey +2 shield lights green as it lands
-	let tickets: CrowdTicket, rzDbl2: HTMLElement, lit = [false, false], ccBusy = false;
+	let applause: ApplauseSign, tickets: CrowdTicket, rzDbl2: HTMLElement, lit = [false, false], ccBusy = false;
 	function crowd(after = 0) {
 		const ds = [rzDbl, rzDbl2];
 		ds.forEach((d, i) => { const m = mid(d); const land = tickets.play(m.x, m.y, m.w, after + i * 160); setTimeout(() => (lit[i] = true, lit = lit), land); });
 		return after + (ds.length - 1) * 160 + tickets.TICKET_MS;
 	}
-	// the whole moment in order, nothing on top of anything else: attacked → (shuffle in a game) → tickets → MISSED ME!
+	// the whole moment in order, nothing on top of anything else: attacked → (shuffle in a game) → tickets → APPLAUSE!
 	function crowdShow() {
 		if (ccBusy) return; ccBusy = true; lit = [false, false];
 		const me = mid(rzMain); comic.play('attacked', me.x, me.y, me.w);
 		const done = crowd(COMIC_TIMING.attacked.ms + 150);
-		setTimeout(() => { const m = mid(rzMain); comic.play('defended', m.x, m.y, m.w); }, done + 100);
-		setTimeout(() => { lit = [false, false]; ccBusy = false; }, done + 100 + COMIC_TIMING.defended.ms + 400);
+		setTimeout(() => { const m = mid(rzMain); applause.play(m.x, m.y, m.w); }, done + 100);
+		setTimeout(() => { lit = [false, false]; ccBusy = false; }, done + 100 + applause.SIGN_MS + 400);
 	}
 	function crowdOnly() { if (ccBusy) return; ccBusy = true; lit = [false, false]; const done = crowd(0); setTimeout(() => { lit = [false, false]; ccBusy = false; }, done + 600); }
 	function comicAt(m: ComicMoment, who: 'me' | 'foe') { const t = mid(who === 'me' ? rzMain : rzFoe); comic.play(m, t.x, t.y, t.w); }
@@ -420,6 +421,7 @@
 				<div class="row sm">
 					<button class="t" on:click={crowdOnly}>Crowd Control</button>
 					<button class="t" on:click={crowdShow}>… in order</button>
+					<button class="t" on:click={() => { const m = mid(rzMain); applause.play(m.x, m.y, m.w); }}>Applause</button>
 					{#each COMIC_BTNS as [m, label, who]}<button class={who === 'me' ? 't' : 'o'} on:click={() => comicAt(m, who)}>{label}</button>{/each}
 				</div>
 				<div class="stage"><span class="dbtn"><RazzleTop size={48} fx={fourFx} sparkle={rzSparkle} ult={rzUlt} kind={rzKind} bodies={rzBodies} left={4 - rzN} /></span></div>
@@ -456,6 +458,7 @@
 <IgnatiaSplash bind:this={igSplash} phone={mobile} />
 <ComicBurst bind:this={comic} />
 <CrowdTicket bind:this={tickets} />
+<ApplauseSign bind:this={applause} />
 <LaughBurst bind:this={nkBurst} x={bx} y={by} size={56} ult={nkUlt} />
 {#if won}
 	{#key won}<VictorySplash round={stats.rounds} team={won.team} reason={won.reason} myTeam={me} {mobile} {stats} onClose={() => (won = null)} />{/key}
