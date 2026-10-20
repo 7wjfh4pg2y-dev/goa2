@@ -11,47 +11,53 @@
 	let wisps: Wisp[] = []
 	let flash: { key: number; x: number; y: number; c: string; delay: number } | null = null
 	let timer: ReturnType<typeof setTimeout> | null = null
-	const TRAIL = [0, 1, 2, 3, 4, 5, 6] // the head + six sparks a beat behind each other (a longer tail, the user 2026-10-19)
+	// the head + seventeen puffs of smoke flying the same path a beat behind; further back = bigger, fainter, a little
+	// off the line (the trail wavers and spreads like smoke — the user, 2026-10-20: flowy, longer, ghostly)
+	const TRAIL = Array.from({ length: 18 }, (_, k) => k)
+	const GAP = 20 // ms between puffs
 
 	/** from = his token, to = where they are absorbed (screen px), colors = one per spell */
 	export function play(from: Pt, to: Pt, colors: string[]) {
 		if (!colors.length) return
 		const n = colors.length, base = Date.now()
-		const intoToken = Math.hypot(to.x - from.x, to.y - from.y) < 4
-		const R = Math.max(54, Math.min(110, 30 + n * 4))
-		const pt = (p: Pt, r: number, a: number): Pt => ({ x: p.x + r * Math.cos(a), y: p.y + r * Math.sin(a) })
-		const tf = (p: Pt, s: number) => `translate(${p.x.toFixed(1)}px, ${p.y.toFixed(1)}px) scale(${s})`
+		const R = Math.max(58, Math.min(120, 34 + n * 4))
+		const ss = (e0: number, e1: number, x: number) => { const u = Math.max(0, Math.min(1, (x - e0) / (e1 - e0))); return u * u * (3 - 2 * u) }
+		const tf = (x: number, y: number, s: number) => `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) scale(${s.toFixed(2)})`
 		wisps = colors.map((c, i) => {
-			const a = (i / n) * Math.PI * 2 + Math.random() * 0.5, r = R * (0.75 + Math.random() * 0.45), dir = 1
-			const o1 = pt(from, r, a), o2 = pt(from, r * 0.95, a + dir * 2.1), o3 = pt(from, r * 0.8, a + dir * 3.9)
-			// the last swing: tighter round the token, or halfway to the book with a sideways bow
-			const mid = intoToken ? pt(from, r * 0.45, a + dir * 5.2) : (() => { const mx = (o3.x + to.x) / 2, my = (o3.y + to.y) / 2, dx = to.x - o3.x, dy = to.y - o3.y, d = Math.hypot(dx, dy) || 1; return { x: mx - (dy / d) * 50, y: my + (dx / d) * 50 } })()
-			const frames: Keyframe[] = [
-				{ transform: tf(from, 0.2), opacity: 0, offset: 0 },
-				{ transform: tf(o1, 1), opacity: 1, offset: 0.16, easing: 'ease-in-out' },
-				{ transform: tf(o2, 1), opacity: 1, offset: 0.4, easing: 'ease-in-out' },
-				{ transform: tf(o3, 0.95), opacity: 1, offset: 0.62, easing: 'ease-in' },
-				{ transform: tf(mid, 0.85), opacity: 1, offset: 0.8, easing: 'cubic-bezier(.55,0,1,.6)' },
-				{ transform: tf(to, 0.25), opacity: 0.2, offset: 1 }
-			]
-			return { key: base + i, c, frames, dur: 1700 + Math.random() * 300, delay: i * 55 }
+			// a spiral round a centre that slides from his token to where they land: it unwinds out of the token, circles
+			// about one and a half turns with a slow breathing sway, then winds in tight as the centre glides home
+			const a0 = (i / n) * Math.PI * 2 + Math.random() * 0.6, r = R * (0.7 + Math.random() * 0.5)
+			const dir = i % 2 ? 1 : -1, turns = 1.3 + Math.random() * 0.5, ph = Math.random() * 6, sw = 0.14 + Math.random() * 0.12
+			const frames: Keyframe[] = []
+			const N = 36
+			for (let j = 0; j <= N; j++) {
+				const t = j / N, m = ss(0.5, 1, t)
+				const cx = from.x + (to.x - from.x) * m, cy = from.y + (to.y - from.y) * m
+				const rho = r * ss(0, 0.22, t) * (1 - ss(0.55, 1, t)) * (1 + sw * Math.sin(t * 9 + ph))
+				const th = a0 + dir * t * turns * Math.PI * 2 + 0.5 * Math.sin(t * 5 + ph)
+				const s = t < 0.12 ? 0.3 + (t / 0.12) * 0.7 : t > 0.86 ? 1 - ((t - 0.86) / 0.14) * 0.75 : 1
+				frames.push({ transform: tf(cx + rho * Math.cos(th), cy + rho * Math.sin(th), s), opacity: t < 0.06 ? t / 0.06 : t > 0.94 ? 1 - (t - 0.94) / 0.06 : 1, offset: t })
+			}
+			return { key: base + i, c, frames, dur: 2100 + Math.random() * 400, delay: i * 50 }
 		})
 		const end = Math.max(...wisps.map((w) => w.dur + w.delay))
-		flash = { key: base, ...to, c: colors[colors.length - 1], delay: Math.round(end * 0.62) }
+		flash = { key: base, ...to, c: colors[colors.length - 1], delay: Math.round(end - 520) }
 		if (timer) clearTimeout(timer)
-		timer = setTimeout(() => { wisps = []; flash = null }, end + 900)
+		timer = setTimeout(() => { wisps = []; flash = null }, end + TRAIL.length * GAP + 900)
 	}
 	/** a Svelte action: run the flight on a span (the trail = the same flight a beat behind) */
 	function fly(node: HTMLElement, a: { w: Wisp; k: number }) {
-		const an = node.animate(a.w.frames, { duration: a.w.dur, delay: a.w.delay + a.k * 32, fill: 'both' })
+		const an = node.animate(a.w.frames, { duration: a.w.dur, delay: a.w.delay + a.k * GAP, fill: 'both' })
 		return { destroy: () => an.cancel() }
 	}
+	/** each puff's fixed drift off the line (a smoke trail wavers) */
+	const jit = (key: number, k: number) => { const v = Math.sin(key * 0.37 + k * 1.9) * k * 0.7; return `${v.toFixed(1)}px, ${(Math.cos(key * 0.53 + k * 1.3) * k * 0.7).toFixed(1)}px` }
 	onDestroy(() => { if (timer) clearTimeout(timer) })
 </script>
 
 <div class="ess" aria-hidden="true">
 	{#each wisps as w (w.key)}
-		{#each TRAIL as k}<span class="w" class:hd={!k} style="--c:{w.c};--k:{k}" use:fly={{ w, k }}><i></i></span>{/each}
+		{#each TRAIL as k}<span class="w" class:hd={!k} style="--c:{w.c};--k:{k};--j:{jit(w.key, k)}" use:fly={{ w, k }}><i></i></span>{/each}
 	{/each}
 	{#if flash}{#key flash.key}<span class="fl" style="left:{flash.x}px;top:{flash.y}px;--c:{flash.c};animation-delay:{flash.delay}ms"></span><span class="fl f2" style="left:{flash.x}px;top:{flash.y}px;animation-delay:{flash.delay + 260}ms"></span>{/key}{/if}
 </div>
@@ -59,9 +65,11 @@
 <style>
 	.ess { position: fixed; inset: 0; z-index: 58; pointer-events: none; overflow: hidden; }
 	.w { position: absolute; left: 0; top: 0; width: 0; height: 0; opacity: 0; }
-	.w i { position: absolute; width: calc(20px - var(--k) * 2.2px); height: calc(20px - var(--k) * 2.2px); left: calc(-10px + var(--k) * 1.1px); top: calc(-10px + var(--k) * 1.1px); border-radius: 50%;
-		background: radial-gradient(circle, #fff 0 18%, var(--c) 45%, transparent 72%); opacity: calc(0.8 - var(--k) * 0.11); }
-	.w.hd i { background: radial-gradient(circle, #fff 0 22%, var(--c) 48%, transparent 74%); opacity: 1; }
+	/* smoke: a soft puff in the spell's colour fading to pale, bigger and fainter further back */
+	.w i { position: absolute; width: calc(14px + var(--k) * 2.4px); height: calc(14px + var(--k) * 2.4px); left: calc(-7px - var(--k) * 1.2px); top: calc(-7px - var(--k) * 1.2px); border-radius: 50%;
+		transform: translate(var(--j)); background: radial-gradient(circle, color-mix(in srgb, var(--c) 70%, #fff) 0, color-mix(in srgb, var(--c) 40%, transparent) 34%, transparent 68%);
+		opacity: calc(0.46 - var(--k) * 0.024); }
+	.w.hd i { width: 20px; height: 20px; left: -10px; top: -10px; transform: none; background: radial-gradient(circle, #fff 0 22%, var(--c) 48%, transparent 74%); opacity: 1; }
 	.w.hd i::before { content: ''; position: absolute; inset: -140%; border-radius: 50%; background: radial-gradient(circle, color-mix(in srgb, var(--c) 55%, transparent) 0, transparent 66%); }
 	.fl { position: absolute; width: 90px; height: 90px; margin: -45px; border-radius: 50%; opacity: 0; transform: scale(0.2);
 		background: radial-gradient(circle, rgba(255, 255, 255, 0.9) 0, color-mix(in srgb, var(--c, #d8b36a) 70%, transparent) 30%, transparent 68%); animation: essfl 0.9s ease-out both; }

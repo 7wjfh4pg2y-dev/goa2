@@ -8,6 +8,10 @@
 	import VictorySplash from '$lib/VictorySplash.svelte';
 	import NebkherSplash from '$lib/hud2/NebkherSplash.svelte';
 	import LaughBurst from '$lib/hud2/LaughBurst.svelte';
+	import EssenceWisps from '$lib/hud2/EssenceWisps.svelte';
+	import GydionBook from '$lib/hud2/GydionBook.svelte';
+	import { BOOK } from '$lib/gydion';
+	import { schoolOf, SCHOOL_COLOR } from '$lib/cards/spells';
 	import { portraitCss } from '$lib/heroes';
 	import YourTurn, { TURN_CUE_LOOKS, TURN_CUE_DEFAULT, type TurnCueLook } from '$lib/YourTurn.svelte';
 	import type { BattleNews, DefeatNews, Team } from '$lib/match';
@@ -69,6 +73,14 @@
 	// NebKher (4★ lab) — demos only, not in games yet
 	let nkSplash: NebkherSplash, nkBurst: LaughBurst, nkTok: HTMLElement, nkUlt = false, bx = 0, by = 0;
 	function laughBurst() { const r = nkTok.getBoundingClientRect(); bx = r.left + r.width / 2; by = r.top + r.height / 2; setTimeout(() => nkBurst.play(), 0); }
+	// Gydion's Prepare Spells: the essence wisps out of his token — into the token (everyone else) or the book (his screen)
+	let ess: EssenceWisps, gyTok: HTMLElement, gyBook: HTMLElement;
+	const ESS: Record<string, string> = { gold: '#ffd25e', red: '#ff5a4e', green: '#4fe07a', blue: '#5b9bff', purple: '#c08cff' };
+	function wisps(n: number, intoBook: boolean) {
+		const c = (el: HTMLElement) => { const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 } };
+		const ids = [...BOOK].sort(() => Math.random() - 0.5).slice(0, n);
+		ess.play(c(gyTok), c(intoBook ? gyBook : gyTok), ids.map((id) => ESS[SCHOOL_COLOR[schoolOf(id)] ?? 'gold']));
+	}
 	let round = 2, turn = 1;
 
 	// sample battle reports: each is built from its list of hero defeats, so kills / deaths / assists add up
@@ -204,6 +216,16 @@
 		</div>
 	</section>
 	<section>
+		<h2>Gydion <small>(Prepare Spells — essence wisps)</small></h2>
+		<div class="row nkrow">
+			<span class="nktok gy" bind:this={gyTok} style={portraitCss('gydion')}></span>
+			<button on:click={() => wisps(21, false)}>First Prepare (21) → token</button>
+			<button on:click={() => wisps(4, false)}>4 spells → token</button>
+			<button on:click={() => wisps(21, true)}>21 → his book</button>
+			<span class="gybook" bind:this={gyBook} title="His dash grimoire"><GydionBook size={48} mode="loaded" /></span>
+		</div>
+	</section>
+	<section>
 		<h2>Turn / round</h2>
 		<div class="row">
 			<button on:click={() => { turn = turn % 4 + 1; turnSplash.play('turn', round, turn); }}>Next turn</button>
@@ -225,6 +247,7 @@
 <YourTurn bind:this={cue} look={cueLook} {mobile} />
 <LevelSplash bind:this={levelSplash} {mobile} />
 <NebkherSplash bind:this={nkSplash} phone={mobile} />
+<EssenceWisps bind:this={ess} />
 <LaughBurst bind:this={nkBurst} x={bx} y={by} size={56} ult={nkUlt} />
 {#if won}
 	{#key won}<VictorySplash round={stats.rounds} team={won.team} reason={won.reason} myTeam={me} {mobile} {stats} onClose={() => (won = null)} />{/key}
@@ -247,6 +270,8 @@
 	button.off { opacity: .4; }
 	.note { margin: -2px 0 10px; text-align: center; font-size: .78rem; color: #cbd5e1; }
 	.nkrow { align-items: center; gap: 14px; margin-top: 28px !important; }
+	.gybook { margin-left: auto; display: flex; }
+	.nktok.gy { box-shadow: 0 0 0 3px #2f7fe6, 0 0 0 6px #e8e8e8; }
 	.nktok { width: 56px; height: 56px; border-radius: 50%; display: block; background-color: #0b1b30; box-shadow: 0 0 0 3px #ef7d22, 0 0 0 6px #7a4292; }
 	.custom label { display: flex; align-items: center; gap: 6px; font-size: .9rem; }
 	.custom input { width: 56px; padding: 6px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, .2); background: rgba(0, 0, 0, .35); color: #fff; font: inherit; }
