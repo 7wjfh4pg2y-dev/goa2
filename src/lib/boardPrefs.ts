@@ -11,8 +11,8 @@ import { writable } from 'svelte/store'
 // corner, as tall as the dash
 // wisps: the spirit swirl on hexes to act on (spawn points, minions to remove, …); off = a still glowing hex
 // dash: the 4★ heroes' own dash buttons' effects (Ignatia's flames, …) — one switch for all of them
-export type BoardPrefs = { dash: boolean; rims: boolean; zone: boolean; sea: boolean; look: 'island' | 'classic'; hud: '2.0' | 'classic'; compact: boolean; cTop: boolean; cOrder: boolean; cLog: boolean; beam: boolean; wisps: boolean; zoomLock: boolean; turnCue: boolean; laugh: boolean; sparkle: boolean; spells: boolean; essence: boolean; emToast: boolean; emClock: boolean; snInscribe: boolean; runeFlare: boolean; igEq: boolean; igSwirl: boolean; igChaos: boolean; tkSwap: boolean; tkWave: boolean; tkWar: boolean; rzShuffle: boolean; rzComic: boolean }
-export const DEFAULT_PREFS: BoardPrefs = { dash: true, rims: true, zone: true, sea: true, look: 'island', hud: '2.0', compact: false, cTop: false, cOrder: false, cLog: false, beam: true, wisps: true, zoomLock: false, turnCue: true, laugh: true, sparkle: true, spells: true, essence: true, emToast: true, emClock: true, snInscribe: true, runeFlare: true, igEq: true, igSwirl: true, igChaos: true, tkSwap: true, tkWave: true, tkWar: true, rzShuffle: true, rzComic: true }
+export type BoardPrefs = { dash: boolean; rims: boolean; zone: boolean; sea: boolean; look: 'island' | 'classic'; hud: '2.0' | 'classic'; compact: boolean; cTop: boolean; cOrder: boolean; cLog: boolean; beam: boolean; wisps: boolean; zoomLock: boolean; turnCue: boolean; laugh: boolean; sparkle: boolean; spells: boolean; essence: boolean; emToast: boolean; emClock: boolean; snInscribe: boolean; runeFlare: boolean; igEq: boolean; igSwirl: boolean; igChaos: boolean; tkSwap: boolean; tkWave: boolean; tkWar: boolean; rzShuffle: boolean; rzComic: boolean; rzPoof: boolean }
+export const DEFAULT_PREFS: BoardPrefs = { dash: true, rims: true, zone: true, sea: true, look: 'island', hud: '2.0', compact: false, cTop: false, cOrder: false, cLog: false, beam: true, wisps: true, zoomLock: false, turnCue: true, laugh: true, sparkle: true, spells: true, essence: true, emToast: true, emClock: true, snInscribe: true, runeFlare: true, igEq: true, igSwirl: true, igChaos: true, tkSwap: true, tkWave: true, tkWar: true, rzShuffle: true, rzComic: true, rzPoof: true }
 const VERSION = 2
 const KEY = 'goa2-board-prefs'
 
@@ -48,6 +48,7 @@ export function readPrefs(raw: string | null): BoardPrefs {
 			tkSwap: fx.tkSwap !== false, // Takahide's gold swap toast (TakaSwapToast.svelte)
 			tkWave: fx.tkWave !== false, // the gold wave off his token on any gold swap (TokenWave.svelte)
 			tkWar: fx.tkWar !== false, // Ready for War (ReadyForWar.svelte)
+			rzPoof: fx.rzPoof !== false, // the smoke cloud as her doubles appear / vanish (ComicBurst poofIn / poofOut)
 			rzComic: fx.rzComic !== false, // Razzle's comic bursts (ComicBurst.svelte)
 			rzShuffle: fx.rzShuffle !== false, // Razzle's tokens shuffling when one of her is attacked (BoardCanvas.shuffle)
 			sparkle: fx.sparkle !== false // Razzle's ultimate: the sparkles round her dash button (RazzleTop.svelte)

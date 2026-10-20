@@ -25,7 +25,7 @@
 	export let rotation = 0; // base orientation in degrees (e.g. 180 so your base sits at the bottom)
 
 	export let pieces: Array<{ id: string; hex: string; team: string; role?: string; label?: string; color?: string; token?: string; sym?: string; hero?: string; face?: number; letter?: string;
-		attachTo?: string; mine?: 'down' | 'up'; peek?: string; immune?: boolean; guard?: string; locked?: boolean; name?: string; nameColor?: string; faded?: boolean }> = [];
+		attachTo?: string; mine?: 'down' | 'up'; peek?: string; immune?: boolean; guard?: string; locked?: boolean; name?: string; nameColor?: string; faded?: boolean; hidden?: boolean }> = [];
 	// holding something to place (minion / token): every tap reports its hex, pieces
 	// aren't picked up, and a hex with a hero on it is still a valid target
 	export let placing = false;
@@ -835,7 +835,7 @@
 				{@const off = drawOff[p.id] ?? { x: 0, y: 0 }}
 				{@const c = { x: base.x + off.x, y: base.y + off.y }}
 				{@const sel = selected === p.id || dragId === p.id}
-				<g class="piece" class:selectable={!!onMovePiece} class:selected={sel} class:lifted={carryId === p.id && !!hoverHex} class:faded={p.faded}
+				<g class="piece" class:selectable={!!onMovePiece} class:selected={sel} class:lifted={carryId === p.id && !!hoverHex} class:faded={p.faded} class:hidden={p.hidden}
 					role="button" tabindex="-1" data-piece={p.id}
 					aria-label={p.role ? `${p.team === "blue" ? "Titan" : "Atlantean"} ${p.role} minion` : (p.label ?? "piece")}
 					transform={rotEff ? `rotate(${-rotEff} ${c.x} ${c.y})` : undefined}
@@ -942,6 +942,7 @@
 	.board-wrap.holding, .board-wrap.holding :global(*) { cursor: grabbing !important; }
 	.piece.lifted { opacity: .7; }
 	.piece.faded, .rim.faded { opacity: .28; }
+	.piece.hidden { opacity: 0; } /* a double about to poof in: shown once the cloud covers it */
 	.piece.selected circle { filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.6)); }
 	.board-wrap.pinging, .board-wrap.pinging :global(*) { cursor: crosshair !important; }
 	.ping .pring { fill: none; stroke: var(--pc); transform-box: fill-box; transform-origin: center; animation: pring 1.1s ease-out 3; opacity: 0; }

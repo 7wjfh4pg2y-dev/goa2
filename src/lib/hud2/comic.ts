@@ -119,7 +119,7 @@ export const COMICS: Record<ComicMoment, Comic[]> = {
 	poofOut: [
 		make({ ...puff(211, 10), fill: '#ffffff', dot: '#b9a7e6', lines: [['POOF!', 104, 230, 32]], top: '#ff3b2a', bot: '#c4100f', rot: -7, grow: 0.14 }),
 		make({ ...puff(212, 11), fill: '#dcf6ff', dot: '#86c4e6', lines: [['WHOOSH!', 86, 286]], top: '#2fb8f0', bot: '#0b5fb0', rot: -9 }),
-		make({ ...puff(213, 10), fill: '#ecdcff', dot: '#a98be0', lines: [['GONE!', 100, 236, 32]], top: '#b56cff', bot: '#5d1fa8', rot: -6 })
+		make({ ...puff(213, 10), fill: '#8a4fd8', dot: '#5a24a6', lines: [['GONE!', 100, 236, 32]], top: '#b8ff5a', bot: '#2fae3a', rot: -6 })
 	],
 	twin: [make({ ...burst(18, 145, 176, 120, 0.74), fill: '#ffcf3a', dot: '#e0912a', lines: [['ENCORE!', 92, 290, 28]], top: '#ffffff', bot: '#ffe08a', ext: '#c2187a', rot: -5 })]
 }

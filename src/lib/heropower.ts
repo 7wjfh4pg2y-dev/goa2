@@ -381,9 +381,12 @@ const markOf = (ctx: TurnCtx) => `${ctx.key}:${ctx.at}`
 export type FxNews = { id: string; by: string; kind: 'eq' | 'flip' | 'swap' | 'bushido' | 'war'; to?: Team; from?: number; card?: number; at: number }
 const fxNewsOf = (kind: FxNews['kind'], by: string, more: Partial<FxNews> = {}): FxNews => ({ id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, kind, by, at: Date.now(), ...more })
 // ── Razzle's comic bursts ──
-export type ComicMoment = 'attacked' | 'attacks' | 'killHero' | 'killMinion' | 'defended' | 'blocked' | 'defeated' | 'twin'
+export type ComicMoment = 'attacked' | 'attacks' | 'killHero' | 'killMinion' | 'defended' | 'blocked' | 'defeated' | 'twin' | 'poofIn' | 'poofOut'
 /** one comic burst for everyone: what happened and the space it bursts over */
-export type ComicNews = { id: string; moment: ComicMoment; hex: string; at: number }
+export type ComicNews = { id: string; moment: ComicMoment; hex: string; at: number
+	/** a poof: every space it bursts over, the bodies that came (hidden until the cloud covers them) and copies of the
+	 *  bodies that went (shown until it does) */
+	hexes?: string[]; came?: string[]; gone?: NonNullable<S['pieces']>[string][] }
 /** The Razzle moment a request made, read off the state before and after it (null = none). Only real events count:
  *  a hero DEFEATED (by her → killHero; she falls → defeated — wins over the clash that ended in it), an ATTACK that
  *  ended with the defender's discard holding (hers blocked / she survived; forced discards and called-off attacks
@@ -400,6 +403,19 @@ export function comicNewsOf(prev: S, next: S, req: { kind: string; pid?: string;
 		if (rz(d.by) && d.by !== d.victim && enemies(d.by, d.victim)) return mk('killHero', hexOf(d.victim))
 		if (rz(d.victim)) return mk('defeated', hexOf(prev.attacks?.[d.victim]?.body ?? d.victim))
 		return null
+	}
+	// her doubles: Stunt Doubles brings one on (poofIn); her reds / the host take one off, or Remove takes them all (poofOut)
+	const rzOp = req.kind === 'power' && (req.op === 'rzSpawn' || req.op === 'rzRemove')
+	if (rzOp || req.kind === 'removeHero') {
+		const who = req.kind === 'power' && req.op === 'rzRemove' ? (req as { id?: string }).id : req.pid
+		const owner = who ? heroPidOf(prev.pieces?.[who] as Body | undefined) ?? who : null
+		if (!owner || !rz(owner)) return null
+		const was = prev.pieces?.[owner] ? bodiesOf(prev, owner) : [], now = next.pieces?.[owner] ? bodiesOf(next, owner) : []
+		const at = (list: Body[]) => new Set(list.map((b) => b.hex))
+		const came = now.filter((b) => !at(was).has(b.hex)), went = was.filter((b) => !at(now).has(b.hex))
+		const n = came.length ? mk('poofIn', came[0].hex) : went.length ? mk('poofOut', went[0].hex) : null
+		if (!n) return null
+		return came.length ? { ...n, hexes: came.map((b) => b.hex), came: came.map((b) => b.id) } : { ...n, hexes: went.map((b) => b.hex), gone: went.map((b) => ({ ...b, id: `${b.id}#poof` })) }
 	}
 	const c = next.lastClash
 	if (c && c.id !== prev.lastClash?.id && c.kind === 'attack' && c.out === 'defended' && c.v && enemies(c.by, c.v)) {

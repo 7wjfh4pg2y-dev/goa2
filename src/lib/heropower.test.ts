@@ -856,6 +856,21 @@ describe("Razzle's comic bursts (comicNewsOf)", () => {
 		expect(comicNewsOf(s, gone('bm'), { kind: 'defeatMinion', pid: 'm', piece: 'bm' })).toBeNull()
 		expect(comicNewsOf(s, s, { kind: 'defeatMinion', pid: 'r', piece: 'bm' })).toBeNull() // refused: still on the board
 	})
+	it('her doubles: a new one = poofIn (hidden until covered); one taken off / Remove all = poofOut (shown until covered)', () => {
+		const s = base()
+		const plus = { ...s, pieces: { ...s.pieces, 'r~2': { id: 'r~2', hex: '7_7', kind: 'hero', team: 'orange', owner: 'r' } } }
+		const inn = comicNewsOf(s, plus, { kind: 'power', pid: 'r', op: 'rzSpawn' })
+		expect(inn?.moment).toBe('poofIn'); expect(inn?.came).toEqual(['r~2']); expect(inn?.hexes).toEqual(['7_7'])
+		const minus = { ...s, pieces: { ...s.pieces } as Record<string, unknown> }; delete minus.pieces['r~1']
+		const out = comicNewsOf(s, minus as never, { kind: 'power', pid: 'r', op: 'rzRemove', id: 'r~1' } as never)
+		expect(out?.moment).toBe('poofOut'); expect(out?.hexes).toEqual(['6_5']); expect(out?.gone?.map((g) => g.id)).toEqual(['r~1#poof'])
+		// Remove (her hero): every body goes, each under its own cloud
+		const none = { ...s, pieces: { e: s.pieces.e, m: s.pieces.m, bm: s.pieces.bm, om: s.pieces.om } }
+		expect(comicNewsOf(s, none as never, { kind: 'removeHero', pid: 'r' })?.hexes).toEqual(['5_5', '6_5'])
+		// a refused spawn, or someone else removing their hero: nothing
+		expect(comicNewsOf(s, s, { kind: 'power', pid: 'r', op: 'rzSpawn' })).toBeNull()
+		expect(comicNewsOf(s, s, { kind: 'removeHero', pid: 'e' })).toBeNull()
+	})
 	it('Twin Strike: once, when it switches on', () => {
 		const s = base()
 		const on = { ...s, power: { r: { twin: { mark: 'k', live: true } } } } as never

@@ -175,7 +175,7 @@
 	function openGoldFor(id: string) { if (iAmHost && id) cardLayer?.openGoldFor(id); }
 	function openBookFor(id: string) { if (iAmHost && id) cardLayer?.openBookFor(id); }
 
-	$: boardPieces = Object.values($ms.pieces).map((p) => ({
+	$: boardPieces = Object.values(poofLinger.length ? { ...$ms.pieces, ...Object.fromEntries(poofLinger.map((q) => [q.id, q])) } : $ms.pieces).map((p) => ({
 		id: p.id, hex: effectiveHex($ms.pieces, p), team: p.team, role: p.role, token: p.token === 'companion' ? undefined : p.token,
 		// a marker riding on a hero is drawn as a small badge on that hero
 		attachTo: p.attachedTo && $ms.pieces[p.attachedTo] ? p.attachedTo : undefined,
@@ -195,6 +195,7 @@
 		guard: p.kind === 'hero' && $ms.cards?.[p.id]?.hero === 'gydion' && guardNow($ms, p.id, $ms.round).length ? guardIcon : undefined,
 		// hover label (mouse): the same name the toolbar shows, heroes/minions in their team colour
 		name: labelOf(p), nameColor: teamText(p),
+		hidden: poofHide.includes(p.id) || undefined,
 		locked: watcher || clearing || (p.role === 'heavy' && !iAmHost && heavyImmune($ms, p.id)) ? true : undefined
 	}));
 
@@ -356,7 +357,7 @@
 			{ id: 'cue', label: 'Cue', icon: ICON.cue, on: $boardPrefs.turnCue, title: `The YOUR TURN cue when your card acts: ${$boardPrefs.turnCue ? 'on' : 'off'}`, act: () => boardPrefs.set({ turnCue: !$boardPrefs.turnCue }) },
 			// NebKher's laugh bursting out of his token (only while a NebKher plays)
 			// Razzle's ultimate: the sparkles round her own dash button (only to her)
-			...(Object.values($ms.cards ?? {}).some((c) => c.hero === 'razzle') ? [{ id: 'rzComic', label: 'Comics', icon: ICON.cue, on: $boardPrefs.rzComic, title: `Razzle's comic bursts (POW!, BAM!…): ${$boardPrefs.rzComic ? 'on' : 'off'}`, act: () => boardPrefs.set({ rzComic: !$boardPrefs.rzComic }) }, { id: 'rzShuffle', label: 'Shuffle', icon: ICON.cue, on: $boardPrefs.rzShuffle, title: `Razzle's tokens shuffling when one of her is attacked: ${$boardPrefs.rzShuffle ? 'on' : 'off'}`, act: () => boardPrefs.set({ rzShuffle: !$boardPrefs.rzShuffle }) }] : []),
+			...(Object.values($ms.cards ?? {}).some((c) => c.hero === 'razzle') ? [{ id: 'rzPoof', label: 'Poof', icon: ICON.cue, on: $boardPrefs.rzPoof, title: `A comic smoke cloud as her doubles appear and vanish: ${$boardPrefs.rzPoof ? 'on' : 'off'}`, act: () => boardPrefs.set({ rzPoof: !$boardPrefs.rzPoof }) }, { id: 'rzComic', label: 'Comics', icon: ICON.cue, on: $boardPrefs.rzComic, title: `Razzle's comic bursts (POW!, BAM!…): ${$boardPrefs.rzComic ? 'on' : 'off'}`, act: () => boardPrefs.set({ rzComic: !$boardPrefs.rzComic }) }, { id: 'rzShuffle', label: 'Shuffle', icon: ICON.cue, on: $boardPrefs.rzShuffle, title: `Razzle's tokens shuffling when one of her is attacked: ${$boardPrefs.rzShuffle ? 'on' : 'off'}`, act: () => boardPrefs.set({ rzShuffle: !$boardPrefs.rzShuffle }) }] : []),
 			...($ms.cards?.[clientId]?.hero === 'razzle' ? [{ id: 'sparkle', label: 'Sparkles', icon: ICON.cue, on: $boardPrefs.sparkle, title: `The sparkles round your button (ultimate): ${$boardPrefs.sparkle ? 'on' : 'off'}`, act: () => boardPrefs.set({ sparkle: !$boardPrefs.sparkle }) }] : []),
 			// Gydion's cast toast (only while a Gydion plays)
 			...(Object.values($ms.cards ?? {}).some((c) => c.hero === 'gydion') ? [{ id: 'spells', label: 'Spells', icon: ICON.cue, on: $boardPrefs.spells, title: `Gydion's spell toast: ${$boardPrefs.spells ? 'on' : 'off'}`, act: () => boardPrefs.set({ spells: !$boardPrefs.spells }) },
@@ -882,8 +883,22 @@
 	let comic: ComicBurst, comicSeen: string | null = $ms.comicNews?.id ?? null, rzShufUntil = 0;
 	$: comicNews = $ms.comicNews ?? null;
 	$: if (comicNews && comicNews.id !== comicSeen) { comicSeen = comicNews.id; playComic(comicNews); }
+	// a poof: the cloud comes FIRST — a new double stays hidden, a leaving one stays drawn, until the cloud covers it
+	let poofHide: string[] = [], poofLinger: Piece[] = [];
 	function playComic(n: NonNullable<typeof comicNews>) {
-		if (!$boardPrefs.rzComic || Date.now() - n.at > 10000) return;
+		const poof = n.moment === 'poofIn' || n.moment === 'poofOut';
+		if (!(poof ? $boardPrefs.rzPoof : $boardPrefs.rzComic) || Date.now() - n.at > 10000) return;
+		if (poof) {
+			const cover = (comic?.coverAt ?? 110) + 30;
+			// (a microtask later: set from inside this reactive pass, the earlier `boardPieces` block wouldn't re-run —
+			// still before the browser paints, so the new double never flashes)
+			queueMicrotask(() => {
+				if (n.came?.length) { poofHide = [...poofHide, ...n.came]; setTimeout(() => (poofHide = poofHide.filter((id) => !n.came!.includes(id))), cover); }
+				if (n.gone?.length) { const g = n.gone as unknown as Piece[]; poofLinger = [...poofLinger, ...g]; setTimeout(() => (poofLinger = poofLinger.filter((q) => !g.includes(q))), cover); }
+			});
+			setTimeout(() => { for (const h of n.hexes ?? [n.hex]) { const p = board?.hexClient(h); if (p) comic?.play(n.moment, p.x, p.y, p.r * 2); } }, 0);
+			return;
+		}
 		// a tick later, so this turn's shuffle (its own reactive block) has started and set rzShufUntil
 		setTimeout(() => {
 			const wait = n.moment === 'attacked' ? Math.max(0, rzShufUntil - Date.now()) : 0;
