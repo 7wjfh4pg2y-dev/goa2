@@ -1,7 +1,8 @@
 <script lang="ts">
-	// Razzle survives an attack with her silver (Crowd Control) — the crowd goes wild: an APPLAUSE sign drops in on its
-	// two wires up and to the right of her body, swings, its bulbs chase round the frame and the word flicks on, holds,
-	// then lifts away. The comic-burst style (one shape with an ink outline and drop shadow, the word in the comic face).
+	// Razzle survives an attack with her silver (Crowd Control) — the crowd goes wild: a little carnival marquee hangs
+	// right above the body that survived (an arched sign with a red-and-white candy-stripe frame, chase bulbs round
+	// the arch, a dark panel where APPLAUSE! flicks on in gold, a gold star). It drops in on its wires, swings,
+	// holds, lifts away. The comic-burst style (ink outline + drop shadow, the word in the comic face).
 	// play(x, y, size) = the token's centre / width. Transform / opacity only, one animation per element.
 	type Sign = { key: number; x: number; y: number; w: number }
 	let signs: Sign[] = []
@@ -9,44 +10,52 @@
 	export const SIGN_MS = 2000
 	export function play(x: number, y: number, size = 48) {
 		const key = ++n
-		const w = Math.max(150, Math.min(300, size * 3.4))
-		signs = [...signs, { key, x: x + size * 0.5 + w * 0.12, y: y - size * 0.75 - w * 0.2, w }]
+		const w = Math.max(96, Math.min(190, size * 2.3))
+		// centred over the body, its foot just clear of the token's top
+		signs = [...signs, { key, x, y: y - size * 0.55 - w * 0.3, w }]
 		setTimeout(() => (signs = signs.filter((s) => s.key !== key)), SIGN_MS + 60)
 	}
-	// bulbs round the frame (between the red box and the dark panel), split into two sets that light in turn
-	const BOX = { x: 20, y: 46, w: 360, h: 124 }
+	// the sign in a 300 × 180 box: an arched top, a square foot
+	const SIGN = 'M20 66 Q150 -6 280 66 V150 Q280 166 264 166 H36 Q20 166 20 150 Z'
+	const PANEL = 'M42 80 Q150 26 258 80 V138 Q258 146 250 146 H50 Q42 146 42 138 Z'
+	// bulbs along the arch (the quadratic from 20,66 via 150,-6 to 280,66, pulled in a little) and down the sides
 	const bulbs: { cx: number; cy: number; odd: boolean }[] = []
-	{
-		const ins = 11, x0 = BOX.x + ins, x1 = BOX.x + BOX.w - ins, y0 = BOX.y + ins, y1 = BOX.y + BOX.h - ins, cols = 14, rows = 4
-		for (let i = 0; i <= cols; i++) { const x = x0 + ((x1 - x0) * i) / cols; bulbs.push({ cx: x, cy: y0, odd: i % 2 === 1 }, { cx: x, cy: y1, odd: i % 2 === 0 }) }
-		for (let j = 1; j < rows; j++) { const y = y0 + ((y1 - y0) * j) / rows; bulbs.push({ cx: x0, cy: y, odd: j % 2 === 1 }, { cx: x1, cy: y, odd: j % 2 === 0 }) }
+	for (let i = 0; i <= 12; i++) {
+		const t = i / 12, x = (1 - t) ** 2 * 31 + 2 * (1 - t) * t * 150 + t * t * 269, y = (1 - t) ** 2 * 71 + 2 * (1 - t) * t * 6 + t * t * 71
+		bulbs.push({ cx: x, cy: y, odd: i % 2 === 1 })
 	}
+	for (let j = 1; j <= 3; j++) { const y = 71 + j * 23; bulbs.push({ cx: 31, cy: y, odd: j % 2 === 0 }, { cx: 269, cy: y, odd: j % 2 === 1 }) }
+	const STAR = (cx: number, cy: number, R: number) => Array.from({ length: 10 }, (_, i) => { const a = ((-90 + i * 36) * Math.PI) / 180, k = i % 2 ? R * 0.45 : R; return `${(cx + Math.cos(a) * k).toFixed(1)},${(cy + Math.sin(a) * k).toFixed(1)}` }).join(' ')
 </script>
 
 <div class="apx" aria-hidden="true">
 	{#each signs as s (s.key)}
+		{@const id = `ap${s.key}`}
 		<span class="at" style="left:{s.x}px;top:{s.y}px;--w:{s.w}px">
 			<span class="drop">
 				<span class="swing">
-					<svg viewBox="0 0 400 190">
+					<svg viewBox="0 -40 300 220">
 						<defs>
-							<linearGradient id="ap{s.key}" x1="0" y1="0" x2="0" y2="1"><stop offset="0.1" stop-color="#fffbe0" /><stop offset="0.95" stop-color="#ffd23a" /></linearGradient>
+							<pattern id="{id}-st" width="16" height="16" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="16" height="16" fill="#fff4e0" /><rect width="8" height="16" fill="#d8172f" /></pattern>
+							<linearGradient id="{id}-t" x1="0" y1="0" x2="0" y2="1"><stop offset="0.1" stop-color="#fffbe0" /><stop offset="0.95" stop-color="#ffc72a" /></linearGradient>
 						</defs>
-						<!-- the two wires it hangs from -->
-						<path d="M120 46 L150 0 M280 46 L250 0" stroke="#141014" stroke-width="5" stroke-linecap="round" fill="none" />
-						<!-- the box: drop shadow, ink outline + red, the dark panel with a gold rule -->
-						<rect x={BOX.x} y={BOX.y} width={BOX.w} height={BOX.h} rx="20" transform="translate(7 9)" fill="#141014" />
-						<rect x={BOX.x} y={BOX.y} width={BOX.w} height={BOX.h} rx="20" fill="#c8162f" stroke="#141014" stroke-width="7" />
-						<rect x={BOX.x + 22} y={BOX.y + 22} width={BOX.w - 44} height={BOX.h - 44} rx="10" fill="#2a0a16" stroke="#ffcf3a" stroke-width="3" />
-						<!-- chase lights: two sets, each its own group fading in turn -->
-						<g class="set a">{#each bulbs.filter((b) => !b.odd) as b}<circle cx={b.cx} cy={b.cy} r="5.6" fill="#fff6c0" stroke="#141014" stroke-width="1.6" />{/each}</g>
-						<g class="set b">{#each bulbs.filter((b) => b.odd) as b}<circle cx={b.cx} cy={b.cy} r="5.6" fill="#fff6c0" stroke="#141014" stroke-width="1.6" />{/each}</g>
+						<!-- the wires it hangs from -->
+						<path d="M104 30 L130 -38 M196 30 L170 -38" stroke="#141014" stroke-width="4" stroke-linecap="round" fill="none" />
+						<!-- the sign: drop shadow, candy-stripe frame in ink, the dark panel with a gold rule -->
+						<path d={SIGN} transform="translate(6 8)" fill="#141014" />
+						<path d={SIGN} fill="url(#{id}-st)" stroke="#141014" stroke-width="6" stroke-linejoin="round" />
+						<path d={PANEL} fill="#2a0a16" stroke="#141014" stroke-width="4" stroke-linejoin="round" />
+						<path d={PANEL} fill="none" stroke="#ffcf3a" stroke-width="2.4" transform="translate(150 113) scale(0.94) translate(-150 -113)" />
+						<!-- chase lights round the arch and down the sides: two sets lighting in turn -->
+						<g class="set a">{#each bulbs.filter((b) => !b.odd) as b}<circle cx={b.cx} cy={b.cy} r="5.2" fill="#fff6c0" stroke="#141014" stroke-width="1.6" />{/each}</g>
+						<g class="set b">{#each bulbs.filter((b) => b.odd) as b}<circle cx={b.cx} cy={b.cy} r="5.2" fill="#fff6c0" stroke="#141014" stroke-width="1.6" />{/each}</g>
+						<polygon points={STAR(150, 46, 11)} fill="#ffcf3a" stroke="#141014" stroke-width="2.2" stroke-linejoin="round" />
 						<!-- the word: unlit underneath, lit on top (it flicks on) -->
-						<g class="word" text-anchor="middle" transform="translate(200 128) skewX(-6)">
-							<text font-size="58" textLength="272" lengthAdjust="spacingAndGlyphs" fill="#5a2232">APPLAUSE!</text>
+						<g class="word" text-anchor="middle" transform="translate(150 133) skewX(-6)">
+							<text font-size="46" textLength="196" lengthAdjust="spacingAndGlyphs" fill="#5a2232">APPLAUSE!</text>
 							<g class="lit">
-								<text transform="translate(3 4)" font-size="58" textLength="272" lengthAdjust="spacingAndGlyphs" fill="#c2187a" stroke="#141014" stroke-width="6" stroke-linejoin="round" paint-order="stroke">APPLAUSE!</text>
-								<text font-size="58" textLength="272" lengthAdjust="spacingAndGlyphs" fill="url(#ap{s.key})" stroke="#141014" stroke-width="5" stroke-linejoin="round" paint-order="stroke">APPLAUSE!</text>
+								<text transform="translate(2.5 3)" font-size="46" textLength="196" lengthAdjust="spacingAndGlyphs" fill="#c2187a" stroke="#141014" stroke-width="5" stroke-linejoin="round" paint-order="stroke">APPLAUSE!</text>
+								<text font-size="46" textLength="196" lengthAdjust="spacingAndGlyphs" fill="url(#{id}-t)" stroke="#141014" stroke-width="4.5" stroke-linejoin="round" paint-order="stroke">APPLAUSE!</text>
 							</g>
 						</g>
 					</svg>
@@ -59,22 +68,22 @@
 <style>
 	.apx { position: fixed; inset: 0; z-index: 59; pointer-events: none; overflow: hidden; }
 	.at { position: absolute; width: 0; height: 0; }
-	/* outer: drops in on its wires, holds, lifts away */
-	.drop { position: absolute; width: var(--w); height: calc(var(--w) * 0.475); left: calc(var(--w) * -0.5); top: calc(var(--w) * -0.24);
+	/* outer: drops in on its wires, holds, lifts away (the box is 300 × 220 units: the sign plus the wires above it) */
+	.drop { position: absolute; width: var(--w); height: calc(var(--w) * 0.733); left: calc(var(--w) * -0.5); top: calc(var(--w) * -0.4);
 		animation: apdrop 2s cubic-bezier(0.3, 1.25, 0.5, 1) both; }
 	@keyframes apdrop {
-		0% { opacity: 0; transform: translateY(-80%); }
+		0% { opacity: 0; transform: translateY(-70%); }
 		8% { opacity: 1; }
 		22% { transform: translateY(0); }
 		84% { opacity: 1; transform: translateY(0); }
-		100% { opacity: 0; transform: translateY(-55%); }
+		100% { opacity: 0; transform: translateY(-45%); }
 	}
-	/* inner: swings on its wires, settling level */
+	/* inner: swings on its wires (from the top), settling level */
 	.swing { position: absolute; inset: 0; transform-origin: 50% 0; animation: apswing 2s ease-in-out both; }
-	@keyframes apswing { 0% { transform: rotate(-12deg); } 22% { transform: rotate(9deg); } 34% { transform: rotate(-5deg); } 46% { transform: rotate(2.5deg); } 58%, 100% { transform: rotate(0deg); } }
+	@keyframes apswing { 0% { transform: rotate(-14deg); } 22% { transform: rotate(10deg); } 34% { transform: rotate(-6deg); } 46% { transform: rotate(3deg); } 58%, 100% { transform: rotate(0deg); } }
 	.swing svg { width: 100%; height: 100%; display: block; overflow: visible; }
 	.word { font-family: 'Bangers', Impact, sans-serif; }
-	/* the chase: the two sets swap every 0.2 s while it hangs there */
+	/* the chase: the two sets swap every 0.2 s */
 	.set { animation: apchase 0.4s steps(1) infinite; }
 	.set.b { animation-delay: 0.2s; }
 	@keyframes apchase { 0% { opacity: 1; } 50% { opacity: 0.18; } }
