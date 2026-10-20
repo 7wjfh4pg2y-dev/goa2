@@ -2,7 +2,7 @@
 	// Razzle's circus bits (DEMO on /splash-demo, 2026-10-20 — the user's picks), each played at a token (screen x / y =
 	// its centre, size = its width), each transform / opacity only and gone from the page when done:
 	//   confetti(x, y, size)  — a confetti cannon: ~40 cyan / magenta / gold scraps shot up and out, tumbling, falling (1.6 s)
-	//   honk(x, y, size)      — a clown horn pops off her token as she falls: squeezed twice, 'HONK!' balloon, then it
+	//   honk(x, y, size)      — a clown horn pops off her token as she falls: squeezed twice, then it
 	//                           floats up and pops into a puff of dots (1.5 s)
 	//   applause(x, y, size)  — an 'APPLAUSE!' marquee lights up above her: chase-light bulbs blinking round it (1.8 s)
 	//   ticket(x, y, size)    — a carnival ticket flutters down onto a body: '+2 · STEP RIGHT UP' (1.4 s)
@@ -54,7 +54,6 @@
 						<rect x="44" y="30" width="18" height="10" rx="3" fill="#d9a52f" stroke="#2a1838" stroke-width="3" />
 						<g class="rb"><ellipse cx="28" cy="35" rx="22" ry="20" fill="#e5383b" stroke="#2a1838" stroke-width="3" /><ellipse cx="21" cy="27" rx="7" ry="5" fill="#ff8a8c" /></g>
 					</svg>
-					<b class="hk">HONK!</b>
 				</span>
 				{#each [0, 1, 2, 3, 4, 5, 6, 7] as k}<i class="pop" style="--a:{k * 45}deg"></i>{/each}
 			{:else if it.kind === 'applause'}
@@ -86,9 +85,6 @@
 	.horn svg { width: 100%; height: 100%; overflow: visible; display: block; }
 	.horn .rb { transform-origin: 28px 35px; transform-box: view-box; animation: hksq 1.5s both; }
 	@keyframes hksq { 0%, 22% { transform: none; } 28% { transform: scale(0.72, 1.12); } 36% { transform: none; } 44% { transform: scale(0.72, 1.12); } 52%, 100% { transform: none; } }
-	.hk { position: absolute; left: 62%; top: -38%; font-weight: normal; font-size: calc(var(--s) * 0.34); color: #ffd42a; white-space: nowrap; transform: rotate(-10deg);
-		-webkit-text-stroke: calc(var(--s) * 0.03) #2a1838; paint-order: stroke fill; text-shadow: 2px 3px 0 #2a1838; animation: hkword 1.5s both; }
-	@keyframes hkword { 0%, 24% { opacity: 0; transform: rotate(-10deg) scale(0.3); } 32% { opacity: 1; transform: rotate(-10deg) scale(1.2); } 40% { transform: rotate(-6deg) scale(1); } 46% { transform: rotate(-12deg) scale(1.15); } 54%, 80% { opacity: 1; transform: rotate(-10deg) scale(1); } 100% { opacity: 0; transform: rotate(-10deg) translateY(-30%); } }
 	/* the horn floats off and pops into dots */
 	.pop { position: absolute; width: 7px; height: 7px; margin: calc(var(--s) * -1.1) 0 0 -3.5px; border-radius: 50%; background: #e5383b; box-shadow: 0 0 0 1.5px #2a1838; opacity: 0; animation: hkpop 0.45s 1.15s ease-out both; }
 	.pop:nth-of-type(even) { background: #ffd42a; }

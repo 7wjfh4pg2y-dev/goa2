@@ -28,7 +28,6 @@
 	import EmmittClock from '$lib/hud2/EmmittClock.svelte';
 	import NebkherEye from '$lib/hud2/NebkherEye.svelte';
 	import RazzleTop from '$lib/hud2/RazzleTop.svelte';
-	import ComicPop, { type PopKind } from '$lib/hud2/ComicPop.svelte';
 	import PoofCloud from '$lib/hud2/PoofCloud.svelte';
 	import ShellGame from '$lib/hud2/ShellGame.svelte';
 	import CircusFx from '$lib/hud2/CircusFx.svelte';
@@ -126,18 +125,16 @@
 	function eq() { const m = mid(igTok); eqSwirl.play(m.x, m.y, m.w); }
 	let nkKind: 'laugh' | 'grip' | 'name' | 'crack' | null = null, nkDoubt: NkColor | null = null, nkUltB = false;
 	let rzN = 1, rzUlt = false, rzSparkle = true, rzKind: 'spawn' | 'clear' | 'retrieve' | null = null;
-	let comic: ComicPop, poof: PoofCloud, rzFoe: HTMLElement, rzDbl: HTMLElement, rzDblOn = true;
-	function bop(k: PopKind) { const m = mid(rzFoe); comic.play(m.x, m.y, m.w, k); }
+	let poof: PoofCloud, rzFoe: HTMLElement, rzDbl: HTMLElement, rzDblOn = true;
 	let shell: ShellGame, circus: CircusFx, rzMe: HTMLElement, rzDbl2: HTMLElement;
 	function shellGame() {
 		const els: [HTMLElement, string][] = [[rzMe, portraitCss('razzle')], [rzDbl, `background-image:url(${altFace('razzle', 1)})`], [rzDbl2, `background-image:url(${altFace('razzle', 2)})`]];
 		shell.play(els.filter(([e]) => e.style.opacity !== '0' && !e.classList.contains('gone')).map(([e, bg]) => { const m = mid(e); return { x: m.x, y: m.y, size: m.w, bg }; }));
 	}
 	const at = (e: HTMLElement) => mid(e);
-	function poofDbl() { const m = mid(rzDbl), out = rzDblOn; poof.play(m.x, m.y, m.w, out); comic.play(m.x, m.y, m.w, out ? 'poofOut' : 'poofIn'); setTimeout(() => (rzDblOn = !out), poof.coverAt); }
-	function selfPop(k: PopKind) { const m = mid(rzMe); comic.play(m.x, m.y, m.w, k); }
-	function crowdDefence() { selfPop('crowd'); for (const e of [rzDbl, rzDbl2]) { const m = mid(e); circus.ticket(m.x, m.y, m.w); } }
-	function cheerKill() { const m = mid(rzMe); circus.confetti(m.x, m.y, m.w); comic.play(m.x, m.y, m.w, 'cheer'); }
+	function poofDbl() { const m = mid(rzDbl), out = rzDblOn; poof.play(m.x, m.y, m.w, out); setTimeout(() => (rzDblOn = !out), poof.coverAt); }
+	function crowdDefence() { for (const e of [rzDbl, rzDbl2]) { const m = mid(e); circus.ticket(m.x, m.y, m.w); } }
+	function cheerKill() { const m = mid(rzMe); circus.confetti(m.x, m.y, m.w); }
 	$: rzBodies = Array.from({ length: rzN }, (_, i) => ({ id: i ? `p~${i}` : 'p', face: i }));
 	let gyMode: 'idle' | 'loaded' | 'open' | 'picked' | 'cast' = 'idle', gySchool = 'evocation', gyUlt = false, gyWishes = 0;
 	const GY_SCHOOLS = ['cantrip', 'evocation', 'necromancy', 'abjuration', 'conjuration', 'enchantment', 'transmutation'];
@@ -398,7 +395,7 @@
 			</div>
 			<!-- Razzle -->
 			<div class="hc">
-				<div class="hh"><span class="pt" style={portraitCss('razzle')}></span><b>Razzle</b><small>big top · juggling balls · demo: comic hits · poof</small></div>
+				<div class="hh"><span class="pt" style={portraitCss('razzle')}></span><b>Razzle</b><small>big top · juggling balls · demo: poof · shell game · circus</small></div>
 				<div class="row sm nkrow">
 					<span class="nktok rz" bind:this={rzMe} style={portraitCss('razzle')}></span>
 					<span class="nktok rzd" bind:this={rzDbl2} style="background-image:url({altFace('razzle', 2)});background-size:cover;background-position:center"></span>
@@ -406,16 +403,12 @@
 					<span class="nktok rzf" bind:this={rzFoe} style={portraitCss('brogan')}></span>
 				</div>
 				<div class="row sm">
-					<button class="o" on:click={() => bop('hit')}>Bop (attack)</button>
-					<button class="o" on:click={() => bop('ko')}>Smash (defeat)</button>
-					<button on:click={() => bop('boo')}>Aww (she fails to kill)</button>
-					<button class="t" on:click={() => selfPop('block')}>Block (she defends)</button>
-					<button class="t" on:click={crowdDefence}>Crowd Control (silver defence)</button>
+					<button class="t" on:click={crowdDefence}>Crowd Control tickets</button>
 					<button class="t" on:click={poofDbl}>{rzDblOn ? 'Poof out' : 'Poof in'}</button>
 				</div>
 				<div class="row sm">
 					<button class="t" on:click={shellGame}>Shell game</button>
-					<button class="o" on:click={cheerKill}>Confetti + cheer (ult kill)</button>
+					<button class="o" on:click={cheerKill}>Confetti (ult kill)</button>
 					<button class="o" on:click={() => { const m = at(rzMe); circus.honk(m.x, m.y, m.w); }}>Honk (she falls)</button>
 					<button on:click={() => { const m = at(rzMe); circus.applause(m.x, m.y, m.w); }}>Applause</button>
 					<button on:click={() => { for (const e of [rzDbl, rzDbl2]) { const m = at(e); circus.ticket(m.x, m.y, m.w); } }}>Step right up (+2)</button>
@@ -452,7 +445,6 @@
 <EquilibriumSwirl bind:this={eqSwirl} />
 <ChaosFlip bind:this={chaos} phone={mobile} art={coinArt} />
 <IgnatiaSplash bind:this={igSplash} phone={mobile} />
-<ComicPop bind:this={comic} />
 <PoofCloud bind:this={poof} />
 <ShellGame bind:this={shell} />
 <CircusFx bind:this={circus} />

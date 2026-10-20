@@ -45,13 +45,6 @@
 	},
 	"type": "module",
 	"dependencies": {
-		"@fontsource/bangers": "^5.3.0",
-		"@fontsource/bungee": "^5.3.0",
-		"@fontsource/chewy": "^5.3.0",
-		"@fontsource/luckiest-guy": "^5.3.0",
-		"@fontsource/monoton": "^5.3.0",
-		"@fontsource/permanent-marker": "^5.3.0",
-		"@fontsource/rubik-wet-paint": "^5.3.0",
 		"@supabase/supabase-js": "^2.116.0",
 		"flowbite-svelte-icons": "^3.1.0",
 		"typescript-map": "^0.1.0"

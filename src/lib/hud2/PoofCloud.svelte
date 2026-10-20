@@ -1,7 +1,7 @@
 <script lang="ts">
 	// Razzle's doubles appear / vanish (DEMO on /splash-demo, 2026-10-20 — the user's idea): a cartoon POOF — a burst of
 	// round, ink-outlined smoke puffs (white with a lilac / cyan shade) that billow out over the token, hold it covered
-	// for a beat, then drift off and shrink away, with a few twinkling stars; the word (POOF! / TA-DA! …) is ComicPop's poofOut / poofIn, played with it. The token is swapped
+	// for a beat, then drift off and shrink away, with a few twinkling stars (no word — the onomatopoeia were cleared, 2026-10-20). The token is swapped
 	// while the cloud covers it (`coverAt` ms after play), so it pops in / out of nowhere. ~0.95 s; transform / opacity only.
 	type Puff = { x: number; y: number; r: number; d: number; tint: string }
 	type Cloud = { key: number; x: number; y: number; s: number; puffs: Puff[]; out: boolean }
