@@ -28,11 +28,13 @@
 	import EmmittClock from '$lib/hud2/EmmittClock.svelte';
 	import NebkherEye from '$lib/hud2/NebkherEye.svelte';
 	import RazzleTop from '$lib/hud2/RazzleTop.svelte';
+	import ComicPop, { type PopKind } from '$lib/hud2/ComicPop.svelte';
+	import PoofCloud from '$lib/hud2/PoofCloud.svelte';
 	import { newPlayerCardState } from '$lib/cards/cardstate';
 	import { RUNES, type NkColor, type Rune } from '$lib/heropower';
 	import { BOOK } from '$lib/gydion';
 	import { schoolOf, SCHOOL_COLOR } from '$lib/cards/spells';
-	import { portraitCss } from '$lib/heroes';
+	import { portraitCss, altFace } from '$lib/heroes';
 	import YourTurn, { TURN_CUE_LOOKS, TURN_CUE_DEFAULT, type TurnCueLook } from '$lib/YourTurn.svelte';
 	import type { BattleNews, DefeatNews, Team } from '$lib/match';
 	import type { PushNews } from '$lib/battle';
@@ -122,6 +124,9 @@
 	function eq() { const m = mid(igTok); eqSwirl.play(m.x, m.y, m.w); }
 	let nkKind: 'laugh' | 'grip' | 'name' | 'crack' | null = null, nkDoubt: NkColor | null = null, nkUltB = false;
 	let rzN = 1, rzUlt = false, rzSparkle = true, rzKind: 'spawn' | 'clear' | 'retrieve' | null = null;
+	let comic: ComicPop, poof: PoofCloud, rzFoe: HTMLElement, rzDbl: HTMLElement, rzDblOn = true;
+	function bop(k: PopKind) { const m = mid(rzFoe); comic.play(m.x, m.y, m.w, k); }
+	function poofDbl() { const m = mid(rzDbl), out = rzDblOn; poof.play(m.x, m.y, m.w, out); setTimeout(() => (rzDblOn = !out), poof.coverAt); }
 	$: rzBodies = Array.from({ length: rzN }, (_, i) => ({ id: i ? `p~${i}` : 'p', face: i }));
 	let gyMode: 'idle' | 'loaded' | 'open' | 'picked' | 'cast' = 'idle', gySchool = 'evocation', gyUlt = false, gyWishes = 0;
 	const GY_SCHOOLS = ['cantrip', 'evocation', 'necromancy', 'abjuration', 'conjuration', 'enchantment', 'transmutation'];
@@ -382,7 +387,18 @@
 			</div>
 			<!-- Razzle -->
 			<div class="hc">
-				<div class="hh"><span class="pt" style={portraitCss('razzle')}></span><b>Razzle</b><small>big top · juggling balls</small></div>
+				<div class="hh"><span class="pt" style={portraitCss('razzle')}></span><b>Razzle</b><small>big top · juggling balls · demo: comic hits · poof</small></div>
+				<div class="row sm nkrow">
+					<span class="nktok rz" style={portraitCss('razzle')}></span>
+					<span class="nktok rzd" class:gone={!rzDblOn} bind:this={rzDbl} style="background-image:url({altFace('razzle', 1)});background-size:cover;background-position:center"></span>
+					<span class="nktok rzf" bind:this={rzFoe} style={portraitCss('brogan')}></span>
+				</div>
+				<div class="row sm">
+					<button class="o" on:click={() => bop('hit')}>Bop (attack)</button>
+					<button class="o" on:click={() => bop('ko')}>Smash (defeat)</button>
+					<button on:click={() => bop('whiff')}>Whiff (defended)</button>
+					<button class="t" on:click={poofDbl}>{rzDblOn ? 'Poof out' : 'Poof in'}</button>
+				</div>
 				<div class="stage"><span class="dbtn"><RazzleTop size={48} fx={fourFx} sparkle={rzSparkle} ult={rzUlt} kind={rzKind} bodies={rzBodies} left={4 - rzN} /></span></div>
 				<div class="row sm">
 					<button on:click={() => (rzN = rzN % 4 + 1)}>Bodies {rzN}</button>
@@ -415,6 +431,8 @@
 <EquilibriumSwirl bind:this={eqSwirl} />
 <ChaosFlip bind:this={chaos} phone={mobile} art={coinArt} />
 <IgnatiaSplash bind:this={igSplash} phone={mobile} />
+<ComicPop bind:this={comic} />
+<PoofCloud bind:this={poof} />
 <LaughBurst bind:this={nkBurst} x={bx} y={by} size={56} ult={nkUlt} />
 {#if won}
 	{#key won}<VictorySplash round={stats.rounds} team={won.team} reason={won.reason} myTeam={me} {mobile} {stats} onClose={() => (won = null)} />{/key}
@@ -442,6 +460,10 @@
 	.nktok.tk { box-shadow: 0 0 0 3px #ef7d22, 0 0 0 6px #e8c24a; }
 	.nktok.tk2 { margin-left: auto; box-shadow: 0 0 0 3px #ef7d22, 0 0 0 6px #6ab0ff; }
 	.nktok.ig { box-shadow: 0 0 0 3px #2f7fe6, 0 0 0 6px #ef7d22; }
+	.nktok.rz { box-shadow: 0 0 0 3px #2f7fe6, 0 0 0 6px #ff3bb4; }
+	.nktok.rzd { box-shadow: 0 0 0 3px #2f7fe6, 0 0 0 6px #ff3bb4; }
+	.nktok.rzd.gone { opacity: 0; }
+	.nktok.rzf { margin-left: auto; box-shadow: 0 0 0 3px #ef7d22, 0 0 0 6px #e8c24a; }
 	.nktok.gy { box-shadow: 0 0 0 3px #2f7fe6, 0 0 0 6px #e8e8e8; }
 	.nktok { width: 56px; height: 56px; border-radius: 50%; display: block; background-color: #0b1b30; box-shadow: 0 0 0 3px #ef7d22, 0 0 0 6px #7a4292; }
 	.four { width: min(1180px, 100%); box-sizing: border-box; }
