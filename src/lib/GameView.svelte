@@ -355,6 +355,7 @@
 			{ id: 'cue', label: 'Cue', icon: ICON.cue, on: $boardPrefs.turnCue, title: `The YOUR TURN cue when your card acts: ${$boardPrefs.turnCue ? 'on' : 'off'}`, act: () => boardPrefs.set({ turnCue: !$boardPrefs.turnCue }) },
 			// NebKher's laugh bursting out of his token (only while a NebKher plays)
 			// Razzle's ultimate: the sparkles round her own dash button (only to her)
+			...(Object.values($ms.cards ?? {}).some((c) => c.hero === 'razzle') ? [{ id: 'rzShuffle', label: 'Shuffle', icon: ICON.cue, on: $boardPrefs.rzShuffle, title: `Razzle's tokens shuffling when one of her is attacked: ${$boardPrefs.rzShuffle ? 'on' : 'off'}`, act: () => boardPrefs.set({ rzShuffle: !$boardPrefs.rzShuffle }) }] : []),
 			...($ms.cards?.[clientId]?.hero === 'razzle' ? [{ id: 'sparkle', label: 'Sparkles', icon: ICON.cue, on: $boardPrefs.sparkle, title: `The sparkles round your button (ultimate): ${$boardPrefs.sparkle ? 'on' : 'off'}`, act: () => boardPrefs.set({ sparkle: !$boardPrefs.sparkle }) }] : []),
 			// Gydion's cast toast (only while a Gydion plays)
 			...(Object.values($ms.cards ?? {}).some((c) => c.hero === 'gydion') ? [{ id: 'spells', label: 'Spells', icon: ICON.cue, on: $boardPrefs.spells, title: `Gydion's spell toast: ${$boardPrefs.spells ? 'on' : 'off'}`, act: () => boardPrefs.set({ spells: !$boardPrefs.spells }) },
@@ -862,6 +863,17 @@
 	$: incoming = attacks[clientId] ?? null;
 	// Razzle: what her Crowd Control would add — her own reminder, on her notice only (silver in hand)
 	$: myCrowd = incoming && crowdOn($ms, clientId) ? crowdBonus($ms, clientId, incoming.body ?? clientId) : null;
+	// Razzle's shell game: one of her bodies attacked → her tokens on the board swap places in pairs and end where they
+	// were (BoardCanvas.shuffle); once per attack, for everyone, never for an attack already open when we joined
+	let rzSeen = new Set(Object.entries($ms.attacks ?? {}).map(([t, a]) => `${t}:${a.at}`));
+	$: for (const [t, a] of Object.entries(attacks)) {
+		const k = `${t}:${a.at}`;
+		if (rzSeen.has(k)) continue;
+		rzSeen.add(k);
+		if ($ms.cards?.[t]?.hero !== 'razzle' || !$boardPrefs.rzShuffle || Date.now() - (a.at ?? 0) > 10000) continue;
+		const ids = bodiesOf($ms, t).map((b) => b.id);
+		if (ids.length > 1) board?.shuffle(ids);
+	}
 	// forced discards: the demand on you, and the one you made
 	$: forcedMe = $ms.forced?.[clientId] ?? null;
 	// the notice says its piece for 5 s, fades (`akout`), then leaves the page — its burst and glow kept animating

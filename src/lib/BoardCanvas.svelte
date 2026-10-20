@@ -137,6 +137,57 @@
 		return off;
 	})();
 
+	// Razzle's shell game: her tokens on the board trade places in pairs (shuffle()), drawn through `shuf` on top of
+	// pieceOffset; the swaps always add up to where they began, so the board ends exactly as it was
+	let shuf: Record<string, { x: number; y: number }> = {};
+	let shufRaf = 0;
+	$: drawOff = Object.keys(shuf).length ? (() => { const o = { ...pieceOffset }; for (const id in shuf) { const a = pieceOffset[id] ?? { x: 0, y: 0 }; o[id] = { x: a.x + shuf[id].x, y: a.y + shuf[id].y }; } return o; })() : pieceOffset;
+	/** Shuffle these pieces like cups on a table (~1–1.6 s); returns false if fewer than two are on the board. */
+	export function shuffle(ids: string[], swapMs = 270): boolean {
+		const toks = ids.map((id) => pieces.find((q) => q.id === id && !q.attachTo)).filter((p): p is NonNullable<typeof p> => !!p);
+		const n = toks.length;
+		if (n < 2 || typeof requestAnimationFrame === 'undefined') return false;
+		const home = toks.map((p) => { const b = centerOf(p.hex), o = pieceOffset[p.id] ?? { x: 0, y: 0 }; return { x: b.x + o.x, y: b.y + o.y }; });
+		// slot[i] = the home slot token i stands on; three random swaps, then the swaps that bring everyone home
+		const slot = toks.map((_, i) => i), at = (k: number) => slot.indexOf(k);
+		const swaps: [number, number][] = [];
+		const swap = (a: number, b: number) => { const i = at(a), j = at(b); slot[i] = b; slot[j] = a; swaps.push([a, b]); };
+		let last = '';
+		for (let k = 0; k < 3; k++) {
+			let a = 0, b = 0, key = '';
+			do { a = Math.floor(Math.random() * n); b = Math.floor(Math.random() * (n - 1)); if (b >= a) b++; key = [a, b].sort().join(); } while (n > 2 && key === last);
+			last = key; swap(a, b);
+		}
+		for (let i = 0; i < n; i++) while (slot[i] !== i) swap(i, slot[i]);
+		if (shufRaf) cancelAnimationFrame(shufRaf);
+		const t0 = performance.now(), total = swaps.length * swapMs;
+		const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+		const frame = (now: number) => {
+			const e = now - t0, k = Math.min(swaps.length - 1, Math.floor(e / swapMs));
+			// token positions at the start of step k
+			const where = toks.map((_, i) => i);
+			for (let s = 0; s < k; s++) { const [a, b] = swaps[s]; const i = where.indexOf(a), j = where.indexOf(b); where[i] = b; where[j] = a; }
+			const [a, b] = swaps[k], t = ease(Math.min(1, (e - k * swapMs) / swapMs));
+			const next: Record<string, { x: number; y: number }> = {};
+			toks.forEach((p, i) => {
+				let x = home[where[i]].x, y = home[where[i]].y;
+				if (e < total && (where[i] === a || where[i] === b)) {
+					const from = home[where[i]], to = home[where[i] === a ? b : a];
+					const dx = to.x - from.x, dy = to.y - from.y, len = Math.hypot(dx, dy) || 1;
+					const bulge = Math.sin(Math.PI * t) * Math.min(size * 1.1, len * 0.35) * (where[i] === a ? 1 : -1);
+					x = from.x + dx * t - (dy / len) * bulge; y = from.y + dy * t + (dx / len) * bulge;
+				}
+				if (e >= total) { x = home[i].x; y = home[i].y; }
+				next[p.id] = { x: x - home[i].x, y: y - home[i].y };
+			});
+			if (e >= total) { shuf = {}; return; }
+			shuf = next;
+			shufRaf = requestAnimationFrame(frame);
+		};
+		shufRaf = requestAnimationFrame(frame);
+		return true;
+	}
+
 	const isSpawn = (t: string) => t === 'spawnOrange' || t === 'spawnBlue';
 	const isThrone = (t: string) => t === 'baseOrangeSpawn' || t === 'baseBlueSpawn';
 	const baseTileFor = (t: string) => (t === 'baseOrangeSpawn' ? 'baseOrange' : 'baseBlue');
@@ -561,7 +612,7 @@
 	onMount(() => { if (interactive) wrapEl?.addEventListener('wheel', onWheel, { passive: false }); });
 	// Esc puts a picked-up piece back down
 	function onKey(e: KeyboardEvent) { if (e.key === 'Escape' && (selected || dragId)) release(); }
-	onDestroy(() => { wrapEl?.removeEventListener('wheel', onWheel); clearLongPress(); if (movingT) clearTimeout(movingT); });
+	onDestroy(() => { if (shufRaf) cancelAnimationFrame(shufRaf); wrapEl?.removeEventListener('wheel', onWheel); clearLongPress(); if (movingT) clearTimeout(movingT); });
 
 	function centerOf(id: string) {
 		const [c, r] = id.split('_').map(Number);
@@ -582,7 +633,7 @@
 	// where a piece is drawn right now (follows the pointer while carried)
 	$: posOf = (id: string, hex: string) => {
 		if (dragId === id) return dragPt;
-		const b = centerOf(hex), o = pieceOffset[id] ?? { x: 0, y: 0 };
+		const b = centerOf(hex), o = drawOff[id] ?? { x: 0, y: 0 };
 		return { x: b.x + o.x, y: b.y + o.y };
 	};
 	// markers riding on a hero: small badges round its upper-right rim
@@ -700,7 +751,7 @@
 		<div class="rims" style:transform={landTf} aria-hidden="true">
 			{#each rimPieces as p (p.id)}
 				{@const base = centerOf(p.hex)}
-				{@const off = pieceOffset[p.id] ?? { x: 0, y: 0 }}
+				{@const off = drawOff[p.id] ?? { x: 0, y: 0 }}
 				{@const d = size * 1.44 * fit.s}
 				<span class="rim" class:lifted={carryId === p.id && !!hoverHex} class:faded={p.faded}
 					style="left:{((base.x + off.x) * fit.s + fit.ox - d / 2).toFixed(2)}px; top:{((base.y + off.y) * fit.s + fit.oy - d / 2).toFixed(2)}px; width:{d.toFixed(2)}px; height:{d.toFixed(2)}px">
@@ -773,7 +824,7 @@
 
 			{#each pieces.filter((q) => !q.attachTo) as p (p.id)}
 				{@const base = centerOf(p.hex)}
-				{@const off = pieceOffset[p.id] ?? { x: 0, y: 0 }}
+				{@const off = drawOff[p.id] ?? { x: 0, y: 0 }}
 				{@const c = { x: base.x + off.x, y: base.y + off.y }}
 				{@const sel = selected === p.id || dragId === p.id}
 				<g class="piece" class:selectable={!!onMovePiece} class:selected={sel} class:lifted={carryId === p.id && !!hoverHex} class:faded={p.faded}
@@ -833,7 +884,7 @@
 		<div class="shines" style:transform={landTf} aria-hidden="true">
 			{#each shinePieces as p (p.id)}
 				{@const base = centerOf(p.hex)}
-				{@const off = pieceOffset[p.id] ?? { x: 0, y: 0 }}
+				{@const off = drawOff[p.id] ?? { x: 0, y: 0 }}
 				{@const k = fit.s}
 				<!-- a box round the piece, turned back like the piece itself (kept upright on screen); in it the shield's box
 				     (see the immune <g> in pieceBody: 76 × 89 of its 150-per-hex units, up and right of the centre) -->
@@ -849,7 +900,7 @@
 				{@const p = pieces.find((q) => q.id === b.id)}
 				{#if p}
 					{@const base = centerOf(p.hex)}
-					{@const off = pieceOffset[p.id] ?? { x: 0, y: 0 }}
+					{@const off = drawOff[p.id] ?? { x: 0, y: 0 }}
 					{@const k = fit.s}
 					{@const w = size * k * (b.total ? 1.1 : 0.8)}
 					<span class="bbox" style="left:{((base.x + off.x) * k + fit.ox).toFixed(2)}px; top:{((base.y + off.y) * k + fit.oy).toFixed(2)}px; transform:rotate({-rotEff}deg)">
