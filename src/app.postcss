@@ -17,3 +17,10 @@ body { font-family: 'Modesto Poster', serif; font-synthesis: none; }
 	src: url('./lib/fonts/atlantis_regular.woff') format('woff');
 	font-display: swap;
 }
+/* Razzle's comic bursts (hud2/ComicBurst.svelte) — the one exception to the one-font rule (the user, 2026-10-20):
+   comic lettering needs a comic face, the way card faces keep their own print fonts. Bangers, SIL OFL. */
+@font-face {
+	font-family: 'Bangers';
+	src: url('./lib/fonts/bangers.woff2') format('woff2');
+	font-display: block;
+}

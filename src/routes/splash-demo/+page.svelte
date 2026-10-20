@@ -29,6 +29,8 @@
 	import NebkherEye from '$lib/hud2/NebkherEye.svelte';
 	import RazzleTop from '$lib/hud2/RazzleTop.svelte';
 	import PoofBurst from '$lib/hud2/PoofBurst.svelte';
+	import ComicBurst from '$lib/hud2/ComicBurst.svelte';
+	import type { ComicMoment } from '$lib/hud2/comic';
 	import { newPlayerCardState } from '$lib/cards/cardstate';
 	import { RUNES, type NkColor, type Rune } from '$lib/heropower';
 	import { BOOK } from '$lib/gydion';
@@ -124,6 +126,10 @@
 	let nkKind: 'laugh' | 'grip' | 'name' | 'crack' | null = null, nkDoubt: NkColor | null = null, nkUltB = false;
 	let rzN = 1, rzUlt = false, rzSparkle = true, rzKind: 'spawn' | 'clear' | 'retrieve' | null = null;
 	let poof: PoofBurst, rzDbl: HTMLElement, rzDblOn = true;
+	let comic: ComicBurst, rzMain: HTMLElement, rzFoe: HTMLElement;
+	// her own moments burst over her; the ones she does to someone else over the target
+	const COMIC_BTNS: [ComicMoment, string, 'me' | 'foe'][] = [['attacked', 'Attacked', 'me'], ['attacks', 'Attacks a hero', 'foe'], ['killHero', 'Defeats a hero', 'foe'], ['killMinion', 'Defeats a minion', 'foe'], ['defended', 'Survives', 'me'], ['blocked', 'Blocked', 'foe'], ['defeated', 'Defeated', 'me'], ['twin', 'Twin Strike', 'foe']];
+	function comicAt(m: ComicMoment, who: 'me' | 'foe') { const t = mid(who === 'me' ? rzMain : rzFoe); comic.play(m, t.x, t.y, t.w); }
 	function poofDbl() { const m = mid(rzDbl), on = !rzDblOn; poof.play(m.x, m.y, m.w); setTimeout(() => (rzDblOn = on), poof.coverAt); }
 	$: rzBodies = Array.from({ length: rzN }, (_, i) => ({ id: i ? `p~${i}` : 'p', face: i }));
 	let gyMode: 'idle' | 'loaded' | 'open' | 'picked' | 'cast' = 'idle', gySchool = 'evocation', gyUlt = false, gyWishes = 0;
@@ -385,11 +391,15 @@
 			</div>
 			<!-- Razzle -->
 			<div class="hc">
-				<div class="hh"><span class="pt" style={portraitCss('razzle')}></span><b>Razzle</b><small>big top · juggling balls · demo: poof</small></div>
+				<div class="hh"><span class="pt" style={portraitCss('razzle')}></span><b>Razzle</b><small>big top · juggling balls · demo: poof · comic bursts</small></div>
 				<div class="row sm nkrow">
-					<span class="nktok rz" style={portraitCss('razzle')}></span>
+					<span class="nktok rz" bind:this={rzMain} style={portraitCss('razzle')}></span>
 					<span class="nktok rz" class:gone={!rzDblOn} bind:this={rzDbl} style="background-image:url({altFace('razzle', 1)});background-size:cover;background-position:center"></span>
 					<button class="t" on:click={poofDbl}>{rzDblOn ? 'Poof out' : 'Poof in'}</button>
+					<span class="nktok rzf" bind:this={rzFoe} style={portraitCss('brogan')}></span>
+				</div>
+				<div class="row sm">
+					{#each COMIC_BTNS as [m, label, who]}<button class={who === 'me' ? 't' : 'o'} on:click={() => comicAt(m, who)}>{label}</button>{/each}
 				</div>
 				<div class="stage"><span class="dbtn"><RazzleTop size={48} fx={fourFx} sparkle={rzSparkle} ult={rzUlt} kind={rzKind} bodies={rzBodies} left={4 - rzN} /></span></div>
 				<div class="row sm">
@@ -424,6 +434,7 @@
 <ChaosFlip bind:this={chaos} phone={mobile} art={coinArt} />
 <IgnatiaSplash bind:this={igSplash} phone={mobile} />
 <PoofBurst bind:this={poof} />
+<ComicBurst bind:this={comic} />
 <LaughBurst bind:this={nkBurst} x={bx} y={by} size={56} ult={nkUlt} />
 {#if won}
 	{#key won}<VictorySplash round={stats.rounds} team={won.team} reason={won.reason} myTeam={me} {mobile} {stats} onClose={() => (won = null)} />{/key}
@@ -453,6 +464,7 @@
 	.nktok.ig { box-shadow: 0 0 0 3px #2f7fe6, 0 0 0 6px #ef7d22; }
 	.nktok.rz { box-shadow: 0 0 0 3px #2f7fe6, 0 0 0 6px #ff3bb4; }
 	.nktok.rz.gone { opacity: 0; }
+	.nktok.rzf { margin-left: auto; box-shadow: 0 0 0 3px #ef7d22, 0 0 0 6px #e8c24a; }
 	.nktok.gy { box-shadow: 0 0 0 3px #2f7fe6, 0 0 0 6px #e8e8e8; }
 	.nktok { width: 56px; height: 56px; border-radius: 50%; display: block; background-color: #0b1b30; box-shadow: 0 0 0 3px #ef7d22, 0 0 0 6px #7a4292; }
 	.four { width: min(1180px, 100%); box-sizing: border-box; }
