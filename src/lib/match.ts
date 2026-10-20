@@ -14,7 +14,7 @@
 // tracker this is robust and easy to reason about.
 
 import { spellName, type GyNews } from './gydion'
-import { applyPower, syncPowers, takaHit, hasPower, isDouble, RZ, rzTwin, twinBars, timelinePick, wantsSecond, runeLine, RUNE_NAME, reversedTurn, trackDiscards, illusionForce, NEB, type NkNews, type PowerReq, type PowerState, type TurnCtx } from './heropower'
+import { applyPower, syncPowers, takaHit, hasPower, isDouble, RZ, rzTwin, twinBars, timelinePick, wantsSecond, runeLine, RUNE_NAME, reversedTurn, trackDiscards, illusionForce, NEB, type NkNews, type EmNews, type PowerReq, type PowerState, type TurnCtx } from './heropower'
 import { teamName, aMinion } from './teams'
 import { hexCube, cubeDist } from './zones'
 import { tokenExpiry, sweepTokens, statusFrom, isTurret } from './tokens'
@@ -459,6 +459,8 @@ export interface MatchState {
 	attacks?: Record<string, { by: string; defending: boolean; at: number; discarded?: boolean; body?: string }>
 	/** NebKher's latest act (laugh / steal / swap / doubt / crack): every screen plays its toast + laugh burst once */
 	nkNews?: NkNews | null
+	/** Emmitt reversed next turn (heropower EmNews): everyone's 'time will run backwards' toast */
+	emNews?: EmNews | null
 	/** forced discards, keyed by the hero who must discard: who forces it, and whether it's "…or die" */
 	forced?: Record<string, { by: string; die: boolean; at: number; only?: 'basic' | 'nonbasic' }>
 	/** what Gydion just cast (everyone's toast; gydion.ts) */

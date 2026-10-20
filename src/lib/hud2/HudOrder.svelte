@@ -53,6 +53,11 @@
 		else if (e.pid === me) onRead(e.pid, e.hero, e.idx);
 		else onNudge(e.pid);
 	}
+	// a reversed turn (the user, 2026-10-20): the banners keep their usual places — highest initiative on the LEFT — and
+	// the tracker runs from the RIGHT instead (the order acts lowest first). `view` = what is drawn, with each card's
+	// place in the acting order (`k`) and whether a tie mark sits before it (the pair it joins is the same either way)
+	$: view = reversed ? order.map((e, k) => ({ e, k })).reverse().map((v, j, a) => ({ ...v, sep: j > 0, tied: j > 0 && !!a[j - 1].e.tied, tieImg: j > 0 ? a[j - 1].e.tieImg : undefined }))
+		: order.map((e, k) => ({ e, k, sep: k > 0, tied: !!e.tied, tieImg: e.tieImg }));
 	const tip = (k: number, e: OrderEntry) => (canPoint && k !== acting ? 'Skip to this card' : e.pid === me ? 'Read your card' : 'Nudge — hurry them up');
 	const dotTip = (d: { pid?: string; hero?: string }) => (d.pid && d.pid !== me ? `${d.hero ?? ''} — nudge them` : d.hero ?? '');
 </script>
@@ -68,8 +73,8 @@
 		{/if}
 	{:else}
 		<b class="ct" class:rv={reversed}>{reversed ? '⟲ Reversed' : 'Initiative'}</b>
-		{#each order as e, k (e.pid)}
-			{#if k}{#if e.tied && (e.tieImg || tieArt)}<img class="ctie" src={e.tieImg ?? tieArt} alt="Tie" title="A tie: the coin's holders went first, then it flipped" />{:else}<i class="cchev">›</i>{/if}{/if}
+		{#each view as { e, k, sep, tied, tieImg } (e.pid)}
+			{#if sep}{#if tied && (tieImg || tieArt)}<img class="ctie" src={tieImg ?? tieArt} alt="Tie" title="A tie: the coin's holders went first, then it flipped" />{:else}<i class="cchev">{reversed ? '‹' : '›'}</i>{/if}{/if}
 			<button class="ce is-{e.team}" class:done={k < acting} class:now={k === acting} on:click={() => click(k, e)} title={tip(k, e)}>
 				<span class="cfc" style="--pc:{e.color}; {e.portrait}"></span>
 				<span class="ch">{e.heroName}</span>{#if runeAt[e.pid]}<RuneMark rune={runeAt[e.pid]} size={14} on fx={false} />{/if}<b class="ci">{e.ini}</b>{#if e.pid === me}<em class="cyou">you</em>{/if}
@@ -86,10 +91,10 @@
 		</div>
 	{:else}
 		{#if reversed}<span class="revtag" title="Time reversed: lower initiative acts first this turn">⟲ Reversed</span>{/if}
-		{#each order as e, k (e.pid)}
+		{#each view as { e, k, sep, tied, tieImg } (e.pid)}
 			{@const c = heroCards(e.hero)[e.idx]}
 			{@const a = act(e)}
-			{#if k}{#if e.tied}<img class="tiemark" src={e.tieImg ?? tieArt} alt="Tie" title="A tie: the coin's holders went first, then it flipped" />{:else}<i class="chev">›</i>{/if}{/if}
+			{#if sep}{#if tied}<img class="tiemark" src={tieImg ?? tieArt} alt="Tie" title="A tie: the coin's holders went first, then it flipped" />{:else}<i class="chev" class:rv={reversed}>{reversed ? '‹' : '›'}</i>{/if}{/if}
 			<button class="ban is-{e.team}" class:done={k < acting} class:now={k === acting} style="--c:{COL[c?.color ?? ''] ?? '#666'}; --art:url({artOf(e.hero, e.idx)})" on:click={() => click(k, e)} title={tip(k, e)}>
 				<span class="bini">{e.ini}</span>
 				{#if runeAt[e.pid]}<span class="brune"><RuneMark rune={runeAt[e.pid]} size={20} on fx={false} /></span>{/if}
@@ -148,6 +153,7 @@
 	.btag { position: absolute; left: 50%; bottom: -11px; transform: translateX(-50%); padding: 2px 10px; border-radius: 999px; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #1b1204; background: linear-gradient(180deg, var(--brass-hi), var(--brass)); white-space: nowrap; }
 	.bdone { position: absolute; right: -6px; top: -7px; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; color: #fff; background: #16a34a; }
 	.chev { font-style: normal; color: var(--brass-hi); font-size: 20px; }
+	.chev.rv { color: #ffa0e6; }
 	.tiemark { width: 30px; height: 30px; border-radius: 50%; box-shadow: 0 0 0 2px #0a1a2c, 0 0 0 3px var(--brass); }
 	/* the compact line */
 	.crow { --brass: #d8b36a; --brass-hi: #f4dfa8; --line: rgba(216, 179, 106, 0.4); width: max-content; max-width: 100%; margin: 0 auto; display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 14px; box-sizing: border-box;

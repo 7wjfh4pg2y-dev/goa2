@@ -12,6 +12,7 @@
 	import DefeatSplash from '$lib/DefeatSplash.svelte';
 	import BattleSplash from '$lib/BattleSplash.svelte';
 	import NebkherSplash from '$lib/hud2/NebkherSplash.svelte';
+	import EmmittSplash from '$lib/hud2/EmmittSplash.svelte';
 	import LaughBurst from '$lib/hud2/LaughBurst.svelte';
 	import PushSplash from '$lib/PushSplash.svelte';
 	import VictorySplash from '$lib/VictorySplash.svelte';
@@ -282,7 +283,7 @@
 	// ── the control centre: one button → a wheel over the board (view controls inside, the board's switches outside)
 	let wheelOpen = false;
 	let deckCovered = false;
-	let phoneStatus: { planning: boolean; countdown: boolean; dots: { color: string; ok: boolean }[]; order: { portrait: string; color: string; team: string }[]; acting: number } | null = null; // the phone top bar's middle: planning dots / the acting order // the deck / a level-up choice is open: the sea, rims and wisps rest under it
+	let phoneStatus: { planning: boolean; countdown: boolean; dots: { color: string; ok: boolean }[]; order: { portrait: string; color: string; team: string }[]; acting: number; reversed?: boolean } | null = null; // the phone top bar's middle: planning dots / the acting order // the deck / a level-up choice is open: the sea, rims and wisps rest under it
 	const ICON = {
 		recenter: '<circle cx="12" cy="12" r="7" /><path d="M12 2v4M12 18v4M2 12h4M18 12h4" /><circle cx="12" cy="12" r="1.4" />',
 		rotl: '<path d="M4 10a8 8 0 1 1 2 6" /><path d="M4 4v6h6" />',
@@ -351,6 +352,8 @@
 			// Gydion's cast toast (only while a Gydion plays)
 			...(Object.values($ms.cards ?? {}).some((c) => c.hero === 'gydion') ? [{ id: 'spells', label: 'Spells', icon: ICON.cue, on: $boardPrefs.spells, title: `Gydion's spell toast: ${$boardPrefs.spells ? 'on' : 'off'}`, act: () => boardPrefs.set({ spells: !$boardPrefs.spells }) },
 				{ id: 'essence', label: 'Essence', icon: ICON.cue, on: $boardPrefs.essence, title: `Prepare Spells' essence wisps: ${$boardPrefs.essence ? 'on' : 'off'}`, act: () => boardPrefs.set({ essence: !$boardPrefs.essence }) }] : []),
+			...(Object.values($ms.cards ?? {}).some((c) => c.hero === 'emmitt') ? [{ id: 'emToast', label: 'Reverse', icon: ICON.cue, on: $boardPrefs.emToast, title: `Emmitt's 'next turn runs backwards' toast: ${$boardPrefs.emToast ? 'on' : 'off'}`, act: () => boardPrefs.set({ emToast: !$boardPrefs.emToast }) },
+				{ id: 'emClock', label: 'Clock', icon: ICON.cue, on: $boardPrefs.emClock, title: `The reversed turn's hourglass: ${$boardPrefs.emClock ? 'on' : 'off'}`, act: () => boardPrefs.set({ emClock: !$boardPrefs.emClock }) }] : []),
 			...(Object.values($ms.cards ?? {}).some((c) => c.hero === 'nebkher') ? [{ id: 'laugh', label: 'Laugh', icon: ICON.laugh, on: $boardPrefs.laugh, title: `NebKher's laugh bursting from his token: ${$boardPrefs.laugh ? 'on' : 'off'}`, act: () => boardPrefs.set({ laugh: !$boardPrefs.laugh }) }] : []),
 			// a 4★ hero's dash button effects (Ignatia's flames, …): one switch for all of them
 			...((hud2 || phone2) && hasPower($ms.cards?.[clientId]?.hero) ? [{ id: 'dash', label: 'Dashboard', icon: ICON.dash, on: $boardPrefs.dash, title: `Your hero button's effects: ${$boardPrefs.dash ? 'on' : 'off'}`, act: () => boardPrefs.set({ dash: !$boardPrefs.dash }) }] : []),
@@ -422,6 +425,10 @@
 	let nkSplash: NebkherSplash, nkBurst: LaughBurst, nkSeen: string | null = $ms.nkNews?.id ?? null, nkX = 0, nkY = 0, nkR = 48, nkUlt = false;
 	$: nkNews = $ms.nkNews ?? null;
 	$: if (nkNews && nkNews.id !== nkSeen) playNk(nkNews);
+	// Emmitt turned the next turn round: everyone's toast, each id once, never on joining (Effects → Reverse)
+	let emSplash: EmmittSplash, emSeen: string | null = $ms.emNews?.id ?? null;
+	$: emNews = $ms.emNews ?? null;
+	$: if (emNews && emNews.id !== emSeen) { emSeen = emNews.id; if (Math.abs(Date.now() - emNews.at) < 10000 && $boardPrefs.emToast) emSplash?.play(); }
 	function playNk(n: NonNullable<typeof nkNews>) {
 		nkSeen = n.id;
 		if (Math.abs(Date.now() - n.at) > 10000) return;
@@ -1177,6 +1184,7 @@
 			</div>
 		{/if}
 	<NebkherSplash bind:this={nkSplash} phone={mobile} />
+	<EmmittSplash bind:this={emSplash} phone={mobile} />
 	<SpellToast bind:this={spellToast} phone={mobile} />
 	<EssenceWisps bind:this={essence} />
 	<LaughBurst bind:this={nkBurst} x={nkX} y={nkY} size={nkR} ult={nkUlt} />

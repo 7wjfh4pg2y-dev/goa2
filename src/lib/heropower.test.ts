@@ -318,6 +318,8 @@ describe('Emmitt: reversed turns, Time Warp, Time Capsule', () => {
 		expect(canReverse(s, 'E', tctx(s))).toBe(true)
 		const p = pw(s, 'E', 'emReverse')
 		expect(p.power?.E?.rev).toBe('1-3')
+		// everyone hears about it once (the toast), naming the turn that runs backwards
+		expect(p.emNews).toMatchObject({ by: 'E', key: '1-3' })
 		// next turn: M (high) and B (low) — B goes first now
 		const t3 = { ...eg(-1, hiA, loA, 3), power: p.power } as MatchState
 		expect(ini(hiA)).toBeGreaterThan(ini(loA))

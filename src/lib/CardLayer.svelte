@@ -52,6 +52,7 @@
 	import Nameplate from '$lib/hud2/Nameplate.svelte';
 	import { portraitCss } from '$lib/heroes';
 	import YourTurn, { TURN_CUE_DEFAULT } from '$lib/YourTurn.svelte';
+	import TimeSplash from '$lib/hud2/TimeSplash.svelte';
 	import HostNotes from '$lib/hud2/HostNotes.svelte';
 	import { segOf } from '$lib/recorder';
 	import { boardPrefs } from '$lib/boardPrefs';
@@ -482,8 +483,8 @@
 		return `M ${(25 + r * Math.sin(a0)).toFixed(2)} ${(25 - r * Math.cos(a0)).toFixed(2)} A ${r} ${r} 0 0 1 ${(25 + r * Math.sin(a1)).toFixed(2)} ${(25 - r * Math.cos(a1)).toFixed(2)}`;
 	};
 	// the phone's top bar shows the turn's state in its free middle: planning dots, or the acting order
-	export let phoneStatus: { planning: boolean; countdown: boolean; dots: { pid?: string; color: string; ok: boolean }[]; order: { pid?: string; portrait: string; color: string; team: string }[]; acting: number } | null = null;
-	$: phoneStatus = phone2 ? { planning: !revealed || levelPhase, countdown: countdownActive, dots: h2dots, order: h2order.map((e) => ({ pid: e.pid, portrait: e.portrait, color: e.color, team: e.team })), acting: em2Pick && revealed ? -1 : actAt } : null;
+	export let phoneStatus: { planning: boolean; countdown: boolean; dots: { pid?: string; color: string; ok: boolean }[]; order: { pid?: string; portrait: string; color: string; team: string }[]; acting: number; reversed?: boolean } | null = null;
+	$: phoneStatus = phone2 ? { planning: !revealed || levelPhase, countdown: countdownActive, dots: h2dots, order: h2order.map((e) => ({ pid: e.pid, portrait: e.portrait, color: e.color, team: e.team })), acting: em2Pick && revealed ? -1 : actAt, reversed: turnReversed } : null;
 	function endAct() { session.cardAction({ kind: 'endAct', pid: clientId }); }
 	// the host's notes for the match report (kept in the shared state, so the game record — and the next host — has them)
 	function addNote(text: string) {
@@ -538,6 +539,19 @@
 	}
 	// YOUR TURN: a short cue when the card acting now is yours (after the reveal curtain); Effects → Cue switches it off
 	let yourTurn: YourTurn;
+	// a turn Emmitt reversed: once its cards are revealed (after the curtain) the hourglass fills the screen, once per turn
+	// (never for a turn already under way when this screen joined); the YOUR TURN cue waits for it (Effects → Clock)
+	let timeSplash: TimeSplash, timeUntil = 0;
+	let timeSeen: string | null = reversedTurn($ms, `${$ms.round}-${$ms.turn}`) && (($ms.revealAt ?? 0) > 0) ? `${$ms.round}-${$ms.turn}` : null;
+	$: timeCheck(turnReversed, revealed, curtain, battlePhase);
+	function timeCheck(..._: unknown[]) {
+		if (!turnReversed || !revealed || curtain || battlePhase) return;
+		const key = pctx.key;
+		if (key === timeSeen) return;
+		timeSeen = key;
+		if (!$boardPrefs.emClock) return;
+		timeUntil = Date.now() + (timeSplash?.play() ?? 0);
+	}
 	let cueKey = '';
 	$: cueCheck(actor, revealed, curtain, actAt);
 	function cueCheck(..._: unknown[]) {
@@ -547,7 +561,9 @@
 		cueKey = key;
 		const me = $players.find((q: Player) => q.id === clientId);
 		const c = myTurnCard != null ? heroCards(mine.hero)[myTurnCard] : null;
-		yourTurn?.play({ hero: mine.hero, heroName: heroName(mine.hero), card: c?.name ?? '', color: colorHex(me?.color ?? ''), team: myTeam === 'blue' ? 'blue' : 'orange' });
+		const cue = { hero: mine.hero, heroName: heroName(mine.hero), card: c?.name ?? '', color: colorHex(me?.color ?? ''), team: (myTeam === 'blue' ? 'blue' : 'orange') as 'blue' | 'orange' };
+		const wait = timeUntil - Date.now();
+		if (wait > 0) setTimeout(() => yourTurn?.play(cue), wait - 400); else yourTurn?.play(cue);
 	}
 	// the host's Next round after the level-up step: one tap loads it, the second goes — until then anyone may still
 	// change this round's level-ups (and a change that leaves someone owing a level-up takes the question back)
@@ -2269,6 +2285,7 @@
 
 	<!-- ───────── dramatic simultaneous reveal ───────── -->
 	<YourTurn bind:this={yourTurn} look={TURN_CUE_DEFAULT} mobile={mobile} />
+	<TimeSplash bind:this={timeSplash} phone={mobile} />
 	{#if nudgeNote}
 		{#key nudgeNote.id}<div class="nudge" class:ph={mobile} style="--nc:{nudgeNote.color}" role="status"><span class="ng">⏳</span><span><b>{nudgeNote.name}</b> is waiting on you</span></div>{/key}
 	{/if}

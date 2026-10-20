@@ -371,6 +371,9 @@ export function nkPower(s: S, pid: string, ctx: TurnCtx): 'laugh' | 'grip' | 'na
 }
 const markOf = (ctx: TurnCtx) => `${ctx.key}:${ctx.at}`
 /** what NebKher just did, for everyone's toast + laugh burst (GameView plays each id once) */
+/** Emmitt set next turn to run backwards (Reverse Time / Tear in Time): every screen plays its toast once; `key` = the reversed turn */
+export type EmNews = { id: string; by: string; key: string; at: number }
+const emNewsOf = (by: string, key: string): EmNews => ({ id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, by, key, at: Date.now() })
 export type NkNews = { id: string; kind: 'laugh' | 'steal' | 'swap' | 'doubt' | 'crack'; by: string; detail?: string; ult?: boolean; at: number
 	/** who the toast is for (plus NebKher himself); none = everyone. The laugh burst shows for everyone */
 	to?: string[] }
@@ -702,10 +705,10 @@ export function applyPower(s: S & { tieTurn?: { key: string; coin: Team } | null
 		const nk = nextTurnKey(ctx)
 		if (byHost) {
 			if (req.on === false) return s.power?.[who]?.rev ? { power: { ...s.power, [who]: { ...s.power?.[who], rev: undefined } } } : {}
-			return nk ? { power: { ...s.power, [who]: { ...s.power?.[who], rev: nk } } } : {}
+			return nk ? { power: { ...s.power, [who]: { ...s.power?.[who], rev: nk } }, emNews: emNewsOf(who, nk) } : {}
 		}
 		if (who !== req.pid || !canReverse(s, who, ctx)) return {}
-		return { power: { ...s.power, [who]: { ...s.power?.[who], rev: nk! } } }
+		return { power: { ...s.power, [who]: { ...s.power?.[who], rev: nk! } }, emNews: emNewsOf(who, nk!) }
 	}
 	if (req.op === 'emWarp') {
 		const by = emActing(s, ctx, RE_WARP)

@@ -37,7 +37,7 @@
 	export let onSheet: () => void = () => {}; // waves / Life: the sheet where tokens flip
 	export let onCoins: (d: number) => void = () => {};
 	/** the turn's state for the free middle: planning dots (player colours, filled = in) or the acting order (lit = acting) */
-	export let status: { planning: boolean; countdown: boolean; dots: { pid?: string; color: string; ok: boolean }[]; order: { pid?: string; portrait: string; color: string; team: string }[]; acting: number } | null = null;
+	export let status: { planning: boolean; countdown: boolean; dots: { pid?: string; color: string; ok: boolean }[]; order: { pid?: string; portrait: string; color: string; team: string }[]; acting: number; reversed?: boolean } | null = null;
 
 	$: right = (left === 'orange' ? 'blue' : 'orange') as Team;
 	const TC: Record<Team, string> = { orange: '#ef7d22', blue: '#2f7fe6' };
@@ -70,7 +70,7 @@
 				{#if status.countdown}<em class="rv">Revealing</em>
 				{:else}<span class="dots">{#each status.dots as d, i (i)}<button class="dt" disabled={!d.pid || d.pid === me} on:click={() => d.pid && onDot(d.pid)} aria-label="Nudge"><i class:ok={d.ok} style="--c:{d.color}"></i></button>{/each}</span>{/if}
 			{:else if status}
-				<span class="ord">{#each status.order as o, k (k)}<button class="f" class:now={k === status.acting} class:done={k < status.acting} style="--pc:{o.color}; {o.portrait}" on:click={() => (o.pid === me ? onOrder() : onPick(k))} aria-label={o.pid === me ? "This turn's cards" : 'Nudge'}></button>{/each}</span>
+				<span class="ord" class:rv={status.reversed}>{#each status.order as o, k (k)}<button class="f" class:now={k === status.acting} class:done={k < status.acting} style="--pc:{o.color}; {o.portrait}" on:click={() => (o.pid === me ? onOrder() : onPick(k))} aria-label={o.pid === me ? "This turn's cards" : 'Nudge'}></button>{/each}</span>
 			{/if}
 		</span>
 		{#if coins != null}
@@ -90,6 +90,8 @@
 </div>
 
 <style>
+	/* a reversed turn: the faces keep their places (highest initiative left), the tracker runs from the right */
+	.ord.rv { flex-direction: row-reverse; }
 	.ptop { position: absolute; top: 0; left: 0; right: 0; z-index: 14; color: #f5f1e8; pointer-events: none; }
 	.bar { height: 44px; display: flex; align-items: center; gap: 4px; padding: 0 6px; box-sizing: border-box; pointer-events: auto;
 		background: linear-gradient(180deg, rgba(16, 44, 72, 0.98), rgba(6, 21, 38, 0.98)); border-bottom: 1px solid rgba(216, 179, 106, 0.4); }

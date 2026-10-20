@@ -11,6 +11,8 @@
 	import EssenceWisps from '$lib/hud2/EssenceWisps.svelte';
 	import GydionBook from '$lib/hud2/GydionBook.svelte';
 	import SpellToast from '$lib/hud2/SpellToast.svelte';
+	import EmmittSplash from '$lib/hud2/EmmittSplash.svelte';
+	import TimeSplash from '$lib/hud2/TimeSplash.svelte';
 	import IgnatiaCoin from '$lib/hud2/IgnatiaCoin.svelte';
 	import SnorriRunes from '$lib/hud2/SnorriRunes.svelte';
 	import TakaGold from '$lib/hud2/TakaGold.svelte';
@@ -100,6 +102,7 @@
 	let tkKind: 'gold' | 'bushido' | null = null, tkUlt = false;
 	$: tkCs = { ...newPlayerCardState('takahide'), ultimate: tkUlt } as PlayerCardState;
 	let emMode: 'idle' | 'run' | 'green' | 'rev' = 'idle';
+	let emSplash: EmmittSplash, timeSplash: TimeSplash;
 	let nkKind: 'laugh' | 'grip' | 'name' | 'crack' | null = null, nkDoubt: NkColor | null = null, nkUltB = false;
 	let rzN = 1, rzUlt = false, rzSparkle = true, rzKind: 'spawn' | 'clear' | 'retrieve' | null = null;
 	$: rzBodies = Array.from({ length: rzN }, (_, i) => ({ id: i ? `p~${i}` : 'p', face: i }));
@@ -330,7 +333,11 @@
 			</div>
 			<!-- Emmitt -->
 			<div class="hc">
-				<div class="hh"><span class="pt" style={portraitCss('emmitt')}></span><b>Emmitt</b><small>hourglass clock</small></div>
+				<div class="hh"><span class="pt" style={portraitCss('emmitt')}></span><b>Emmitt</b><small>reverse toast · hourglass · clock</small></div>
+				<div class="row sm">
+					<button on:click={() => emSplash.play()}>Reverse Time (toast)</button>
+					<button class="t" on:click={() => timeSplash.play()}>The reversed turn</button>
+				</div>
 				<div class="stage"><span class="dbtn"><EmmittClock size={48} mode={emMode} fx={fourFx} /></span></div>
 				<div class="row sm">
 					{#each [['idle', 'Rest'], ['run', 'Time runs'], ['green', 'Can reverse'], ['rev', 'Reversed']] as [m, l]}<button class:off={emMode !== m} on:click={() => (emMode = m as typeof emMode)}>{l}</button>{/each}
@@ -361,6 +368,8 @@
 <NebkherSplash bind:this={nkSplash} phone={mobile} />
 <EssenceWisps bind:this={ess} />
 <SpellToast bind:this={spellToast} phone={mobile} />
+<EmmittSplash bind:this={emSplash} phone={mobile} />
+<TimeSplash bind:this={timeSplash} phone={mobile} />
 <LaughBurst bind:this={nkBurst} x={bx} y={by} size={56} ult={nkUlt} />
 {#if won}
 	{#key won}<VictorySplash round={stats.rounds} team={won.team} reason={won.reason} myTeam={me} {mobile} {stats} onClose={() => (won = null)} />{/key}
