@@ -1,5 +1,5 @@
 <script lang="ts">
-	// A wave of light off a hero's token (DEMO on /splash-demo, 2026-10-20 — Takahide's gold swap): three rings in the
+	// A wave of light off a hero's token (Takahide's gold swap, in games since 2026-10-20, Effects → Wave): three rings in the
 	// colour roll out from the token one after another over a bright flash. Screen x / y = the token's centre, size = its
 	// width. Fixed layer; transform / opacity only.
 	type W = { key: number; x: number; y: number; s: number; c: string }

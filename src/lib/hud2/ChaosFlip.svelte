@@ -1,13 +1,13 @@
 <script lang="ts">
-	// Chaos Incarnate (DEMO on /splash-demo, 2026-10-20; the user wanted it far more pronounced — energy FUSION, not
+	// Chaos Incarnate (in games since 2026-10-20, Effects → Chaos; the user wanted it far more pronounced — energy FUSION, not
 	// sparkles): two plasma cores, fire and water, spiral in round the middle of the screen trailing light, collide in a
-	// white-violet fusion flash (shockwaves, lightning), the tie-breaker coin spins seven half-turns
+	// white-violet fusion flash (shockwaves, a burst of streaks), the tie-breaker coin spins seven half-turns
 	// inside a turning plasma corona, then lands on its new face with a blast in that team's colour:
-	// 'Chaos Incarnate · The coin turns to the Titans'. ~2 s; transform / opacity only (the face swaps at each edge-on).
+	// 'Chaos Incarnate · The coin turns to the Titans'. 2 s + 0.5 s held to read; transform / opacity only (the face swaps at each edge-on).
 	import { teamName } from '$lib/teams'
 	export let phone = false
 	export let art: (t: 'orange' | 'blue') => string = () => ''
-	const DUR = 2000, SPIN0 = 550, HALF = 100
+	const DUR = 2500, SPIN0 = 550, HALF = 100 // 2 s of motion + 0.5 s to read
 	let on = false, run = 0, face: 'orange' | 'blue' = 'orange', to: 'orange' | 'blue' = 'blue'
 	let timers: ReturnType<typeof setTimeout>[] = []
 	/** flip to `t` (the side the coin lands on) */
@@ -23,9 +23,8 @@
 		})
 	}
 	const TRAIL = [0, 1, 2, 3, 4, 5]
-	// lightning round the corona: jagged bolts at a few angles
-	const BOLT = 'M0 -38 L6 -52 L-3 -60 L5 -74 L-2 -86 L4 -100'
-	const BOLTS = [20, 95, 160, 230, 300]
+	// the fusion's streaks: long rays flung out, fire and water alternating
+	const STREAKS = Array.from({ length: 18 }, (_, i) => ({ a: i * 20 + (i % 2 ? 6 : 0), fire: i % 2 === 0, l: 0.7 + ((i * 7) % 5) * 0.12 }))
 </script>
 
 {#if on}
@@ -41,9 +40,9 @@
 				<!-- fusion -->
 				<i class="flash"></i>
 				<i class="wave w1"></i><i class="wave w2"></i><i class="wave w3"></i>
+				{#each STREAKS as s}<span class="streak" style="--a:{s.a}deg;--l:{s.l}"><i class:fire={s.fire}></i></span>{/each}
 				<!-- the corona the coin spins in -->
 				<span class="corona"><i class="rays"></i><i class="rays r2"></i></span>
-				<svg class="bolts" viewBox="-110 -110 220 220">{#each BOLTS as a, j}<path d={BOLT} transform="rotate({a})" class="bolt b{j % 3}" />{/each}</svg>
 				<span class="coin"><img src={art(face)} alt="" /></span>
 				<!-- landing blast in the new team's colour -->
 				<i class="land l1"></i><i class="land l2"></i><i class="landglow"></i>
@@ -55,9 +54,9 @@
 {/if}
 
 <style>
-	.cf { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; align-content: center; gap: 12px; pointer-events: none; animation: cfout 2s linear both; --s: clamp(170px, 25vmin, 250px); }
+	.cf { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; align-content: center; gap: 12px; pointer-events: none; animation: cfout 2.5s linear both; --s: clamp(170px, 25vmin, 250px); }
 	.cf::before { content: ''; position: absolute; inset: 0; background: radial-gradient(circle at 50% 46%, rgba(10, 4, 20, 0.7), rgba(10, 4, 20, 0.3) 45%, transparent 75%); }
-	@keyframes cfout { 0%, 84% { opacity: 1; } 100% { opacity: 0; } }
+	@keyframes cfout { 0%, 88% { opacity: 1; } 100% { opacity: 0; } }
 	.stage { position: relative; width: var(--s); height: var(--s); }
 	.stage > * { position: absolute; }
 	/* ── the cores: the orbit turns (fast, then faster) while each arm reels in from wide to the centre ── */
@@ -85,12 +84,11 @@
 	.rays.r2 { animation-duration: 2.1s; animation-direction: reverse; opacity: 0.7; transform: scale(0.8);
 		background: repeating-conic-gradient(from 7deg, rgba(220, 170, 255, 0.85) 0 3deg, transparent 3deg 24deg); }
 	@keyframes cfspinr { to { transform: rotate(360deg); } }
-	.bolts { left: 50%; top: 50%; width: calc(var(--s) * 2); height: calc(var(--s) * 2); margin: calc(var(--s) * -1); overflow: visible; animation: cfspinr 2.4s linear infinite; }
-	.bolt { fill: none; stroke: #f6ecff; stroke-width: 2.6; stroke-linejoin: round; stroke-linecap: round; opacity: 0; }
-	.b0 { animation: cfbolt 0.12s 0.58s steps(1) 6 both; }
-	.b1 { animation: cfbolt 0.12s 0.62s steps(1) 6 both; stroke: #9fe6ff; }
-	.b2 { animation: cfbolt 0.12s 0.66s steps(1) 6 both; stroke: #ffc070; }
-	@keyframes cfbolt { 0% { opacity: 1; } 40% { opacity: 0; } 100% { opacity: 0; } }
+	.streak { left: 50%; top: 50%; width: 0; height: 0; transform: rotate(var(--a)); }
+	.streak i { position: absolute; left: -3px; top: 0; width: 6px; height: calc(var(--s) * 0.5 * var(--l)); border-radius: 3px; transform-origin: 50% 0; mix-blend-mode: screen; opacity: 0;
+		background: linear-gradient(180deg, #ffffff, #8fe0ff 30%, rgba(40, 140, 255, 0)); animation: cfstreak 0.55s 0.55s cubic-bezier(0.1, 0.8, 0.3, 1) both; }
+	.streak i.fire { background: linear-gradient(180deg, #ffffff, #ffc060 30%, rgba(255, 80, 20, 0)); }
+	@keyframes cfstreak { 0% { opacity: 0; transform: translateY(calc(var(--s) * 0.08)) scaleY(0.2); } 15% { opacity: 1; } 100% { opacity: 0; transform: translateY(calc(var(--s) * 0.95)) scaleY(1.3); } }
 	/* the coin: appears out of the fusion, 7 flat half-turns, then a settle */
 	.coin { inset: 0; display: grid; opacity: 0; animation: cfin 0.2s 0.52s ease-out both, cfspin 0.7s 0.55s linear both, cfland 0.4s 1.25s cubic-bezier(0.2, 1.6, 0.4, 1) both; }
 	.coin img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.7)); }

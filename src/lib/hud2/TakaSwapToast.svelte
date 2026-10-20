@@ -1,15 +1,17 @@
 <script lang="ts">
-	// Takahide swaps his gold (DEMO on /splash-demo, 2026-10-20): a toast under the top bar — his sun halo turning behind,
+	// Takahide swaps his gold (in games since 2026-10-20, Effects → Swap; also on /splash-demo): a toast under the top bar — his sun halo turning behind,
 	// the old gold folding away and the new one swinging in with a sheen; the words follow the gold he draws (Tiger / Butterfly / Bee). A Bushido swap
-	// in the game would show only a face-down card (the swap stays secret). ~3 s; transform / opacity only.
+	// is secret, so it never gets this toast (only the gold wave). ~3 s; transform / opacity only.
 	import { heroCards, backgroundSlug } from '$lib/cards/deck'
 	export let phone = false
 	const ART = import.meta.glob('$lib/cards/images/cards/takahide/*.webp', { eager: true, import: 'default' }) as Record<string, string>
 	const golds = heroCards('takahide').filter((c) => c.color === 'GOLD' && !c.handicapped)
 	const artOf = (i: number) => { const c = golds[i]; return c ? Object.entries(ART).find(([k]) => k.endsWith(`/${backgroundSlug(c)}.webp`))?.[1] ?? '' : '' }
 	let from = 0, to = 1, on = false, run = 0, timer: ReturnType<typeof setTimeout> | null = null
-	export function play(a = 0, b = 1) {
-		from = a; to = b; on = false; run++
+	/** a / b = his golds by index (0–2) or by card name */
+	export function play(a: number | string = 0, b: number | string = 1) {
+		const ix = (v: number | string) => (typeof v === 'number' ? v : Math.max(0, golds.findIndex((c) => c.name === v)))
+		from = ix(a); to = ix(b); on = false; run++
 		if (timer) clearTimeout(timer)
 		requestAnimationFrame(() => { on = true; timer = setTimeout(() => (on = false), 3000) })
 	}

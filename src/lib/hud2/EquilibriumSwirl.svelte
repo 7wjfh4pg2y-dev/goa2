@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Ignatia's Equilibrium switches on (DEMO on /splash-demo, 2026-10-20 — kept quiet on purpose): her ten tomoe commas
+	// Ignatia's Equilibrium switches on (in games since 2026-10-20, Effects → Swirl — kept quiet on purpose): her ten tomoe commas
 	// swirl in from a wide circle round her token, fire on the left and water on the right, settle into a ring hugging
 	// the token and fade. No dimming, no words. ~1.8 s; transform / opacity only (each comma its own small svg).
 	import { TOMOE, TOMOE_BODY, TOMOE_INK, TOMOE_MID, TOMOE_KEY } from './tomoe'

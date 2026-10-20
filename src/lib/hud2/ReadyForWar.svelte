@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Takahide's ultimate takes hold (DEMO on /splash-demo, 2026-10-20): a violet sunburst turns in the middle of the
+	// Takahide's ultimate takes hold (in games since 2026-10-20, Effects → War): a violet sunburst turns in the middle of the
 	// screen and his three golds fan out in front of it under 'Ready for War'. ~3 s; transform / opacity only.
 	import { heroCards, backgroundSlug } from '$lib/cards/deck'
 	export let phone = false

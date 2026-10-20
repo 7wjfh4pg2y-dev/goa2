@@ -14,6 +14,8 @@ export type Team = 'orange' | 'blue'
 export type PowerState = {
 	/** Ignatia: the turn (round-turn key) she last flipped the tie-breaker with Chaos Incarnate (once a turn) */
 	flip?: string
+	/** Ignatia: Equilibrium is on (syncPowers' edge detector for the splash) */
+	eqOn?: boolean
 	/** Snorri: the rune under each turn slot I–IV (index = slot), once he has inscribed them */
 	runes?: Rune[]
 	/** Snorri's ultimate: the inactive rune he picked as a second active rune, for this turn (round-turn key) only */
@@ -373,6 +375,11 @@ const markOf = (ctx: TurnCtx) => `${ctx.key}:${ctx.at}`
 /** what NebKher just did, for everyone's toast + laugh burst (GameView plays each id once) */
 /** Emmitt set next turn to run backwards (Reverse Time / Tear in Time): every screen plays its toast once; `key` = the reversed turn */
 /** Snorri inscribed his runes (his silver): everyone's banner of the four runes, once per id */
+/** Ignatia's / Takahide's moments, for everyone's splash (GameView plays each id once): Equilibrium switched on, a
+ *  Chaos Incarnate flip (`to` = the team the coin turns to), a gold swap by his gold (`from` → `card`, deck indices —
+ *  face up, so public) or by Bushido (secret: only that a swap happened), Ready for War */
+export type FxNews = { id: string; by: string; kind: 'eq' | 'flip' | 'swap' | 'bushido' | 'war'; to?: Team; from?: number; card?: number; at: number }
+const fxNewsOf = (kind: FxNews['kind'], by: string, more: Partial<FxNews> = {}): FxNews => ({ id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, kind, by, at: Date.now(), ...more })
 export type SnNews = { id: string; by: string; order: Rune[]; at: number }
 export type EmNews = { id: string; by: string; key: string; at: number }
 const emNewsOf = (by: string, key: string): EmNews => ({ id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, by, key, at: Date.now() })
@@ -753,6 +760,7 @@ export function applyPower(s: S & { tieTurn?: { key: string; coin: Team } | null
 		if (from == null) return {}
 		const out: Record<string, unknown> = { cards: { ...s.cards, [who]: swapGold(cs, from, req.idx, kind !== 'gold') } }
 		if (kind) out.power = { ...s.power, [who]: { ...s.power?.[who], swap: `${ctx.key}:${ctx.at}` } }
+		if (kind) out.fxNews = kind === 'gold' ? fxNewsOf('swap', who, { from, card: req.idx }) : fxNewsOf('bushido', who)
 		// the card in play changed its initiative: the cards that acted and the one acting keep their places
 		if (ctx.revealed && cs.pending === from) out.acting = { key: ctx.key, idx: ctx.at, done: s.acting?.key === ctx.key ? s.acting.done : undefined, pin: ctx.order.slice(0, ctx.at + 1) }
 		return out
@@ -798,18 +806,28 @@ export function applyPower(s: S & { tieTurn?: { key: string; coin: Team } | null
 			tieBreaker: other,
 			// the order of this turn keeps the coin it began with (a flip changes her card text, not who goes next)
 			tieTurn: s.tieTurn?.key === ctx.key ? s.tieTurn : { key: ctx.key, coin: ctx.tieBreaker },
-			power: { ...s.power, [req.pid]: { ...s.power?.[req.pid], flip: ctx.key } }
+			power: { ...s.power, [req.pid]: { ...s.power?.[req.pid], flip: ctx.key } },
+			fxNews: fxNewsOf('flip', req.pid, { to: other })
 		}
 	}
 	return {}
 }
 
-/** after any change: what follows by itself (Takahide's Ready for War as his ultimate comes on / off). Returns a
- *  patch (cards / power) or null */
-export function syncPowers(s: S, _ctx: TurnCtx): { cards?: Record<string, PlayerCardState>; power?: Record<string, PowerState> } | null {
-	let cards: Record<string, PlayerCardState> | undefined, power: Record<string, PowerState> | undefined
+/** after any change: what follows by itself (Takahide's Ready for War as his ultimate comes on / off; Ignatia's
+ *  Equilibrium switching on, for the splash). Returns a patch (cards / power / fxNews) or null */
+export function syncPowers(s: S, _ctx: TurnCtx): { cards?: Record<string, PlayerCardState>; power?: Record<string, PowerState>; fxNews?: FxNews } | null {
+	let cards: Record<string, PlayerCardState> | undefined, power: Record<string, PowerState> | undefined, fxNews: FxNews | undefined
 	for (const pid in s.cards ?? {}) {
 		const cs = s.cards![pid]
+		if (cs.hero === 'ignatia') {
+			// Equilibrium's edge: on → news once; off → forget, so the next one plays again
+			const on = equilibrium(s, pid), was = !!s.power?.[pid]?.eqOn
+			if (on !== was) {
+				power = { ...(power ?? s.power), [pid]: { ...s.power?.[pid], eqOn: on || undefined } }
+				if (on) fxNews = fxNewsOf('eq', pid)
+			}
+			continue
+		}
 		if (cs.hero !== TAKA) continue
 		const applied = !!s.power?.[pid]?.war
 		const war = readyForWar(cs, applied)
@@ -822,6 +840,8 @@ export function syncPowers(s: S, _ctx: TurnCtx): { cards?: Record<string, Player
 		if (next === cs) continue
 		cards = { ...(cards ?? s.cards), [pid]: next }
 		if (war) power = { ...(power ?? s.power), [pid]: { ...s.power?.[pid], war: cs.ultimate } }
+		if (war && cs.ultimate) fxNews = fxNewsOf('war', pid)
 	}
-	return cards ? (power ? { cards, power } : { cards }) : null
+	if (!cards && !power) return null
+	return { ...(cards ? { cards } : {}), ...(power ? { power } : {}), ...(fxNews ? { fxNews } : {}) }
 }

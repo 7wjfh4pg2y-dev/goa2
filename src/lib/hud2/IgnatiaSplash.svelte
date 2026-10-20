@@ -1,6 +1,6 @@
 <script lang="ts">
-	// Equilibrium (DEMO on /splash-demo, 2026-10-20 — the user's ask): a toast under the top bar in the NebKher / Emmitt /
-	// Snorri frame — 'Controlled Chaos · Ignatia has achieved Equilibrium' — with her Equilibrium painting in the slanted
+	// Equilibrium (in games since 2026-10-20, Effects → Balance; also on /splash-demo): a toast under the top bar in the NebKher / Emmitt /
+	// Snorri frame — 'Controlled Chaos · Ignatia has achieved Equilibrium' (the title in a fire → water gradient, 'Equilibrium' magenta) — with her Equilibrium painting in the slanted
 	// window, BROUGHT TO LIFE: her hair burns (copies of the hair cut out of the painting sway gently from its roots under a
 	// flickering heat glow, embers rising off it), both orbs swirl with energy, then she draws them together — the two lights pull to
 	// the middle, an arc crackles between them and they fuse in a white-violet flash. ~2.5 s; transform / opacity only.
@@ -59,7 +59,6 @@
 				</span>
 				<span class="edge"></span>
 				<div class="copy">
-					<small class="kick">Fire and water, as one</small>
 					<b class="title">Controlled Chaos</b>
 					<span class="sub">Ignatia has achieved <em>Equilibrium</em></span>
 				</div>
@@ -130,18 +129,17 @@
 	@keyframes igfring { 0% { opacity: 0; transform: scale(0.2); } 15% { opacity: 0.9; } 100% { opacity: 0; transform: scale(2.6); } }
 	.edge { position: absolute; left: 0; top: 0; bottom: 0; width: var(--w); background: linear-gradient(180deg, #ffb060, #c58cff 50%, #4fe0f0); z-index: 2;
 		clip-path: polygon(calc(100% - 3px) 0, 100% 0, 84% 100%, calc(84% - 3px) 100%); }
-	.copy { position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 3px; padding: 0 14px 0 0; min-width: 0; }
-	.kick { font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase; background: linear-gradient(90deg, #ffb070, #8fe6f2); -webkit-background-clip: text; background-clip: text; color: transparent; }
-	.title { font-weight: normal; font-size: 30px; line-height: 1; color: #fff6f0; white-space: nowrap; -webkit-text-stroke: 1px #12060a; paint-order: stroke fill;
-		text-shadow: -6px 0 14px rgba(239, 125, 34, 0.55), 6px 0 14px rgba(47, 208, 230, 0.55), 2px 3px 0 #12060a; animation: igslam 0.45s 0.2s cubic-bezier(0.2, 1.6, 0.4, 1) both; }
+	.copy { position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; padding: 0 14px 0 0; min-width: 0; }
+	.title { font-weight: normal; font-size: 34px; line-height: 1.05; background: linear-gradient(90deg, #ffd27a, #ff7a2a 30%, #d58cff 52%, #3fd2ef 72%, #b8f4ff); -webkit-background-clip: text; background-clip: text; color: transparent; white-space: nowrap; 
+		filter: drop-shadow(2px 3px 0 #12060a) drop-shadow(0 0 10px rgba(197, 140, 255, 0.45)); animation: igslam 0.45s 0.2s cubic-bezier(0.2, 1.6, 0.4, 1) both; }
 	@keyframes igslam { from { opacity: 0; transform: scale(1.4); } to { opacity: 1; transform: none; } }
-	.sub { font-size: 13px; color: #eadcf2; }
-	.sub em { font-style: normal; color: #d8b4ff; }
+	.sub { font-size: 14px; color: #eadcf2; }
+	.sub em { font-style: normal; color: #ff3dd8; text-shadow: 0 0 10px rgba(255, 61, 216, 0.6); }
 	/* the fusion's light runs along the band */
 	.sheen { position: absolute; top: -20%; bottom: -20%; left: 0; width: 30%; z-index: 3; background: linear-gradient(100deg, transparent, rgba(230, 200, 255, 0.35), transparent); transform: translateX(-120%) skewX(-14deg); animation: igsh 0.6s 1.7s ease-in-out both; }
 	@keyframes igsh { to { transform: translateX(420%) skewX(-14deg); } }
 	.ph { top: 64px; --w: 118px; --h: 100px; --k: 0.27; }
-	.ph .title { font-size: 23px; }
+	.ph .title { font-size: 26px; }
 	.ph .sub { font-size: 12px; }
 	@media (prefers-reduced-motion: reduce) { .igs *, .igs { animation-duration: 0.01s !important; animation-delay: 0s !important; animation-iteration-count: 1 !important; } }
 </style>

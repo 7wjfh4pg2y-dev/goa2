@@ -41,6 +41,18 @@ describe('Ignatia: Equilibrium (her silver) — both halves of her cards while i
 		expect(next.round).toBe(2)
 		expect(equilibrium(next, 'I')).toBe(false)
 	})
+	it('everyone hears once when it switches on (the splash), and again only after it has ended', () => {
+		const s = { ...game([silver, red1, null, null]), host: 'B', effects: [fx(silver)] } as MatchState
+		const p = applyCardReq(s, { kind: 'coins', pid: 'I', delta: 1 })
+		expect(p.fxNews).toMatchObject({ kind: 'eq', by: 'I' })
+		const on = { ...s, ...p } as MatchState
+		expect(applyCardReq(on, { kind: 'coins', pid: 'I', delta: 1 }).fxNews).toBeUndefined()
+		const off = { ...on, effects: [] } as MatchState
+		const q = applyCardReq(off, { kind: 'coins', pid: 'I', delta: 1 })
+		expect(q.power?.I?.eqOn).toBeUndefined()
+		const again = { ...off, ...q, effects: [fx(silver)] } as MatchState
+		expect(applyCardReq(again, { kind: 'coins', pid: 'I', delta: 1 }).fxNews).toMatchObject({ kind: 'eq' })
+	})
 })
 
 describe('Ignatia: Chaos Incarnate (her ultimate) — flip the tie-breaker once a turn', () => {
@@ -58,6 +70,7 @@ describe('Ignatia: Chaos Incarnate (her ultimate) — flip the tie-breaker once 
 		const p = applyCardReq(s, { kind: 'power', pid: 'I', op: 'ignatiaFlip' })
 		expect(p.tieBreaker).toBe('blue')
 		expect(p.tieTurn).toEqual({ key: turnKey(s), coin: 'orange' })
+		expect(p.fxNews).toMatchObject({ kind: 'flip', by: 'I', to: 'blue' })
 		const after = { ...s, ...p } as MatchState
 		expect(turnOrder(after)).toEqual(before)
 		expect(flipUsed(after, 'I', ctx(after))).toBe(true)
@@ -191,6 +204,15 @@ describe('Takahide: gold card swaps, Bushido face down, teammates swap, Ready fo
 		expect(swap(actingAs(tg(butterfly), 'B'), tiger)).toEqual({})
 		expect(swap(s, butterfly)).toEqual({})
 	})
+	it('a swap is news for everyone: his gold names both cards (face up); Bushido only that it happened; the host\'s fix nothing', () => {
+		const s = actingAs(tg(butterfly), 'T')
+		expect(swap(s, tiger).fxNews).toMatchObject({ kind: 'swap', by: 'T', from: butterfly, card: tiger })
+		const b = actingAs(tg(silver), 'T')
+		const bn = swap(b, sting).fxNews!
+		expect(bn.kind).toBe('bushido')
+		expect(bn.card).toBeUndefined()
+		expect(swap(tg(red1), sting, 'B', 'T').fxNews).toBeUndefined()
+	})
 	it('the safeguard that returns lost cards follows his current gold (Butterfly stays in the deck)', () => {
 		const s = actingAs(tg(butterfly), 'T')
 		const after = { ...s, ...swap(s, sting), turn: 4 } as MatchState
@@ -283,10 +305,12 @@ describe('Takahide: gold card swaps, Bushido face down, teammates swap, Ready fo
 		expect(cs.hand).toEqual(expect.arrayContaining([butterfly, sting, tiger]))
 		expect(cs.hand).not.toContain(silver)
 		expect(p.power!.T.war).toBe(true)
+		expect(p.fxNews).toMatchObject({ kind: 'war', by: 'T' })
 		const off = { ...on, ...p, cards: { ...p.cards, T: { ...cs, ultimate: false } } } as MatchState
 		const q = applyCardReq(off, { kind: 'coins', pid: 'T', delta: 1 })
 		expect(q.cards!.T.hand).toContain(silver)
 		expect(heldGolds(q.cards!.T)).toHaveLength(1)
+		expect(q.fxNews).toBeUndefined()
 	})
 })
 

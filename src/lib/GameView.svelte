@@ -13,6 +13,12 @@
 	import BattleSplash from '$lib/BattleSplash.svelte';
 	import NebkherSplash from '$lib/hud2/NebkherSplash.svelte';
 	import EmmittSplash from '$lib/hud2/EmmittSplash.svelte';
+	import IgnatiaSplash from '$lib/hud2/IgnatiaSplash.svelte';
+	import EquilibriumSwirl from '$lib/hud2/EquilibriumSwirl.svelte';
+	import ChaosFlip from '$lib/hud2/ChaosFlip.svelte';
+	import TakaSwapToast from '$lib/hud2/TakaSwapToast.svelte';
+	import TokenWave from '$lib/hud2/TokenWave.svelte';
+	import ReadyForWar from '$lib/hud2/ReadyForWar.svelte';
 	import SnorriSplash from '$lib/hud2/SnorriSplash.svelte';
 	import LaughBurst from '$lib/hud2/LaughBurst.svelte';
 	import PushSplash from '$lib/PushSplash.svelte';
@@ -355,6 +361,12 @@
 				{ id: 'essence', label: 'Essence', icon: ICON.cue, on: $boardPrefs.essence, title: `Prepare Spells' essence wisps: ${$boardPrefs.essence ? 'on' : 'off'}`, act: () => boardPrefs.set({ essence: !$boardPrefs.essence }) }] : []),
 			...(Object.values($ms.cards ?? {}).some((c) => c.hero === 'snorri') ? [{ id: 'snInscribe', label: 'Runes', icon: ICON.cue, on: $boardPrefs.snInscribe, title: `Snorri's 'inscribes the runes' banner: ${$boardPrefs.snInscribe ? 'on' : 'off'}`, act: () => boardPrefs.set({ snInscribe: !$boardPrefs.snInscribe }) },
 				{ id: 'runeFlare', label: 'Ignite', icon: ICON.cue, on: $boardPrefs.runeFlare, title: `A rune flaring as it becomes active: ${$boardPrefs.runeFlare ? 'on' : 'off'}`, act: () => boardPrefs.set({ runeFlare: !$boardPrefs.runeFlare }) }] : []),
+			...(Object.values($ms.cards ?? {}).some((c) => c.hero === 'ignatia') ? [{ id: 'igEq', label: 'Balance', icon: ICON.cue, on: $boardPrefs.igEq, title: `Ignatia's 'Controlled Chaos' toast: ${$boardPrefs.igEq ? 'on' : 'off'}`, act: () => boardPrefs.set({ igEq: !$boardPrefs.igEq }) },
+				{ id: 'igSwirl', label: 'Swirl', icon: ICON.cue, on: $boardPrefs.igSwirl, title: `The tomoe swirling round her token as Equilibrium starts: ${$boardPrefs.igSwirl ? 'on' : 'off'}`, act: () => boardPrefs.set({ igSwirl: !$boardPrefs.igSwirl }) },
+				{ id: 'igChaos', label: 'Chaos', icon: ICON.cue, on: $boardPrefs.igChaos, title: `Chaos Incarnate's coin flip: ${$boardPrefs.igChaos ? 'on' : 'off'}`, act: () => boardPrefs.set({ igChaos: !$boardPrefs.igChaos }) }] : []),
+			...(Object.values($ms.cards ?? {}).some((c) => c.hero === 'takahide') ? [{ id: 'tkSwap', label: 'Swap', icon: ICON.cue, on: $boardPrefs.tkSwap, title: `Takahide's gold swap toast: ${$boardPrefs.tkSwap ? 'on' : 'off'}`, act: () => boardPrefs.set({ tkSwap: !$boardPrefs.tkSwap }) },
+				{ id: 'tkWave', label: 'Wave', icon: ICON.cue, on: $boardPrefs.tkWave, title: `The gold wave off his token on a swap: ${$boardPrefs.tkWave ? 'on' : 'off'}`, act: () => boardPrefs.set({ tkWave: !$boardPrefs.tkWave }) },
+				{ id: 'tkWar', label: 'War', icon: ICON.cue, on: $boardPrefs.tkWar, title: `Ready for War: ${$boardPrefs.tkWar ? 'on' : 'off'}`, act: () => boardPrefs.set({ tkWar: !$boardPrefs.tkWar }) }] : []),
 			...(Object.values($ms.cards ?? {}).some((c) => c.hero === 'emmitt') ? [{ id: 'emToast', label: 'Reverse', icon: ICON.cue, on: $boardPrefs.emToast, title: `Emmitt's 'next turn runs backwards' toast: ${$boardPrefs.emToast ? 'on' : 'off'}`, act: () => boardPrefs.set({ emToast: !$boardPrefs.emToast }) },
 				{ id: 'emClock', label: 'Clock', icon: ICON.cue, on: $boardPrefs.emClock, title: `The reversed turn's hourglass: ${$boardPrefs.emClock ? 'on' : 'off'}`, act: () => boardPrefs.set({ emClock: !$boardPrefs.emClock }) }] : []),
 			...(Object.values($ms.cards ?? {}).some((c) => c.hero === 'nebkher') ? [{ id: 'laugh', label: 'Laugh', icon: ICON.laugh, on: $boardPrefs.laugh, title: `NebKher's laugh bursting from his token: ${$boardPrefs.laugh ? 'on' : 'off'}`, act: () => boardPrefs.set({ laugh: !$boardPrefs.laugh }) }] : []),
@@ -436,6 +448,31 @@
 	let emSplash: EmmittSplash, emSeen: string | null = $ms.emNews?.id ?? null;
 	$: emNews = $ms.emNews ?? null;
 	$: if (emNews && emNews.id !== emSeen) { emSeen = emNews.id; if (Math.abs(Date.now() - emNews.at) < 10000 && $boardPrefs.emToast) emSplash?.play(); }
+	// Ignatia / Takahide moments (heropower FxNews): each id once, never on joining, each look behind its own switch
+	let igSplash: IgnatiaSplash, eqSwirl: EquilibriumSwirl, chaosFlip: ChaosFlip, tkToast: TakaSwapToast, tkWave: TokenWave, tkWar: ReadyForWar;
+	let fxSeen: string | null = $ms.fxNews?.id ?? null;
+	$: fxNews = $ms.fxNews ?? null;
+	$: if (fxNews && fxNews.id !== fxSeen) playFx(fxNews);
+	function playFx(n: NonNullable<typeof fxNews>) {
+		fxSeen = n.id;
+		if (Math.abs(Date.now() - n.at) > 10000) return;
+		const at = () => board?.clientPos(n.by);
+		if (n.kind === 'eq') {
+			if ($boardPrefs.igEq) igSplash?.play();
+			const p = $boardPrefs.igSwirl ? at() : null;
+			if (p) eqSwirl?.play(p.x, p.y, p.r * 2);
+		} else if (n.kind === 'flip') {
+			if ($boardPrefs.igChaos && n.to) chaosFlip?.play(n.to);
+		} else if (n.kind === 'war') {
+			if ($boardPrefs.tkWar) tkWar?.play();
+		} else {
+			// a gold swap: the wave off his token for both kinds; the toast only when the new gold is face up (his gold)
+			const p = $boardPrefs.tkWave ? at() : null;
+			if (p) tkWave?.play(p.x, p.y, p.r * 2);
+			const deck = heroCards('takahide');
+			if (n.kind === 'swap' && $boardPrefs.tkSwap && n.from != null && n.card != null) tkToast?.play(deck[n.from]?.name ?? '', deck[n.card]?.name ?? '');
+		}
+	}
 	function playNk(n: NonNullable<typeof nkNews>) {
 		nkSeen = n.id;
 		if (Math.abs(Date.now() - n.at) > 10000) return;
@@ -1193,6 +1230,12 @@
 	<NebkherSplash bind:this={nkSplash} phone={mobile} />
 	<EmmittSplash bind:this={emSplash} phone={mobile} />
 	<SnorriSplash bind:this={snSplash} phone={mobile} />
+	<IgnatiaSplash bind:this={igSplash} phone={mobile} />
+	<EquilibriumSwirl bind:this={eqSwirl} />
+	<ChaosFlip bind:this={chaosFlip} phone={mobile} art={tieArt} />
+	<TakaSwapToast bind:this={tkToast} phone={mobile} />
+	<TokenWave bind:this={tkWave} />
+	<ReadyForWar bind:this={tkWar} phone={mobile} />
 	<SpellToast bind:this={spellToast} phone={mobile} />
 	<EssenceWisps bind:this={essence} />
 	<LaughBurst bind:this={nkBurst} x={nkX} y={nkY} size={nkR} ult={nkUlt} />
