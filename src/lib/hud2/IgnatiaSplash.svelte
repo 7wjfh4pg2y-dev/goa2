@@ -1,13 +1,13 @@
 <script lang="ts">
 	// Equilibrium (DEMO on /splash-demo, 2026-10-20 — the user's ask): a toast under the top bar in the NebKher / Emmitt /
 	// Snorri frame — 'Controlled Chaos · Ignatia has achieved Equilibrium' — with her Equilibrium painting in the slanted
-	// window, BROUGHT TO LIFE: her hair burns (copies of the hair cut out of the painting sway from its roots under a
+	// window, BROUGHT TO LIFE: her hair burns (copies of the hair cut out of the painting sway gently from its roots under a
 	// flickering heat glow, embers rising off it), both orbs swirl with energy, then she draws them together — the two lights pull to
-	// the middle, an arc crackles between them and they fuse in a white-violet flash. ~3.3 s; transform / opacity only.
+	// the middle, an arc crackles between them and they fuse in a white-violet flash. ~2.5 s; transform / opacity only.
 	// Everything over the painting is placed in the painting's own pixels (775 × 1071) inside one scaled box.
 	import art from '$lib/cards/images/cards/ignatia/Silver.webp'
 	export let phone = false
-	const DUR = 3300
+	const DUR = 2500
 	let on = false, run = 0, timer: ReturnType<typeof setTimeout> | null = null
 	export function play() {
 		on = false; run++
@@ -70,8 +70,8 @@
 {/if}
 
 <style>
-	.igs { position: fixed; left: 50%; top: calc(86px * var(--uis, 1)); z-index: 62; pointer-events: none; transform: translateX(-50%); animation: igin 3.3s cubic-bezier(0.2, 1.2, 0.4, 1) both;
-		--w: 172px; --h: 130px; --k: 0.244; --cx: 404px; }
+	.igs { position: fixed; left: 50%; top: calc(86px * var(--uis, 1)); z-index: 62; pointer-events: none; transform: translateX(-50%); animation: igin 2.5s cubic-bezier(0.2, 1.2, 0.4, 1) both;
+		--w: 172px; --h: 130px; --k: 0.34; --cx: 398px; --cy: 432px; }
 	@keyframes igin { 0% { opacity: 0; transform: translate(-50%, -20px) scale(0.94); } 9% { opacity: 1; transform: translate(-50%, 0) scale(1); } 88% { opacity: 1; transform: translate(-50%, 0); } 100% { opacity: 0; transform: translate(-50%, -12px); } }
 	.band { position: relative; width: min(500px, 94vw); height: var(--h); display: grid; grid-template-columns: var(--w) 1fr; align-items: center; overflow: hidden; border-radius: 12px; border: 1px solid transparent;
 		background: radial-gradient(90% 140% at 0% 50%, rgba(140, 40, 20, 0.45), transparent 60%) padding-box, radial-gradient(90% 140% at 100% 50%, rgba(20, 110, 130, 0.35), transparent 60%) padding-box,
@@ -79,17 +79,17 @@
 		box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5), 0 12px 30px rgba(0, 0, 0, 0.55), -8px 0 24px rgba(239, 125, 34, 0.18), 8px 0 24px rgba(47, 208, 230, 0.18); }
 	.artbox { position: relative; height: 100%; overflow: hidden; clip-path: polygon(0 0, 100% 0, 84% 100%, 0 100%); background: #050308; }
 	/* a slow push in towards the orbs */
-	.zoom { position: absolute; inset: 0; transform-origin: 56% 82%; animation: igzoom 3.3s ease-out both; }
+	.zoom { position: absolute; inset: 0; transform-origin: 56% 82%; animation: igzoom 2.5s ease-out both; }
 	@keyframes igzoom { from { transform: scale(1.1); } to { transform: scale(1); } }
-	.pic { position: absolute; left: 0; top: 0; width: 775px; height: 1071px; transform-origin: 0 0; transform: translate(calc(var(--w) / 2 - var(--cx) * var(--k)), -4px) scale(var(--k)); }
+	.pic { position: absolute; left: 0; top: 0; width: 775px; height: 1071px; transform-origin: 0 0; transform: translate(calc(var(--w) / 2 - var(--cx) * var(--k)), calc(var(--h) / 2 - var(--cy) * var(--k))) scale(var(--k)); }
 	.pic > span, .pic > svg { position: absolute; }
 	.paint, .hair { left: 0; top: 0; width: 775px; height: 1071px; background-size: 100% 100%; }
 	/* the burning hair: two cut-outs swaying from the roots (the head), out of step, so the flames lick and shift */
 	.hair { transform-origin: 404px 345px; }
 	.h1 { animation: igsway 0.42s ease-in-out infinite alternate; }
 	.h2 { opacity: 0.6; animation: igsway2 0.31s ease-in-out infinite alternate; }
-	@keyframes igsway { from { transform: skewX(-6deg) scale(0.99, 0.96); } to { transform: skewX(5deg) scale(1.02, 1.09); } }
-	@keyframes igsway2 { from { transform: skewX(6deg) scale(1.02, 1.07); } to { transform: skewX(-4deg) scale(0.98, 0.97); } }
+	@keyframes igsway { from { transform: skewX(-1.5deg) scale(1, 0.99); } to { transform: skewX(1.2deg) scale(1, 1.025); } }
+	@keyframes igsway2 { from { transform: skewX(1.5deg) scale(1, 1.02); } to { transform: skewX(-1deg) scale(1, 0.99); } }
 	/* the fire burns brighter and dimmer over the hair, flickering out of step */
 	.heat { left: 250px; top: -30px; width: 320px; height: 400px; border-radius: 50%; mix-blend-mode: screen; background: radial-gradient(50% 50% at 50% 60%, rgba(255, 200, 80, 0.55), rgba(255, 90, 20, 0.25) 50%, transparent 72%);
 		transform-origin: 50% 100%; animation: igheat 0.23s steps(2, jump-none) infinite alternate; }
@@ -111,22 +111,22 @@
 	.fire .sw { animation-direction: reverse; } .fire .sw.s2 { animation-direction: normal; }
 	@keyframes igspin { to { transform: rotate(360deg); } }
 	/* the pull: each orb's light drawn to the middle */
-	.pull { width: 90px; height: 90px; margin: -45px; border-radius: 50%; mix-blend-mode: screen; opacity: 0; animation: igpull 0.7s 1.55s cubic-bezier(0.5, 0, 0.8, 0.6) both; }
+	.pull { width: 90px; height: 90px; margin: -45px; border-radius: 50%; mix-blend-mode: screen; opacity: 0; animation: igpull 0.55s 1.1s cubic-bezier(0.5, 0, 0.8, 0.6) both; }
 	.pull.water { background: radial-gradient(circle, #e8fbff 0 18%, rgba(80, 200, 255, 0.8) 40%, transparent 70%); }
 	.pull.fire { background: radial-gradient(circle, #fff8d8 0 18%, rgba(255, 140, 30, 0.8) 40%, transparent 70%); }
 	@keyframes igpull { 0% { opacity: 0; transform: none; } 20% { opacity: 1; } 100% { opacity: 1; transform: translate(var(--tx), var(--ty)) scale(0.6); } }
 	/* the arc crackling between them while they close in */
 	.arcs { left: 0; top: 0; overflow: visible; }
 	.arc { fill: none; stroke: #f2e8ff; stroke-width: 5; stroke-linejoin: round; mix-blend-mode: screen; opacity: 0; }
-	.arc.a0 { animation: igarc 0.18s 1.25s steps(1) 6 both; }
-	.arc.a1 { animation: igarc 0.18s 1.31s steps(1) 6 both; stroke: #9fe6ff; }
-	.arc.a2 { animation: igarc 0.18s 1.37s steps(1) 6 both; stroke: #ffc070; }
+	.arc.a0 { animation: igarc 0.16s 0.88s steps(1) 5 both; }
+	.arc.a1 { animation: igarc 0.16s 0.93s steps(1) 5 both; stroke: #9fe6ff; }
+	.arc.a2 { animation: igarc 0.16s 0.98s steps(1) 5 both; stroke: #ffc070; }
 	@keyframes igarc { 0% { opacity: 1; } 34% { opacity: 0; } 100% { opacity: 0; } }
 	/* fusion: a white-violet flash where they meet, a ring rolling out */
 	.fuse { width: 260px; height: 260px; margin: -130px; border-radius: 50%; mix-blend-mode: screen; opacity: 0; background: radial-gradient(circle, #ffffff 0 12%, rgba(214, 160, 255, 0.9) 30%, rgba(140, 70, 230, 0.4) 50%, transparent 70%);
-		animation: igfuse 0.9s 2.2s ease-out both; }
+		animation: igfuse 0.75s 1.62s ease-out both; }
 	@keyframes igfuse { 0% { opacity: 0; transform: scale(0.2); } 18% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1.6); } }
-	.fring { width: 200px; height: 200px; margin: -100px; border-radius: 50%; border: 10px solid #e7d0ff; opacity: 0; animation: igfring 0.8s 2.25s ease-out both; }
+	.fring { width: 200px; height: 200px; margin: -100px; border-radius: 50%; border: 10px solid #e7d0ff; opacity: 0; animation: igfring 0.7s 1.66s ease-out both; }
 	@keyframes igfring { 0% { opacity: 0; transform: scale(0.2); } 15% { opacity: 0.9; } 100% { opacity: 0; transform: scale(2.6); } }
 	.edge { position: absolute; left: 0; top: 0; bottom: 0; width: var(--w); background: linear-gradient(180deg, #ffb060, #c58cff 50%, #4fe0f0); z-index: 2;
 		clip-path: polygon(calc(100% - 3px) 0, 100% 0, 84% 100%, calc(84% - 3px) 100%); }
@@ -138,9 +138,9 @@
 	.sub { font-size: 13px; color: #eadcf2; }
 	.sub em { font-style: normal; color: #d8b4ff; }
 	/* the fusion's light runs along the band */
-	.sheen { position: absolute; top: -20%; bottom: -20%; left: 0; width: 30%; z-index: 3; background: linear-gradient(100deg, transparent, rgba(230, 200, 255, 0.35), transparent); transform: translateX(-120%) skewX(-14deg); animation: igsh 0.8s 2.3s ease-in-out both; }
+	.sheen { position: absolute; top: -20%; bottom: -20%; left: 0; width: 30%; z-index: 3; background: linear-gradient(100deg, transparent, rgba(230, 200, 255, 0.35), transparent); transform: translateX(-120%) skewX(-14deg); animation: igsh 0.6s 1.7s ease-in-out both; }
 	@keyframes igsh { to { transform: translateX(420%) skewX(-14deg); } }
-	.ph { top: 64px; --w: 118px; --h: 100px; --k: 0.19; }
+	.ph { top: 64px; --w: 118px; --h: 100px; --k: 0.27; }
 	.ph .title { font-size: 23px; }
 	.ph .sub { font-size: 12px; }
 	@media (prefers-reduced-motion: reduce) { .igs *, .igs { animation-duration: 0.01s !important; animation-delay: 0s !important; animation-iteration-count: 1 !important; } }
