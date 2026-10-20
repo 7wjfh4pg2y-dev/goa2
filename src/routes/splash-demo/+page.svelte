@@ -21,6 +21,7 @@
 	import GoldThread from '$lib/hud2/GoldThread.svelte';
 	import EquilibriumSwirl from '$lib/hud2/EquilibriumSwirl.svelte';
 	import ChaosFlip from '$lib/hud2/ChaosFlip.svelte';
+	import IgnatiaSplash from '$lib/hud2/IgnatiaSplash.svelte';
 	import IgnatiaCoin from '$lib/hud2/IgnatiaCoin.svelte';
 	import SnorriRunes from '$lib/hud2/SnorriRunes.svelte';
 	import TakaGold from '$lib/hud2/TakaGold.svelte';
@@ -112,7 +113,7 @@
 	let emMode: 'idle' | 'run' | 'green' | 'rev' = 'idle';
 	let emSplash: EmmittSplash, timeSplash: TimeSplash;
 	let snSplash: SnorriSplash;
-	let tokWave: TokenWave, tkToast: TakaSwapToast, rfw: ReadyForWar, thread: GoldThread, eqSwirl: EquilibriumSwirl, chaos: ChaosFlip;
+	let tokWave: TokenWave, tkToast: TakaSwapToast, rfw: ReadyForWar, thread: GoldThread, eqSwirl: EquilibriumSwirl, chaos: ChaosFlip, igSplash: IgnatiaSplash;
 	let tkTok: HTMLElement, tkMate: HTMLElement, igTok: HTMLElement, tkFrom = 0;
 	const mid = (el: HTMLElement) => { const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width }; };
 	function goldWave() { const m = mid(tkTok); tokWave.play(m.x, m.y, m.w); }
@@ -314,9 +315,10 @@
 			</div>
 			<!-- Ignatia -->
 			<div class="hc">
-				<div class="hh"><span class="pt" style={portraitCss('ignatia')}></span><b>Ignatia</b><small>demo: equilibrium swirl · chaos flip</small></div>
+				<div class="hh"><span class="pt" style={portraitCss('ignatia')}></span><b>Ignatia</b><small>demo: equilibrium toast · swirl · chaos flip</small></div>
 				<div class="row sm nkrow">
 					<span class="nktok ig" bind:this={igTok} style={portraitCss('ignatia')}></span>
+					<button on:click={() => igSplash.play()}>Equilibrium toast</button>
 					<button on:click={eq}>Equilibrium swirl</button>
 					<button class="b" on:click={() => chaos.play('blue')}>Chaos → Titans</button>
 					<button class="o" on:click={() => chaos.play('orange')}>Chaos → Atlanteans</button>
@@ -412,6 +414,7 @@
 <GoldThread bind:this={thread} />
 <EquilibriumSwirl bind:this={eqSwirl} />
 <ChaosFlip bind:this={chaos} phone={mobile} art={coinArt} />
+<IgnatiaSplash bind:this={igSplash} phone={mobile} />
 <LaughBurst bind:this={nkBurst} x={bx} y={by} size={56} ult={nkUlt} />
 {#if won}
 	{#key won}<VictorySplash round={stats.rounds} team={won.team} reason={won.reason} myTeam={me} {mobile} {stats} onClose={() => (won = null)} />{/key}

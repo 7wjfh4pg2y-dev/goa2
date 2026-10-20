@@ -47,7 +47,7 @@
 							<span class="slot" style="--d:{0.55 + i * 0.2}s;--t:{i * 17}deg">
 								<span class="sock">
 									<em>{ROMAN[i]}</em>
-									<span class="rn"><RuneMark rune={r} size={phone ? 26 : 32} on /></span>
+									<span class="rn"><RuneMark rune={r} size={phone ? 28 : 38} on /></span>
 									<i class="chisel"></i>
 									{#each SHARDS as k}<i class="shard" style="--a:{k * 60}deg"></i>{/each}
 								</span>
@@ -65,7 +65,7 @@
 <style>
 	.sns { position: fixed; left: 50%; top: calc(86px * var(--uis, 1)); z-index: 62; pointer-events: none; transform: translateX(-50%); animation: snin 3.4s cubic-bezier(0.2, 1.2, 0.4, 1) both; }
 	@keyframes snin { 0% { opacity: 0; transform: translate(-50%, -20px) scale(0.94); } 9% { opacity: 1; transform: translate(-50%, 0) scale(1); } 88% { opacity: 1; transform: translate(-50%, 0); } 100% { opacity: 0; transform: translate(-50%, -12px); } }
-	.band { position: relative; width: min(500px, 94vw); height: 128px; display: grid; grid-template-columns: 118px 1fr; align-items: center; overflow: hidden; border-radius: 12px;
+	.band { position: relative; width: min(500px, 94vw); height: 140px; display: grid; grid-template-columns: 118px 1fr; align-items: center; overflow: hidden; border-radius: 12px;
 		background: radial-gradient(120% 140% at 0% 50%, rgba(30, 70, 120, 0.55), transparent 60%), linear-gradient(90deg, rgba(8, 20, 36, 0.97), rgba(6, 12, 24, 0.97));
 		border: 1px solid rgba(140, 200, 255, 0.6); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5), 0 12px 30px rgba(0, 0, 0, 0.55), 0 0 24px rgba(110, 180, 255, 0.24); }
 	/* his painting: the face and the raised hammer */
@@ -85,15 +85,15 @@
 	.motes { position: absolute; left: 118px; right: 0; top: 0; bottom: 0; overflow: hidden; }
 	.motes i { position: absolute; bottom: -6px; width: var(--ms); height: var(--ms); border-radius: 50%; background: #dff3ff; box-shadow: 0 0 4px #9fd2ff; opacity: 0; animation: snmote 2.4s var(--md) ease-out infinite; }
 	@keyframes snmote { 0% { opacity: 0; transform: translateY(0); } 20% { opacity: 0.8; } 100% { opacity: 0; transform: translateY(-120px); } }
-	.copy { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; padding: 0 14px 0 6px; min-width: 0; }
+	.copy { position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 3px; padding: 0 12px 0 0; min-width: 0; }
 	.kick { font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: #a8d8ff; }
-	.title { font-weight: normal; font-size: 26px; line-height: 1; color: #f0f8ff; white-space: nowrap; -webkit-text-stroke: 1px #06101e; paint-order: stroke fill;
+	.title { font-weight: normal; font-size: 29px; line-height: 1; color: #f0f8ff; white-space: nowrap; -webkit-text-stroke: 1px #06101e; paint-order: stroke fill;
 		text-shadow: 0 0 14px rgba(120, 190, 255, 0.55), 2px 3px 0 #06101e; animation: snslam 0.45s 0.2s cubic-bezier(0.2, 1.6, 0.4, 1) both; }
 	@keyframes snslam { from { opacity: 0; transform: scale(1.4); } to { opacity: 1; transform: none; } }
-	.row { display: flex; gap: 12px; margin-top: 4px; }
-	.slot { display: flex; flex-direction: column; align-items: center; gap: 2px; width: 62px; }
-	.slot b { font-weight: normal; font-size: 11.5px; color: #e6f3ff; opacity: 0; animation: snfade 0.4s calc(var(--d) + 0.15s) ease-out both; }
-	.sock { position: relative; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px rgba(140, 200, 255, 0.35), inset 0 0 10px rgba(0, 0, 0, 0.6); }
+	.row { display: flex; gap: 10px; margin-top: 6px; }
+	.slot { display: flex; flex-direction: column; align-items: center; gap: 3px; width: 70px; }
+	.slot b { font-weight: normal; font-size: 12.5px; color: #e6f3ff; opacity: 0; animation: snfade 0.4s calc(var(--d) + 0.15s) ease-out both; }
+	.sock { position: relative; display: grid; place-items: center; width: 46px; height: 46px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px rgba(140, 200, 255, 0.35), inset 0 0 10px rgba(0, 0, 0, 0.6); }
 	.sock em { position: absolute; top: -3px; left: -9px; font-style: normal; font-size: 10px; color: #8fb4d8; letter-spacing: 0.06em; }
 	.rn { display: grid; animation: slam 0.42s var(--d) cubic-bezier(0.3, 1.6, 0.5, 1) both; }
 	@keyframes slam { from { opacity: 0; transform: scale(2.3) rotate(-25deg); } to { opacity: 1; transform: none; } }
@@ -112,14 +112,14 @@
 	@keyframes snsh { to { transform: translateX(420%) skewX(-14deg); } }
 	/* phones: under the phone's top bar, smaller */
 	.ph { top: 64px; }
-	.ph .band { height: 108px; grid-template-columns: 84px 1fr; }
+	.ph .band { height: 116px; grid-template-columns: 84px 1fr; }
 	.ph .edge { width: 84px; }
 	.ph .frieze, .ph .motes { left: 84px; }
-	.ph .title { font-size: 19px; }
-	.ph .row { gap: 6px; }
-	.ph .slot { width: 50px; }
+	.ph .title { font-size: 21px; }
+	.ph .row { gap: 4px; }
+	.ph .slot { width: 56px; }
 	.ph .slot b { font-size: 10.5px; }
-	.ph .sock { width: 32px; height: 32px; }
+	.ph .sock { width: 36px; height: 36px; }
 	.ph .sock em { left: -7px; font-size: 9px; }
 	@media (prefers-reduced-motion: reduce) { .sns *, .sns { animation-duration: 0.01s !important; animation-delay: 0s !important; } }
 </style>
