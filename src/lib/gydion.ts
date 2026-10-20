@@ -32,6 +32,8 @@ export type GyState = {
 	struck?: string[]
 	/** Wishes cast (the third wins) */
 	wish?: number
+	/** what each turn of this round cast (turn key 'round-turn' → spells, Wish first): public — a sigil on his boards */
+	casts?: Record<string, string[]>
 	/** the spell cast for an acting card (`key:at`); `wish` = cast through a Wish */
 	cast?: { mark: Mark; spell: string; wish?: boolean }
 	/** his silver did its job for this card (Prepare or Wish) */
@@ -64,6 +66,16 @@ export type GyCtx = { key: string; round: number; turnIdx: number; order: string
 export type GyReq = { pid: string; op: string; spell?: string; spells?: string[]; target?: string; hex?: string; idx?: number; on?: boolean; wish?: number }
 
 const markOf = (ctx: GyCtx) => `${ctx.key}:${ctx.at}`
+/** add a spell to this turn's record, dropping earlier rounds' */
+const withCast = (g: GyState, ctx: GyCtx, sp: string): Record<string, string[]> => {
+	const keep = Object.fromEntries(Object.entries(g.casts ?? {}).filter(([k]) => k.startsWith(`${ctx.round}-`)))
+	return { ...keep, [ctx.key]: [...(keep[ctx.key] ?? []), sp] }
+}
+/** the spells his card cast in each turn slot I–IV of this round (null = none) — for every player's view of his boards */
+export function castsByTurn(s: GyS, pid: string, round: number): (string[] | null)[] {
+	const c = gyOf(s, pid).casts ?? {}
+	return [1, 2, 3, 4].map((t) => c[`${round}-${t}`] ?? null)
+}
 export const gyOf = (s: GyS, pid: string): GyState => s.power?.[pid]?.gy ?? {}
 const isGy = (s: GyS, pid: string) => s.cards?.[pid]?.hero === GY
 
@@ -212,7 +224,7 @@ export function applyGydion(s: GyS, req: GyReq, ctx: GyCtx): Record<string, unkn
 	if (req.op === 'gyWish') {
 		if (!canWish(s, pid, ctx)) return {}
 		const wish = (g.wish ?? 0) + 1
-		const out = put({ ...g, gone: [...(g.gone ?? []), 'wish'], wish, silver: mark, wishOpen: mark }, { gyNews: newsOf(pid, 'wish', { wish }) })
+		const out = put({ ...g, gone: [...(g.gone ?? []), 'wish'], wish, silver: mark, wishOpen: mark, casts: withCast(g, ctx, 'wish') }, { gyNews: newsOf(pid, 'wish', { wish }) })
 		const team = ctx.teams?.[pid]
 		if (wish >= 3 && team && !s.wonBy) (out as Record<string, unknown>).wonBy = { team, reason: 'Gydion cast Wish three times' }
 		return out
@@ -221,7 +233,7 @@ export function applyGydion(s: GyS, req: GyReq, ctx: GyCtx): Record<string, unkn
 		const sp = req.spell
 		if (!sp || !castOptions(s, pid, ctx).includes(sp)) return {}
 		const before = othersGone(s, pid, sp)
-		const next: GyState = { ...g, gone: [...(g.gone ?? []), sp], cast: { mark, spell: sp, ...(g.wishOpen === mark ? { wish: true } : {}) } }
+		const next: GyState = { ...g, gone: [...(g.gone ?? []), sp], cast: { mark, spell: sp, ...(g.wishOpen === mark ? { wish: true } : {}) }, casts: withCast(g, ctx, sp) }
 		const out: Record<string, unknown> = { gyNews: newsOf(pid, sp) }
 		const cs = s.cards![pid]
 		if (sp === 'midas-touch') { const coins = Math.floor(before / 2); if (coins) out.cards = { ...s.cards, [pid]: { ...cs, coins: cs.coins + coins } } }

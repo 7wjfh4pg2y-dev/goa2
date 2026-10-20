@@ -5,6 +5,7 @@
 	// player's whole board (their items are there); the slot reads the card.
 	import TurnSlot from '$lib/cards/TurnSlot.svelte';
 	import RuneMark from './RuneMark.svelte';
+	import SpellMark from './SpellMark.svelte';
 	import type { RuneSlots } from './runes';
 	import { heroName } from '$lib/cards/deck';
 	import { portraitCss } from '$lib/heroes';
@@ -24,6 +25,9 @@
 	/** Snorri's runes under the slots (public), and whether the Dashboard effects run */
 	export let runes: RuneSlots | null = null;
 	export let runeFx = true;
+	/** Gydion's spell each turn cast this round (public; a sigil under the slot, tap = read it) */
+	export let spells: (string[] | null)[] | null = null;
+	export let onSpell: (ids: string[]) => void = () => {};
 
 	export let onSlot: (e: Event, t: number) => void = () => {};
 
@@ -49,6 +53,7 @@
 		<TurnSlot heroId={cs.hero} played={cs.turns[turnIdx]} pending={cs.pending} isCurrent {revealed} label={ROMAN[turnIdx] ?? ''} back={!me && isHidden(cs, cs.turns[turnIdx])} veil={me && isHidden(cs, cs.turns[turnIdx])} examinable on:click={(e) => onSlot(e, turnIdx)} />
 		{#if !revealed && ready}<i class="ok" title="Card in">✓</i>{/if}
 		{#if runes?.at[turnIdx]}<span class="nr"><RuneMark rune={runes.at[turnIdx]} size={15} on fx={runeFx} /></span>{/if}
+		{#if spells?.[turnIdx]}<span class="nr nsp"><SpellMark spells={spells[turnIdx]} size={15} now onOpen={onSpell} /></span>{/if}
 	</span>
 	{#if roomy}<span class="hd" title="Cards in hand"><svg viewBox="0 0 24 24"><rect x="5" y="6" width="10" height="14" rx="2" /><path d="M9 3h8.5a2 2 0 0 1 2 2v12" /></svg>{cs.hand.length}</span>{/if}
 </div>
@@ -81,4 +86,5 @@
 	.hd { flex: none; display: inline-flex; align-items: center; gap: 2px; font-size: 12px; color: #bccbd9; }
 	.hd svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.8; }
 	.nr { position: absolute; left: -5px; bottom: -3px; z-index: 1; display: grid; pointer-events: none; }
+	.nr.nsp { pointer-events: auto; }
 </style>

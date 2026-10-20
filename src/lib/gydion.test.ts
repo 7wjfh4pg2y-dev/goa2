@@ -4,7 +4,7 @@ import { newPlayerCardState, type PlayerCardState } from './cards/cardstate'
 import { heroCards } from './cards/deck'
 import { hasPower, takaHit, type TurnCtx } from './heropower'
 import { FOUR_STAR_LAB, isLabHero } from './heroes'
-import { BOOK, inBook, bookSpells, castOptions, gyMode, canPrepare, canWish, spellNums, othersGone, forceTargets, raiseSpots, canStrike, canDrink, guardNow, gyOf, castNow } from './gydion'
+import { BOOK, castsByTurn, inBook, bookSpells, castOptions, gyMode, canPrepare, canWish, spellNums, othersGone, forceTargets, raiseSpots, canStrike, canDrink, guardNow, gyOf, castNow } from './gydion'
 import { zoneTable } from './zones'
 import map from './maps/forgotten_island.json'
 
@@ -69,6 +69,18 @@ describe('Gydion: the spellbook', () => {
 		expect((x.gyNews as { moved?: string[] }).moved).toEqual(BOOK)
 		const later = actingAs(gg(SILVER, {}, { ...book(['fireball', 'shield']), round: 2 }), 'G')
 		expect((pw(later, 'G', 'gyPrepare').gyNews as { moved?: string[] }).moved).toEqual(['fireball', 'shield'])
+	})
+	it('every turn\'s spell is on record for the round (the board sigils): Wish first, then the spell it opened; a new round starts clean', () => {
+		const s = actingAs(gg(GEVO, {}, book()), 'G')
+		const opts = castOptions(s, 'G', tc(s))
+		const x = go(s, pw(s, 'G', 'gyCast', { spell: opts[0] }))
+		expect(castsByTurn(x, 'G', 1)).toEqual([null, [opts[0]], null, null])
+		const later = { ...x, round: 2 } as MatchState
+		expect(castsByTurn(later, 'G', 2)).toEqual([null, null, null, null])
+		const w = actingAs(gg(SILVER, { ultimate: true }, book()), 'G')
+		const w1 = go(w, pw(w, 'G', 'gyWish'))
+		const w2 = go(w1, pw(w1, 'G', 'gyCast', { spell: 'fireball' }))
+		expect(castsByTurn(w2, 'G', 1)[1]).toEqual(['wish', 'fireball'])
 	})
 	it('a casting card casts only the spells it names, still in the book, once', () => {
 		const s = actingAs(gg(LEVO, {}, book(['burning-hands'])), 'G')

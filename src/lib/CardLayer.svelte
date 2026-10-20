@@ -17,7 +17,9 @@
 	import RazzleTop from '$lib/hud2/RazzleTop.svelte';
 	import GydionBook from '$lib/hud2/GydionBook.svelte';
 	import SpellbookWindow from '$lib/hud2/SpellbookWindow.svelte';
-	import { gyOf, gyMode, castOptions, castNow, bookSpells, cardSpells, canWish, canStrike, canDrink, forceTargets, raiseSpots, spellNums, FORCE_SPELLS } from '$lib/gydion';
+	import SpellMark from '$lib/hud2/SpellMark.svelte';
+	import SpellPreview from '$lib/hud2/SpellPreview.svelte';
+	import { castsByTurn, gyOf, gyMode, castOptions, castNow, bookSpells, cardSpells, canWish, canStrike, canDrink, forceTargets, raiseSpots, spellNums, FORCE_SPELLS } from '$lib/gydion';
 	import { spellOf, schoolOf, schoolIcon } from '$lib/cards/spells';
 	import SnorriRunes from '$lib/hud2/SnorriRunes.svelte';
 	import RunePanel from '$lib/hud2/RunePanel.svelte';
@@ -248,6 +250,10 @@
 		return Object.fromEntries(Object.keys(vc).map((pid) => [pid, vc[pid]?.hero === 'snorri' ? { at: runesOf(st, pid) ?? [], second: secondRune(st, pid, ctx) } : null]));
 	}
 	$: runeMap = runeSlots($ms, pctx, viewCards);
+	// Gydion: the spell each of his turns cast this round, for everyone's view of his boards (a sigil; tap = read it)
+	$: spellMap = Object.fromEntries(Object.entries(cards).filter(([, c]) => c.hero === 'gydion').map(([pid]) => [pid, castsByTurn($ms, pid, $ms.round)])) as Record<string, (string[] | null)[]>;
+	let spellView: string[] | null = null, spellWho = '';
+	const openSpell = (pid: string) => (ids: string[]) => { spellWho = pidName(pid); spellView = ids; };
 	$: runeNow = Object.fromEntries(Object.entries(runeMap).map(([pid, r]) => [pid, r?.at[turnIdx] ?? null])) as Record<string, Rune | null>;
 	// (out to GameView: Emmitt's Rewind / Warp pills read the turn)
 	export let turnCtx: TurnCtx | null = null;
@@ -1280,7 +1286,7 @@
 
 <!-- controls shared by the desktop dash and the phone dash -->
 {#snippet plate(p: Player, cs: PlayerCardState, w = npW)}
-	<Nameplate {cs} runes={runeMap[p.id]} runeFx={dashFx} name={p.name} color={colorHex(p.color)} team={pTeam(p)} {turnIdx} {revealed} ready={isReady(cards[p.id] ?? cs)} me={p.id === clientId} width={w}
+	<Nameplate {cs} runes={runeMap[p.id]} runeFx={dashFx} spells={spellMap[p.id] ?? null} onSpell={openSpell(p.id)} name={p.name} color={colorHex(p.color)} team={pTeam(p)} {turnIdx} {revealed} ready={isReady(cards[p.id] ?? cs)} me={p.id === clientId} width={w}
 		fx={!!fxFor(p.id, slotIdx(cs, turnIdx))} onOpen={() => (overlayId = p.id)} onSlot={(e, t) => peekSlot(e, cs, t)} />
 {/snippet}
 <!-- a 4★ hero's own button, at the size its dash gives it -->
@@ -1546,7 +1552,7 @@
 				{#if !platesTop}
 					{#each h2enemies as p (p.id)}
 						{@const cs = viewCards[p.id]}
-						{#if cs}{#if compact}{@render plate(p, cs, 344)}{:else}<HudBoard {cs} own={p.id === clientId} runes={runeMap[p.id]} runeFx={dashFx} name={p.name} color={colorHex(p.color)} team={pTeam(p)} {turnIdx} {revealed} ready={isReady(cards[p.id] ?? cs)} compact={h2compact} small={h2tight}
+						{#if cs}{#if compact}{@render plate(p, cs, 344)}{:else}<HudBoard {cs} own={p.id === clientId} runes={runeMap[p.id]} runeFx={dashFx} spells={spellMap[p.id] ?? null} onSpell={openSpell(p.id)} name={p.name} color={colorHex(p.color)} team={pTeam(p)} {turnIdx} {revealed} ready={isReady(cards[p.id] ?? cs)} compact={h2compact} small={h2tight}
 							fxAt={(t) => !!fxFor(p.id, slotIdx(cs, t))} onOpen={() => (overlayId = p.id)} onSlot={(e, t) => peekSlot(e, cs, t)} />{/if}{/if}
 					{/each}
 				{/if}
@@ -1555,7 +1561,7 @@
 				{#if !platesTop}
 					{#each colRight as p (p.id)}
 						{@const cs = viewCards[p.id]}
-						{#if cs}{#if compact}{@render plate(p, cs, 344)}{:else}<HudBoard {cs} own={p.id === clientId} runes={runeMap[p.id]} runeFx={dashFx} name={p.name} color={colorHex(p.color)} team={pTeam(p)} {turnIdx} {revealed} ready={isReady(cards[p.id] ?? cs)} compact={h2compact} small={h2tight}
+						{#if cs}{#if compact}{@render plate(p, cs, 344)}{:else}<HudBoard {cs} own={p.id === clientId} runes={runeMap[p.id]} runeFx={dashFx} spells={spellMap[p.id] ?? null} onSpell={openSpell(p.id)} name={p.name} color={colorHex(p.color)} team={pTeam(p)} {turnIdx} {revealed} ready={isReady(cards[p.id] ?? cs)} compact={h2compact} small={h2tight}
 							fxAt={(t) => !!fxFor(p.id, slotIdx(cs, t))} onOpen={() => (overlayId = p.id)} onSlot={(e, t) => peekSlot(e, cs, t)} />{/if}{/if}
 					{/each}
 				{/if}
@@ -1578,7 +1584,7 @@
 	{#if phone2 && overlayId && ovPlayer && viewCards[overlayId]}
 		{@const pcs = viewCards[overlayId]}
 		{@const pid = ovPlayer.id}
-		<PhoneBoard cs={pcs} own={pid === clientId} runes={runeMap[pid]} runeFx={dashFx} name={ovPlayer.name} color={colorHex(ovPlayer.color)} team={pTeam(ovPlayer)} {turnIdx} {revealed} status={statusMap[pid] ?? EMPTY_STATUS} {markArt}
+		<PhoneBoard cs={pcs} own={pid === clientId} runes={runeMap[pid]} runeFx={dashFx} spells={spellMap[pid] ?? null} onSpell={openSpell(pid)} name={ovPlayer.name} color={colorHex(ovPlayer.color)} team={pTeam(ovPlayer)} {turnIdx} {revealed} status={statusMap[pid] ?? EMPTY_STATUS} {markArt}
 			fxAt={(t) => !!fxFor(pid, slotIdx(pcs, t))} onStatus={(k) => toggleStatus(pid, k)} onSlot={(e, t) => peekSlot(e, pcs, t)}
 			onRead={(list, at) => (examine = { hid: pcs.hero, idx: list[at], pid, list: list.map((i) => ({ hid: pcs.hero, idx: i, pid })) })} onClose={() => (overlayId = null)} />
 	{:else if overlayId && ovPlayer && viewCards[overlayId]}
@@ -1630,7 +1636,7 @@
 				<div class="turns">
 					{#each [0, 1, 2, 3] as t}
 						<div class="tbox" class:current={t === turnIdx} style="--tint:{teamTint(ovPlayer)}">
-							<div class="tlabel">Turn {t + 1}{#if runeMap[oid]}{@const rs = runeMap[oid]}{@const r = rs?.at[t] ?? null}<span class="tlrune"><RuneMark rune={r} size={24} on={t === turnIdx && !!r} second={!!r && rs?.second === r} fx={dashFx} /></span>{/if}</div>
+							<div class="tlabel">Turn {t + 1}{#if runeMap[oid]}{@const rs = runeMap[oid]}{@const r = rs?.at[t] ?? null}<span class="tlrune"><RuneMark rune={r} size={24} on={t === turnIdx && !!r} second={!!r && rs?.second === r} fx={dashFx} /></span>{/if}{#if spellMap[oid]?.[t]}<span class="tlrune sp"><SpellMark spells={spellMap[oid][t]} size={24} now={t === turnIdx} onOpen={openSpell(oid)} /></span>{/if}</div>
 							<div class="tslot">
 								<span class="tbroman">{ROMAN[t]}</span>
 								<span class="fxwrap" class:fx={!!fxFor(oid, slotIdx(cs, t))} style="--fxc:{colorOf(oid)}"><TurnSlot heroId={oh} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} back={!own && isHidden(cs, cs.turns[t])} veil={own && isHidden(cs, cs.turns[t])} peekable={oid === clientId} examinable on:click={(e) => peekSlot(e, cs, t)} /></span>
@@ -2285,6 +2291,7 @@
 
 	<!-- ───────── dramatic simultaneous reveal ───────── -->
 	<YourTurn bind:this={yourTurn} look={TURN_CUE_DEFAULT} mobile={mobile} />
+	<div class="spvwrap" class:dk={!mobile}><SpellPreview bind:ids={spellView} phone={mobile} title={spellWho} /></div>
 	<TimeSplash bind:this={timeSplash} phone={mobile} />
 	{#if nudgeNote}
 		{#key nudgeNote.id}<div class="nudge" class:ph={mobile} style="--nc:{nudgeNote.color}" role="status"><span class="ng">⏳</span><span><b>{nudgeNote.name}</b> is waiting on you</span></div>{/key}
@@ -2464,6 +2471,7 @@
 	.tbroman { position: absolute; inset: 0; display: grid; place-items: center; font-family: 'Modesto Poster', serif; font-size: 3.4rem; line-height: 1; color: rgba(255,255,255,.07); pointer-events: none; z-index: 0; }
 	/* Snorri's rune for that turn, after 'Turn n' (pulled into the line so the label row keeps its height) */
 	.tlrune { display: inline-grid; vertical-align: middle; margin: -6px 0 -6px 6px; pointer-events: none; }
+	.tlrune.sp { pointer-events: auto; }
 	.tbroman.trash { padding: 22%; color: rgba(255,255,255,.08); }
 	.tbroman.trash :global(svg) { width: 100%; height: 100%; }
 	.tslot :global(.slot) { position: relative; z-index: 1; }
@@ -2628,6 +2636,7 @@
 	.mrune { position: absolute; left: -4px; bottom: -3px; z-index: 1; display: grid; pointer-events: none; }
 	.lvwrap.dk { zoom: var(--uis, 1); } /* desktop: in design px, like the rest of the HUD */
 	/* Gydion's spellbook window: above the dash (desktop, in design px) / a sheet over the phone dash */
+	.spvwrap.dk { zoom: var(--uis, 1); }
 	.gywrap { position: fixed; left: 0; right: 0; z-index: 27; display: flex; justify-content: center; pointer-events: none; }
 	.gywrap.dk { zoom: var(--uis, 1); bottom: 134px; }
 	.gywrap.ph { bottom: calc(100px + env(safe-area-inset-bottom, 0px)); }

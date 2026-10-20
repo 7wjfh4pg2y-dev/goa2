@@ -6,6 +6,7 @@
 	// open information: played (revealed) cards, discards, removed cards — never a face-down card or an upgrade.
 	import TurnSlot from '$lib/cards/TurnSlot.svelte';
 	import RuneMark from './RuneMark.svelte';
+	import SpellMark from './SpellMark.svelte';
 	import type { RuneSlots } from './runes';
 	import Card from '$lib/cards/Card.svelte';
 	import StatBubbles from './StatBubbles.svelte';
@@ -30,6 +31,9 @@
 	/** Snorri's runes under the slots (public), and whether the Dashboard effects run */
 	export let runes: RuneSlots | null = null;
 	export let runeFx = true;
+	/** Gydion's spell each turn cast this round (public; a sigil under the slot, tap = read it) */
+	export let spells: (string[] | null)[] | null = null;
+	export let onSpell: (ids: string[]) => void = () => {};
 	/** is this board yours? (face-down cards: yours under a veil, everyone else's as a card back) */
 	export let own = false;
 
@@ -68,7 +72,7 @@
 	<StatBubbles {cs} size={30} />
 	<div class="turns">
 		{#each [0, 1, 2, 3] as t (t)}
-			<span class="tw" class:now={t === turnIdx} class:glow={fxAt(t)}><TurnSlot heroId={cs.hero} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} label={ROMAN[t]} back={down(cs.turns[t])} veil={own && isHidden(cs, cs.turns[t])} examinable on:click={(e) => onSlot(e, t)} />{#if runes}<span class="wr"><RuneMark rune={runes.at[t] ?? null} size={22} on={t === turnIdx && !!runes.at[t]} second={!!runes.second && runes.second === runes.at[t]} fx={runeFx} /></span>{/if}</span>
+			<span class="tw" class:now={t === turnIdx} class:glow={fxAt(t)}><TurnSlot heroId={cs.hero} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} label={ROMAN[t]} back={down(cs.turns[t])} veil={own && isHidden(cs, cs.turns[t])} examinable on:click={(e) => onSlot(e, t)} />{#if runes}<span class="wr"><RuneMark rune={runes.at[t] ?? null} size={22} on={t === turnIdx && !!runes.at[t]} second={!!runes.second && runes.second === runes.at[t]} fx={runeFx} /></span>{/if}{#if spells?.[t]}<span class="wsp"><SpellMark spells={spells[t]} size={22} now={t === turnIdx} onOpen={onSpell} /></span>{/if}</span>
 		{/each}
 		<span class="dv"></span>
 		<button class="tw pile" disabled={top == null} on:click={() => top != null && !down(top) && read(top)} aria-label="Discard pile">
@@ -137,4 +141,5 @@
 	.sc.rmv { filter: grayscale(1) brightness(0.6); }
 	.sc.rmv::after { content: ''; position: absolute; left: -2px; right: -2px; top: 50%; height: 2px; background: #e0533f; transform: rotate(-35deg); }
 	.wr { position: absolute; right: 0; bottom: 0; transform: translate(30%, 30%); z-index: 1; display: grid; pointer-events: none; }
+	.wsp { position: absolute; right: 0; bottom: 0; transform: translate(30%, 30%); z-index: 2; display: grid; }
 </style>
