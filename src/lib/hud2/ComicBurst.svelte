@@ -1,10 +1,10 @@
 <script lang="ts">
-	// Razzle's comic bursts (DEMO on /splash-demo, 2026-10-20 — the user's picks: one shape, its own halftone dots,
+	// Razzle's comic bursts (in games since 2026-10-20; the poofs are a demo on /splash-demo — the user's picks: one shape, its own halftone dots,
 	// the word): `play(moment, x, y, size)` pops one of that moment's bursts (never the same twice running) at the
 	// upper right of a token — screen x / y = its centre, size = its width — holds it, then pops it away. Transform /
 	// opacity only, on one span per burst; the art is a small static svg (comic.ts).
 	import { onMount } from 'svelte'
-	import { COMICS, COMIC_TIMING, pickComic, type Comic, type ComicMoment } from './comic'
+	import { COMICS, COMIC_TIMING, COMIC_OVER, COMIC_COVER, pickComic, type Comic, type ComicMoment } from './comic'
 	type Pop = { key: number; x: number; y: number; w: number; ms: number; c: Comic }
 	let pops: Pop[] = []
 	let n = 0
@@ -15,10 +15,13 @@
 		const { scale, ms } = COMIC_TIMING[moment]
 		const w = Math.max(96, Math.min(260, size * scale))
 		const key = ++n
-		// centred up and to the right of the token, so the token itself stays readable
-		pops = [...pops, { key, x: x + size * 0.55 + w * 0.12, y: y - size * 0.45 - w * 0.2, w, ms, c: COMICS[moment][i] }]
+		// up and to the right of the token, so the token itself stays readable — or, for a poof, right over it
+		const over = COMIC_OVER.includes(moment)
+		pops = [...pops, { key, x: over ? x : x + size * 0.55 + w * 0.12, y: over ? y : y - size * 0.45 - w * 0.2, w, ms, c: COMICS[moment][i] }]
 		setTimeout(() => (pops = pops.filter((p) => p.key !== key)), ms + 60)
 	}
+	/** ms after play() when the burst is at full size (swap a token under a poof then) */
+	export const coverAt = COMIC_COVER
 	const EXT = [6, 5, 4, 3, 2, 1]
 	// fetch the comic face up front, so the first burst never shows blank letters while it loads
 	onMount(() => { document.fonts?.load("40px 'Bangers'").catch(() => {}) })

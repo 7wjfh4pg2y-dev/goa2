@@ -28,7 +28,6 @@
 	import EmmittClock from '$lib/hud2/EmmittClock.svelte';
 	import NebkherEye from '$lib/hud2/NebkherEye.svelte';
 	import RazzleTop from '$lib/hud2/RazzleTop.svelte';
-	import PoofBurst from '$lib/hud2/PoofBurst.svelte';
 	import ComicBurst from '$lib/hud2/ComicBurst.svelte';
 	import type { ComicMoment } from '$lib/hud2/comic';
 	import { newPlayerCardState } from '$lib/cards/cardstate';
@@ -125,12 +124,13 @@
 	function eq() { const m = mid(igTok); eqSwirl.play(m.x, m.y, m.w); }
 	let nkKind: 'laugh' | 'grip' | 'name' | 'crack' | null = null, nkDoubt: NkColor | null = null, nkUltB = false;
 	let rzN = 1, rzUlt = false, rzSparkle = true, rzKind: 'spawn' | 'clear' | 'retrieve' | null = null;
-	let poof: PoofBurst, rzDbl: HTMLElement, rzDblOn = true;
+	let rzDbl: HTMLElement, rzDblOn = true;
 	let comic: ComicBurst, rzMain: HTMLElement, rzFoe: HTMLElement;
 	// her own moments burst over her; the ones she does to someone else over the target
 	const COMIC_BTNS: [ComicMoment, string, 'me' | 'foe'][] = [['attacked', 'Attacked', 'me'], ['attacks', 'Attacks a hero', 'foe'], ['killHero', 'Defeats a hero', 'foe'], ['killMinion', 'Defeats a minion', 'foe'], ['defended', 'Survives', 'me'], ['blocked', 'Blocked', 'foe'], ['defeated', 'Defeated', 'me'], ['twin', 'Twin Strike', 'foe']];
 	function comicAt(m: ComicMoment, who: 'me' | 'foe') { const t = mid(who === 'me' ? rzMain : rzFoe); comic.play(m, t.x, t.y, t.w); }
-	function poofDbl() { const m = mid(rzDbl), on = !rzDblOn; poof.play(m.x, m.y, m.w); setTimeout(() => (rzDblOn = on), poof.coverAt); }
+	// a double pops in / out under a smoke-cloud burst (the swap happens while the cloud covers the token)
+	function poofDbl() { const m = mid(rzDbl), on = !rzDblOn; comic.play(on ? 'poofIn' : 'poofOut', m.x, m.y, m.w); setTimeout(() => (rzDblOn = on), comic.coverAt); }
 	$: rzBodies = Array.from({ length: rzN }, (_, i) => ({ id: i ? `p~${i}` : 'p', face: i }));
 	let gyMode: 'idle' | 'loaded' | 'open' | 'picked' | 'cast' = 'idle', gySchool = 'evocation', gyUlt = false, gyWishes = 0;
 	const GY_SCHOOLS = ['cantrip', 'evocation', 'necromancy', 'abjuration', 'conjuration', 'enchantment', 'transmutation'];
@@ -433,7 +433,6 @@
 <EquilibriumSwirl bind:this={eqSwirl} />
 <ChaosFlip bind:this={chaos} phone={mobile} art={coinArt} />
 <IgnatiaSplash bind:this={igSplash} phone={mobile} />
-<PoofBurst bind:this={poof} />
 <ComicBurst bind:this={comic} />
 <LaughBurst bind:this={nkBurst} x={bx} y={by} size={56} ult={nkUlt} />
 {#if won}

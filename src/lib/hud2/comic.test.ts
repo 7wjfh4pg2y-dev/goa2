@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest'
 import { COMICS, COMIC_TIMING, pickComic, type ComicMoment } from './comic'
 
 describe('comic bursts', () => {
-	it('has three bursts for each of the four main moments and one for each extra', () => {
-		for (const m of ['attacked', 'attacks', 'killHero', 'killMinion'] as ComicMoment[]) expect(COMICS[m]).toHaveLength(3)
+	it('has three bursts for each of the four main moments and the two poofs and one for each extra', () => {
+		for (const m of ['attacked', 'attacks', 'killHero', 'killMinion', 'poofIn', 'poofOut'] as ComicMoment[]) expect(COMICS[m]).toHaveLength(3)
 		for (const m of ['defended', 'blocked', 'defeated', 'twin'] as ComicMoment[]) expect(COMICS[m]).toHaveLength(1)
 		for (const m in COMICS) expect(COMIC_TIMING[m as ComicMoment]).toBeTruthy()
 	})

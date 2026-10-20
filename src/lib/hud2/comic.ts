@@ -2,7 +2,7 @@
 // comes from the shape, the colours and the lettering). Geometry is in a 400 × 300 box centred on 200, 150, and is
 // worked out once, deterministically, so every screen draws the same burst. ComicBurst.svelte draws them.
 
-export type ComicMoment = 'attacked' | 'attacks' | 'killHero' | 'killMinion' | 'defended' | 'blocked' | 'defeated' | 'twin'
+export type ComicMoment = 'attacked' | 'attacks' | 'killHero' | 'killMinion' | 'defended' | 'blocked' | 'defeated' | 'twin' | 'poofIn' | 'poofOut'
 export type ComicLine = { t: string; y: number; size: number; len: number; chars: { t: string; s: number; dy: number; r: number }[] }
 export type Comic = {
 	word: string
@@ -110,14 +110,30 @@ export const COMICS: Record<ComicMoment, Comic[]> = {
 	defended: [make({ ...puff(111), fill: '#33d3f2', dot: '#0b8fb6', lines: [['MISSED', 78, 240, -16], ['ME!', 82, 130, 58]], top: '#ff6fd2', bot: '#d4007f', rot: -7 })],
 	blocked: [make({ ...lump(121, 0.18), fill: '#8ea3c8', dot: '#5c6f94', lines: [['AWW!', 100, 208]], top: '#ffffff', bot: '#cfe0ff', ext: '#2a3550', rot: 6, skew: 4, wave: 3, grow: -0.1 })],
 	defeated: [make({ ...burst(8, 131, 154, 96, 0.72), fill: '#7a4292', dot: '#4a2160', lines: [['OOF!', 100, 200, 32]], top: '#ffe0f3', bot: '#ff8fcf', rot: 4, skew: -4, wave: 3, grow: -0.08 })],
+	// a double appears / vanishes: a smoke cloud CENTRED on the token (COMIC_OVER) that hides it while it pops in or out
+	poofIn: [
+		make({ ...puff(201, 10), fill: '#ffffff', dot: '#b9a7e6', lines: [['POOF!', 104, 230, 32]], top: '#ff3b2a', bot: '#c4100f', rot: -7, grow: 0.14 }),
+		make({ ...puff(202, 11), fill: '#ecdcff', dot: '#a98be0', lines: [['PRESTO!', 88, 280]], top: '#ff4fc4', bot: '#9c0057', rot: -6 }),
+		make({ ...puff(203, 10), fill: '#dcf6ff', dot: '#86c4e6', lines: [['TA-DAA!', 90, 272]], top: '#ffd23a', bot: '#ff7a00', rot: -8 })
+	],
+	poofOut: [
+		make({ ...puff(211, 10), fill: '#ffffff', dot: '#b9a7e6', lines: [['POOF!', 104, 230, 32]], top: '#ff3b2a', bot: '#c4100f', rot: -7, grow: 0.14 }),
+		make({ ...puff(212, 11), fill: '#dcf6ff', dot: '#86c4e6', lines: [['WHOOSH!', 86, 286]], top: '#2fb8f0', bot: '#0b5fb0', rot: -9 }),
+		make({ ...puff(213, 10), fill: '#ecdcff', dot: '#a98be0', lines: [['GONE!', 100, 236, 32]], top: '#b56cff', bot: '#5d1fa8', rot: -6 })
+	],
 	twin: [make({ ...burst(18, 145, 176, 120, 0.74), fill: '#ffcf3a', dot: '#e0912a', lines: [['ENCORE!', 92, 290, 28]], top: '#ffffff', bot: '#ffe08a', ext: '#c2187a', rot: -5 })]
 }
 
 /** how big and how long each moment plays: width = `scale` × the token's width; `ms` on screen */
 export const COMIC_TIMING: Record<ComicMoment, { scale: number; ms: number }> = {
 	attacked: { scale: 2.6, ms: 1150 }, attacks: { scale: 2.6, ms: 1150 }, killHero: { scale: 3.2, ms: 1600 }, killMinion: { scale: 2.2, ms: 900 },
-	defended: { scale: 2.8, ms: 1300 }, blocked: { scale: 2.5, ms: 1200 }, defeated: { scale: 2.8, ms: 1400 }, twin: { scale: 3, ms: 1400 }
+	defended: { scale: 2.8, ms: 1300 }, blocked: { scale: 2.5, ms: 1200 }, defeated: { scale: 2.8, ms: 1400 }, twin: { scale: 3, ms: 1400 },
+	poofIn: { scale: 2.4, ms: 1050 }, poofOut: { scale: 2.4, ms: 1050 }
 }
+/** these burst CENTRED on the token (and hide it) instead of up and to its right */
+export const COMIC_OVER: ComicMoment[] = ['poofIn', 'poofOut']
+/** ms after `play` when a burst is at full size — swap a token in / out then, while the cloud covers it */
+export const COMIC_COVER = 110
 
 /** pick one of a moment's bursts at random, never the same one twice in a row */
 export function pickComic(m: ComicMoment, last: number, rand = Math.random): number {
