@@ -170,7 +170,7 @@ export const actorOf = (s: MatchState): string | null => (timelinePick(s) ? null
 /** Apply a card instruction to the shared state, returning the patch to broadcast. */
 // the turn facts a 4★ power needs (heropower.ts can't import this file)
 // (revealed: the host applies every request, and `revealAt` is in the host's clock)
-const powerCtx = (x: MatchState): TurnCtx => ({ key: turnKey(x), round: x.round, turnIdx: x.turn - 1, order: turnOrder(x), at: actingIdx(x), tieBreaker: x.tieBreaker, revealed: x.revealAt != null && Date.now() >= x.revealAt,
+export const powerCtx = (x: MatchState): TurnCtx => ({ key: turnKey(x), round: x.round, turnIdx: x.turn - 1, order: turnOrder(x), at: actingIdx(x), tieBreaker: x.tieBreaker, revealed: x.revealAt != null && Date.now() >= x.revealAt,
 	teams: Object.fromEntries(Object.keys(x.cards ?? {}).map((pid) => [pid, teamOf(x, pid)])) })
 export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 	// Razzle's Twin Strike: the repeat may not hit the unit the first attack hit
@@ -1484,6 +1484,12 @@ export function joinMatch(
 			rev: local.rev + 1,
 			updatedBy: clientId,
 			updatedAt: Date.now()
+		}
+		// a card effect switched on / off (Activate effect, End effect) is a plain update, not a card request: let the
+		// 4★ powers see it too (Ignatia's Equilibrium is an effect of her silver — its splash news is written here)
+		if ('effects' in patch && Object.values(after.cards ?? {}).some((c) => hasPower(c.hero))) {
+			const sync = syncPowers(after, powerCtx(after))
+			if (sync) Object.assign(after, sync)
 		}
 		recordHistory(before, after)
 		local = after

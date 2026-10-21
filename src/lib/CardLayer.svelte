@@ -1282,7 +1282,8 @@
 	const canUndoNow = session.canUndo;
 </script>
 
-<svelte:window on:pointerdown={onWindowDown} bind:innerWidth={winW} bind:innerHeight={winH} />
+<!-- Escape closes the card view (its scrim never has focus, and the dialog inside stops keys) -->
+<svelte:window on:pointerdown={onWindowDown} on:keydown={(e) => { if (e.key === 'Escape' && examine) examine = null; }} bind:innerWidth={winW} bind:innerHeight={winH} />
 
 <!-- controls shared by the desktop dash and the phone dash -->
 {#snippet plate(p: Player, cs: PlayerCardState, w = npW)}

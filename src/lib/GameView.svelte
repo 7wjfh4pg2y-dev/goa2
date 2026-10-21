@@ -1875,7 +1875,7 @@
 	.atkask.fd .aktitle { color: #ffd9a8; }
 	.atkask { position: absolute; inset: 0; z-index: 12; display: grid; place-items: center; pointer-events: none; animation: akout .7s ease 5s forwards; }
 	/* the notice says its piece, then gets out of the way (the choice stays on the action button) */
-	@keyframes akout { to { opacity: 0; visibility: hidden; } }
+	@keyframes akout { to { opacity: 0; } } /* opacity only: with visibility in it the whole fade ran on the main thread (it leaves the page at 5.8 s anyway) */
 	.akwrap { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 18px 34px 16px; color: #ffe9e2; animation: akin .4s cubic-bezier(.2, 1.3, .3, 1) both; }
 	.gamewrap:not(.mob) .akwrap { zoom: var(--uis, 1); }
 	.akburst { position: absolute; left: 50%; top: 52px; width: 300px; height: 300px; margin: -150px 0 0 -150px; border-radius: 50%; opacity: 0.5;
