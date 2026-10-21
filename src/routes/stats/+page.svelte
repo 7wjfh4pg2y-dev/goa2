@@ -188,6 +188,7 @@
 	<header class="hh">
 		<div class="hbar">
 			<a class="home" href={base + '/?at=adminhub'} on:click|preventDefault={() => goBack('adminhub')} title="Back">←</a>
+			<a class="home" href={base + '/'} title="Home" aria-label="Home"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h5v-6h4v6h5V10"/></svg></a>
 			<span class="brand"><span class="logo">◆</span><b>Hall of Records</b><small>Guards of Atlantis II</small></span>
 			<nav class="tabs" aria-label="Sections">
 				{#each TABS as [k, l] (k)}<button class:on={tab === k} on:click={() => go(k)}>{l}</button>{/each}
