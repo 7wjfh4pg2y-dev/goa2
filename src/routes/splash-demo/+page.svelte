@@ -38,6 +38,8 @@
 	import { BOOK } from '$lib/gydion';
 	import { schoolOf, SCHOOL_COLOR } from '$lib/cards/spells';
 	import { portraitCss, altFace } from '$lib/heroes';
+	import RevealLab, { REVEAL_LOOKS, type RevealLook, type RevealSeat } from '$lib/RevealLab.svelte';
+	import { heroCards } from '$lib/cards/deck';
 	import YourTurn, { TURN_CUE_LOOKS, TURN_CUE_DEFAULT, type TurnCueLook } from '$lib/YourTurn.svelte';
 	import type { BattleNews, DefeatNews, Team } from '$lib/match';
 	import type { PushNews } from '$lib/battle';
@@ -91,6 +93,21 @@
 	let turnSplash: TurnSplash;
 	// YOUR TURN: the three looks to choose from (the game uses TURN_CUE_DEFAULT)
 	let cueLook: TurnCueLook = TURN_CUE_DEFAULT;
+	// card reveal mock-ups (sample players: made-up names; one card pair always ties across the teams for C's coin)
+	let reveal: RevealLab, revealN = 3, revealTurn = 2, revealLook: RevealLook | null = null;
+	const R_SEATS: [string, string, 'orange' | 'blue', string][] = [['Zara', 'arien', 'orange', '#dc2626'], ['Mo', 'brogan', 'orange', '#eab308'], ['Avery', 'xargatha', 'orange', '#14b8a6'],
+		['Priya', 'wasp', 'blue', '#ec4899'], ['Sam', 'trinkets', 'blue', '#84cc16'], ['Quinn', 'tigerclaw', 'blue', '#a855f7']];
+	function revealSeats(n: number): RevealSeat[] {
+		const pick = R_SEATS.filter((_, i) => i % 3 < n);
+		const hand = (h: string) => newPlayerCardState(h).hand.filter((i) => (heroCards(h)[i]?.initiative ?? 0) > 0);
+		const ini = (h: string, i: number) => heroCards(h)[i]?.initiative ?? 0;
+		const cards = pick.map(([, h], k) => hand(h)[k % Math.max(1, hand(h).length)] ?? 0);
+		// make the first Atlantean and the first Titan tie on initiative when their hands allow it
+		const a = pick.findIndex((r) => r[2] === 'orange'), b = pick.findIndex((r) => r[2] === 'blue');
+		outer: for (const i of hand(pick[a][1])) for (const j of hand(pick[b][1])) if (ini(pick[a][1], i) === ini(pick[b][1], j)) { cards[a] = i; cards[b] = j; break outer; }
+		return pick.map(([name, hero, team, color], k) => ({ pid: `r${k}`, name, hero, team, color, card: cards[k] }));
+	}
+	function playReveal(l: RevealLook) { revealLook = l; reveal.play(l, revealSeats(revealN), revealTurn, 'orange'); }
 	let cue: YourTurn;
 	const CUE_HEROES = [{ hero: 'tigerclaw', heroName: 'Tigerclaw', card: 'Hit and Run', color: '#e11d48', team: 'orange' as const }, { hero: 'xargatha', heroName: 'Xargatha', card: 'Stone Gaze', color: '#14b8a6', team: 'blue' as const }];
 	function playCue(l: TurnCueLook) { cueLook = l; setTimeout(() => cue?.play(CUE_HEROES[me === 'blue' ? 1 : 0]), 0); }
@@ -216,6 +233,17 @@
 		<div class="row">
 			{#each TURN_CUE_LOOKS as l (l.id)}<button class:off={cueLook !== l.id} on:click={() => playCue(l.id)}>{l.label}{l.id === TURN_CUE_DEFAULT ? ' (in the game now)' : ''}</button>{/each}
 		</div>
+	</section>
+	<section>
+		<h2>Card reveal <small>(mock-ups — pick a look)</small></h2>
+		<div class="row">
+			{#each REVEAL_LOOKS as l (l.id)}<button class:off={revealLook !== l.id} title={l.blurb} on:click={() => playReveal(l.id)}>{l.label}</button>{/each}
+		</div>
+		<div class="row sm">
+			<button class:off={revealN !== 2} on:click={() => (revealN = 2)}>2 v 2</button>
+			<button class:off={revealN !== 3} on:click={() => (revealN = 3)}>3 v 3</button>
+		</div>
+		{#if revealLook}<p class="blurb">{REVEAL_LOOKS.find((l) => l.id === revealLook)?.blurb}</p>{/if}
 	</section>
 	<section>
 		<h2>Minion battle</h2>
@@ -442,6 +470,7 @@
 <DefeatSplash news={kill} {cards} names={(i) => names[i] ?? i} {lifeArt} {mobile} myTeam={side} />
 <TurnSplash bind:this={turnSplash} {mobile} />
 <YourTurn bind:this={cue} look={cueLook} {mobile} />
+<RevealLab bind:this={reveal} {mobile} myTeam={me} />
 <LevelSplash bind:this={levelSplash} {mobile} />
 <NebkherSplash bind:this={nkSplash} phone={mobile} />
 <EssenceWisps bind:this={ess} />
@@ -473,6 +502,7 @@
 	section { padding: 14px 18px; border-radius: 14px; background: rgba(12, 18, 32, .46); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, .12); }
 	.row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
 	.row + .row { margin-top: 10px; }
+	.blurb { margin: 8px 0 0; text-align: center; font-size: .78rem; color: #9fb0c4; max-width: 560px; }
 	button { font: inherit; padding: 8px 16px; border-radius: 10px; cursor: pointer; border: 1px solid rgba(255, 255, 255, .2); background: rgba(255, 255, 255, .08); color: #f1f5f9; }
 	button.o { background: #ef7d22; border-color: transparent; color: #fff; }
 	button.b { background: #2f7fe6; border-color: transparent; color: #fff; }
