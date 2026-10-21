@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { inPlay } from '$lib/busy';
 	import { uiScale } from '$lib/layout';
 	import { teamName, aTeam } from '$lib/teams';
 	import { sweepJournals } from '$lib/recorder';
@@ -53,6 +54,7 @@
 
 	type Mode = 'landing' | 'choose' | 'admin' | 'adminhub' | 'menu' | 'learn' | 'create' | 'join' | 'lobby' | 'draft' | 'game';
 	let mode: Mode = 'landing';
+	$: inPlay.set(mode === 'lobby' || mode === 'draft' || mode === 'game');
 	let notice = '';
 
 	// admin

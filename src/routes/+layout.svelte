@@ -5,12 +5,15 @@
 	import { browser } from '$app/environment';
 	import { updated } from '$app/stores';
 	import { trackNav } from '$lib/nav';
+	import { inPlay } from '$lib/busy';
 
 	trackNav();
 
 	// When SvelteKit detects a new deploy (via version polling), reload so players
-	// always run the latest build — no manual hard refresh / cache clearing.
-	$: if (browser && $updated) location.reload();
+	// always run the latest build — no manual hard refresh / cache clearing. Never in the middle of a lobby, hero
+	// select or game (a fix pushed during a live game used to reload every table at once): those tabs wait until
+	// the player is back on the menus, or press Update · Reload in the ☰ Game lobby.
+	$: if (browser && $updated && !$inPlay) location.reload();
 
 	// Also check the moment the tab regains focus, so returning picks up a deploy fast.
 	onMount(() => {

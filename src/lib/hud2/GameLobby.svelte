@@ -3,6 +3,7 @@
 </script>
 
 <script lang="ts">
+	import { updated } from '$app/stores';
 	// ☰ in the 2.0 HUD = the game lobby, in the middle of the screen: the room and the connection, both teams (the
 	// host can kick), the watchers and their seat requests, Leave. (Your HUD — 2.0 / classic — is in the wheel's Version.)
 	import { portraitCss, heroById } from '$lib/heroes';
@@ -60,7 +61,7 @@
 <svelte:window on:keydown={(e) => e.key === 'Escape' && onClose()} />
 <div class="scrim" class:phone role="presentation" on:pointerdown|self={onClose}>
 	<div class="glob" role="dialog" aria-modal="true" aria-label="Game lobby">
-		<div class="ghead"><b>Game lobby</b><span class="groom">Room <em>{room}</em></span><span class="gconn {connClass}"><i></i>{conn}</span><button class="gx" on:click={onClose} aria-label="Close">✕</button></div>
+		<div class="ghead"><b>Game lobby</b><span class="groom">Room <em>{room}</em></span><span class="gconn {connClass}"><i></i>{conn}</span>{#if $updated}<button class="gupd" on:click={() => location.reload()} title="A new version is ready — reloading puts you straight back in your seat">Update · Reload</button>{/if}<button class="gx" on:click={onClose} aria-label="Close">✕</button></div>
 		<div class="gteams">
 			{#each teams as tm (tm.t)}
 				<div class="gteam is-{tm.t}">
@@ -117,6 +118,8 @@
 	button { font: inherit; }
 	.ghead { display: flex; align-items: center; gap: 12px; margin: 0 -18px; padding: 12px 18px; border-bottom: 1px solid var(--line); }
 	.ghead b { font-weight: 400; font-size: 20px; }
+	.gupd + .gx { margin-left: 0; }
+	.gupd { margin-left: auto; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--brass, #d8b36a); background: rgba(216, 179, 106, 0.14); color: var(--brass-hi, #f1d79a); font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap; }
 	.groom { font-size: 13px; color: #bccbd9; } .groom em { font-style: normal; color: var(--brass-hi); letter-spacing: 0.12em; }
 	.gconn { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #fcd34d; } .gconn i { width: 8px; height: 8px; border-radius: 50%; background: #f59e0b; }
 	.gconn.connected { color: #86efac; } .gconn.connected i { background: #22c55e; }
