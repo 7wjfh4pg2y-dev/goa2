@@ -72,6 +72,7 @@
 	function stepWaves(d: number) { goCustom(); customWaves = Math.min(7, Math.max(1, customWaves + d)); }
 	function stepLife(d: number) { goCustom(); customLife = Math.min(10, Math.max(3, customLife + d)); }
 	let draftSystem: DraftSystem = 'all-pick';
+	let labRules = false; // GMs: Lab rules = the 1–3★ card automation still in the lab (autocards.ts); these games aren't recorded
 	let draftStars = [1, 2, 3]; // 4★ heroes disabled for now (extra dev work pending)
 	let maps: MapChoice[] = [];
 	let mapId = '';
@@ -634,7 +635,8 @@
 			map: chosen?.data ?? null,
 			draftSystem,
 			draftStars,
-			draftLab: gmCreate && draftStars.includes(4)
+			draftLab: gmCreate && draftStars.includes(4),
+			labRules: gmCreate && labRules
 		});
 		rememberRoom(room);
 		session = joinMatch(room, { name, color: 'spectator' }, { seed });
@@ -1043,6 +1045,7 @@
 					</div>
 					<footer class="cfoot">
 						<button class="btn btn-ghost" on:click={() => (mode = 'menu')}><Icon name="back" /> Back</button>
+						{#if gmCreate}<button class="pill labr" class:on={labRules} aria-pressed={labRules} title="Lab rules: the card automation still being tested (GM test games, not recorded)" on:click={() => (labRules = !labRules)}>Lab rules</button>{/if}
 						<div class="csum">{@render counts()}<span class="pill">{playerCount} seats</span><span class="pill" class:pill--bad={poolShort} title={poolShort ? `Only ${eligibleCount} heroes — ${DRAFT_LABELS[draftSystem]} with ${playerCount} players needs ${poolNeed}` : 'Heroes in the pool'}>{eligibleCount}{poolShort ? ` / ${poolNeed}` : ''} heroes</span></div>
 						<button class="btn btn-duo createbtn" on:click={createGame} disabled={poolShort || !name.trim()}>Create game</button>
 					</footer>
@@ -1264,6 +1267,8 @@
 	.cxchips .chip { flex: 1 1 0; min-width: 0; min-height: 56px; padding: 0 4px; }
 	.cxchips :global(.ico) { width: 20px; height: 20px; }
 	.cfoot { display: flex; align-items: center; gap: 16px; margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--hair); }
+	.labr { cursor: pointer; flex: none; }
+	.labr.on { border-color: var(--brass, #d8b36a); color: var(--brass, #d8b36a); box-shadow: inset 0 0 0 1px var(--brass, #d8b36a); }
 	.csum { display: flex; flex-wrap: nowrap; justify-content: center; align-items: center; gap: 8px; margin: 0 auto; white-space: nowrap; }
 	/* waves / Life with their own ± — the counts are edited where they are shown */
 	.pstep { gap: 6px; padding-left: 4px; padding-right: 4px; }

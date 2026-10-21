@@ -75,6 +75,7 @@ export interface Journal {
 	startedAt: number
 	lastAt: number
 	fromStart: boolean // this browser saw the game's first turn
+	lab?: boolean // played with Lab rules (a GM's test game): never sent
 	seats: number
 	mapId: string
 	draftSystem: string
@@ -127,6 +128,7 @@ export function newJournal(room: string, s: MatchState): Journal {
 	return {
 		v: 1, id: gameId(room, s), room, startedAt: Date.now(), lastAt: Date.now(),
 		fromStart: s.round === 1 && s.turn === 1 && !s.wonBy,
+		...(s.labRules ? { lab: true } : {}),
 		seats: s.seats, mapId: s.mapId, draftSystem: s.draftSystem, lifeMax: s.lifeMax, wavesMax: s.wavesMax,
 		players: {}, draft: null, turns: [], cur: null, log: [], ev: [], evv: 3, builds: {}, mark: null, done: false, uploaded: false,
 		zones: {}, pcs: {}, shots: [], bcur: null, notes: []
@@ -409,6 +411,8 @@ export function journalUpdate(j: Journal, s: MatchState): Journal {
 export function isFullGame(j: Journal): boolean {
 	// a 4★ hero still in the lab = a GM's test game: never reaches the Hall
 	if (Object.values(j.players).some((p) => isLabHero(p.hero))) return false
+	// …and so is a game with Lab rules (the card automation being tested)
+	if (j.lab) return false
 	return j.fromStart && j.done && new Set(Object.keys(j.players)).size >= 2
 }
 

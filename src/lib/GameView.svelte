@@ -51,7 +51,8 @@
 	import {
 		colorHex, movePiece, teamForSeat, throneHex, minionCoins, heroDefeatSummary, canRespawn, freeSpawns, teamOf, clearable, turnKey, 
 		type MatchState, type Player, type MatchSession, type Team, type ConnStatus, type Piece
-	, minionDefense, hurrying, actorOf as actorNow } from '$lib/match';
+	, minionDefense, hurrying, actorOf as actorNow, heroSpawns } from '$lib/match';
+	import { autoOn, cardOf, behindRule, spacesBehind, heroesOn, leapSpaces, swapMinions, spawnPoints, auraRadius, immuneNow, attackBarred } from '$lib/autocards';
 
 	export let session: MatchSession;
 	export let ms: Readable<MatchState>;
@@ -195,7 +196,7 @@
 		// heavies are immune while another minion of theirs stands in the battle zone (host can override)
 		immune: p.role === 'heavy' && heavyImmune($ms, p.id) ? true : undefined,
 		// Gydion's Shield / Invulnerability for the round: the Abjuration hand on his piece
-		guard: p.kind === 'hero' && $ms.cards?.[p.id]?.hero === 'gydion' && guardNow($ms, p.id, $ms.round).length ? guardIcon : undefined,
+		guard: p.kind === 'hero' && (($ms.cards?.[p.id]?.hero === 'gydion' && guardNow($ms, p.id, $ms.round).length) || immuneNow($ms, heroPidOf(p) ?? p.id).length) ? guardIcon : undefined,
 		// hover label (mouse): the same name the toolbar shows, heroes/minions in their team colour
 		name: labelOf(p), nameColor: teamText(p),
 		hidden: poofHide.includes(p.id) || undefined,
@@ -247,7 +248,8 @@
 		{ label: 'Back', fam: 'off', run: () => (forceMenu = false) }
 	] as Pill[]) : ([
 		selImmune ? { label: 'Immune', fam: 'fight', kind: 'imm', title: 'Heavy minions can\'t be moved, defeated or removed while another minion of their team is in the battle zone' } : null,
-		canDefeatSel && selPiece.kind === 'hero' ? { label: attacks[selHero ?? ''] ? 'Under attack…' : 'Attack', fam: 'fight', kind: 'go', off: !!attacks[selHero ?? ''], run: () => attackSel('attack') } : null,
+		canDefeatSel && selPiece.kind === 'hero' ? { label: attacks[selHero ?? ''] ? 'Under attack…' : selBarred ? 'Immune' : 'Attack', fam: 'fight', kind: 'go', off: !!attacks[selHero ?? ''] || selBarred, run: () => attackSel('attack'), title: selBarred ? 'A card makes them immune to your attacks' : undefined } : null,
+		canBehindSel ? { label: `${behindCard} · ${behindHeroes.length}`, fam: 'power', kind: 'bad', off: !behindHeroes.length, run: behindSel, title: `An enemy hero in the ${behind?.n} spaces behind it discards a card${behind?.die ? ', or is defeated' : ''}` } : null,
 		canDefeatSel && selPiece.kind === 'hero' ? { label: 'Defeat', fam: 'fight', kind: 'bad', coin: heroDefeatSummary($ms, clientId, selHero ?? '').coins, run: () => attackSel('defeat'), title: 'Not an attack: defeat them outright — same rewards' } : null,
 		canDefeatSel && selPiece.kind === 'hero' ? { label: $ms.forced?.[selHero ?? ''] ? 'Discarding…' : 'Forced discard', fam: 'fight', kind: 'force', off: !!$ms.forced?.[selHero ?? ''], run: () => (forceMenu = true), title: 'A card makes them discard (or be defeated)' } : null,
 		canDefeatSel && selPiece.kind !== 'hero' && (!selImmune || iAmHost) ? { label: 'Defeat', fam: 'fight', kind: 'bad', coin: minionCoins(selPiece.role), run: defeatSel } : null,
@@ -428,7 +430,7 @@
 	let crackPreview: { hex: string; dir: number } | null = null;
 	$: crackShown = crackPreview ? { ...crackPreview, alpha: 0.24 } : crack ? { ...crack, alpha: 0.38 } : null;
 	$: crackArea = crackShown ? [{ hex: crackShown.hex, r: 0, color: '#c58cff', alpha: crackShown.alpha, hexes: lineHexes(crackShown.hex, crackShown.dir, (h) => !!$ms.map?.cells?.[h]) }] : [];
-	$: areas = [...crackArea, ...Object.entries($ms.radii ?? {}).flatMap(([pid, r]) => {
+	$: areas = [...crackArea, ...auraAreas, ...Object.entries($ms.radii ?? {}).flatMap(([pid, r]) => {
 		const hero = $ms.pieces?.[pid];
 		return hero && r > 0 && !(pid === clientId && myPriv) ? [{ hex: hero.hex, r, color: colorHex(hero.color ?? '') }] : [];
 	}), ...(myPriv ? [{ hex: $ms.pieces[clientId].hex, r: myPriv, color: colorHex($ms.pieces[clientId].color ?? '') }] : [])];
@@ -436,7 +438,7 @@
 	// Gydion's Create Undead: the empty friendly spawn points he may raise a minion on (CardLayer decides when)
 	let gyRaise: string[] = [];
 	$: raiseMarks = gyRaise.map((hex) => ({ hex, r: 0, team: myTeam ?? 'orange', color: '' }));
-	$: boardMarks = [...battleMarks, ...spawnMarks, ...clearMarks, ...strayMarks, ...raiseMarks];
+	$: boardMarks = [...battleMarks, ...spawnMarks, ...clearMarks, ...strayMarks, ...raiseMarks, ...behindMarks, ...hintMarks];
 
 	// ── minion battle / lane (battle.ts) ──
 	// the minions the battle's loser may take off glow red on the board
@@ -706,6 +708,11 @@
 			swapFrom = null;
 			if (id && id !== a) { doSwap(a, id); queueMicrotask(() => board?.release()); selPieceId = null; return; }
 		}
+		// Arien's Torrent with several heroes behind: the tap picks one of them
+		if (behindPick.length) {
+			if (id && behindPick.includes(id)) { queueMicrotask(() => board?.release()); behindAsk(id); return; }
+			behindPick = [];
+		}
 		const pc = id ? $ms.pieces[id] : null;
 		// tapping any piece (heroes included) just picks it up to move it — a
 		// player's board opens from the right-hand HUD instead. Minions / tokens
@@ -778,6 +785,49 @@
 		const id = selHero;
 		askRing(selPiece.id, 'Hurry up', heroById(selPiece.hero ?? '')?.name ?? '', 'go', () => session.cardAction({ kind: 'hurry', pid: clientId, target: id }));
 	}
+	// ── 1–3★ card automation (autocards.ts — Lab rules until a hero goes live) ──
+	$: selBarred = !!selHero && attackBarred($ms, clientId, selHero);
+	// the card I'm acting with, when my hero is automated
+	$: myActCard = !!turnCtx && turnCtx.revealed && turnCtx.order[turnCtx.at] === clientId && autoOn($ms, clientId) ? cardOf($ms.cards?.[clientId], $ms.cards?.[clientId]?.pending) : undefined;
+	$: myHex = $ms.pieces?.[clientId]?.hex;
+	// Arien's Dangerous Current / Raging Stream / Violent Torrent: on the unit next to him he attacks, the enemy heroes
+	// in the spaces straight behind it — one of them discards (or is defeated)
+	$: behind = behindRule(myActCard);
+	$: behindCard = myActCard?.name ?? '';
+	$: behindLine = behind && selPiece && myHex && selPiece.id !== clientId && selPiece.team !== myTeam && (selPiece.kind === 'hero' || selPiece.kind === 'minion') ? spacesBehind(myHex, selPiece.hex, behind.n) : [];
+	$: canBehindSel = !watcher && behindLine.length > 0;
+	$: behindHeroes = canBehindSel ? heroesOn($ms, clientId, behindLine) : [];
+	let behindPick: string[] = []; // more than one hero behind: they glow, a tap picks one
+	$: if (behindPick.length && !behind) behindPick = [];
+	$: behindMarks = behindPick.map((id) => ({ hex: $ms.pieces[id]?.hex ?? '', r: 0, team: myTeam ?? 'orange', color: '' })).filter((m) => m.hex);
+	function behindAsk(pieceId: string) {
+		const pc = $ms.pieces[pieceId], pid = pc ? heroPidOf(pc) ?? pc.id : null, die = !!behind?.die;
+		behindPick = [];
+		if (!pc || !pid) return;
+		const go = () => session.cardAction({ kind: 'force', pid: clientId, target: pid, die });
+		// the question is about the hero behind, not the unit picked: let go of the pick, or the ring drops it
+		if (useRing) { selPieceId = null; askRing(pieceId, die ? 'Discard or die' : 'Discard', `${heroOf(pid)} · ${behindCard}`, 'bad', go); }
+		else { go(); selPieceId = null; }
+	}
+	function behindSel() {
+		if (!behindHeroes.length) return;
+		if (behindHeroes.length === 1) { behindAsk(behindHeroes[0].id); return; }
+		board?.release(); selPieceId = null; behindPick = behindHeroes.map((p) => p.id);
+	}
+	// Liquid Leap / Magical Current / Stranger Tide: where he may land · Arcane Whirlpool / Ebb and Flow: the minions he
+	// may swap with — lit while his hero is picked (or the swap waits for its second piece)
+	$: allSpawns = spawnPoints($ms.map, [...heroSpawns($ms, 'orange'), ...heroSpawns($ms, 'blue')]);
+	$: meSel = selHero === clientId || swapFrom === clientId;
+	$: leapHexes = myActCard && meSel ? leapSpaces($ms, clientId, myActCard, allSpawns) ?? [] : [];
+	$: whirlHexes = myActCard && meSel ? (swapMinions($ms, clientId, myActCard) ?? []).map((id) => $ms.pieces[id].hex) : [];
+	$: hintMarks = [...leapHexes, ...whirlHexes].map((hex) => ({ hex, r: 0, team: myTeam ?? 'orange', color: '' }));
+	// Spell Break / Slippery Ground / Deluge: while the effect is on, his radius on everyone's board
+	$: auraAreas = ($ms.effects ?? []).flatMap((e) => {
+		const cs = $ms.cards?.[e.pid], hero = $ms.pieces?.[e.pid];
+		if (!cs || !hero || !autoOn($ms, e.pid)) return [];
+		const r = auraRadius(cs, heroCards(e.hero)[e.idx]);
+		return r ? [{ hex: hero.hex, r, color: colorHex(hero.color ?? ''), alpha: 0.12 }] : [];
+	});
 	// Temporal Punch / Slam / Judgment: the defender uses Initiative instead of Defense
 	$: temporalIn = !!incoming && RE_TEMPORAL.test(heroCards($ms.cards?.[incoming.by]?.hero ?? '')[$ms.cards?.[incoming.by]?.pending ?? -1]?.description ?? '');
 	// ── a board action waiting for its yes: the action ring (2.0 HUD, 2.0 phone) asks, with Cancel beside it ──
@@ -1384,7 +1434,8 @@
 			{/if}
 			{#if selImmune}<span class="pieimm" title="Heavy minions can't be moved, defeated or removed while another minion of their team is in the battle zone{iAmHost ? ' — as host you can still override for card exceptions' : ''}">Immune</span>{/if}
 			{#if canDefeatSel && selPiece.kind === 'hero'}
-				<button class="piedefeat" on:click={() => attackSel('attack')} disabled={!!attacks[selHero ?? '']}>{attacks[selHero ?? ''] ? 'Under attack…' : '⚔ Attack'}</button>
+				<button class="piedefeat" on:click={() => attackSel('attack')} disabled={!!attacks[selHero ?? ''] || selBarred}>{attacks[selHero ?? ''] ? 'Under attack…' : selBarred ? 'Immune' : '⚔ Attack'}</button>
+				{#if canBehindSel}<button class="pieflip" on:click={behindSel} disabled={!behindHeroes.length}>{behindCard} · {behindHeroes.length}</button>{/if}
 				<button class="piedel" on:click={() => attackSel('defeat')} title="Not an attack: defeat them outright — same rewards">☠ Defeat</button>
 				<button class="pieflip" on:click={() => forceSel(false)} disabled={!!$ms.forced?.[selHero ?? '']} title="A card makes them discard">Discard</button>
 				<button class="piedel" on:click={() => forceSel(true)} disabled={!!$ms.forced?.[selHero ?? '']} title="They discard a card — or are defeated (you take the rewards)">Discard or die</button>

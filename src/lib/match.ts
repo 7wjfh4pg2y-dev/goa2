@@ -18,6 +18,7 @@ import { applyPower, syncPowers, takaHit, comicNewsOf, hasPower, isDouble, RZ, r
 import { teamName, aMinion } from './teams'
 import { hexCube, cubeDist } from './zones'
 import { hexNeighbours } from './board/hexgeo'
+import { attackBarred, defenceImmunity, defenceCard, RE_NO_MINION_MODS, textOf, type Immune } from './autocards'
 import { tokenExpiry, sweepTokens, statusFrom, isTurret } from './tokens'
 import { expireEffects, type Effect } from './effects'
 import { startBattle, pushCheck, battleRemove, battleSettle, battleAuto, battleResult, laneNotes, heavyImmune, type Battle, type PushNews } from './battle'
@@ -178,6 +179,8 @@ export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 	// Razzle's Twin Strike: the repeat may not hit the unit the first attack hit
 	const twinOn = (req.kind === 'attack' || req.kind === 'defeatMinion' || req.kind === 'defeatHero') && s.cards?.[req.pid]?.hero === RZ ? twinBars(s, req.pid, powerCtx(s)) : null
 	if (twinOn && (req as { target?: string }).target === twinOn) return {}
+	// a card's immunity (autocards): no attack on that hero, but from the one it excepts
+	if (req.kind === 'attack' && attackBarred(s, req.pid, req.target)) return {}
 	const patch0 = req.kind === 'power' ? (applyPower(s, req, powerCtx(s)) as Partial<MatchState>) : applyCardReqBase(s, req as Exclude<CardReq, PowerReq>)
 	// …and once her next attack starts, the repeat is spent
 	const spend = Object.keys(patch0).length > 0 && (req.kind === 'attack' || req.kind === 'defeatMinion' || req.kind === 'defeatHero') && s.cards?.[req.pid]?.hero === RZ && rzTwin(s, req.pid, powerCtx(s)) === 'live'
@@ -186,6 +189,11 @@ export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 	if (!Object.keys(patch).length) return patch
 	// Alternative Timelines: a take back starts his turn over — both cards are back, and 'just one' is forgotten
 	if (req.kind === 'uncommit' && s.power?.[req.pid]?.one) patch.power = { ...(patch.power ?? s.power), [req.pid]: { ...s.power[req.pid], one: undefined } }
+	// the defence card just discarded switches on what it says (autocards: Expert / Master Duelist's immunity)
+	if (req.kind === 'defend' && patch.attacks?.[req.pid]?.discarded && !s.attacks?.[req.pid]?.discarded) {
+		const imm = defenceImmunity({ ...s, ...patch } as MatchState, req.pid)
+		if (imm) patch.immune = imm
+	}
 	const next = { ...s, ...patch }
 	if (!Object.values(next.cards ?? {}).some((c) => hasPower(c.hero))) { const kept = keepActor(s, next as MatchState); return kept ? { ...patch, ...kept } : patch }
 	// Takahide's "after the attack" swap opens once his acting card has hit
@@ -330,7 +338,7 @@ function applyCardReqBase(s: MatchState, req: Exclude<CardReq, PowerReq>): Parti
 	if (req.kind === 'defend' && fd && changed) { const forced = { ...s.forced }; delete forced[req.pid]; return { cards: { ...cards, [req.pid]: next }, forced, lastClash: clashNews('force', fd.by, req.pid, 'defended', true) } }
 	// a discard while being attacked is the defence: the defender may now answer Defended
 	const atk = s.attacks?.[req.pid]
-	if (req.kind === 'defend' && atk && changed) return { cards: { ...cards, [req.pid]: next }, attacks: { ...s.attacks, [req.pid]: { ...atk, defending: true, discarded: true } } }
+	if (req.kind === 'defend' && atk && changed) return { cards: { ...cards, [req.pid]: next }, attacks: { ...s.attacks, [req.pid]: { ...atk, defending: true, discarded: true, card: atk.card ?? req.idx } } }
 	return { cards: { ...cards, [req.pid]: next } }
 }
 
@@ -443,6 +451,10 @@ export interface MatchState {
 	turnDisc?: { key: string; by: Record<string, number[]> } | null
 	/** a GM's test room: 4★ heroes still in the lab can be drafted, and the game is never uploaded to the Hall */
 	draftLab?: boolean
+	/** Lab rules (a GM's choice on Create): the 1–3★ card automation in autocards.ts runs for every hero */
+	labRules?: boolean
+	/** card immunities (autocards Immune: Arien's Expert / Master Duelist…) */
+	immune?: Record<string, Immune[]>
 	waves: number // SHARED wave counters remaining; game ends when it hits 0
 	lastPush: Team | null // team that won the most recent Push the Lane
 	life: Record<Team, number> // per-team Life counters remaining; 0 = that team loses
@@ -469,7 +481,7 @@ export interface MatchState {
 	wonBy?: { team: Team; reason: string } | null // a push won the game (throne / last wave)
 	/** heroes under attack, keyed by the defender: who attacks, and whether they chose to defend */
 	/** discarded: the defender has discarded a card since the attack began — only then can they answer Defended */
-	attacks?: Record<string, { by: string; defending: boolean; at: number; discarded?: boolean; body?: string }>
+	attacks?: Record<string, { by: string; defending: boolean; at: number; discarded?: boolean; body?: string; card?: number }>
 	/** NebKher's latest act (laugh / steal / swap / doubt / crack): every screen plays its toast + laugh burst once */
 	nkNews?: NkNews | null
 	/** Emmitt reversed next turn (heropower EmNews): everyone's 'time will run backwards' toast */
@@ -943,6 +955,7 @@ export function initialMatchState(
 		draftSystem?: DraftSystem
 		draftStars?: number[]
 		draftLab?: boolean
+		labRules?: boolean
 	} = {}
 ): MatchState {
 	const length = opts.length ?? 'long'
@@ -977,6 +990,7 @@ export function initialMatchState(
 		draftSystem: opts.draftSystem ?? 'all-pick',
 		draftStars: opts.draftStars ?? [1, 2, 3, 4],
 		...(opts.draftLab ? { draftLab: true } : {}),
+		...(opts.labRules ? { labRules: true } : {}),
 		draft: null,
 		started: false,
 		closed: false,
@@ -1678,6 +1692,7 @@ export function joinMatch(
 		if (req.kind === 'clearAround' && patch.pieces) { const n = Object.keys(local.pieces ?? {}).length - Object.keys(patch.pieces).length; note(req.pid, `cleared ${n} token${n === 1 ? '' : 's'} next to them`) }
 		if (req.kind === 'spawn' && patch.pieces) note(req.pid, 'entered the battlefield')
 		if (req.kind === 'attack' && patch.attacks) note(req.pid, `attacks ${nameOf(req.target)}!`)
+		if (req.kind === 'defend' && patch.immune) { const i = patch.immune[req.pid]?.slice(-1)[0]; if (i) note(req.pid, `is immune to every other enemy's attacks ${i.span === 'round' ? 'this round' : 'this turn'} (${i.card})`) }
 		if (req.kind === 'force' && patch.forced) note(req.pid, req.die ? `forces ${nameOf(req.target)} to discard — or be defeated!` : `forces ${nameOf(req.target)} to discard a card`)
 		if (req.kind === 'forceResolve' && patch.forced && !patch.lastDefeat) {
 			const by = local.forced?.[req.target]?.by ?? ''
@@ -2273,6 +2288,8 @@ export function minionDefense(s: MatchState, target: string): { mods: { id: stri
 	const hero = s.pieces?.[s.attacks?.[target]?.body ?? target] ?? s.pieces?.[target]
 	if (!hero || hero.kind !== 'hero') return { mods: [], total: 0 }
 	const at = hexCube(hero.hex)
+	// Arien's Duelists (autocards): defending with one, every minion modifier is ignored
+	if (RE_NO_MINION_MODS.test(textOf(defenceCard(s, target)))) return { mods: [], total: 0 }
 	const mods: { id: string; d: number }[] = []
 	for (const p of Object.values(s.pieces ?? {})) {
 		if (p.kind !== 'minion') continue
