@@ -205,7 +205,7 @@ export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 	// heroes defeated this round (War Drummer / Master Skald)
 	if (patch.lastDefeat && patch.lastDefeat.id !== s.lastDefeat?.id) patch.fallen = { round: s.round, n: (s.fallen?.round === s.round ? s.fallen.n : 0) + 1 }
 	const next = { ...s, ...patch }
-	if (!Object.values(next.cards ?? {}).some((c) => hasPower(c.hero))) { const kept = keepActor(s, next as MatchState); return kept ? { ...patch, ...kept } : patch }
+	if (!Object.values(next.cards ?? {}).some((c) => hasPower(c.hero))) { const kept = req.kind === 'claim' ? null : keepActor(s, next as MatchState); return kept ? { ...patch, ...kept } : patch }
 	// Takahide's "after the attack" swap opens once his acting card has hit
 	const hit = takaHit(s, next, req, powerCtx(s))
 	const marked = hit ? { ...patch, power: hit } : patch
@@ -229,7 +229,8 @@ export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 		const disc = trackDiscards(s, fin, key)
 		if (disc !== undefined) out.turnDisc = disc
 	}
-	const kept = keepActor(s, { ...s, ...out } as MatchState)
+	// (a tie claim hands the card acting to a teammate on purpose — keepActor must not pin it back)
+	const kept = req.kind === 'claim' ? null : keepActor(s, { ...s, ...out } as MatchState)
 	return kept ? { ...out, ...kept } : out
 }
 function applyCardReqBase(s: MatchState, req: Exclude<CardReq, PowerReq>): Partial<MatchState> {

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { outside } from './outside'
 	// NebKher's dash button — the WINGED EYE (the user's pick, 2026-10-17, artifact "NebKher's Laughter": the winged
 	// scarab's wings, the Eye of Horus in the middle, the Aten's heat ring). At rest the wings lie folded along the
 	// disc in weathered sandstone, still. While one of his power cards is the card acting (Diabolical Laughter, a gold,
@@ -113,7 +114,7 @@
 </script>
 
 <svelte:window on:keydown={onKey} />
-<span class="nk" class:ph={phone} style="--s:{z}px; --wl:{wl}; --hx:{hx}; width:{slotW}px">
+<span class="nk" class:ph={phone} use:outside={{ on: open, close: () => (open = false) }} style="--s:{z}px; --wl:{wl}; --hx:{hx}; width:{slotW}px">
 	<span class="unit" class:on={live && !ult} class:ult class:live class:fx={fx && live} class:doubt={!!doubt}>
 		<span class="lay glow"></span>
 		<span class="lay heat"><svg viewBox="0 0 200 200"><circle cx="100" cy="100" r="58" fill="none" stroke-width="2.6" /></svg></span>

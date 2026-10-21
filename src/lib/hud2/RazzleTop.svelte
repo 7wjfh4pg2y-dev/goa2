@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { outside } from './outside'
 	// Razzle's dash button — the BIG TOP JUGGLER (the user's pick, 2026-10-18, artifact "Razzle's Big Top"): her circus
 	// tent seen from above, cyan and magenta stripes with a gold star on the king pole, and a ring of her star balls
 	// round it — one ball for each of her on the board (dotted rings for the empty places). While one of her cards
@@ -79,7 +80,7 @@
 </script>
 
 <svelte:window on:keydown={onKey} />
-<span class="rz" class:ph={phone} style="--s:{z}px; width:{slotW}px">
+<span class="rz" class:ph={phone} use:outside={{ on: open, close: () => (open = false) }} style="--s:{z}px; width:{slotW}px">
 	<span class="u" class:on={live} class:ult class:fx class:sparkle={sparkle && ult && live}>
 		<span class="lay glow"></span>
 		<button class="btn" class:ready={live} class:open on:click={() => (open = !open)} title={tip} aria-label={tip}>

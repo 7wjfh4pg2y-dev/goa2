@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { outside } from './outside'
 	// Snorri's dash button: the rune active this turn, large, with the turn's numeral on a small tab (a dark, blank rune
 	// before his first Inscribe), inside a RUNE CIRCLE (the user's pick A, 2026-10-16: the 24 Elder Futhark between two
 	// thin circles). The circle rests dim and still; it lights ice-blue and turns while he can (re)inscribe — his silver
@@ -47,7 +48,7 @@
 </script>
 
 <svelte:window on:keydown={onKey} />
-<span class="sr" class:ph={phone} style="--z:{phone ? size - 7 : size}px">
+<span class="sr" class:ph={phone} use:outside={{ on: open, close: () => (open = false) }} style="--z:{phone ? size - 7 : size}px">
 	<span class="circ {lit ?? 'rest'}" class:spin={!!lit && fx} aria-hidden="true">
 		{#if lit}
 			<svg class="cg" viewBox="0 0 200 200"><defs><filter id={uid} x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="3.2" /></filter></defs>

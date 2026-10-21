@@ -17,6 +17,7 @@
 	import RazzleTop from '$lib/hud2/RazzleTop.svelte';
 	import GydionBook from '$lib/hud2/GydionBook.svelte';
 	import SpellbookWindow from '$lib/hud2/SpellbookWindow.svelte';
+	import { outside } from '$lib/hud2/outside';
 	import SpellMark from '$lib/hud2/SpellMark.svelte';
 	import SpellPreview from '$lib/hud2/SpellPreview.svelte';
 	import { castsByTurn, gyOf, gyMode, castOptions, castNow, bookSpells, cardSpells, canWish, canStrike, canDrink, forceTargets, raiseSpots, spellNums, FORCE_SPELLS } from '$lib/gydion';
@@ -435,6 +436,8 @@
 	$: if (powerArm?.op === 'nkCrack' && nkKind !== 'crack') powerArm = null;
 	$: if (powerArm && powerArm.op === 'takaSwap' && !powerArm.target && !tkKind) powerArm = null;
 	$: if (powerArm && powerArm.op === 'mateSwap' && !mateOff) powerArm = null;
+	// his gold / Bushido is acting: the ring offers the swap first (× = keep this gold)
+	let tkOpen = false, tkNo = '';
 	// the gold panel hands over the gold to swap in (a stable function: the panel calls it reactively)
 	function tkPick(i: number | null) {
 		if (i == null) { if (powerArm?.op === 'takaSwap' && !powerArm.target) powerArm = null; return; }
@@ -1234,6 +1237,8 @@
 			// Time Capsule / Future Proof: take back this turn's discards? (× = no)
 			if (capAsk) { const n = capBack.length; return { label: 'Retrieve', sub: `${n} discarded card${n === 1 ? '' : 's'}`, kind: 'go', pulse: true, run: () => session.cardAction({ kind: 'power', pid: clientId, op: 'capsule' }), cancel: declineCap }; }
 			// your card names a lingering effect: on your turn the ring asks first (× = no effect), then End turn
+			// Takahide's gold / Bushido: Swap opens his gold cards (the pick loads Swap · <gold> above); × = not this time
+			if (actor === clientId && tkKind && tkNo !== fxKey) return { label: 'Swap', sub: tkKind === 'bushido' ? 'Bushido · gold card' : 'Gold card', subShort: 'Gold', kind: 'go', tint: true, pulse: true, run: () => (tkOpen = true), cancel: () => { tkNo = fxKey; tkOpen = false; } };
 			// Diabolical Laughter: the laugh comes first ('if you do' — the swaps wait for it); × = no laugh this card
 			if (actor === clientId && nkKind === 'laugh' && !nkLaughed && nkNoLaugh !== fxKey) return { label: 'Laugh', sub: nkTargets.length ? `${nkTargets.length} must discard` : 'Diabolically', kind: 'go', tint: true, pulse: true, run: () => session.cardAction({ kind: 'power', pid: clientId, op: 'nkLaugh' }), cancel: nkSkipLaugh };
 			// Razzle: her card's chances come first, each with its own × (not this time): spawn doubles · retrieve ·
@@ -1298,7 +1303,7 @@
 	{#if myPower === 'ignatia'}
 		<IgnatiaCoin {size} phone={mobile} face={$ms.tieBreaker} split={igSplit} ult={!!mine?.ultimate} ready={igReady} used={igUsed} flames={dashFx} art={(t) => icon(`tiebreaker_${t}`)} onPress={armIgnatiaFlip} />
 	{:else if myPower === 'takahide' && mine}
-		<TakaGold {size} cs={mine} kind={tkKind} {turnIdx} fx={dashFx} phone={mobile} onPick={tkPick} />
+		<TakaGold {size} cs={mine} kind={tkKind} bind:open={tkOpen} {turnIdx} fx={dashFx} phone={mobile} onPick={tkPick} />
 	{:else if myPower === 'emmitt'}
 		<EmmittClock {size} phone={mobile} mode={em2Wants || (mine?.pending2 != null && !revealed) ? 'green' : emMode} fx={dashFx} ready={em2Wants} onPress={em2Start} label={em2Wants ? 'Alternative Timelines: play a second card' : ''} />
 	{:else if myPower === 'nebkher'}
@@ -1936,11 +1941,11 @@
 
 	<!-- the level-up / ultimate choice (the desktop deck has its own; this one serves the phone deck and the dash's Unlock) -->
 	{#if gyMine && gyOpen}
-		<div class="gywrap" class:dk={!mobile} class:ph={mobile}><SpellbookWindow bind:open={gyOpen} phone={mobile} ult={!!mine?.ultimate} wishes={gySt.wish ?? 0} book={gyBookL} gone={gySt.gone ?? []} struck={gySt.struck ?? []}
+		<div class="gywrap" class:dk={!mobile} class:ph={mobile} use:outside={{ on: gyOpen, close: () => (gyOpen = false) }}><SpellbookWindow bind:open={gyOpen} phone={mobile} ult={!!mine?.ultimate} wishes={gySt.wish ?? 0} book={gyBookL} gone={gySt.gone ?? []} struck={gySt.struck ?? []}
 			prepared={!!gySt.prep} options={gyOpts} acting={gyActing} preparing={gyM === 'prepare'} picked={gyPick} nums={(id) => spellNums($ms, clientId, id)} follow={gyFollow} onPick={gyPickSpell} onStrike={gyStrikeGo} onForce={gyForceArm} onDrink={gyDrinkGo} /></div>
 	{/if}
 	{#if bookFor && bookOpen && cards[bookFor]}
-		<div class="gywrap host" class:dk={!mobile} class:ph={mobile}><SpellbookWindow bind:open={bookOpen} phone={mobile} host={pidName(bookFor)} ult={!!cards[bookFor].ultimate} wishes={bookSt.wish ?? 0}
+		<div class="gywrap host" class:dk={!mobile} class:ph={mobile} use:outside={{ on: bookOpen, close: () => (bookOpen = false) }}><SpellbookWindow bind:open={bookOpen} phone={mobile} host={pidName(bookFor)} ult={!!cards[bookFor].ultimate} wishes={bookSt.wish ?? 0}
 			book={bookSpells($ms, bookFor)} gone={bookSt.gone ?? []} struck={bookSt.struck ?? []} prepared={!!bookSt.prep} nums={(id) => spellNums($ms, bookFor ?? '', id)}
 			onFix={(spell, on) => gyFix({ spell, on })} onWish={(n) => gyFix({ wish: n })} /></div>
 	{/if}

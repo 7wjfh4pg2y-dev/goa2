@@ -329,6 +329,16 @@ describe('active turns (after the reveal the cards act one at a time)', () => {
 		expect(s.tieBreaker).toBe('orange') // one flip only (after D)
 		expect(order.length).toBe(4)
 	})
+	it('a tie claim after the reveal really hands the card over (keepActor does not pin it back)', () => {
+		let s = { ...play('blue'), revealAt: Date.now() - 5000 } as MatchState
+		while (actorOf(s) !== 'D') s = { ...s, ...applyCardReq(s, { kind: 'endAct', pid: actorOf(s)! }) } as MatchState
+		s = { ...s, ...applyCardReq(s, { kind: 'endAct', pid: 'D' }) } as MatchState
+		expect(actorOf(s)).toBe('A')
+		s = { ...s, ...applyCardReq(s, { kind: 'claim', pid: 'C' }) } as MatchState
+		expect(actorOf(s)).toBe('C')
+		s = { ...s, ...applyCardReq(s, { kind: 'endAct', pid: 'C' }) } as MatchState
+		expect(actorOf(s)).toBe('A')
+	})
 	it('after the last card ends its turn nobody acts and the turn waits for the host (Next turn / minion battle)', () => {
 		let s = play()
 		for (const p of turnOrder(play())) s = { ...s, ...applyCardReq(s, { kind: 'endAct', pid: p }) } as MatchState

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { outside } from './outside'
 	// Takahide's dash button: a fan of his three gold cards — the one he holds in the middle, lit; those in his deck
 	// either side, dark. While he may swap (a gold of his is the card acting, or Bushido is) a sun-rayed halo (kōhai:
 	// 48 rays, every third longer, a beaded ring, a gold disc) rises behind it, its rays turning and its glow breathing
@@ -30,7 +31,7 @@
 	$: golds = goldsOf(H);
 	$: held = heldGolds(cs);
 	$: canPick = modal || kind != null;
-	let open = modal;
+	export let open = modal;
 	let pick: number | null = null;
 	$: if (!canPick && pick != null) pick = null;
 	// the swap landed: the picked card is now one he holds
@@ -75,7 +76,7 @@
 </script>
 
 <svelte:window on:keydown={onKey} />
-<span class="tg" class:modal style="--z:{size}px">
+<span class="tg" class:modal use:outside={{ on: open, close: close }} style="--z:{size}px">
 	{#if !modal}
 		<button class="gb" class:ready={kind != null} class:ult={cs.ultimate} class:halo={kind != null} class:spin={kind != null && fx} class:open on:click={toggle} title={kind ? 'Swap your gold card' : 'Your gold cards'} aria-label="Gold cards">
 			<i class="glow"></i>
