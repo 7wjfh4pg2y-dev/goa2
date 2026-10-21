@@ -1721,6 +1721,7 @@ export function joinMatch(
 		if (req.kind === 'removeHero' && patch.defeated) note(req.pid, 'took their hero off the board — back with their next card')
 		if (req.kind === 'power' && req.op === 'rzSpawn' && patch.pieces) note(req.pid, 'spawns a double (Stunt Doubles)')
 		if (req.kind === 'power' && req.op === 'rzRemove' && patch.pieces) note(req.pid, 'takes one of her bodies off the board')
+		if (req.kind === 'power' && req.op === 'rzMain' && patch.pieces) note(req.pid, req.pid === local.host && local.pieces?.[req.id ?? '']?.owner !== req.pid ? 'swapped Razzle\'s main piece (host)' : 'makes another of her bodies her main piece')
 		if (req.kind === 'power' && req.op === 'rzClear' && patch.pieces) note(req.pid, 'calls every double back (Crowd Control)')
 		if (req.kind === 'power' && req.op === 'rzTwin' && patch.power) note(req.pid, 'strikes again with another one of her (Twin Strike)')
 		if (req.kind === 'power' && req.op === 'emKeep' && patch.cards) {

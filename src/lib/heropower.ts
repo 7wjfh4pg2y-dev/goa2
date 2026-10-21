@@ -71,7 +71,7 @@ export const NK_COLORS: NkColor[] = ['GOLD', 'SILVER', 'RED', 'BLUE', 'GREEN']
 export type NkEnemy = { pid: string; hero: string; name: string; player: string; dist: number | null; prev: number | null; prevHidden: boolean
 	/** every turn slot I–IV as it stands (this turn's = the card in play), and whether Laughter may swap it */
 	cards: { t: number; idx: number | null; hidden: boolean; ok: boolean; now: boolean }[] }
-export type PowerReq = { kind: 'power'; pid: string; op: 'ignatiaFlip' | 'snorriInscribe' | 'snorriSecond' | 'takaSwap' | 'mateSwap' | 'emReverse' | 'emWarp' | 'warpSwap' | 'capsule' | 'nkLaugh' | 'nkSwap' | 'nkName' | 'nkCrack' | 'nkGrip' | 'rzSpawn' | 'rzRemove' | 'rzClear' | 'rzRetrieve' | 'rzTwin' | 'emCommit2' | 'emUncommit2' | 'emKeep' | 'emOne' | 'gyPrepare' | 'gyWish' | 'gyCast' | 'gyStrike' | 'gyForce' | 'gyRaise' | 'gyDrink' | 'gyFix';
+export type PowerReq = { kind: 'power'; pid: string; op: 'ignatiaFlip' | 'snorriInscribe' | 'snorriSecond' | 'takaSwap' | 'mateSwap' | 'emReverse' | 'emWarp' | 'warpSwap' | 'capsule' | 'nkLaugh' | 'nkSwap' | 'nkName' | 'nkCrack' | 'nkGrip' | 'rzSpawn' | 'rzRemove' | 'rzMain' | 'rzClear' | 'rzRetrieve' | 'rzTwin' | 'emCommit2' | 'emUncommit2' | 'emKeep' | 'emOne' | 'gyPrepare' | 'gyWish' | 'gyCast' | 'gyStrike' | 'gyForce' | 'gyRaise' | 'gyDrink' | 'gyFix';
 	/** takaSwap: the gold card from his deck to take; mateSwap: the hand / discard card to swap in; warpSwap: the turn slot (0–3) */
 	idx?: number
 	/** mateSwap: where the swapped-in card comes from */
@@ -685,6 +685,21 @@ function applyRazzle(s: S, req: PowerReq, ctx: TurnCtx): Record<string, unknown>
 		const pieces = dropBodies(s.pieces!, [d.id], owner)
 		pieces[owner] = { ...pieces[owner], hex: d.hex, face: d.face ?? 0 }
 		return { pieces, ...took }
+	}
+	if (req.op === 'rzMain') {
+		// Make main (the player's ask, 2026-10-21): her own piece and a double trade places and faces, so her radius
+		// and everything else that reads her main piece measure from that body. Bookkeeping only: any time, not while
+		// an attack or forced discard on her is open (they name the body hit)
+		const id = req.id, d = id ? s.pieces?.[id] : undefined
+		const owner = d ? heroPidOf(d) : null
+		const main = owner ? s.pieces?.[owner] : undefined
+		if (!id || !d || !main || !owner || id === owner || !isDouble(d) || s.cards?.[owner]?.hero !== RZ || (req.pid !== owner && req.pid !== s.host)) return {}
+		if (s.attacks?.[owner] || s.forced?.[owner]) return {}
+		const pieces: NonNullable<S['pieces']> = {}
+		for (const k in s.pieces) { const p = s.pieces[k]; pieces[k] = p.attachedTo === owner ? { ...p, attachedTo: id } : p.attachedTo === id ? { ...p, attachedTo: owner } : p }
+		pieces[owner] = { ...pieces[owner], hex: d.hex, face: d.face ?? 0 }
+		pieces[id] = { ...pieces[id], hex: main.hex, face: main.face ?? 0 }
+		return { pieces }
 	}
 	if (req.op === 'rzClear') {
 		// Crowd Control as a skill: every other one of her leaves (her own piece stays)

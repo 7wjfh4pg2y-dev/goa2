@@ -255,6 +255,7 @@
 		canDefeatSel && selPiece.kind !== 'hero' && (!selImmune || iAmHost) ? { label: 'Defeat', fam: 'fight', kind: 'bad', coin: minionCoins(selPiece.role), run: defeatSel } : null,
 		selMovable ? { label: 'Move', fam: 'move', kind: 'move', run: moveSel, title: 'Pick it up — click a hex to put it down (or drag the piece)' } : null,
 		selSwappable ? { label: 'Swap', fam: 'move', kind: 'swap', run: startSwap, title: 'Swap places with another piece' } : null,
+		canMainSel ? { label: 'Make main', fam: 'move', kind: 'move', off: !!attacks[selHero ?? ''] || !!$ms.forced?.[selHero ?? ''], run: makeMain, title: 'Make this one your main piece — your radius and the rest measure from here' } : null,
 		// powers come from the card in play: Emmitt's Rewind / Warp, Min's mines, the attack card's Clear (tokens next to you)
 		canRewindSel ? { label: 'Rewind', fam: 'power', kind: 'time', run: rewindSel, title: 'Back to the Future: back to where they stood as the turn began' } : null,
 		canWarpSel ? { label: 'Warp', fam: 'power', kind: 'time', run: warpSel, title: 'Time Warp: they swap their card in play for one of their resolved cards' } : null,
@@ -951,6 +952,9 @@
 		if (useRing) { askRing(selPiece.id, 'Remove', 'Your hero', 'bad', () => session.cardAction({ kind: 'removeHero', pid: clientId })); return; }
 		actId = selPiece.id; confirmKind = 'selfremove'; board?.release();
 	}
+	// Razzle: make a double her main piece (they trade places and faces; her own call, or the host's)
+	$: canMainSel = !!selPiece && isDouble(selPiece) && (ownHeroSel || iAmHost);
+	function makeMain() { if (!selPiece) return; const id = selPiece.id; board?.release(); session.cardAction({ kind: 'power', pid: clientId, op: 'rzMain', id }); selPieceId = heroPidOf(selPiece); }
 	// Razzle: one body off the board (a double; her own piece hands its place to a double)
 	function bodyRemoveAsk() {
 		if (!selPiece) return;
@@ -1489,6 +1493,7 @@
 				<button class="piedel" on:click={selfDefeatAsk} title="You were defeated (not by an Attack): choose who gets the reward">☠ Defeat</button>
 			{/if}
 			{#if !ownHeroSel && iAmHost && isDouble(selPiece)}<button class="piedel" on:click={bodyRemoveAsk} title="Take this double off the board">Remove</button>{/if}
+			{#if canMainSel}<button class="pieflip" on:click={makeMain} disabled={!!attacks[selHero ?? ''] || !!$ms.forced?.[selHero ?? '']} title="Make this one your main piece">Make main</button>{/if}
 			{#if canBattleSel}<button class="piedefeat" on:click={battleTakeSel}>Remove for the battle</button>{/if}
 			{#if canRemoveSel && selPiece.kind !== 'hero' && (!selImmune || iAmHost)}<button class="piedel" on:click={openRemove}>Remove</button>{/if}
 			{/if}

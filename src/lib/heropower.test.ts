@@ -601,6 +601,19 @@ describe('Razzle: her doubles — spawn, faces, remove / promote, Crowd Control,
 		expect([0, 1, 2, 3]).toContain(back.pieces!.R.face ?? 0)
 		expect(Object.values(back.pieces!).filter((p) => p.kind === 'hero' && heroPidOf(p) === 'R').length).toBe(1)
 	})
+	it('Make main: her piece and a double trade places and faces (any time, not under attack; owner or host)', () => {
+		let x = afterAttack(actingAs(rg(gold), 'R'))
+		x = go(x, pw(x, 'R', 'rzSpawn', { hex: '3_3', face: 1 }))
+		const home = x.pieces.R.hex
+		x = { ...x, pieces: { ...x.pieces, bt: { id: 'bt', hex: '3_3', team: 'blue', kind: 'token', token: 'marker_bounty', owner: 'B', attachedTo: 'R~1' } } } as MatchState
+		expect(pw(x, 'B', 'rzMain', { id: 'R~1' })).toEqual({}) // not someone else's call
+		const m = go(x, pw(x, 'R', 'rzMain', { id: 'R~1' }))
+		expect(m.pieces.R.hex).toBe('3_3')
+		expect(m.pieces.R.face).toBe(1)
+		expect(m.pieces['R~1'].hex).toBe(home)
+		expect(m.pieces.bt.attachedTo).toBe('R') // the marker stays with the body it rode on
+		expect(pw({ ...x, attacks: { R: { by: 'B', defending: true, at: 1 } } } as MatchState, 'R', 'rzMain', { id: 'R~1' })).toEqual({})
+	})
 	it('Remove one body: a double just goes; her own piece hands its place to a double; never the last one; Remove (her hero) takes them all', () => {
 		let x = afterAttack(actingAs(rg(gold), 'R'))
 		x = go(x, pw(x, 'R', 'rzSpawn', { hex: '3_3', face: 1 }))
