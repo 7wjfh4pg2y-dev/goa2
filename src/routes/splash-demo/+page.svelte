@@ -38,7 +38,7 @@
 	import { BOOK } from '$lib/gydion';
 	import { schoolOf, SCHOOL_COLOR } from '$lib/cards/spells';
 	import { portraitCss, altFace } from '$lib/heroes';
-	import RevealLab, { REVEAL_LOOKS, type RevealLook, type RevealSeat } from '$lib/RevealLab.svelte';
+	import RevealCurtain, { type RevealEntry, type RevealFace } from '$lib/RevealCurtain.svelte';
 	import { heroCards } from '$lib/cards/deck';
 	import YourTurn, { TURN_CUE_LOOKS, TURN_CUE_DEFAULT, type TurnCueLook } from '$lib/YourTurn.svelte';
 	import type { BattleNews, DefeatNews, Team } from '$lib/match';
@@ -93,11 +93,12 @@
 	let turnSplash: TurnSplash;
 	// YOUR TURN: the three looks to choose from (the game uses TURN_CUE_DEFAULT)
 	let cueLook: TurnCueLook = TURN_CUE_DEFAULT;
-	// card reveal mock-ups (sample players: made-up names; one card pair always ties across the teams for C's coin)
-	let reveal: RevealLab, revealN = 3, revealTurn = 2, revealLook: RevealLook | null = null;
+	// the card reveal (the game's curtain; sample players: made-up names; one card pair always ties across the teams for the coin)
+	let revealN = 3, revealTurn = 2, revealFace: RevealFace = 'brass';
+	let revealShow: { entries: RevealEntry[]; order: string[]; flips: number[]; face: RevealFace } | null = null;
 	const R_SEATS: [string, string, 'orange' | 'blue', string][] = [['Zara', 'arien', 'orange', '#dc2626'], ['Mo', 'brogan', 'orange', '#eab308'], ['Avery', 'xargatha', 'orange', '#14b8a6'],
 		['Priya', 'wasp', 'blue', '#ec4899'], ['Sam', 'trinkets', 'blue', '#84cc16'], ['Quinn', 'tigerclaw', 'blue', '#a855f7']];
-	function revealSeats(n: number): RevealSeat[] {
+	function revealSeats(n: number): RevealEntry[] {
 		const pick = R_SEATS.filter((_, i) => i % 3 < n);
 		const hand = (h: string) => newPlayerCardState(h).hand.filter((i) => (heroCards(h)[i]?.initiative ?? 0) > 0);
 		const ini = (h: string, i: number) => heroCards(h)[i]?.initiative ?? 0;
@@ -105,9 +106,22 @@
 		// make the first Atlantean and the first Titan tie on initiative when their hands allow it
 		const a = pick.findIndex((r) => r[2] === 'orange'), b = pick.findIndex((r) => r[2] === 'blue');
 		outer: for (const i of hand(pick[a][1])) for (const j of hand(pick[b][1])) if (ini(pick[a][1], i) === ini(pick[b][1], j)) { cards[a] = i; cards[b] = j; break outer; }
-		return pick.map(([name, hero, team, color], k) => ({ pid: `r${k}`, name, hero, team, color, card: cards[k] }));
+		return pick.map(([name, hero, team, color], k) => ({ pid: `r${k}`, name, hero, team, color, card: cards[k], ini: ini(hero, cards[k]) }));
 	}
-	function playReveal(l: RevealLook) { revealLook = l; reveal.play(l, revealSeats(revealN), revealTurn, 'orange'); }
+	// acting order like match.ts turnPlan: initiative high → low; a cross-team tie goes to the coin's team (Atlanteans here), then flips
+	function playReveal(f: RevealFace) {
+		revealFace = f;
+		const entries = revealSeats(revealN), order: string[] = [], flips: number[] = [];
+		let coin: 'orange' | 'blue' = 'orange';
+		const left = [...entries].sort((a, b) => (b.ini ?? 0) - (a.ini ?? 0));
+		while (left.length) {
+			const tied = left.filter((e) => e.ini === left[0].ini), contested = new Set(tied.map((e) => e.team)).size > 1;
+			const pick = contested ? tied.find((e) => e.team === coin)! : tied[0];
+			if (contested) { flips.push(order.length); coin = coin === 'orange' ? 'blue' : 'orange'; }
+			order.push(pick.pid); left.splice(left.indexOf(pick), 1);
+		}
+		revealShow = { entries, order, flips, face: f };
+	}
 	let cue: YourTurn;
 	const CUE_HEROES = [{ hero: 'tigerclaw', heroName: 'Tigerclaw', card: 'Hit and Run', color: '#e11d48', team: 'orange' as const }, { hero: 'xargatha', heroName: 'Xargatha', card: 'Stone Gaze', color: '#14b8a6', team: 'blue' as const }];
 	function playCue(l: TurnCueLook) { cueLook = l; setTimeout(() => cue?.play(CUE_HEROES[me === 'blue' ? 1 : 0]), 0); }
@@ -235,15 +249,16 @@
 		</div>
 	</section>
 	<section>
-		<h2>Card reveal <small>(mock-ups — pick a look)</small></h2>
+		<h2>Card reveal <small>(the game's curtain — Order of Play)</small></h2>
 		<div class="row">
-			{#each REVEAL_LOOKS as l (l.id)}<button class:off={revealLook !== l.id} title={l.blurb} on:click={() => playReveal(l.id)}>{l.label}</button>{/each}
+			<button class:off={revealFace !== 'brass'} on:click={() => playReveal('brass')}>Brass face (in the game now)</button>
+			<button class:off={revealFace !== 'player'} on:click={() => playReveal('player')}>Player-colour face</button>
 		</div>
 		<div class="row sm">
 			<button class:off={revealN !== 2} on:click={() => (revealN = 2)}>2 v 2</button>
 			<button class:off={revealN !== 3} on:click={() => (revealN = 3)}>3 v 3</button>
 		</div>
-		{#if revealLook}<p class="blurb">{REVEAL_LOOKS.find((l) => l.id === revealLook)?.blurb}</p>{/if}
+		<p class="blurb">The initiative hex keeps the team-colour rim; its face is brass, or the player's own colour</p>
 	</section>
 	<section>
 		<h2>Minion battle</h2>
@@ -470,7 +485,7 @@
 <DefeatSplash news={kill} {cards} names={(i) => names[i] ?? i} {lifeArt} {mobile} myTeam={side} />
 <TurnSplash bind:this={turnSplash} {mobile} />
 <YourTurn bind:this={cue} look={cueLook} {mobile} />
-<RevealLab bind:this={reveal} {mobile} myTeam={me} />
+{#if revealShow}{#key revealShow}<RevealCurtain {...revealShow} turn={revealTurn} {mobile} myTeam={me ?? 'blue'} onClose={() => (revealShow = null)} />{/key}{/if}
 <LevelSplash bind:this={levelSplash} {mobile} />
 <NebkherSplash bind:this={nkSplash} phone={mobile} />
 <EssenceWisps bind:this={ess} />

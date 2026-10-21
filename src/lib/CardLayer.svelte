@@ -43,6 +43,7 @@
 	import { PASS, isHidden, statDeltas, levelOf, levelCost, ultimateIndex, mustLevel, canPick, canAfford, swapSource, twinOf, allowedMoves, type PlayerCardState, type StatKey, type CardZone } from '$lib/cards/cardstate';
 	import LevelConfirm from '$lib/LevelConfirm.svelte';
 	import TurnSplash from '$lib/TurnSplash.svelte';
+	import RevealCurtain, { type RevealEntry } from '$lib/RevealCurtain.svelte';
 	import DockHand from '$lib/DockHand.svelte';
 	import LevelSplash from '$lib/LevelSplash.svelte';
 	import HudBoard from '$lib/hud2/HudBoard.svelte';
@@ -166,32 +167,10 @@
 	const forceAnswer = (target: string, result: 'defeated' | 'none' | 'cancel') => session.cardAction({ kind: 'forceResolve', pid: clientId, target, result });
 	const answerAttack = (result: 'defended' | 'defeated') => session.cardAction({ kind: 'attackResolve', pid: clientId, target: clientId, result });
 	$: seatedWithCards = seated.filter((p) => cards[p.id]);
-	// reveal layout: 1–2 players share one row; more split by team — your team on
-	// top (orange when spectating), the other team underneath
-	$: curtainRows = revealRows(seatedWithCards, pTeam, (mySeat >= 0 && teamForSeat(mySeat, $ms.seats)) || 'orange');
-	// each team's row may wrap (e.g. 3 + 2 on a portrait phone): pick the column
-	// count that gives the biggest cards for this screen
 	// the game area (GameView's .gamewrap: the window minus a sideways iPhone's notch insets); the window until measured
 	export let areaW = 0, areaH = 0;
 	let winW = 1440, winH = 800;
 	$: vhPx = areaH || winH;
-	// a player with two cards up (Emmitt's ultimate) takes two places in the row
-	$: curtainFit = fitReveal(curtainRows.map((r) => r.reduce((n, p) => n + (viewCards[p.id]?.pending2 != null ? 2 : 1), 0)), vw, vhPx);
-	$: curtainCols = curtainFit.cols;
-	function fitReveal(counts: number[], w: number, h: number) {
-		const most = Math.max(1, ...counts), gap = Math.min(26, Math.max(16, w * 0.024));
-		let best = { cols: most, rows: counts.length, cw: 0 };
-		for (let c = 1; c <= most; c++) {
-			const rows = counts.reduce((n, k) => n + Math.ceil(k / c), 0);
-			const cw = Math.min(320, (w - 32 - (c - 1) * gap) / c, ((h - 120) / rows - 44) * 1192 / 1664);
-			if (cw > best.cw + 0.5) best = { cols: c, rows, cw };
-		}
-		return best;
-	}
-	function revealRows(ps: Player[], teamOf: (p: Player) => string, first: string): Player[][] {
-		const a = ps.filter((p) => teamOf(p) === first), b = ps.filter((p) => teamOf(p) !== first);
-		return ps.length <= 2 ? [[...a, ...b]] : [a, b].filter((r) => r.length);
-	}
 	// DERIVED reveal: everyone ready ⇒ all cards face-up (same for every client).
 	// A player is ready when they've committed, or when they simply have no cards
 	// left to play (there is no "pass" in GoA2 — you play a card unless you can't).
@@ -920,26 +899,26 @@
 
 	// ── dramatic reveal curtain: when everyone's ready, all cards flip up at once ──
 	import { onDestroy } from 'svelte';
-	let curtain = false; // overlay visible
-	let curtainFlip = false; // cards flipped face-up
+	let curtain = false; // overlay visible (stays until a click / Esc — the user's call)
 	let wasRevealed = false;
-	let curtainTimers: ReturnType<typeof setTimeout>[] = [];
+	let curtainSnap: { entries: RevealEntry[]; order: string[]; flips: number[]; turn: number; myTeam: 'orange' | 'blue' } | null = null;
 	$: syncCurtain(revealed);
 	function syncCurtain(r: boolean) {
 		if (r && !wasRevealed) { wasRevealed = true; showCurtain(); }
-		else if (!r) { wasRevealed = false; }
+		else if (!r) { wasRevealed = false; curtain = false; }
 	}
+	// a snapshot as it opens: a later claim / Emmitt's pick doesn't re-deal it
 	function showCurtain() {
-		curtainTimers.forEach(clearTimeout);
+		const p = turnPlan($ms);
+		const entries = seatedWithCards.map((pl): RevealEntry => {
+			const cs = viewCards[pl.id], i = cs?.pending, play = i != null && i >= 0;
+			return { pid: pl.id, name: pl.name, hero: cs.hero, team: pTeam(pl), color: colorHex(pl.color), card: play ? i : null, card2: play ? (cs.pending2 ?? null) : null, ini: play ? cardInitiative($ms, pl.id) : null };
+		});
+		curtainSnap = { entries, order: p.order, flips: p.flips, turn: $ms.turn, myTeam: viewTeam };
 		curtain = true;
-		curtainFlip = false;
-		curtainTimers = [
-			setTimeout(() => (curtainFlip = true), 650), // flip all at once
-			setTimeout(() => (curtain = false), 6600) // hold ~6s (big cards to read) then return
-		];
 	}
-	function skipCurtain() { curtainTimers.forEach(clearTimeout); curtain = false; }
-	onDestroy(() => { curtainTimers.forEach(clearTimeout); if (countTick) clearInterval(countTick); if (lowerTimer) clearTimeout(lowerTimer); if (discTimer) clearTimeout(discTimer); });
+	function skipCurtain() { curtain = false; }
+	onDestroy(() => { if (countTick) clearInterval(countTick); if (lowerTimer) clearTimeout(lowerTimer); if (discTimer) clearTimeout(discTimer); });
 
 	// ── token / marker shelf: each hero's own kit (see tokens.ts) ──────────────
 	// Pick one → it rides under the cursor → tap a hex to place it (GameView).
@@ -2305,38 +2284,8 @@
 	{#if nudgeNote}
 		{#key nudgeNote.id}<div class="nudge" class:ph={mobile} style="--nc:{nudgeNote.color}" role="status"><span class="ng">⏳</span><span><b>{nudgeNote.name}</b> is waiting on you</span></div>{/key}
 	{/if}
-	{#if curtain}
-		<div class="curtain" on:click={skipCurtain} on:keydown={(e) => e.key === 'Escape' && skipCurtain()} role="presentation">
-			<div class="curtain-inner">
-				<div class="curtain-title">Reveal — Turn {$ms.turn}</div>
-				<div class="curtain-cards" style="--cols:{curtainCols}; --rows:{curtainFit.rows}">
-					{#each curtainRows as row, ri (ri)}
-					<div class="cc-row">
-					{#each row as p (p.id)}
-						{@const cs = viewCards[p.id]}
-						{@const idx = cs.pending}
-						<div class="cc" class:dbl={cs.pending2 != null} style="--tint:{teamTint(p)}">
-							{#if idx != null && idx !== PASS}
-								<div class="ccpair">
-									{#each cs.pending2 != null ? [idx, cs.pending2] : [idx] as ci, k (k)}
-										<div class="cc-flip" class:up={curtainFlip}>
-											<div class="cc-face cc-back"><CardBack hero={cs.hero} /></div>
-											<div class="cc-face cc-front"><Card heroId={cs.hero} card={heroCards(cs.hero)[ci]} /></div>
-										</div>
-									{/each}
-								</div>
-							{:else}
-								<div class="cc-flip skip">—</div>
-							{/if}
-							<div class="cc-name"><PlayerIcon hero={cs.hero} team={pTeam(p)} color={colorHex(p.color)} size="1.6em" ring={2} /><span>{p.name}</span></div>
-						</div>
-					{/each}
-					</div>
-					{/each}
-				</div>
-				<div class="curtain-hint">Resuming…</div>
-			</div>
-		</div>
+	{#if curtain && curtainSnap}
+		<RevealCurtain {...curtainSnap} {mobile} onClose={skipCurtain} />
 	{/if}
 {/if}
 
@@ -2682,18 +2631,6 @@
 	/* dramatic reveal curtain */
 	/* round-start banner */
 
-	.curtain { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; cursor: pointer;
-		background: radial-gradient(120% 90% at 50% 40%, rgba(20,14,6,.86), rgba(3,5,10,.96)); animation: curtainIn .35s ease; }
-	@keyframes curtainIn { from { opacity: 0; } to { opacity: 1; } }
-	.curtain-inner { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 18px 16px; max-width: 100vw; }
-	/* one line at any width */
-	.curtain-title { font-family: 'Modesto Poster', serif; font-size: clamp(1.1rem, 5.2vw, 2.4rem); white-space: nowrap; letter-spacing: .06em; color: #f6ead2; text-shadow: 0 2px 12px rgba(0,0,0,.7), 0 0 22px rgba(199,154,78,.4); }
-	/* cards as large as both the width (widest row) and the height (all rows) allow */
-	.curtain-cards { --gap: clamp(16px, 2.4vw, 26px); display: flex; flex-direction: column; align-items: center; gap: calc(var(--gap) * 1.2);
-		--cw: min(320px, calc((100vw - 32px - (var(--cols) - 1) * var(--gap)) / var(--cols)), calc(((100vh - 120px) / var(--rows) - 52px) * 1192 / 1664 * 0.97)); }
-	.cc-row { display: flex; flex-wrap: wrap; justify-content: center; gap: calc(var(--gap) * 1.2) var(--gap); max-width: calc(var(--cols) * var(--cw) + (var(--cols) - 1) * var(--gap) + 1px); }
-	/* the face-up card grows 4% (the flip's scale), i.e. 2% of its height past its foot: the gap leaves room for that */
-	.cc { display: flex; flex-direction: column; align-items: center; gap: calc(8px + var(--cw) * 0.03); perspective: 1300px; width: var(--cw); }
 	/* Alternative Timelines: the two cards side by side over the board (the dash and its ring stay free below) */
 	.tlpick { position: fixed; left: 50%; top: 45%; transform: translate(-50%, -50%); z-index: 45; pointer-events: auto; display: flex; flex-direction: column; align-items: center; gap: 12px;
 		padding: 16px 18px 14px; border-radius: 16px; background: rgba(6, 21, 38, 0.97); border: 1px solid rgba(65, 174, 89, 0.6); box-shadow: 0 18px 44px rgba(0, 0, 0, 0.6); color: #e8eef5; }
@@ -2712,21 +2649,6 @@
 	.tlc.ret .tlt { color: #ffc9c2; border: 1px solid #e5484d; } .tlc.keep .tlt { color: #bff5cc; border: 1px solid #41ae59; }
 	.tlpick.ph { top: 42%; width: calc(100vw - 16px); padding: 12px 10px; }
 	.tlpick.ph .tlc { width: min(42vw, 30vh); }
-	.cc.dbl { width: calc(var(--cw) * 2 + var(--gap)); }
-	.ccpair { display: flex; gap: var(--gap); }
-	.cc-flip { width: var(--cw); aspect-ratio: 1192 / 1664; position: relative; transform-style: preserve-3d; transition: transform .7s cubic-bezier(.34,.08,.2,1); }
-	.cc-face { box-shadow: 0 12px 30px rgba(0,0,0,.6); }
-	.cc-flip.up { transform: rotateY(180deg) scale(1.04); }
-	.cc-flip.skip { display: grid; place-items: center; border: 1.5px dashed rgba(255,255,255,.2); border-radius: 5%; color: #6b7a8d; font-size: 2rem; }
-	.cc-face { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; border-radius: 5%; overflow: hidden; }
-	.cc-face.cc-front { transform: rotateY(180deg); box-shadow: 0 0 0 2px var(--tint); }
-	.cc-face.cc-front :global(.cardface) { display: block; width: 100%; border-radius: 5%; }
-	.cc-back { box-shadow: 0 0 0 2px var(--tint); } /* the drawing is CardBack */
-	.cc-name { display: flex; align-items: center; justify-content: center; gap: .4em; max-width: 100%; font-family: 'Modesto Poster', serif; font-size: clamp(.62rem, calc(var(--cw) / 14), 1.15rem); color: #eef2f8; }
-	.cc-name span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-	.cc-name img { width: 1.9rem; height: 1.9rem; border-radius: 50%; object-fit: cover; border: 2px solid var(--tint); }
-	.curtain-hint { font-size: .7rem; letter-spacing: .18em; text-transform: uppercase; color: #8b7a52; }
-
 	/* examine */
 	.scrim2 { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; background: rgba(2,4,9,.8); }
 	.bigcard { width: min(400px, 62vw); filter: drop-shadow(0 20px 50px rgba(0,0,0,.7)); }
