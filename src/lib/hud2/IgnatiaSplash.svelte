@@ -3,11 +3,11 @@
 	// Snorri frame — 'Controlled Chaos · Ignatia has achieved Equilibrium' (the title in a fire → water gradient, 'Equilibrium' magenta) — with her Equilibrium painting in the slanted
 	// window, BROUGHT TO LIFE: her hair burns (copies of the hair cut out of the painting sway gently from its roots under a
 	// flickering heat glow, embers rising off it), both orbs swirl with energy, then she draws them together — the two lights pull to
-	// the middle, an arc crackles between them and they fuse in a white-violet flash. ~2.5 s; transform / opacity only.
+	// the middle, an arc crackles between them and they fuse in a white-violet flash. ~3.5 s (the user: a second longer, 2026-10-21); transform / opacity only.
 	// Everything over the painting is placed in the painting's own pixels (775 × 1071) inside one scaled box.
 	import art from '$lib/cards/images/cards/ignatia/Silver.webp'
 	export let phone = false
-	const DUR = 2500
+	const DUR = 3500
 	let on = false, run = 0, timer: ReturnType<typeof setTimeout> | null = null
 	export function play() {
 		on = false; run++
@@ -69,16 +69,16 @@
 {/if}
 
 <style>
-	.igs { position: fixed; left: 50%; top: calc(86px * var(--uis, 1)); z-index: 62; pointer-events: none; transform: translateX(-50%); animation: igin 2.5s cubic-bezier(0.2, 1.2, 0.4, 1) both;
+	.igs { position: fixed; left: 50%; top: calc(86px * var(--uis, 1)); z-index: 62; pointer-events: none; transform: translateX(-50%); animation: igin 3.5s cubic-bezier(0.2, 1.2, 0.4, 1) both;
 		--w: 172px; --h: 130px; --k: 0.34; --cx: 398px; --cy: 432px; }
-	@keyframes igin { 0% { opacity: 0; transform: translate(-50%, -20px) scale(0.94); } 9% { opacity: 1; transform: translate(-50%, 0) scale(1); } 88% { opacity: 1; transform: translate(-50%, 0); } 100% { opacity: 0; transform: translate(-50%, -12px); } }
+	@keyframes igin { 0% { opacity: 0; transform: translate(-50%, -20px) scale(0.94); } 6.4% { opacity: 1; transform: translate(-50%, 0) scale(1); } 91.4% { opacity: 1; transform: translate(-50%, 0); } 100% { opacity: 0; transform: translate(-50%, -12px); } }
 	.band { position: relative; width: min(500px, 94vw); height: var(--h); display: grid; grid-template-columns: var(--w) 1fr; align-items: center; overflow: hidden; border-radius: 12px; border: 1px solid transparent;
 		background: radial-gradient(90% 140% at 0% 50%, rgba(140, 40, 20, 0.45), transparent 60%) padding-box, radial-gradient(90% 140% at 100% 50%, rgba(20, 110, 130, 0.35), transparent 60%) padding-box,
 			linear-gradient(90deg, rgba(28, 10, 8, 0.97), rgba(6, 18, 26, 0.97)) padding-box, linear-gradient(90deg, #ef7d22, #c58cff 50%, #2fd0e6) border-box;
 		box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5), 0 12px 30px rgba(0, 0, 0, 0.55), -8px 0 24px rgba(239, 125, 34, 0.18), 8px 0 24px rgba(47, 208, 230, 0.18); }
 	.artbox { position: relative; height: 100%; overflow: hidden; clip-path: polygon(0 0, 100% 0, 84% 100%, 0 100%); background: #050308; }
 	/* a slow push in towards the orbs */
-	.zoom { position: absolute; inset: 0; transform-origin: 56% 82%; animation: igzoom 2.5s ease-out both; }
+	.zoom { position: absolute; inset: 0; transform-origin: 56% 82%; animation: igzoom 3.5s ease-out both; }
 	@keyframes igzoom { from { transform: scale(1.1); } to { transform: scale(1); } }
 	.pic { position: absolute; left: 0; top: 0; width: 775px; height: 1071px; transform-origin: 0 0; transform: translate(calc(var(--w) / 2 - var(--cx) * var(--k)), calc(var(--h) / 2 - var(--cy) * var(--k))) scale(var(--k)); }
 	.pic > span, .pic > svg { position: absolute; }

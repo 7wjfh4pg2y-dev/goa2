@@ -464,7 +464,8 @@
 	$: actAt = actingIdx($ms);
 	$: actor = revealed ? actorOf($ms) : null;
 	$: actorName = actor ? heroName(cards[actor]?.hero ?? '') : '';
-	$: covered = deckOpen || !!lvConfirm || !!deckFor;
+	// the board rests (still sea, still rims) under anything that covers it: the deck, the level-up choice, the reveal
+	$: covered = deckOpen || !!lvConfirm || !!deckFor || curtain;
 	// the strip's level ring (8 arcs round the portrait, the 8th purple) — like the desktop boards
 	const lvArc = (i: number, r = 22) => {
 		const a0 = ((i * 45 + 5) * Math.PI) / 180, a1 = ((i * 45 + 40) * Math.PI) / 180;
@@ -2285,7 +2286,7 @@
 		{#key nudgeNote.id}<div class="nudge" class:ph={mobile} style="--nc:{nudgeNote.color}" role="status"><span class="ng">⏳</span><span><b>{nudgeNote.name}</b> is waiting on you</span></div>{/key}
 	{/if}
 	{#if curtain && curtainSnap}
-		<RevealCurtain {...curtainSnap} {mobile} onClose={skipCurtain} />
+		<RevealCurtain {...curtainSnap} {mobile} me={clientId} face="player" onClose={skipCurtain} />
 	{/if}
 {/if}
 

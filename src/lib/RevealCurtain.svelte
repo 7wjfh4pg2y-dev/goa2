@@ -8,8 +8,8 @@
 	// The reveal curtain — 'Order of Play' (the user's pick, 2026-10-21): the cards are dealt face down in seat order
 	// (the enemy first), turned highest initiative first, each initiative slammed in as a medallion (team-colour hex rim,
 	// brass — or the player's colour — face, the number rolling up odometer-style, sparks + a ring), then slid into acting
-	// order (rows when they don't fit one): brass arrows light in turn, a glow runs each row's track, the first to act
-	// stands in the light. A coin sits where the tie-breaker settled a tie across the teams. Stays until a click / Esc.
+	// order (rows when they don't fit one): brass arrows light in turn, a glow runs each row's track, and YOUR card
+	// stands in the light (so every player sees their own place in the line-up; watchers see no spotlight). A coin sits where the tie-breaker settled a tie across the teams. Stays until a click / Esc.
 	// The data is a SNAPSHOT taken as it opens (a later claim / Emmitt's pick doesn't re-deal it). Only transform /
 	// opacity animate; one animation per element (pos = arrive · mv = sort · faces = flip · each medal layer its own).
 	import { onMount } from 'svelte';
@@ -24,6 +24,8 @@
 	export let flips: number[] = [];
 	export let turn = 1;
 	export let myTeam: 'orange' | 'blue' = 'blue';
+	/** the viewer's player id: their card gets the spotlight */
+	export let me: string | null = null;
 	export let mobile = false;
 	export let face: RevealFace = 'brass';
 	export let onClose: () => void = () => {};
@@ -101,10 +103,18 @@
 			const a = at(r * cols), b = at(Math.min(m, (r + 1) * cols) - 1);
 			tracks.push({ y: a.y + (w * AR) / 2 + 6 + name + 10, x0: a.x - w / 2, x1: b.x + w / 2 });
 		}
-		spot = m ? items[0] : null;
+		spot = items.find((it) => it.pid === me && it.play) ?? null;
 		doneT = sortT + 1.2;
 	}
 	const close = () => onClose();
+	// The curtain is opaque, so while it is up the game under it is not drawn at all: the curtain lives on <body> and
+	// html.revealing hides the HUD layers of .gamewrap with content-visibility (measured 2026-10-21: the dash's 4★ buttons were being
+	// re-layered on every step of the reveal — Emmitt's phone 320 → under 100 ms/s).
+	function onTop(node: HTMLElement) {
+		document.body.appendChild(node);
+		document.documentElement.classList.add('revealing');
+		return { destroy() { document.documentElement.classList.remove('revealing'); node.remove(); requestAnimationFrame(() => window.dispatchEvent(new Event('goa2-revealed'))); } };
+	}
 </script>
 
 <svelte:window bind:innerWidth={vw} bind:innerHeight={vh} on:keydown={(e) => e.key === 'Escape' && close()} />
@@ -113,7 +123,7 @@
 	{@const ink = inkOf(it.color)}
 	<span class="med" class:pf={face === 'player'} style="--md:{it.fd + 0.28}s; --v:{it.ini ?? 0}; --tint:{TINT[it.team]}; --pc:{it.color}; --ink:{face === 'player' ? ink.ink : '#1a1206'}; --ish:{face === 'player' ? ink.sh : 'rgba(255,255,255,.45)'}">
 		<span class="mring"></span>
-		{#each SPARKS as a (a)}<i class="sp" style="--a:{a}deg"></i>{/each}
+		<span class="sps">{#each SPARKS as a (a)}<i class="sp" style="--a:{a}deg"></i>{/each}</span>
 		<span class="mbody">
 			<span class="hx"></span><span class="hx2"></span>
 			<span class="roll"><span class="strip">{#each Array.from({ length: Math.max(0, it.ini ?? 0) + 1 }, (_, k) => k) as k (k)}<b>{k}</b>{/each}</span></span>
@@ -127,7 +137,7 @@
 {/snippet}
 
 {#if ready}
-	<div class="rv" class:ph={mobile} style="--cw:{w}px; --ms:{ms}px" role="presentation" on:click={close}>
+	<div class="rv" use:onTop class:ph={mobile} style="--cw:{w}px; --ms:{ms}px" role="presentation" on:click={close}>
 		<div class="scrim"></div>
 		<div class="title" style="top:{title}px">Turn {ROMAN[turn - 1] ?? turn} <span>· order of play</span></div>
 		{#if spot}<div class="spot" style="left:{spot.x}px; top:{spot.y}px; --sd:{sortT + 0.7}s"></div>{/if}
@@ -142,9 +152,8 @@
 						<div class="card">
 							{#if it.card2 != null}<div class="alt">{@render faces(it.hero, it.card2, it.fd)}</div>{/if}
 							{@render faces(it.hero, it.card, it.fd)}
-							<i class="flash" style="--fd:{it.fd}s"></i>
 						</div>
-						{#if it.rank === 0}<i class="lit" style="--ld:{sortT + 0.7}s"></i>{/if}
+						{#if spot && it.pid === spot.pid}<i class="lit" style="--ld:{sortT + 0.7}s"></i>{/if}
 					{:else}
 						<div class="card none">—</div>
 					{/if}
@@ -159,6 +168,8 @@
 {/if}
 
 <style>
+	/* the HUD under the curtain is not drawn (the board stays painted — it rests, and redrawing it on close was a 200 ms hitch) */
+	:global(html.revealing .gamewrap > :not(.ocean, .boardarea)) { content-visibility: hidden; }
 	.rv { position: fixed; inset: 0; z-index: 60; cursor: pointer; overflow: hidden; font-family: 'Modesto Poster', serif; color: #f6ead2; }
 	.scrim { position: absolute; inset: 0; background: radial-gradient(120% 90% at 50% 45%, #08182c, #02060c); animation: fade 0.35s ease both; }
 	@keyframes fade { from { opacity: 0; } }
@@ -183,17 +194,17 @@
 	.face.front { animation: open 0.2s ease-out calc(var(--fd) + 0.17s) both; }
 	@keyframes shut { to { transform: scaleX(0); } }
 	@keyframes open { from { transform: scaleX(0); } to { transform: scaleX(1); } }
-	.flash { position: absolute; inset: -8%; z-index: 2; border-radius: 10%; pointer-events: none; opacity: 0; background: radial-gradient(closest-side, rgba(255, 244, 214, 0.7), transparent); animation: fl 0.55s ease-out calc(var(--fd) + 0.17s) both; }
-	@keyframes fl { 25% { opacity: 1; } to { opacity: 0; } }
 	.nm { display: flex; align-items: center; gap: 0.4em; max-width: 100%; font-size: clamp(0.62rem, calc(var(--cw) / 14), 1.25rem); animation: fade 0.4s ease var(--nd) both; }
 	.nm.dim { color: #8d99a8; }
 	.nm span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 	/* the initiative medallion: hex rim in the team colour, a brass (or player-colour) face, the number rolling up, then a slam + sparks */
-	.med { position: absolute; z-index: 3; left: 50%; top: calc(var(--ms) * -0.62); width: var(--ms); height: var(--ms); margin: calc(var(--ms) / -2) 0 0 calc(var(--ms) / -2); animation: medIn 0.25s ease-out var(--md) both; }
-	@keyframes medIn { from { opacity: 0; transform: scale(0.4); } }
-	.mbody { position: absolute; inset: 0; display: grid; place-items: center; animation: slam 0.42s cubic-bezier(0.3, 1.8, 0.5, 1) calc(var(--md) + 0.5s) both; }
-	@keyframes slam { 0% { transform: scale(1); } 35% { transform: scale(1.32); } to { transform: scale(1); } }
+	.med { position: absolute; z-index: 3; left: 50%; top: calc(var(--ms) * -0.62); width: var(--ms); height: var(--ms); margin: calc(var(--ms) / -2) 0 0 calc(var(--ms) / -2); }
+	/* ONE animation for the medallion's body: it pops in (0.25 s), holds while the number rolls, then slams (0.42 s) —
+	   few, cheap animations: every start / end of one costs the page a style pass (measured 2026-10-21) */
+	.mbody { position: absolute; inset: 0; display: grid; place-items: center; animation: medpop 1.17s linear var(--md) both; }
+	@keyframes medpop { 0% { opacity: 0; transform: scale(0.4); animation-timing-function: ease-out; } 21% { opacity: 1; transform: scale(1); } 43% { transform: scale(1); animation-timing-function: ease-out; }
+		55% { transform: scale(1.32); animation-timing-function: ease-in-out; } to { transform: scale(1); } }
 	.hx, .hx2 { position: absolute; clip-path: polygon(25% 3%, 75% 3%, 100% 50%, 75% 97%, 25% 97%, 0 50%); }
 	.hx { inset: 0; background: linear-gradient(160deg, color-mix(in srgb, var(--tint) 55%, white), var(--tint) 45%, color-mix(in srgb, var(--tint) 60%, black)); }
 	.hx2 { inset: 11%; background: radial-gradient(circle at 38% 30%, #fff3c4, #e2b65a 45%, #8a5b1c); }
@@ -205,8 +216,10 @@
 	@keyframes roll { from { transform: translateY(0); } }
 	.mring { position: absolute; inset: -40%; border-radius: 50%; background: radial-gradient(closest-side, transparent 58%, color-mix(in srgb, var(--tint) 70%, white) 66%, transparent 74%); opacity: 0; animation: ring 0.6s ease-out calc(var(--md) + 0.5s) both; }
 	@keyframes ring { 0% { opacity: 1; transform: scale(0.5); } to { opacity: 0; transform: scale(1.35); } }
-	.sp { position: absolute; left: 50%; top: 50%; width: calc(var(--ms) * 0.22); height: 3px; margin: -1.5px 0 0 0; border-radius: 2px; background: linear-gradient(90deg, #fff6d0, var(--tint)); transform-origin: 0 50%; opacity: 0; animation: spark 0.55s ease-out calc(var(--md) + 0.5s) both; }
-	@keyframes spark { 0% { opacity: 1; transform: rotate(var(--a)) translateX(calc(var(--ms) * 0.35)) scaleX(0.4); } to { opacity: 0; transform: rotate(var(--a)) translateX(calc(var(--ms) * 1)) scaleX(1); } }
+	/* the ten sparks are still; their holder bursts outwards and fades (one animation, not ten) */
+	.sps { position: absolute; inset: 0; opacity: 0; animation: burst 0.55s ease-out calc(var(--md) + 0.5s) both; }
+	.sp { position: absolute; left: 50%; top: 50%; width: calc(var(--ms) * 0.24); height: 3px; margin: -1.5px 0 0 0; border-radius: 2px; background: linear-gradient(90deg, #fff6d0, var(--tint)); transform-origin: 0 50%; transform: rotate(var(--a)) translateX(calc(var(--ms) * 0.55)); }
+	@keyframes burst { 0% { opacity: 1; transform: scale(0.6); } to { opacity: 0; transform: scale(1.7); } }
 
 	/* arrows light in sequence, a glow runs the track, the first to act stands in the light */
 	.spot { position: absolute; width: calc(var(--cw) * 2.2); height: calc(var(--cw) * 3); margin: calc(var(--cw) * -1.5) 0 0 calc(var(--cw) * -1.1); background: radial-gradient(closest-side, rgba(243, 212, 138, 0.28), transparent 70%); opacity: 0; animation: spotIn 0.8s ease var(--sd) both; z-index: 1; }

@@ -152,7 +152,9 @@
 		};
 		run();
 		document.fonts?.ready.then(run).catch(() => {});
-		return { update: () => run() };
+		// the reveal curtain hides the HUD (content-visibility) — a label set meanwhile measured nothing, so fit again after
+		window.addEventListener('goa2-revealed', run);
+		return { update: () => run(), destroy: () => window.removeEventListener('goa2-revealed', run) };
 	}
 	$: labelFs = packed.fs;
 	// the kept-up banner row: as many a line as fit at a readable width (220+), centred, wrapping upward

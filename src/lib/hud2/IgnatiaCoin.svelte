@@ -22,6 +22,8 @@
 	export let phone = false;
 	export let art: (t: Team) => string;
 	export let onPress: () => void = () => {};
+	/** Equilibrium's motion: 'pulse' (the game) or 'blur' (a /splash-demo try: the ring spins so fast it smears into orange and blue) */
+	export let eqLook: 'pulse' | 'blur' = 'pulse';
 
 	// the coin under the split keeps the face it had; it only turns to the real face once the split has gone
 	let base: Team = face;
@@ -53,7 +55,7 @@
 		: `Tie-breaker: the ${NAME[face]} — your ${face} text applies${ult ? (ready ? ' · tap to flip it (Chaos Incarnate)' : used ? ' · flipped this turn' : ' · flip it on your turn, after an action') : ''}`;
 </script>
 
-<button class="icoin" class:split class:ult class:ready class:used class:fx={moving} class:ph={phone} style="--s:{cs}px" on:click={() => ready && onPress()} title={tip} aria-label={tip}>
+<button class="icoin" class:split class:ult class:ready class:used class:fx={moving} class:ph={phone} class:blur={eqLook === 'blur' && split && flames} style="--s:{cs}px" on:click={() => ready && onPress()} title={tip} aria-label={tip}>
 	<!-- the tomoe ring: ten commas all round, in the coin's colour; fire / water halves under Equilibrium; purple with the ultimate -->
 	<span class="ring" aria-hidden="true">
 		{#each TOMOE as c, k (k)}
@@ -66,6 +68,7 @@
 			</svg>
 		{/each}
 	</span>
+	{#if eqLook === 'blur' && split && flames}<span class="smear" aria-hidden="true"><span class="sm1"></span><span class="sm2"></span></span>{/if}
 	<span class="glow" aria-hidden="true"></span>
 	<span class="face" class:flip={flipping}><img src={art(base)} alt="" draggable="false" /></span>
 	<span class="halves" aria-hidden="true">
@@ -108,5 +111,14 @@
 	@keyframes breathe { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
 	.used .face, .used .halves { opacity: 0.55; }
 	.used.split .halves { opacity: 0.55; }
-	@media (prefers-reduced-motion: reduce) { .tm, .ready.fx .rim { animation: none; } }
+	/* the blur try: the comma ring whips round (0.32 s a turn) under a smeared orange / blue band spinning with it, so
+	   the eye reads one blur of both colours (transform only; the band's blur is static) */
+	.blur .ring { animation: whirl 0.32s linear infinite; }
+	.blur .tm { animation: none; opacity: 0.45; }
+	.smear { position: absolute; inset: -50%; pointer-events: none; }
+	.smear > span { position: absolute; inset: 0; border-radius: 50%; -webkit-mask: radial-gradient(circle, transparent 27%, #000 31%, #000 41%, transparent 46%); mask: radial-gradient(circle, transparent 27%, #000 31%, #000 41%, transparent 46%); }
+	.sm1 { background: conic-gradient(from 0deg, #ff8a2a, #ffd27a 10%, #ef7d22 22%, #2f7fe6 30%, #8fd8ff 40%, #2f7fe6 50%, #ef7d22 58%, #ffd27a 68%, #ef7d22 76%, #2f7fe6 84%, #8fd8ff 92%, #ff8a2a); filter: blur(2.5px); opacity: 0.9; animation: whirl 0.24s linear infinite; }
+	.sm2 { background: conic-gradient(from 90deg, transparent, rgba(255, 255, 255, 0.55) 6%, transparent 14%, transparent 50%, rgba(255, 255, 255, 0.4) 56%, transparent 64%); filter: blur(3px); animation: whirl 0.4s linear infinite; }
+	@keyframes whirl { to { transform: rotate(360deg); } }
+	@media (prefers-reduced-motion: reduce) { .tm, .ready.fx .rim, .blur .ring, .smear > span { animation: none; } }
 </style>

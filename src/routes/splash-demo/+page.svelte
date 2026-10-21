@@ -94,7 +94,7 @@
 	// YOUR TURN: the three looks to choose from (the game uses TURN_CUE_DEFAULT)
 	let cueLook: TurnCueLook = TURN_CUE_DEFAULT;
 	// the card reveal (the game's curtain; sample players: made-up names; one card pair always ties across the teams for the coin)
-	let revealN = 3, revealTurn = 2, revealFace: RevealFace = 'brass';
+	let revealN = 3, revealTurn = 2, revealFace: RevealFace = 'player';
 	let revealShow: { entries: RevealEntry[]; order: string[]; flips: number[]; face: RevealFace } | null = null;
 	const R_SEATS: [string, string, 'orange' | 'blue', string][] = [['Zara', 'arien', 'orange', '#dc2626'], ['Mo', 'brogan', 'orange', '#eab308'], ['Avery', 'xargatha', 'orange', '#14b8a6'],
 		['Priya', 'wasp', 'blue', '#ec4899'], ['Sam', 'trinkets', 'blue', '#84cc16'], ['Quinn', 'tigerclaw', 'blue', '#a855f7']];
@@ -142,7 +142,7 @@
 	let spellToast: SpellToast;
 	const tbArt = import.meta.glob('/src/lib/cards/images/tiebreaker_*.png', { eager: true, import: 'default' }) as Record<string, string>;
 	const coinArt = (t: Team) => tbArt[`/src/lib/cards/images/tiebreaker_${t}.png`] ?? '';
-	let igFace: Team = 'orange', igSplit = false, igUlt = false, igReady = false, igUsed = false;
+	let igFace: Team = 'orange', igBlur = false, igSplit = false, igUlt = false, igReady = false, igUsed = false;
 	let snRunes: Rune[] | null = [...RUNES], snTurn = 0, snEdit = false, snCan2 = false, snSecond: Rune | null = null, snUlt = false;
 	let tkKind: 'gold' | 'bushido' | null = null, tkUlt = false;
 	$: tkCs = { ...newPlayerCardState('takahide'), ultimate: tkUlt } as PlayerCardState;
@@ -251,14 +251,14 @@
 	<section>
 		<h2>Card reveal <small>(the game's curtain — Order of Play)</small></h2>
 		<div class="row">
-			<button class:off={revealFace !== 'brass'} on:click={() => playReveal('brass')}>Brass face (in the game now)</button>
-			<button class:off={revealFace !== 'player'} on:click={() => playReveal('player')}>Player-colour face</button>
+			<button class:off={revealFace !== 'player'} on:click={() => playReveal('player')}>Player-colour face (in the game now)</button>
+			<button class:off={revealFace !== 'brass'} on:click={() => playReveal('brass')}>Brass face</button>
 		</div>
 		<div class="row sm">
 			<button class:off={revealN !== 2} on:click={() => (revealN = 2)}>2 v 2</button>
 			<button class:off={revealN !== 3} on:click={() => (revealN = 3)}>3 v 3</button>
 		</div>
-		<p class="blurb">The initiative hex keeps the team-colour rim; its face is brass, or the player's own colour</p>
+		<p class="blurb">The spotlight is on YOUR card (here: the first player of the team you view as)</p>
 	</section>
 	<section>
 		<h2>Minion battle</h2>
@@ -394,10 +394,11 @@
 					<button class="b" on:click={() => chaos.play('blue')}>Chaos → Titans</button>
 					<button class="o" on:click={() => chaos.play('orange')}>Chaos → Atlanteans</button>
 				</div>
-				<div class="stage"><span class="dbtn"><IgnatiaCoin size={46} face={igFace} split={igSplit} ult={igUlt} ready={igReady} used={igUsed} flames={fourFx} art={coinArt} /></span></div>
+				<div class="stage"><span class="dbtn"><IgnatiaCoin size={46} face={igFace} split={igSplit} ult={igUlt} ready={igReady} used={igUsed} flames={fourFx} art={coinArt} eqLook={igBlur ? 'blur' : 'pulse'} /></span></div>
 				<div class="row sm">
 					<button on:click={() => (igFace = igFace === 'orange' ? 'blue' : 'orange')}>Coin: {igFace === 'orange' ? 'Atlanteans' : 'Titans'}</button>
 					<button class:off={!igSplit} on:click={() => (igSplit = !igSplit)}>Equilibrium</button>
+					<button class:off={!igBlur} title="Equilibrium's motion: the ring spins into an orange / blue blur instead of the pulse" on:click={() => { igBlur = !igBlur; igSplit = true; }}>Blur spin (try)</button>
 					<button class:off={!igUlt} on:click={() => (igUlt = !igUlt)}>Ultimate</button>
 					<button class:off={!igReady} on:click={() => (igReady = !igReady)}>Can flip</button>
 					<button class:off={!igUsed} on:click={() => (igUsed = !igUsed)}>Flipped</button>
@@ -485,7 +486,7 @@
 <DefeatSplash news={kill} {cards} names={(i) => names[i] ?? i} {lifeArt} {mobile} myTeam={side} />
 <TurnSplash bind:this={turnSplash} {mobile} />
 <YourTurn bind:this={cue} look={cueLook} {mobile} />
-{#if revealShow}{#key revealShow}<RevealCurtain {...revealShow} turn={revealTurn} {mobile} myTeam={me ?? 'blue'} onClose={() => (revealShow = null)} />{/key}{/if}
+{#if revealShow}{#key revealShow}<RevealCurtain {...revealShow} me={revealShow.entries.find((e) => e.team === (me ?? 'blue'))?.pid ?? null} turn={revealTurn} {mobile} myTeam={me ?? 'blue'} onClose={() => (revealShow = null)} />{/key}{/if}
 <LevelSplash bind:this={levelSplash} {mobile} />
 <NebkherSplash bind:this={nkSplash} phone={mobile} />
 <EssenceWisps bind:this={ess} />
