@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { inPlay } from '$lib/busy';
+	import { warmSplashes } from '$lib/warmArt';
 	import { uiScale } from '$lib/layout';
 	import { teamName, aTeam } from '$lib/teams';
 	import { sweepJournals } from '$lib/recorder';
@@ -43,7 +44,7 @@
 		nameKey,
 		cachedRoom
 	} from '$lib/match';
-	import { HEROES, draftable, FOUR_STAR_LIVE } from '$lib/heroes';
+	import { HEROES, HEROES_ALPHA, draftable, FOUR_STAR_LIVE } from '$lib/heroes';
 	import { initCards } from '$lib/cards/cardstate';
 	import HeroDraft from '$lib/HeroDraft.svelte';
 	import GameView from '$lib/GameView.svelte';
@@ -55,6 +56,8 @@
 	type Mode = 'landing' | 'choose' | 'admin' | 'adminhub' | 'menu' | 'learn' | 'create' | 'join' | 'lobby' | 'draft' | 'game';
 	let mode: Mode = 'landing';
 	$: inPlay.set(mode === 'lobby' || mode === 'draft' || mode === 'game');
+	// hero select's paintings start downloading while people sit in the lobby (warmArt.ts), in the grid's order
+	$: if (session && (mode === 'lobby' || mode === 'draft') && $state?.draftStars) warmSplashes(HEROES_ALPHA.filter((hr) => draftable(hr, $state.draftStars, !!$state.draftLab)).map((hr) => hr.id));
 	let notice = '';
 
 	// admin

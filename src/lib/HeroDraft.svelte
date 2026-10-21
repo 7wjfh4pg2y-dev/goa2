@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { teamName } from '$lib/teams';
 	import { onMount, onDestroy } from 'svelte';
+	import { browser } from '$app/environment';
+	import { warmSplashes, warmNow } from '$lib/warmArt';
 	import type { Readable } from 'svelte/store';
 	import MatchupSplash from '$lib/MatchupSplash.svelte';
 	import {
@@ -243,6 +245,11 @@
 	}
 	let ticker: ReturnType<typeof setInterval>;
 	onMount(() => { ticker = setInterval(watchdog, 1000); });
+	// the paintings load in the background (warmArt.ts, begun in the lobby): the shown hero first, then the pool in the
+	// grid's order; the screen often opens before the draft has arrived, so start once the pool is known
+	let warmed = false;
+	$: if (browser && !warmed && d?.pool?.length) { warmed = true; const pool = new Set(d.pool); warmSplashes([sel, ...HEROES_ALPHA.map((h) => h.id).filter((id) => pool.has(id))]); }
+	const prefer = (id: string) => { if (browser) warmNow(id); };
 	onDestroy(() => { clearInterval(ticker); clearTimeout(toastTimer); });
 
 	// top banner text
@@ -403,6 +410,7 @@
 								class:filtered={off} class:viewlock={viewLocked}
 								disabled={!inPool.has(h.id) || off || viewLocked}
 								title={soon4(h) ? `${h.name} — 4★ heroes coming soon` : tk ? `${h.name} — picked by ${tk.name}` : bannedSet.has(h.id) ? `${h.name} — banned` : h.name}
+								on:pointerenter={() => prefer(h.id)} on:pointerdown={() => prefer(h.id)} on:focus={() => prefer(h.id)}
 								on:click={() => (sel = h.id)}>
 								<img src={heroAvatar(h.id)} alt={h.name} />
 								{#if tk}<span class="tk" style="--pc:{tk.color}"></span>{/if}
