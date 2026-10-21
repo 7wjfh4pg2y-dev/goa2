@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { applyCardReq, canRespawn, turnOrder, turnPlan, claimable, reclaimableSeat, transferSeat, nameKey, turnKey, actorOf, lifeTier, cardInitiative, cardResolved, clearable, minionDefense, boardLookOf, zoneGlowOf, boardFxOf, type MatchState, type Piece } from './match'
+import { applyCardReq, canRespawn, turnOrder, turnPlan, claimable, reclaimableSeat, transferSeat, nameKey, turnKey, actorOf, lifeTier, cardInitiative, cardResolved, clearable, minionDefense, boardLookOf, zoneGlowOf, boardFxOf, iniAdjust, keepActor, type MatchState, type Piece } from './match'
 import { newPlayerCardState } from './cards/cardstate'
 import { heroCards as heroCardsOf } from './cards/deck'
+import { hexNeighbours as hexNeighboursOf } from './board/hexgeo'
 
 // A (orange) + C (orange, A's teammate) vs B (blue, level 3) and D (blue)
 const hero = (id: string, team: 'orange' | 'blue', hex: string): Piece => ({ id, hex, team, kind: 'hero', hero: 'arien' })
@@ -380,5 +381,77 @@ describe('the host edits a player\'s deck (free level up / down)', () => {
 		const down = applyCardReq({ ...s, cards: up.cards } as MatchState, { kind: 'hostMove', pid: 'H', target: 'D', idx: r2, to: 'deck' })
 		expect(down.cards!.D.level).toBe(1)
 		expect(down.cards!.D.hand).not.toContain(r2)
+	})
+})
+
+describe('cards and tokens that change initiative (Hanu\'s Hurry up!, Tali\'s Ice)', () => {
+	const idxOf = (hero: string, name: string) => heroCardsOf(hero).findIndex((c) => c.name === name)
+	// A = Hanu acting with Hurry up!; B and D (blue) still to act, C (A's teammate) too
+	function hurryGame(): MatchState {
+		const s = game()
+		const c = s.cards!
+		const hurry = idxOf('hanu', 'Hurry up!')
+		const low = heroCardsOf('arien').findIndex((k) => (k.initiative ?? 99) <= 4)
+		return {
+			...s, host: 'H', tieBreaker: 'orange', revealAt: 1,
+			pieces: { ...s.pieces, A: { ...s.pieces.A, hero: 'hanu' } },
+			cards: { ...c, A: { ...newPlayerCardState('hanu'), pending: hurry }, B: { ...c.B, pending: low }, C: { ...c.C, pending: low }, D: { ...c.D, pending: low } }
+		} as MatchState
+	}
+	it('Hurry up! sets another hero\'s unresolved card to printed 11 while Hanu\'s card acts', () => {
+		const s = hurryGame()
+		expect(actorOf(s)).toBe('A')
+		const before = cardInitiative(s, 'D')!
+		const p = applyCardReq(s, { kind: 'hurry', pid: 'A', target: 'D' })
+		expect(p.hurry?.D).toEqual({ key: turnKey(s), idx: s.cards!.D.pending })
+		const t = { ...s, ...p } as MatchState
+		expect(cardInitiative(t, 'D')).toBe(11)
+		expect(before).not.toBe(11)
+		expect(turnOrder(t)[0]).toBe('A') // Hanu keeps acting
+		expect(turnOrder(t)[1]).toBe('D') // and D moves up behind him
+		// only for that card, that turn
+		expect(iniAdjust({ ...t, turn: 3 } as MatchState, 'D').printed).toBeUndefined()
+		expect(iniAdjust({ ...t, cards: { ...t.cards, D: { ...t.cards!.D, pending: 0 } } } as MatchState, 'D').printed).toBeUndefined()
+	})
+	it('is refused when Hanu is not acting with it, on himself, or on a card that already resolved', () => {
+		const s = hurryGame()
+		expect(applyCardReq(s, { kind: 'hurry', pid: 'B', target: 'D' })).toEqual({}) // not the actor
+		expect(applyCardReq(s, { kind: 'hurry', pid: 'A', target: 'A' })).toEqual({})
+		expect(applyCardReq({ ...s, revealAt: undefined } as unknown as MatchState, { kind: 'hurry', pid: 'A', target: 'D' })).toEqual({})
+		const other = { ...s, cards: { ...s.cards, A: { ...s.cards!.A, pending: idxOf('hanu', 'Hurry up!') === 0 ? 1 : 0 } } } as MatchState
+		if (actorOf(other) === 'A') expect(applyCardReq(other, { kind: 'hurry', pid: 'A', target: 'D' })).toEqual({}) // another card
+		expect(applyCardReq(s, { kind: 'hurry', pid: 'H', target: 'C' }).hurry?.C).toBeTruthy() // the host may
+	})
+	it('Ice: −1 for each of an enemy Tali\'s Ice next to the hero; her own team and other ice don\'t count', () => {
+		const s = game()
+		const ice = (id: string, hex: string, owner: string): Piece => ({ id, hex, kind: 'token', token: 'token_ice', owner, team: s.pieces[owner].team } as Piece)
+		const t = {
+			...s,
+			pieces: { ...s.pieces, B: { ...s.pieces.B, hero: 'tali' }, i1: ice('i1', '1_0', 'B'), i2: ice('i2', '0_1', 'B'), i3: ice('i3', '9_9', 'B') },
+			cards: { ...s.cards, A: { ...s.cards!.A, pending: 0 }, B: { ...newPlayerCardState('tali'), pending: 0 } }
+		} as unknown as MatchState
+		const n = ['1_0', '0_1'].filter((h) => hexNeighboursOf('1_1').includes(h)).length
+		expect(iniAdjust(t, 'A').delta).toBe(-n)
+		expect(cardInitiative(t, 'A')).toBe(heroCardsOf('arien')[0].initiative! + (iniAdjust(t, 'A').delta))
+		expect(iniAdjust(t, 'B').delta).toBe(0) // not on her own side
+		const notTali = { ...t, cards: { ...t.cards, B: { ...newPlayerCardState('arien'), pending: 0 } } } as MatchState
+		expect(iniAdjust(notTali, 'A').delta).toBe(0)
+	})
+	it('a change mid-turn never hands the turn to another card: the actor and those before stay pinned', () => {
+		const s = hurryGame()
+		const p = applyCardReq(s, { kind: 'hurry', pid: 'A', target: 'D' })
+		const t = { ...s, ...p } as MatchState
+		expect(actorOf(t)).toBe('A')
+		// D (Tali) drops two Ice next to Hanu while he acts: 12 − 2 = 10 < D's 11 — he still finishes his turn
+		const n = hexNeighboursOf(t.pieces.A.hex)
+		const ice = (id: string, hex: string): Piece => ({ id, hex, kind: 'token', token: 'token_ice', owner: 'D', team: 'blue' } as Piece)
+		const iced = { ...t, pieces: { ...t.pieces, D: { ...t.pieces.D, hero: 'tali' }, i1: ice('i1', n[0]), i2: ice('i2', n[1]) },
+			cards: { ...t.cards, D: { ...newPlayerCardState('tali'), pending: t.cards!.D.pending } } } as MatchState
+		expect(cardInitiative(iced, 'A')).toBeLessThan(cardInitiative(iced, 'D')!)
+		expect(turnOrder(iced)[0]).toBe('D') // unpinned, D would jump in
+		const k = keepActor(t, iced)
+		expect(k?.acting?.pin).toEqual(['A'])
+		expect(actorOf({ ...iced, ...k } as MatchState)).toBe('A')
+		expect(keepActor(s, s)).toBeNull()
 	})
 })

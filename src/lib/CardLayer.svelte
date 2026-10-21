@@ -8,7 +8,7 @@
 	import { teamName } from '$lib/teams';
 	import type { Readable } from 'svelte/store';
 	import type { MatchSession, MatchState, Player } from '$lib/match';
-	import { teamForSeat, colorHex, battlePatch, levelPatch, canRespawn, turnPlan, claimable, actingIdx, actorOf, turnOrder, teamOf, turnKey as keyOfTurn } from '$lib/match';
+	import { teamForSeat, colorHex, battlePatch, levelPatch, canRespawn, turnPlan, claimable, actingIdx, actorOf, turnOrder, teamOf, turnKey as keyOfTurn, cardInitiative } from '$lib/match';
 	import { hasPower, equilibrium, canFlip, flipUsed, runesOf, secondRune, canInscribe, canSecond, RUNES, takaSwapKind, mateOffer, canReverse, nextTurnKey, reversedTurn, warpOffer, warpSlots, capsuleOffer, RE_REVERSE, RE_TEMPORAL, nkPower, laughed, laughTargets, nkSwapsLeft, nkSlots, nkCardAt, prevCard, doubtNow, crackNow, pieceDist, rzPower, rzRemoves, rzTwin, rzSpawnsLeft, rzLeft, bodiesOf, crowdBonus, crowdOn, canCommit2, wantsSecond, timelinePick, type NkColor, type NkEnemy, type Rune, type TurnCtx } from '$lib/heropower';
 	import EmmittClock from '$lib/hud2/EmmittClock.svelte';
 	import TakaGold from '$lib/hud2/TakaGold.svelte';
@@ -678,7 +678,7 @@
 	let committing = false; // preview flip animation on commit
 	$: myName = seated.find((p) => p.id === clientId)?.name ?? 'You';
 	$: myColor = seated.find((p) => p.id === clientId)?.color ?? 'spectator';
-	$: myInit = mine ? initOf(mine, true) : null;
+	$: myInit = mine ? initOf(mine, true, clientId) : null;
 	// your hand, always in colour order: Silver, Gold, Red, Blue, Green (then the rest)
 	const COLOR_ORDER: Record<string, number> = { SILVER: 0, GOLD: 1, RED: 2, BLUE: 3, GREEN: 4 };
 	const colorRank = (hero: string, idx: number) => COLOR_ORDER[heroCards(hero)[idx]?.color] ?? 9;
@@ -687,9 +687,11 @@
 	// initiative of the card a player has in play this turn = the card's printed
 	// initiative + their initiative upgrades (NOT the hero's base stat).
 	// Opponents' is shown only once revealed.
-	function initOf(cs: PlayerCardState, show: boolean): number | null {
+	// (+ what the board does to it: Hanu's Hurry up!, Tali's Ice — match.ts iniAdjust)
+	function initOf(cs: PlayerCardState, show: boolean, pid: string): number | null {
 		const idx = cs.pending;
 		if (!show || idx == null || idx === PASS) return null;
+		if ($ms.cards?.[pid]?.pending === idx) return cardInitiative($ms, pid);
 		const v = heroCards(cs.hero)[idx]?.initiative;
 		return v == null ? null : v + (statDeltas(cs).init ?? 0);
 	}
@@ -958,7 +960,8 @@
 	$: leftOf = (tk: string) => (tk.startsWith('marker_') || tk.startsWith('rune_') ? Infinity : tokensLeft($ms.pieces ?? {}, clientId, tk));
 	// the shelf stays open while you place (so you can drop several, one at a time);
 	// clicking anywhere else closes it
-	function armToken(it: ShelfItem) { onArmToken(it.arm); }
+	// picking a token closes the drawer: it sits over the board right by your hero, where tokens usually go
+	function armToken(it: ShelfItem) { onArmToken(it.arm); tokenDrawer = false; }
 
 	// ── area radius: a temporary, translucent area around your hero (1–8 hexes),
 	// in your colour, seen by everyone; it clears when the turn advances
@@ -1092,7 +1095,7 @@
 	}
 	// the order row after the reveal: highest initiative first; a tie goes to the team holding the tie-breaker
 	$: h2order = actOrder
-		.map((pid) => ({ p: $players.find((q: Player) => q.id === pid), pid, cs: viewCards[pid] ?? cards[pid], ini: initOf(cards[pid], true) ?? 0 }))
+		.map((pid) => ({ p: $players.find((q: Player) => q.id === pid), pid, cs: viewCards[pid] ?? cards[pid], ini: initOf(cards[pid], true, pid) ?? 0 }))
 		.filter((x) => !!x.cs)
 		.map((x, k, all): OrderEntry => ({ pid: x.pid, hero: x.cs.hero, heroName: heroName(x.cs.hero), player: x.p?.name ?? '', team: (teamOfPid(x.pid) ?? 'orange'), idx: cards[x.pid].pending!, ini: x.ini,
 			tied: k > 0 && flipAfter.has(all[k - 1].pid), tieImg: k > 0 ? icon(`tiebreaker_${teamOfPid(all[k - 1].pid) ?? 'orange'}`) : undefined, portrait: portraitCss(x.cs.hero), color: colorHex(x.p?.color ?? '') }));
@@ -1442,7 +1445,7 @@
 			{#each phone2 ? [...h2enemies, ...h2allies] : others as p (p.id)}
 				{@const cs = viewCards[p.id]}
 				{#if cs}
-					{@const ini = initOf(cs, revealed)}
+					{@const ini = initOf(cs, revealed, p.id)}
 					{@const cfx = fxFor(p.id, slotIdx(cs, turnIdx))}
 					<div class="mpc" class:fxon={effects.some((e) => e.pid === p.id)} style="{teamVars(pTeam(p))} --fxc:{colorOf(p.id)}" role="button" tabindex="0" on:click={() => (overlayId = p.id)} on:keydown={(e) => e.key === 'Enter' && (overlayId = p.id)}>
 						<span class="mpic">{#if phone2}<svg class="lring" viewBox="0 0 50 50" aria-hidden="true">{#each Array(8) as _, i (i)}<path d={lvArc(i)} class:on={i < levelOf(cs) || (i === 7 && cs.ultimate)} class:ult={i === 7} />{/each}</svg>{/if}<PlayerIcon hero={cs.hero} team={pTeam(p)} color={colorHex(p.color)} size={phone2 ? '24px' : '28px'} ring={2} ult={cs.ultimate} /></span>
@@ -1494,7 +1497,7 @@
 						{:else if cs && !revealed}<span class="rdot" class:on={isReady(cs)} title={isReady(cs) ? 'Ready' : 'Not ready'}></span>{/if}
 						<!-- this turn's initiative (card + upgrades), once revealed — sits above the radius stat -->
 						{#if cs}
-							{@const ini = initOf(cs, revealed)}
+							{@const ini = initOf(cs, revealed, p.id)}
 							<span class="initb" class:off={ini == null} title="Initiative this turn">
 								<i class="inicon">{@html CLOCK}</i><b>{ini ?? '–'}</b>
 							</span>

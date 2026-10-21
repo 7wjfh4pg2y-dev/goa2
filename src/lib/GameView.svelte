@@ -51,7 +51,7 @@
 	import {
 		colorHex, movePiece, teamForSeat, throneHex, minionCoins, heroDefeatSummary, canRespawn, freeSpawns, teamOf, clearable, turnKey, 
 		type MatchState, type Player, type MatchSession, type Team, type ConnStatus, type Piece
-	, minionDefense } from '$lib/match';
+	, minionDefense, hurrying, actorOf as actorNow } from '$lib/match';
 
 	export let session: MatchSession;
 	export let ms: Readable<MatchState>;
@@ -256,6 +256,7 @@
 		// powers come from the card in play: Emmitt's Rewind / Warp, Min's mines, the attack card's Clear (tokens next to you)
 		canRewindSel ? { label: 'Rewind', fam: 'power', kind: 'time', run: rewindSel, title: 'Back to the Future: back to where they stood as the turn began' } : null,
 		canWarpSel ? { label: 'Warp', fam: 'power', kind: 'time', run: warpSel, title: 'Time Warp: they swap their card in play for one of their resolved cards' } : null,
+		canHurrySel ? { label: 'Hurry up', fam: 'power', kind: 'time', run: hurrySel, title: 'Hurry up!: their unresolved card counts as printed initiative 11' } : null,
 		canFlip ? { label: selPiece.faceDown ? 'Flip — reveal' : 'Flip face down', fam: 'power', run: flipMine } : null,
 		ownHeroSel && ownAttack && selPiece.id === clientId ? { label: `Clear${clearCount ? ` ${clearCount}` : ''}`, fam: 'power', off: !clearCount, run: startClear, title: 'Your attack card: remove tokens next to your hero' } : null,
 		ownHeroSel ? { label: 'Defeated', fam: 'off', kind: 'bad', run: selfDefeatAsk, title: 'You were defeated (not by an Attack): choose who gets the reward' } : null,
@@ -767,6 +768,15 @@
 		if (!selPiece || !selHero) return;
 		const id = selHero;
 		askRing(selPiece.id, 'Warp', heroById(selPiece.hero ?? '')?.name ?? '', 'go', () => session.cardAction({ kind: 'power', pid: clientId, op: 'emWarp', target: id }));
+	}
+	// Hanu's Hurry up!: while that card acts, he (or the host) sets another hero's unresolved card to initiative 11
+	$: hurryBy = (() => { const a = actorNow($ms); return a && hurrying($ms, a) ? a : null })();
+	$: canHurrySel = !!hurryBy && (clientId === hurryBy || iAmHost) && !!selPiece && selPiece.kind === 'hero' && !!turnCtx && !!selHero && selHero !== hurryBy
+		&& turnCtx.order.indexOf(selHero) > turnCtx.at && $ms.hurry?.[selHero]?.key !== turnKey($ms);
+	function hurrySel() {
+		if (!selPiece || !selHero) return;
+		const id = selHero;
+		askRing(selPiece.id, 'Hurry up', heroById(selPiece.hero ?? '')?.name ?? '', 'go', () => session.cardAction({ kind: 'hurry', pid: clientId, target: id }));
 	}
 	// Temporal Punch / Slam / Judgment: the defender uses Initiative instead of Defense
 	$: temporalIn = !!incoming && RE_TEMPORAL.test(heroCards($ms.cards?.[incoming.by]?.hero ?? '')[$ms.cards?.[incoming.by]?.pending ?? -1]?.description ?? '');
@@ -1368,6 +1378,7 @@
 			{#if selSwappable}<button class="pieflip" on:click={startSwap} title="Swap places with another piece">Swap</button>{/if}
 			{#if canRewindSel}<button class="pieflip" on:click={rewindSel}>Rewind</button>{/if}
 			{#if canWarpSel}<button class="pieflip" on:click={warpSel}>Warp</button>{/if}
+			{#if canHurrySel}<button class="pieflip" on:click={hurrySel}>Hurry up</button>{/if}
 			{#if canFlip}
 				<button class="pieflip" on:click={flipMine}>{selPiece.faceDown ? 'Flip — reveal' : 'Flip face down'}</button>
 			{/if}

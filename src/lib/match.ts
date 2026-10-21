@@ -17,6 +17,7 @@ import { spellName, type GyNews } from './gydion'
 import { applyPower, syncPowers, takaHit, comicNewsOf, hasPower, isDouble, RZ, rzTwin, twinBars, timelinePick, wantsSecond, runeLine, RUNE_NAME, reversedTurn, trackDiscards, illusionForce, NEB, type NkNews, type ComicNews, type EmNews, type SnNews, type FxNews, type PowerReq, type PowerState, type TurnCtx } from './heropower'
 import { teamName, aMinion } from './teams'
 import { hexCube, cubeDist } from './zones'
+import { hexNeighbours } from './board/hexgeo'
 import { tokenExpiry, sweepTokens, statusFrom, isTurret } from './tokens'
 import { expireEffects, type Effect } from './effects'
 import { startBattle, pushCheck, battleRemove, battleSettle, battleAuto, battleResult, laneNotes, heavyImmune, type Battle, type PushNews } from './battle'
@@ -86,6 +87,7 @@ export type CardReq =
 	| { kind: 'endAct'; pid: string } // the acting player (or the host, for someone away) ends their turn: the next card acts; after the last, the turn moves on
 	| { kind: 'setAct'; pid: string; idx: number } // host: say who is acting (a click on the order row)
 	| { kind: 'claim'; pid: string } // a tied player takes the card acting now from a teammate (the team's choice)
+	| { kind: 'hurry'; pid: string; target: string } // Hanu's Hurry up! (acting): the target's unresolved card goes to printed initiative 11
 
 /** a card request on the wire: who sent it and its place in their sequence (see hostApplyReq) */
 export type WireReq = CardReq & { from?: string; seq?: number }
@@ -185,7 +187,7 @@ export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 	// Alternative Timelines: a take back starts his turn over — both cards are back, and 'just one' is forgotten
 	if (req.kind === 'uncommit' && s.power?.[req.pid]?.one) patch.power = { ...(patch.power ?? s.power), [req.pid]: { ...s.power[req.pid], one: undefined } }
 	const next = { ...s, ...patch }
-	if (!Object.values(next.cards ?? {}).some((c) => hasPower(c.hero))) return patch
+	if (!Object.values(next.cards ?? {}).some((c) => hasPower(c.hero))) { const kept = keepActor(s, next as MatchState); return kept ? { ...patch, ...kept } : patch }
 	// Takahide's "after the attack" swap opens once his acting card has hit
 	const hit = takaHit(s, next, req, powerCtx(s))
 	const marked = hit ? { ...patch, power: hit } : patch
@@ -209,7 +211,8 @@ export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 		const disc = trackDiscards(s, fin, key)
 		if (disc !== undefined) out.turnDisc = disc
 	}
-	return out
+	const kept = keepActor(s, { ...s, ...out } as MatchState)
+	return kept ? { ...out, ...kept } : out
 }
 function applyCardReqBase(s: MatchState, req: Exclude<CardReq, PowerReq>): Partial<MatchState> {
 	const cards = s.cards ?? {}
@@ -235,6 +238,14 @@ function applyCardReqBase(s: MatchState, req: Exclude<CardReq, PowerReq>): Parti
 		return { acting: { key, idx: at + 1, done, pin: done } }
 	}
 	// a tied player claims the card acting now from their teammate (the team chooses who goes first)
+	if (req.kind === 'hurry') {
+		const by = actorOf(s)
+		if (!by || s.revealAt == null || Date.now() < s.revealAt || s.battlePhase) return {}
+		if ((req.pid !== by && req.pid !== s.host) || !hurrying(s, by)) return {}
+		const order = turnOrder(s), at = actingIdx(s), t = s.cards?.[req.target]
+		if (req.target === by || !t || t.pending == null || t.pending < 0 || order.indexOf(req.target) <= at) return {}
+		return { hurry: { ...(s.hurry ?? {}), [req.target]: { key: turnKey(s), idx: t.pending } } }
+	}
 	if (req.kind === 'claim') {
 		if (!claimable(s).includes(req.pid)) return {}
 		const key = turnKey(s)
@@ -491,6 +502,8 @@ export interface MatchState {
 	acting?: { key: string; idx: number; done?: string[]; pin?: string[] } | null
 	/** tied teammates who claimed to go first this turn (the most recent claim first) */
 	tieClaims?: { key: string; order: string[] } | null
+	/** Hanu's Hurry up!: a player's card in play set to printed initiative 11 (`key` = the turn, `idx` = that card) until it changes */
+	hurry?: Record<string, { key: string; idx: number }>
 	/** the tie-breaker coin as this turn's order was set (an automatic flip mid-turn must not reshuffle it) */
 	tieTurn?: { key: string; coin: Team } | null
 	// per-player status markers shown on the HUD (Tigerclaw poison, Bain bounty),
@@ -1491,6 +1504,8 @@ export function joinMatch(
 			const sync = syncPowers(after, powerCtx(after))
 			if (sync) Object.assign(after, sync)
 		}
+		// a move / token / host edit mid-turn never takes the turn away from the card acting (Tali's Ice, …)
+		if ('pieces' in patch || 'cards' in patch) { const kept = keepActor(before, after); if (kept) Object.assign(after, kept) }
 		recordHistory(before, after)
 		local = after
 		state.set(local)
@@ -1613,6 +1628,7 @@ export function joinMatch(
 		if (req.kind === 'endAct' && (patch.acting !== undefined || patch.turn)) { const who = actorOf(local); if (who) note(who, req.pid === who ? 'ends their turn' : 'turn skipped by the host') }
 		if (req.kind === 'endAct' && patch.tieBreaker) note(req.pid, `the tie-breaker coin flips to the ${teamName(patch.tieBreaker)}`)
 		if (req.kind === 'claim' && patch.tieClaims) note(req.pid, 'claims the tie — goes first')
+		if (req.kind === 'hurry' && patch.hurry) { const t = local.cards?.[req.target]; note(req.pid, `hurries ${nameOf(req.target)}'s ${heroCards(t?.hero ?? '')[t?.pending ?? -1]?.name ?? 'card'} up to initiative 11 (Hurry up!)`) }
 		if (req.kind === 'power' && req.op === 'snorriInscribe' && patch.power && req.order) note(req.pid, req.target && req.target !== req.pid ? `set ${nameOf(req.target)}'s runes: ${runeLine(req.order)} (host)` : `inscribed the runes: ${runeLine(req.order)}`)
 		if (req.kind === 'power' && req.op === 'snorriSecond' && patch.power) note(req.pid, req.rune ? `Rune Mastery: ${RUNE_NAME[req.rune]} is active too` : 'Rune Mastery: no second rune')
 		if (req.kind === 'power' && req.op === 'takaSwap' && patch.cards && req.idx != null) {
@@ -2016,8 +2032,43 @@ export function cardInitiative(s: MatchState, pid: string): number | null {
 	const cs = s.cards?.[pid]
 	const idx = cs?.pending
 	if (!cs || idx == null || idx < 0) return null
-	const v = heroCards(cs.hero)[idx]?.initiative
-	return v == null ? null : v + (statDeltas(cs).init ?? 0)
+	const adj = iniAdjust(s, pid)
+	const v = adj.printed ?? heroCards(cs.hero)[idx]?.initiative
+	return v == null ? null : v + (statDeltas(cs).init ?? 0) + adj.delta
+}
+/** Card text that changes a player's initiative this turn: Hanu's Hurry up! (`printed` = 11 while the card it was
+ *  set on is still the one in play) and Tali's Ice tokens (−1 for every Ice token of an ENEMY Tali next to the hero) */
+export function iniAdjust(s: Pick<MatchState, 'cards' | 'pieces' | 'hurry' | 'round' | 'turn'>, pid: string): { printed?: number; delta: number } {
+	const cs = s.cards?.[pid]
+	const h = s.hurry?.[pid]
+	const printed = h && h.key === turnKey(s) && h.idx === cs?.pending ? 11 : undefined
+	let delta = 0
+	const me = s.pieces?.[pid]
+	if (me?.kind === 'hero') {
+		const near = new Set(hexNeighbours(me.hex))
+		for (const p of Object.values(s.pieces ?? {}))
+			if (p.kind === 'token' && p.token === 'token_ice' && near.has(p.hex) && p.owner && s.cards?.[p.owner]?.hero === 'tali' && s.pieces?.[p.owner]?.team !== me.team) delta--
+	}
+	return { printed, delta }
+}
+/** Hanu's Hurry up!: is this player's card acting now the one that sets an initiative to 11? */
+export const RE_HURRY = /set the printed [\s\S]{0,40}initiative value [\s\S]{0,80}to 11/i
+export const hurrying = (s: MatchState, pid: string) => {
+	const cs = s.cards?.[pid]
+	return actorOf(s) === pid && !!cs && RE_HURRY.test(heroCards(cs.hero)[cs.pending ?? -1]?.description ?? '')
+}
+/** A change in the middle of a turn may not hand the turn to another card: if the card acting now would move, the
+ *  order up to it is pinned as it stood (Hurry up!, a hero stepping next to Ice, a host edit…). Null = nothing to do */
+export function keepActor(before: MatchState, after: MatchState): Partial<MatchState> | null {
+	const key = turnKey(after)
+	if (turnKey(before) !== key || after.revealAt == null || Date.now() < after.revealAt || after.battlePhase) return null
+	const at = actingIdx(before)
+	if (actingIdx(after) !== at) return null
+	const ob = turnOrder(before), oa = turnOrder(after)
+	const was = ob[at]
+	if (!was || oa[at] === was || !oa.includes(was)) return null
+	const pin = ob.slice(0, at + 1).filter((p) => oa.includes(p))
+	return { acting: { ...(after.acting?.key === key ? after.acting : { key, idx: at }), pin } }
 }
 /** Has `target`'s card this turn already resolved while `attacker` acts? Higher initiative
  *  goes first (ties: the team showing on the tie-breaker coin). No card out → no. */
