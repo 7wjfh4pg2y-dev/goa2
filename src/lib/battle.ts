@@ -17,6 +17,7 @@ import type { GameMap } from './maps'
 import type { MatchState, Piece, Team } from './match'
 import { zoneTable, hexCube, cubeDist } from './zones'
 import { isTurret } from './tokens'
+import { battleExtras } from './autocards'
 
 export const LANE = ['Orange Beach', 'Center', 'Blue Beach'] as const
 export const START_LANE = 1
@@ -64,10 +65,14 @@ export function pushWinner(s: Pick<MatchState, 'map' | 'lane' | 'pieces'>): Team
 }
 
 /** Count the battle zone: the team with fewer minions removes the difference. */
-export function battleResult(s: Pick<MatchState, 'map' | 'lane' | 'pieces'>): Battle {
-	const c = minionCount(s)
+export function battleResult(s: Pick<MatchState, 'map' | 'lane' | 'pieces'> & Partial<MatchState>): Battle {
+	const m = minionCount(s)
+	// heroes that count as minions in the battle (autocards: Brogan's One Man Army) — never removed: once the minions
+	// are gone the zone is empty and the other team pushes ('lose the push instead')
+	const x = s.cards ? battleExtras(s as MatchState, (h) => inZone(s, h)) : { orange: 0, blue: 0 }
+	const c = { orange: m.orange + x.orange, blue: m.blue + x.blue }
 	const loser: Team | null = c.orange < c.blue ? 'orange' : c.blue < c.orange ? 'blue' : null
-	const remove = loser ? Math.min(Math.abs(c.orange - c.blue), c[loser]) : 0
+	const remove = loser ? Math.min(Math.abs(c.orange - c.blue), m[loser]) : 0
 	return { ...c, loser, remove }
 }
 

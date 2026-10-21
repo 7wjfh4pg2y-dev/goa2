@@ -18,7 +18,7 @@ import { applyPower, syncPowers, takaHit, comicNewsOf, hasPower, isDouble, RZ, r
 import { teamName, aMinion } from './teams'
 import { hexCube, cubeDist } from './zones'
 import { hexNeighbours } from './board/hexgeo'
-import { attackBarred, defenceImmunity, defenceCard, RE_NO_MINION_MODS, textOf, type Immune } from './autocards'
+import { attackBarred, defenceImmunity, defenceCard, RE_NO_MINION_MODS, textOf, saverFor, saveCards, giftOffer, actingCard, markOf, type Immune, type Saving } from './autocards'
 import { tokenExpiry, sweepTokens, statusFrom, isTurret } from './tokens'
 import { expireEffects, type Effect } from './effects'
 import { startBattle, pushCheck, battleRemove, battleSettle, battleAuto, battleResult, laneNotes, heavyImmune, type Battle, type PushNews } from './battle'
@@ -89,6 +89,8 @@ export type CardReq =
 	| { kind: 'setAct'; pid: string; idx: number } // host: say who is acting (a click on the order row)
 	| { kind: 'claim'; pid: string } // a tied player takes the card acting now from a teammate (the team's choice)
 	| { kind: 'hurry'; pid: string; target: string } // Hanu's Hurry up! (acting): the target's unresolved card goes to printed initiative 11
+	| { kind: 'save'; pid: string; idx?: number } // Brogan's Shield / Bolster / Fortify: discard idx to keep the defeated minion; no idx = let it fall (autocards)
+	| { kind: 'gift'; pid: string; target: string } // War Drummer / Master Skald (acting): the coins to a friendly hero in range (autocards)
 
 /** a card request on the wire: who sent it and its place in their sequence (see hostApplyReq) */
 export type WireReq = CardReq & { from?: string; seq?: number }
@@ -181,6 +183,12 @@ export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 	if (twinOn && (req as { target?: string }).target === twinOn) return {}
 	// a card's immunity (autocards): no attack on that hero, but from the one it excepts
 	if (req.kind === 'attack' && attackBarred(s, req.pid, req.target)) return {}
+	// a save Brogan never answered: the minion falls before the turn moves on
+	if (s.saving && (req.kind === 'advance' || req.kind === 'endAct')) {
+		const fell = resolveSave(s, s.saving.saver)
+		const after = applyCardReq({ ...s, ...fell } as MatchState, req)
+		return Object.keys(after).length ? { ...fell, ...after } : {}
+	}
 	const patch0 = req.kind === 'power' ? (applyPower(s, req, powerCtx(s)) as Partial<MatchState>) : applyCardReqBase(s, req as Exclude<CardReq, PowerReq>)
 	// …and once her next attack starts, the repeat is spent
 	const spend = Object.keys(patch0).length > 0 && (req.kind === 'attack' || req.kind === 'defeatMinion' || req.kind === 'defeatHero') && s.cards?.[req.pid]?.hero === RZ && rzTwin(s, req.pid, powerCtx(s)) === 'live'
@@ -194,6 +202,8 @@ export function applyCardReq(s: MatchState, req: CardReq): Partial<MatchState> {
 		const imm = defenceImmunity({ ...s, ...patch } as MatchState, req.pid)
 		if (imm) patch.immune = imm
 	}
+	// heroes defeated this round (War Drummer / Master Skald)
+	if (patch.lastDefeat && patch.lastDefeat.id !== s.lastDefeat?.id) patch.fallen = { round: s.round, n: (s.fallen?.round === s.round ? s.fallen.n : 0) + 1 }
 	const next = { ...s, ...patch }
 	if (!Object.values(next.cards ?? {}).some((c) => hasPower(c.hero))) { const kept = keepActor(s, next as MatchState); return kept ? { ...patch, ...kept } : patch }
 	// Takahide's "after the attack" swap opens once his acting card has hit
@@ -246,6 +256,12 @@ function applyCardReqBase(s: MatchState, req: Exclude<CardReq, PowerReq>): Parti
 		return { acting: { key, idx: at + 1, done, pin: done } }
 	}
 	// a tied player claims the card acting now from their teammate (the team chooses who goes first)
+	if (req.kind === 'save') return resolveSave(s, req.pid, req.idx)
+	if (req.kind === 'gift') {
+		const by = actorOf(s), c = actingCard(s, req.pid, by), g = giftOffer(s, req.pid, c), mark = markOf(s, actingIdx(s))
+		if (!g || !g.targets.includes(req.target) || s.auto?.[req.pid]?.gift === mark || s.revealAt == null || Date.now() < s.revealAt) return {}
+		return { cards: addCoinsTo(s.cards ?? {}, req.target, g.amount), auto: { ...(s.auto ?? {}), [req.pid]: { ...s.auto?.[req.pid], gift: mark } } }
+	}
 	if (req.kind === 'hurry') {
 		const by = actorOf(s)
 		if (!by || s.revealAt == null || Date.now() < s.revealAt || s.battlePhase) return {}
@@ -288,6 +304,13 @@ function applyCardReqBase(s: MatchState, req: Exclude<CardReq, PowerReq>): Parti
 		// the moment a team's last minion (its heavy) leaves the battle zone, the other team pushes
 		// an immune heavy can't be touched (the host can still override for card exceptions)
 		if (heavyImmune(s, req.piece) && req.pid !== s.host) return {}
+		if (s.saving?.piece.id === req.piece) return {} // already waiting on Brogan's save
+		// Brogan's Shield / Bolster / Fortify: the defeated minion waits while he decides (the coins are paid now)
+		const saver = req.kind === 'defeatMinion' ? saverFor(s, req.piece) : null
+		if (saver && s.pieces?.[req.piece]) {
+			const m = s.pieces[req.piece]
+			return { cards: addCoinsTo(s.cards ?? {}, req.pid, minionCoins(m.role)), saving: { piece: m, by: req.pid, saver: saver.pid, card: saver.card, kind: saver.kind, at: Date.now() } }
+		}
 		const off = minionOff(s, req.pid, req.piece, req.kind === 'defeatMinion')
 		return off.pieces ? { ...off, ...battleSettle({ ...s, cards: off.cards ?? s.cards }, off.pieces, req.piece) } : off
 	}
@@ -455,6 +478,12 @@ export interface MatchState {
 	labRules?: boolean
 	/** card immunities (autocards Immune: Arien's Expert / Master Duelist…) */
 	immune?: Record<string, Immune[]>
+	/** a defeated minion Brogan may still save (autocards Saving) — it stays on the board until he decides */
+	saving?: Saving | null
+	/** heroes defeated this round (autocards: War Drummer) */
+	fallen?: { round: number; n: number }
+	/** once-per-card marks of the automated moves (autocards) */
+	auto?: Record<string, { gift?: string }>
 	waves: number // SHARED wave counters remaining; game ends when it hits 0
 	lastPush: Team | null // team that won the most recent Push the Lane
 	life: Record<Team, number> // per-team Life counters remaining; 0 = that team loses
@@ -1629,7 +1658,7 @@ export function joinMatch(
 			const coins = patch.cards?.[req.pid]?.coins ?? 0
 			note(req.pid, `money ${req.delta > 0 ? '+' : '−'}${Math.abs(req.delta)} → ${coins}`)
 		}
-		if (req.kind === 'defeatMinion' || req.kind === 'removeMinion') {
+		if ((req.kind === 'defeatMinion' || req.kind === 'removeMinion') && !patch.saving) {
 			const m = local.pieces?.[req.piece]
 			const what = aMinion(m?.team, m?.role)
 			note(req.pid, req.kind === 'defeatMinion' ? `defeated ${what} (+${minionCoins(m?.role)} coins)` : `removed ${what} (no coins)`)
@@ -1642,6 +1671,9 @@ export function joinMatch(
 		if (req.kind === 'endAct' && (patch.acting !== undefined || patch.turn)) { const who = actorOf(local); if (who) note(who, req.pid === who ? 'ends their turn' : 'turn skipped by the host') }
 		if (req.kind === 'endAct' && patch.tieBreaker) note(req.pid, `the tie-breaker coin flips to the ${teamName(patch.tieBreaker)}`)
 		if (req.kind === 'claim' && patch.tieClaims) note(req.pid, 'claims the tie — goes first')
+		if (req.kind === 'defeatMinion' && patch.saving) { const m = patch.saving.piece; note(req.pid, `defeated ${aMinion(m.team as Team, m.role)} (+${minionCoins(m.role)} coins) — ${nameOf(patch.saving.saver)} may save it (${patch.saving.card})`) }
+		if (req.kind === 'save' && 'saving' in patch && local.saving) { const sv = local.saving; note(req.pid, req.idx != null ? `discards ${heroCards(local.cards?.[req.pid]?.hero ?? '')[req.idx]?.name ?? 'a card'}: the minion stays (${sv.card})` : `lets ${aMinion(sv.piece.team as Team, sv.piece.role)} fall`) }
+		if (req.kind === 'gift' && patch.cards) { const d = (patch.cards[req.target]?.coins ?? 0) - (local.cards?.[req.target]?.coins ?? 0); note(req.pid, `gives ${nameOf(req.target)} ${d} coin${d === 1 ? '' : 's'} (${heroCards(local.cards?.[req.pid]?.hero ?? '')[local.cards?.[req.pid]?.pending ?? -1]?.name ?? 'card'})`) }
 		if (req.kind === 'hurry' && patch.hurry) { const t = local.cards?.[req.target]; note(req.pid, `hurries ${nameOf(req.target)}'s ${heroCards(t?.hero ?? '')[t?.pending ?? -1]?.name ?? 'card'} up to initiative 11 (Hurry up!)`) }
 		if (req.kind === 'power' && req.op === 'snorriInscribe' && patch.power && req.order) note(req.pid, req.target && req.target !== req.pid ? `set ${nameOf(req.target)}'s runes: ${runeLine(req.order)} (host)` : `inscribed the runes: ${runeLine(req.order)}`)
 		if (req.kind === 'power' && req.op === 'snorriSecond' && patch.power) note(req.pid, req.rune ? `Rune Mastery: ${RUNE_NAME[req.rune]} is active too` : 'Rune Mastery: no second rune')
@@ -2005,6 +2037,21 @@ const addCoinsTo = (cards: Record<string, PlayerCardState>, pid: string, n: numb
 	cards[pid] ? { ...cards, [pid]: { ...cards[pid], coins: cards[pid].coins + n } } : cards
 
 /** A minion leaves play: defeated (the presser gains its coins) or removed (no coins). */
+/** Brogan's answer to a save (autocards): `idx` = the card he discards (it must pay for this save) → the minion stays;
+ *  none = it falls now (the host may let it fall for an away player). */
+export function resolveSave(s: MatchState, pid: string, idx?: number): Partial<MatchState> {
+	const sv = s.saving
+	if (!sv || (pid !== sv.saver && !(pid === s.host && idx == null))) return {}
+	if (idx == null) {
+		if (!s.pieces?.[sv.piece.id]) return { saving: null }
+		const pieces = { ...s.pieces }
+		delete pieces[sv.piece.id]
+		return { saving: null, ...battleSettle(s, pieces, sv.piece.id) }
+	}
+	const cs = s.cards?.[pid]
+	if (!cs || !saveCards(cs, sv.kind).includes(idx)) return {}
+	return { saving: null, cards: { ...s.cards, [pid]: repairCards(discardCard(cs, idx)) } }
+}
 export function minionOff(s: MatchState, pid: string, pieceId: string, defeated: boolean): Partial<MatchState> {
 	const m = s.pieces?.[pieceId]
 	if (!m || m.kind !== 'minion') return {}

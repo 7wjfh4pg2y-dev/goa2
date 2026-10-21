@@ -52,7 +52,7 @@
 		colorHex, movePiece, teamForSeat, throneHex, minionCoins, heroDefeatSummary, canRespawn, freeSpawns, teamOf, clearable, turnKey, 
 		type MatchState, type Player, type MatchSession, type Team, type ConnStatus, type Piece
 	, minionDefense, hurrying, actorOf as actorNow, heroSpawns } from '$lib/match';
-	import { autoOn, cardOf, behindRule, spacesBehind, heroesOn, leapSpaces, swapMinions, spawnPoints, auraRadius, immuneNow, attackBarred } from '$lib/autocards';
+	import { autoOn, cardOf, behindRule, spacesBehind, heroesOn, leapSpaces, swapMinions, spawnPoints, auraRadius, immuneNow, attackBarred, discardOffer, giftOffer, saveCards, markOf } from '$lib/autocards';
 
 	export let session: MatchSession;
 	export let ms: Readable<MatchState>;
@@ -438,7 +438,7 @@
 	// Gydion's Create Undead: the empty friendly spawn points he may raise a minion on (CardLayer decides when)
 	let gyRaise: string[] = [];
 	$: raiseMarks = gyRaise.map((hex) => ({ hex, r: 0, team: myTeam ?? 'orange', color: '' }));
-	$: boardMarks = [...battleMarks, ...spawnMarks, ...clearMarks, ...strayMarks, ...raiseMarks, ...behindMarks, ...hintMarks];
+	$: boardMarks = [...battleMarks, ...spawnMarks, ...clearMarks, ...strayMarks, ...raiseMarks, ...pickMarks, ...hintMarks, ...saveMarks];
 
 	// ── minion battle / lane (battle.ts) ──
 	// the minions the battle's loser may take off glow red on the board
@@ -709,9 +709,10 @@
 			if (id && id !== a) { doSwap(a, id); queueMicrotask(() => board?.release()); selPieceId = null; return; }
 		}
 		// Arien's Torrent with several heroes behind: the tap picks one of them
-		if (behindPick.length) {
-			if (id && behindPick.includes(id)) { queueMicrotask(() => board?.release()); behindAsk(id); return; }
-			behindPick = [];
+		if (autoPick) {
+			const ap = autoPick;
+			if (id && ap.ids.includes(id)) { queueMicrotask(() => board?.release()); autoPick = null; ap.run(id); return; }
+			autoPick = null;
 		}
 		const pc = id ? $ms.pieces[id] : null;
 		// tapping any piece (heroes included) just picks it up to move it — a
@@ -797,12 +798,14 @@
 	$: behindLine = behind && selPiece && myHex && selPiece.id !== clientId && selPiece.team !== myTeam && (selPiece.kind === 'hero' || selPiece.kind === 'minion') ? spacesBehind(myHex, selPiece.hex, behind.n) : [];
 	$: canBehindSel = !watcher && behindLine.length > 0;
 	$: behindHeroes = canBehindSel ? heroesOn($ms, clientId, behindLine) : [];
-	let behindPick: string[] = []; // more than one hero behind: they glow, a tap picks one
-	$: if (behindPick.length && !behind) behindPick = [];
-	$: behindMarks = behindPick.map((id) => ({ hex: $ms.pieces[id]?.hex ?? '', r: 0, team: myTeam ?? 'orange', color: '' })).filter((m) => m.hex);
+	// a card asks to pick one of several pieces: they glow, the next tap picks one (anything else lets it go)
+	let autoPick: { ids: string[]; run: (pieceId: string) => void; key: string } | null = null;
+	$: if (autoPick && autoPick.key !== (myActCard ? `${$ms.round}-${$ms.turn}:${turnCtx?.at}` : '')) autoPick = null;
+	$: pickMarks = (autoPick?.ids ?? []).map((id) => ({ hex: $ms.pieces[id]?.hex ?? '', r: 0, team: myTeam ?? 'orange', color: '' })).filter((m) => m.hex);
+	const pickKey = () => `${$ms.round}-${$ms.turn}:${turnCtx?.at}`;
 	function behindAsk(pieceId: string) {
 		const pc = $ms.pieces[pieceId], pid = pc ? heroPidOf(pc) ?? pc.id : null, die = !!behind?.die;
-		behindPick = [];
+		autoPick = null;
 		if (!pc || !pid) return;
 		const go = () => session.cardAction({ kind: 'force', pid: clientId, target: pid, die });
 		// the question is about the hero behind, not the unit picked: let go of the pick, or the ring drops it
@@ -812,7 +815,7 @@
 	function behindSel() {
 		if (!behindHeroes.length) return;
 		if (behindHeroes.length === 1) { behindAsk(behindHeroes[0].id); return; }
-		board?.release(); selPieceId = null; behindPick = behindHeroes.map((p) => p.id);
+		board?.release(); selPieceId = null; autoPick = { ids: behindHeroes.map((p) => p.id), run: behindAsk, key: pickKey() };
 	}
 	// Liquid Leap / Magical Current / Stranger Tide: where he may land · Arcane Whirlpool / Ebb and Flow: the minions he
 	// may swap with — lit while his hero is picked (or the swap waits for its second piece)
@@ -828,6 +831,44 @@
 		const r = auraRadius(cs, heroCards(e.hero)[e.idx]);
 		return r ? [{ hex: hero.hex, r, color: colorHex(hero.color ?? ''), alpha: 0.12 }] : [];
 	});
+	// ── the acting card's own moves on the ring (autocards): who discards, coins to a friend; × = not this time ──
+	let autoNo: string[] = []; // offers waved off (mark:card:what), local
+	$: actMark = turnCtx ? markOf($ms, turnCtx.at) : '';
+	const heroPiece = (pid: string) => $ms.pieces[pid]?.id ?? pid;
+	// Shield Bash / Counterattack: an adjacent enemy who played an attack card this turn discards (or is defeated)
+	$: dOffer = myActCard ? discardOffer($ms, clientId, myActCard) : null;
+	$: dTargets = dOffer ? dOffer.targets.filter((t) => !$ms.forced?.[t]) : [];
+	let dSent = ''; // this card's discard was asked for
+	$: offerAsk = dOffer && dTargets.length && dSent !== actMark && !autoNo.includes(`${actMark}:d`) ? discardAsk(dOffer.die, dOffer.card, dTargets) : null;
+	function discardAsk(die: boolean, card: string, targets: string[]): Order {
+		const go = (pid: string) => { dSent = actMark; session.cardAction({ kind: 'force', pid: clientId, target: pid, die }); };
+		const label = die ? 'Discard or die' : 'Discard';
+		if (targets.length === 1) return { label, sub: `${heroOf(targets[0])} · ${card}`, kind: 'bad', pulse: true, run: () => go(targets[0]), cancel: () => (autoNo = [...autoNo, `${actMark}:d`]) };
+		return { label, sub: `Pick a hero · ${card}`, kind: 'bad', pulse: true, run: () => (autoPick = { ids: targets.map(heroPiece), key: pickKey(), run: (pc) => { const pid = heroPidOf($ms.pieces[pc]) ?? pc; askRing(pc, label, `${heroOf(pid)} · ${card}`, 'bad', () => go(pid)); } }), cancel: () => (autoNo = [...autoNo, `${actMark}:d`]) };
+	}
+	// War Drummer / Master Skald: coins to a friendly hero in range (3 / 4 once a hero has fallen this round)
+	$: gOffer = myActCard ? giftOffer($ms, clientId, myActCard) : null;
+	$: giftAsk = gOffer && gOffer.targets.length && $ms.auto?.[clientId]?.gift !== actMark && !autoNo.includes(`${actMark}:g`) ? giftOrder(gOffer.amount, gOffer.card, gOffer.targets) : null;
+	function giftOrder(n: number, card: string, targets: string[]): Order {
+		const go = (pid: string) => session.cardAction({ kind: 'gift', pid: clientId, target: pid });
+		const label = `+${n} coin${n === 1 ? '' : 's'}`;
+		if (targets.length === 1) return { label, sub: `${heroOf(targets[0])} · ${card}`, kind: 'go', pulse: true, run: () => go(targets[0]), cancel: () => (autoNo = [...autoNo, `${actMark}:g`]) };
+		return { label, sub: `Pick a hero · ${card}`, kind: 'go', pulse: true, run: () => (autoPick = { ids: targets.map(heroPiece), key: pickKey(), run: (pc) => { const pid = heroPidOf($ms.pieces[pc]) ?? pc; askRing(pc, label, `${heroOf(pid)} · ${card}`, 'go', () => go(pid)); } }), cancel: () => (autoNo = [...autoNo, `${actMark}:g`]) };
+	}
+	// Brogan's Shield / Bolster / Fortify: a friendly minion fell in his radius — discard to keep it (× lets it fall)
+	$: saving = $ms.saving ?? null;
+	$: saveMarks = saving && $ms.pieces[saving.piece.id] ? [{ hex: saving.piece.hex, r: 0, team: (saving.piece.team as Team) ?? 'orange', color: '' }] : [];
+	$: saveAsk = saving && saving.saver === clientId ? saveOrder(saving) : null;
+	function saveOrder(sv: NonNullable<MatchState['saving']>): Order | null {
+		const cs = $ms.cards?.[clientId];
+		const opts = cs ? saveCards(cs, sv.kind) : [];
+		if (!opts.length) return null;
+		const nm = (i: number) => heroCards(cs!.hero)[i]?.name ?? 'card';
+		const pay = (i?: number) => session.cardAction({ kind: 'save', pid: clientId, idx: i });
+		return { label: 'Save', sub: `Discard ${nm(opts[0])}`, kind: 'go', pulse: true, run: () => pay(opts[0]), cancel: () => pay(),
+			...(opts[1] != null ? { alt: { label: nm(opts[1]), run: () => pay(opts[1]) } } : {}) };
+	}
+	$: autoAsk = saveAsk ?? offerAsk ?? giftAsk;
 	// Temporal Punch / Slam / Judgment: the defender uses Initiative instead of Defense
 	$: temporalIn = !!incoming && RE_TEMPORAL.test(heroCards($ms.cards?.[incoming.by]?.hero ?? '')[$ms.cards?.[incoming.by]?.pending ?? -1]?.description ?? '');
 	// ── a board action waiting for its yes: the action ring (2.0 HUD, 2.0 phone) asks, with Cancel beside it ──
@@ -1395,7 +1436,7 @@
 	<BoardCanvas bind:this={board} map={$ms.map ?? {}} inset={boardInset} look={boardLook} {glowZone} activeZone={$ms.wonBy ? null : battleZone($ms)} effects={!deckCovered} sea={$boardPrefs.sea} rims={$boardPrefs.rims} rotation={orientation} interactive={true} {placing} {placeGhost} holdColor={myHoldColor} onCancelPlace={cancelPlace} {areas} marks={boardMarks} badges={defBadges} zoomLock={mobile && $boardPrefs.zoomLock} wisps={$boardPrefs.wisps} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} pings={boardPings} onPing={doPing} {pingArmed} />
 	</div>
 
-	<CardLayer bind:this={cardLayer} bind:turnCtx bind:crackPreview bind:gyRaise areaW={gvw} areaH={gvh} {mobile} {hud2} {phone2} ringAsk={ringAsk ?? swapAsk} onResults={() => (victoryClosed = false)} compact={$boardPrefs.compact} cTop={$boardPrefs.cTop} cOrder={$boardPrefs.cOrder} cLog={$boardPrefs.cLog} bind:topW {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} bind:covered={deckCovered} bind:phoneStatus onRespawn={placeMyHero} onEnter={placeMyHero} onArmToken={armToken} onArmDouble={armDouble} placingDouble={pendingDouble} holdingToken={!!pendingToken} {pingArmed} onPing={pingButton} bind:previewId />
+	<CardLayer bind:this={cardLayer} bind:turnCtx bind:crackPreview bind:gyRaise areaW={gvw} areaH={gvh} {mobile} {hud2} {phone2} ringAsk={ringAsk ?? swapAsk ?? autoAsk} onResults={() => (victoryClosed = false)} compact={$boardPrefs.compact} cTop={$boardPrefs.cTop} cOrder={$boardPrefs.cOrder} cLog={$boardPrefs.cLog} bind:topW {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} bind:covered={deckCovered} bind:phoneStatus onRespawn={placeMyHero} onEnter={placeMyHero} onArmToken={armToken} onArmDouble={armDouble} placingDouble={pendingDouble} holdingToken={!!pendingToken} {pingArmed} onPing={pingButton} bind:previewId />
 
 	<!-- selected minion/token: offer delete (heroes aren't deletable) -->
 	{#if hud2}

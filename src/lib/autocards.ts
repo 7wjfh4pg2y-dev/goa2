@@ -24,7 +24,15 @@ export type AutoS = {
 	map?: GameMap | null
 	immune?: Record<string, Immune[]>
 	attacks?: Record<string, { by: string; discarded?: boolean; card?: number }>
+	effects?: { pid: string; hero: string; idx: number }[]
+	/** a defeated minion a card may still save (Brogan's Shield / Bolster / Fortify) */
+	saving?: Saving | null
+	/** how many heroes fell this round (War Drummer / Master Skald) */
+	fallen?: { round: number; n: number }
+	/** once-per-card marks of the automated moves (`turn key : acting index`) */
+	auto?: Record<string, { gift?: string }>
 }
+export type Saving = { piece: Pc; by: string; saver: string; card: string; kind: 'silver' | 'basic'; at: number }
 
 /** is this player's hero automated in this game? */
 export const autoOn = (s: Pick<AutoS, 'labRules' | 'cards'>, pid: string) => !!s.labRules || AUTO_LIVE.includes(s.cards?.[pid]?.hero ?? '')
@@ -123,9 +131,97 @@ export function swapMinions(s: AutoS, pid: string, c: HeroCardJson | undefined):
 
 // Spell Break / Slippery Ground / Deluge: a lingering effect on the enemy heroes round him — drawn as his radius while it
 // is on (adjacent = radius 1), so everyone sees who is in it
-const RE_AURA = /enemy heroes (in radius|adjacent to you) cannot/i
+// (Brogan's Bulwark: "You and friendly units in radius cannot be moved…"; his Shields: "any friendly minion in radius")
+const RE_AURA = /enemy heroes (in radius|adjacent to you) cannot|(friendly units) in radius cannot be moved|(friendly minion) in radius is defeated/i
 export function auraRadius(cs: PlayerCardState, c: HeroCardJson | undefined): number | null {
 	const m = RE_AURA.exec(textOf(c))
 	if (!m) return null
-	return m[1].startsWith('adjacent') ? 1 : reachOf(cs, c, 'radius')
+	return m[1]?.startsWith('adjacent') ? 1 : reachOf(cs, c, 'radius')
+}
+
+// ── Shared: the card that is acting, and "the turn's mark" for once-per-card moves ──
+/** the player's acting card, if they are the one acting and automated (`actor` / `at` from match.ts) */
+export function actingCard(s: AutoS, pid: string, actor: string | null): HeroCardJson | undefined {
+	if (!actor || actor !== pid || !autoOn(s, pid)) return undefined
+	return cardOf(s.cards?.[pid], s.cards?.[pid]?.pending)
+}
+export const markOf = (s: Pick<AutoS, 'round' | 'turn'>, at: number) => `${turnKeyOf(s)}:${at}`
+/** the hero's card in play this turn (resolved or not; undefined = none) */
+export function cardThisTurn(s: AutoS, pid: string): HeroCardJson | undefined {
+	const cs = s.cards?.[pid]
+	return cardOf(cs, cs?.turns?.[s.turn - 1] ?? cs?.pending)
+}
+
+// ── Discards the acting card asks of an enemy: who qualifies ──
+// Brogan's Shield Bash / Counterattack: "An enemy hero adjacent to you who has played an attack card this turn discards
+// a card, if able / or is defeated."
+const RE_BASH = /an enemy hero adjacent to you who has played an attack card this turn discards a card(, or is defeated)?/i
+export type DiscardOffer = { targets: string[]; die: boolean; card: string }
+/** the enemy heroes (player ids) the acting card makes discard, or null when the card asks for none */
+export function discardOffer(s: AutoS, pid: string, c: HeroCardJson | undefined): DiscardOffer | null {
+	const t = textOf(c), me = s.pieces?.[pid]
+	if (!c || !me) return null
+	const bash = RE_BASH.exec(t)
+	if (bash) {
+		const near = new Set(hexNeighbours(me.hex))
+		const targets = heroIds(s, pid).filter((h) => near.has(s.pieces![h].hex) && cardThisTurn(s, h)?.primaryAction === 'ATTACK')
+		return { targets, die: !!bash[1], card: c.name }
+	}
+	return null
+}
+/** the enemy players whose main hero piece is on the board */
+const heroIds = (s: AutoS, pid: string) => Object.keys(s.cards ?? {}).filter((h) => h !== pid && s.pieces?.[h]?.kind === 'hero' && s.pieces[h].team !== s.pieces?.[pid]?.team)
+
+// ── Coins the acting card hands out ──
+// War Drummer / Master Skald: "A friendly hero in range gains N coin(s); if any hero was defeated this round, that
+// friendly hero gains M coins instead."
+const RE_DRUM = /a friendly hero in range gains (\d+) coins?; if any hero was defeated this round, that friendly hero gains (\d+) coins instead/i
+export type GiftOffer = { targets: string[]; amount: number; card: string }
+export function giftOffer(s: AutoS, pid: string, c: HeroCardJson | undefined): GiftOffer | null {
+	const m = RE_DRUM.exec(textOf(c)), cs = s.cards?.[pid], me = s.pieces?.[pid]
+	if (!m || !c || !cs || !me) return null
+	const range = reachOf(cs, c, 'range') ?? 0
+	const amount = Number(s.fallen?.round === s.round && s.fallen.n > 0 ? m[2] : m[1])
+	// a friendly hero = his team's heroes, him too
+	const targets = Object.keys(s.cards ?? {}).filter((h) => s.pieces?.[h]?.kind === 'hero' && s.pieces[h].team === me.team && hexDist(s.pieces[h].hex, me.hex) <= range)
+	return { targets, amount, card: c.name }
+}
+
+// ── Brogan's Shield / Bolster / Fortify: "This round: When any friendly minion in radius is defeated you may discard a
+// silver (Fortify: basic) card. If you do, the minion is not removed." — the defeated minion waits while he decides ──
+const RE_SAVE = /when any friendly minion in radius is defeated you may discard a (silver|basic) card/i
+/** who may save this minion now (null = nobody): an automated hero with such an effect on, the minion in his radius,
+ *  and a card of that kind in hand */
+export function saverFor(s: AutoS, minionId: string): { pid: string; kind: 'silver' | 'basic'; card: string } | null {
+	const m = s.pieces?.[minionId]
+	if (!m || m.kind !== 'minion') return null
+	for (const e of s.effects ?? []) {
+		const c = heroCards(e.hero)[e.idx], cs = s.cards?.[e.pid], me = s.pieces?.[e.pid]
+		const r = RE_SAVE.exec(textOf(c))
+		if (!r || !cs || !me || me.team !== m.team || !autoOn(s, e.pid)) continue
+		const radius = reachOf(cs, c, 'radius') ?? 0
+		const kind = r[1].toLowerCase() as 'silver' | 'basic'
+		if (hexDist(me.hex, m.hex) <= radius && saveCards(cs, kind).length) return { pid: e.pid, kind, card: c!.name }
+	}
+	return null
+}
+/** the cards in hand that pay for the save (silver first) */
+export function saveCards(cs: PlayerCardState, kind: 'silver' | 'basic'): number[] {
+	const cards = heroCards(cs.hero)
+	const ok = (i: number) => cards[i]?.color === 'SILVER' || (kind === 'basic' && cards[i]?.color === 'GOLD')
+	return cs.hand.filter(ok).sort((a, b) => (cards[a]?.color === 'SILVER' ? 0 : 1) - (cards[b]?.color === 'SILVER' ? 0 : 1))
+}
+
+// ── Battle count: heroes who count as minions (Brogan's One Man Army) ──
+const RE_ARMY = /during minion battle you count as a heavy minion/i
+/** extra minions per team in the battle zone's count */
+export function battleExtras(s: AutoS, inZone: (hex: string) => boolean): Record<'orange' | 'blue', number> {
+	const out = { orange: 0, blue: 0 }
+	for (const [pid, cs] of Object.entries(s.cards ?? {})) {
+		const me = s.pieces?.[pid]
+		if (!cs.ultimate || !me || me.kind !== 'hero' || !autoOn(s, pid) || !inZone(me.hex)) continue
+		const ult = heroCards(cs.hero).find((c) => c.color === 'PURPLE')
+		if (RE_ARMY.test(textOf(ult)) && (me.team === 'orange' || me.team === 'blue')) out[me.team]++
+	}
+	return out
 }
