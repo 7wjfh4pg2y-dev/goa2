@@ -699,6 +699,24 @@ export function transferSeat(s: MatchState, from: string, to: string, toName: st
 	if (s.toSpawn?.[from]) { const t = { ...s.toSpawn, [to]: { ...s.toSpawn[from], id: to } }; delete t[from]; patch.toSpawn = t }
 	if (s.defeated?.[from]) { const d = { ...s.defeated, [to]: { ...s.defeated[from], piece: { ...s.defeated[from].piece, id: to } } }; delete d[from]; patch.defeated = d }
 	if (draft) patch.draft = draft
+	// everything else kept per player moves too: 4★ powers (Snorri's runes, Gydion's book…), immunity, Hurry up!,
+	// open attacks / forced discards, and the turn's acting order (a reconnect used to strand them on the old id)
+	const rekey = <T,>(m: Record<string, T> | null | undefined): Record<string, T> | undefined => {
+		if (!m || !(from in m)) return undefined
+		const n = { ...m, [to]: m[from] }; delete n[from]; return n
+	}
+	const swapId = (l: string[] | undefined) => l?.map((p) => (p === from ? to : p))
+	for (const k of ['power', 'immune', 'hurry', 'radii'] as const) { const n = rekey(s[k] as Record<string, unknown> | undefined); if (n) (patch as Record<string, unknown>)[k] = n }
+	const byFix = <T extends { by?: string }>(m: Record<string, T> | null | undefined) => {
+		if (!m) return undefined
+		const n: Record<string, T> = {}
+		for (const k in m) n[k === from ? to : k] = m[k].by === from ? { ...m[k], by: to } : m[k]
+		return n
+	}
+	if (s.attacks && Object.keys(s.attacks).length) patch.attacks = byFix(s.attacks as Record<string, { by?: string }>) as MatchState['attacks']
+	if (s.forced && Object.keys(s.forced).length) patch.forced = byFix(s.forced as Record<string, { by?: string }>) as MatchState['forced']
+	if (s.acting) patch.acting = { ...s.acting, ...(s.acting.done ? { done: swapId(s.acting.done) } : {}), ...(s.acting.pin ? { pin: swapId(s.acting.pin) } : {}) }
+	if (s.tieClaims) patch.tieClaims = { ...s.tieClaims, order: swapId(s.tieClaims.order)! }
 	if (s.host === from) patch.host = to // the departed player was host → hand it over too
 	return patch
 }

@@ -127,6 +127,22 @@ describe('4★ heroes through the real session', () => {
 		t.host.leave(); t.mo.leave();
 	});
 
+	it('Snorri: his runes stay through a defeat, the next turns and his respawn', async () => {
+		const t = table('SN2', 'snorri', idxOf('snorri', 'Inscribe the Runes'));
+		const order = ['horn', 'bird', 'anvil', 'axe'];
+		t.host.cardAction({ kind: 'power', pid: t.h, op: 'snorriInscribe', order } as never);
+		t.mo.cardAction({ kind: 'attack', pid: t.m, target: t.h } as never);
+		await new Promise((r) => setTimeout(r, 400));
+		t.host.cardAction({ kind: 'attackResolve', pid: t.h, target: t.h, result: 'defeated' } as never);
+		expect(t.s().defeated?.[t.h]).toBeTruthy();
+		expect(t.s().power?.[t.h]?.runes).toEqual(order);
+		t.host.cardAction({ kind: 'advance', pid: t.h } as never);
+		expect(t.s().power?.[t.h]?.runes).toEqual(order);
+		await new Promise((r) => setTimeout(r, 400));
+		expect(t.sm().power?.[t.h]?.runes).toEqual(order);
+		t.host.leave(); t.mo.leave();
+	});
+
 	it('Takahide: a gold swap by his acting gold is logged and makes swap news', () => {
 		const g = idxOf('takahide', 'Float like a Butterfly');
 		const t = table('TK1', 'takahide', g);

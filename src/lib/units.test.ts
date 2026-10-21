@@ -375,6 +375,14 @@ describe('coming back to your seat under the same name (a new device, the app vs
 		expect(p.cards!.A).toBeUndefined()
 		expect(p.pieces!.A2?.id).toBe('A2')
 	})
+	it('the hand-back also moves their 4★ power state (Snorri\'s runes), open attacks and the acting order', () => {
+		const st = { ...s(), power: { A: { runes: ['horn', 'bird', 'anvil', 'axe'] } }, attacks: { B: { by: 'A', defending: true, at: 1 } }, acting: { key: '1-1', idx: 1, done: ['A'], pin: ['A'] } } as unknown as MatchState
+		const p = transferSeat(st, 'A', 'A2', 'Avery', 0)
+		expect(p.power!.A2?.runes).toEqual(['horn', 'bird', 'anvil', 'axe'])
+		expect(p.power!.A).toBeUndefined()
+		expect(p.attacks!.B.by).toBe('A2')
+		expect(p.acting!.done).toEqual(['A2'])
+	})
 })
 
 
