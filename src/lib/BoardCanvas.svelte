@@ -137,16 +137,21 @@
 		return off;
 	})();
 
-	// Razzle's shell game: her tokens on the board trade places in pairs (shuffle()), drawn through `shuf` on top of
-	// pieceOffset; the swaps always add up to where they began, so the board ends exactly as it was
-	let shuf: Record<string, { x: number; y: number }> = {};
-	let shufRaf = 0;
-	$: drawOff = Object.keys(shuf).length ? (() => { const o = { ...pieceOffset }; for (const id in shuf) { const a = pieceOffset[id] ?? { x: 0, y: 0 }; o[id] = { x: a.x + shuf[id].x, y: a.y + shuf[id].y }; } return o; })() : pieceOffset;
+	// Razzle's shell game: her tokens on the board trade places in pairs (shuffle()); the swaps always add up to where
+	// they began, so the board ends exactly as it was. While it runs her real pieces stay put, hidden (`shufHide`), and
+	// copies fly the swaps in the `.shufl` html layer — each copy one transform animation over the whole path, worked out
+	// up front (the GPU's job). Moving the pieces inside the board svg frame by frame re-painted and re-layered that svg
+	// every frame: ~135 ms of main-thread work a second while she shuffled.
+	type ShufFly = { id: string; home: { x: number; y: number }; frames: Keyframe[]; dur: number; run: number };
+	let shufList: ShufFly[] = [];
+	let shufHide: string[] = [];
+	let shufT: ReturnType<typeof setTimeout> | null = null;
+	let shufRun = 0;
 	/** Shuffle these pieces like cups on a table; returns how long it runs (ms), 0 if fewer than two are on the board. */
 	export function shuffle(ids: string[], swapMs = 270): number {
 		const toks = ids.map((id) => pieces.find((q) => q.id === id && !q.attachTo)).filter((p): p is NonNullable<typeof p> => !!p);
 		const n = toks.length;
-		if (n < 2 || typeof requestAnimationFrame === 'undefined') return 0;
+		if (n < 2 || !fit || typeof document === 'undefined') return 0;
 		const home = toks.map((p) => { const b = centerOf(p.hex), o = pieceOffset[p.id] ?? { x: 0, y: 0 }; return { x: b.x + o.x, y: b.y + o.y }; });
 		// slot[i] = the home slot token i stands on; three random swaps, then the swaps that bring everyone home
 		const slot = toks.map((_, i) => i), at = (k: number) => slot.indexOf(k);
@@ -159,33 +164,39 @@
 			last = key; swap(a, b);
 		}
 		for (let i = 0; i < n; i++) while (slot[i] !== i) swap(i, slot[i]);
-		if (shufRaf) cancelAnimationFrame(shufRaf);
-		const t0 = performance.now(), total = swaps.length * swapMs;
+		const total = swaps.length * swapMs, k = fit.s;
 		const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
-		const frame = (now: number) => {
-			const e = now - t0, k = Math.min(swaps.length - 1, Math.floor(e / swapMs));
-			// token positions at the start of step k
-			const where = toks.map((_, i) => i);
-			for (let s = 0; s < k; s++) { const [a, b] = swaps[s]; const i = where.indexOf(a), j = where.indexOf(b); where[i] = b; where[j] = a; }
-			const [a, b] = swaps[k], t = ease(Math.min(1, (e - k * swapMs) / swapMs));
-			const next: Record<string, { x: number; y: number }> = {};
-			toks.forEach((p, i) => {
-				let x = home[where[i]].x, y = home[where[i]].y;
-				if (e < total && (where[i] === a || where[i] === b)) {
-					const from = home[where[i]], to = home[where[i] === a ? b : a];
-					const dx = to.x - from.x, dy = to.y - from.y, len = Math.hypot(dx, dy) || 1;
-					const bulge = Math.sin(Math.PI * t) * Math.min(size * 1.1, len * 0.35) * (where[i] === a ? 1 : -1);
-					x = from.x + dx * t - (dy / len) * bulge; y = from.y + dy * t + (dx / len) * bulge;
-				}
-				if (e >= total) { x = home[i].x; y = home[i].y; }
-				next[p.id] = { x: x - home[i].x, y: y - home[i].y };
-			});
-			if (e >= total) { shuf = {}; return; }
-			shuf = next;
-			shufRaf = requestAnimationFrame(frame);
-		};
-		shufRaf = requestAnimationFrame(frame);
+		// each token's path, sampled 18 times a swap (in board units, relative to its home), as keyframes in layer px
+		const STEPS = 18;
+		const frames: Keyframe[][] = toks.map(() => []);
+		const where = toks.map((_, i) => i);
+		swaps.forEach(([a, b], s) => {
+			for (let q = s ? 1 : 0; q <= STEPS; q++) {
+				const t = ease(q / STEPS), off = (s + q / STEPS) / swaps.length;
+				toks.forEach((_, i) => {
+					const w = where[i]; let x = home[w].x, y = home[w].y;
+					if (w === a || w === b) {
+						const from = home[w], to = home[w === a ? b : a];
+						const dx = to.x - from.x, dy = to.y - from.y, len = Math.hypot(dx, dy) || 1;
+						const bulge = Math.sin(Math.PI * t) * Math.min(size * 1.1, len * 0.35) * (w === a ? 1 : -1);
+						x = from.x + dx * t - (dy / len) * bulge; y = from.y + dy * t + (dx / len) * bulge;
+					}
+					frames[i].push({ transform: `translate(${((x - home[i].x) * k).toFixed(2)}px, ${((y - home[i].y) * k).toFixed(2)}px)`, offset: Math.min(1, off) });
+				});
+			}
+			const i = where.indexOf(a), j = where.indexOf(b); where[i] = b; where[j] = a;
+		});
+		const run = ++shufRun;
+		shufList = toks.map((p, i) => ({ id: p.id, home: home[i], frames: frames[i], dur: total, run }));
+		shufHide = toks.map((p) => p.id);
+		if (shufT) clearTimeout(shufT);
+		shufT = setTimeout(() => { if (shufRun === run) { shufList = []; shufHide = []; } }, total + 40);
 		return total;
+	}
+	/** a Svelte action: fly a copy along its precomputed path */
+	function shufFly(node: HTMLElement, f: ShufFly) {
+		const an = node.animate(f.frames, { duration: f.dur, fill: 'both' });
+		return { destroy: () => an.cancel() };
 	}
 
 	const isSpawn = (t: string) => t === 'spawnOrange' || t === 'spawnBlue';
@@ -620,7 +631,7 @@
 	onMount(() => { if (interactive) wrapEl?.addEventListener('wheel', onWheel, { passive: false }); });
 	// Esc puts a picked-up piece back down
 	function onKey(e: KeyboardEvent) { if (e.key === 'Escape' && (selected || dragId)) release(); }
-	onDestroy(() => { if (shufRaf) cancelAnimationFrame(shufRaf); wrapEl?.removeEventListener('wheel', onWheel); clearLongPress(); if (movingT) clearTimeout(movingT); });
+	onDestroy(() => { if (shufT) clearTimeout(shufT); wrapEl?.removeEventListener('wheel', onWheel); clearLongPress(); if (movingT) clearTimeout(movingT); });
 
 	function centerOf(id: string) {
 		const [c, r] = id.split('_').map(Number);
@@ -641,7 +652,7 @@
 	// where a piece is drawn right now (follows the pointer while carried)
 	$: posOf = (id: string, hex: string) => {
 		if (dragId === id) return dragPt;
-		const b = centerOf(hex), o = drawOff[id] ?? { x: 0, y: 0 };
+		const b = centerOf(hex), o = pieceOffset[id] ?? { x: 0, y: 0 };
 		return { x: b.x + o.x, y: b.y + o.y };
 	};
 	// markers riding on a hero: small badges round its upper-right rim
@@ -759,7 +770,7 @@
 		<div class="rims" style:transform={landTf} aria-hidden="true">
 			{#each rimPieces as p (p.id)}
 				{@const base = centerOf(p.hex)}
-				{@const off = drawOff[p.id] ?? { x: 0, y: 0 }}
+				{@const off = pieceOffset[p.id] ?? { x: 0, y: 0 }}
 				{@const d = size * 1.44 * fit.s}
 				<span class="rim" class:lifted={carryId === p.id && !!hoverHex} class:faded={p.faded}
 					style="left:{((base.x + off.x) * fit.s + fit.ox - d / 2).toFixed(2)}px; top:{((base.y + off.y) * fit.s + fit.oy - d / 2).toFixed(2)}px; width:{d.toFixed(2)}px; height:{d.toFixed(2)}px">
@@ -832,10 +843,10 @@
 
 			{#each pieces.filter((q) => !q.attachTo) as p (p.id)}
 				{@const base = centerOf(p.hex)}
-				{@const off = drawOff[p.id] ?? { x: 0, y: 0 }}
+				{@const off = pieceOffset[p.id] ?? { x: 0, y: 0 }}
 				{@const c = { x: base.x + off.x, y: base.y + off.y }}
 				{@const sel = selected === p.id || dragId === p.id}
-				<g class="piece" class:selectable={!!onMovePiece} class:selected={sel} class:lifted={carryId === p.id && !!hoverHex} class:faded={p.faded} class:hidden={p.hidden}
+				<g class="piece" class:selectable={!!onMovePiece} class:selected={sel} class:lifted={carryId === p.id && !!hoverHex} class:faded={p.faded} class:hidden={p.hidden || shufHide.includes(p.id)}
 					role="button" tabindex="-1" data-piece={p.id}
 					aria-label={p.role ? `${p.team === "blue" ? "Titan" : "Atlantean"} ${p.role} minion` : (p.label ?? "piece")}
 					transform={rotEff ? `rotate(${-rotEff} ${c.x} ${c.y})` : undefined}
@@ -892,7 +903,7 @@
 		<div class="shines" style:transform={landTf} aria-hidden="true">
 			{#each shinePieces as p (p.id)}
 				{@const base = centerOf(p.hex)}
-				{@const off = drawOff[p.id] ?? { x: 0, y: 0 }}
+				{@const off = pieceOffset[p.id] ?? { x: 0, y: 0 }}
 				{@const k = fit.s}
 				<!-- a box round the piece, turned back like the piece itself (kept upright on screen); in it the shield's box
 				     (see the immune <g> in pieceBody: 76 × 89 of its 150-per-hex units, up and right of the centre) -->
@@ -902,13 +913,32 @@
 			{/each}
 		</div>
 	{/if}
+	{#if fit && viewM && shufList.length}
+		<!-- Razzle's shell game: copies of her tokens flying the swaps (see shuffle()) -->
+		<div class="shufl" style:transform={landTf} aria-hidden="true">
+			{#each shufList as f (f.id + ':' + f.run)}
+				{@const p = pieces.find((q) => q.id === f.id)}
+				{#if p}
+					{@const k = fit.s}
+					<span class="shp" style="left:{((f.home.x - size) * k + fit.ox).toFixed(2)}px; top:{((f.home.y - size) * k + fit.oy).toFixed(2)}px; width:{(2 * size * k).toFixed(2)}px; height:{(2 * size * k).toFixed(2)}px" use:shufFly={f}>
+						<svg viewBox="{f.home.x - size} {f.home.y - size} {2 * size} {2 * size}">
+							<g transform={rotEff ? `rotate(${-rotEff} ${f.home.x} ${f.home.y})` : undefined}>
+								{#if look === 'island' && !p.role}<circle cx={f.home.x + size * 0.05} cy={f.home.y + size * 0.13} r={size * (p.token || p.letter ? 0.7 : 0.77)} fill="#000" fill-opacity=".34" />{/if}
+								{@render pieceBody(p, f.home, false, 'sh-' + p.id)}
+							</g>
+						</svg>
+					</span>
+				{/if}
+			{/each}
+		</div>
+	{/if}
 	{#if fit && viewM && badges.length}
 		<div class="badges" class:bob={effects} style:transform={landTf} aria-hidden="true">
 			{#each badges as b (b.id)}
 				{@const p = pieces.find((q) => q.id === b.id)}
-				{#if p}
+				{#if p && !shufHide.includes(p.id)}
 					{@const base = centerOf(p.hex)}
-					{@const off = drawOff[p.id] ?? { x: 0, y: 0 }}
+					{@const off = pieceOffset[p.id] ?? { x: 0, y: 0 }}
 					{@const k = fit.s}
 					{@const w = size * k * (b.total ? 1.1 : 0.8)}
 					<span class="bbox" style="left:{((base.x + off.x) * k + fit.ox).toFixed(2)}px; top:{((base.y + off.y) * k + fit.oy).toFixed(2)}px; transform:rotate({-rotEff}deg)">
@@ -982,6 +1012,9 @@
 	.mk .mote { fill: var(--mh); filter: drop-shadow(0 0 4px #fff); }
 	/* the shine on an immune heavy's shield: a glint sweeps across it now and then, clipped to the shield's outline */
 	.shines { position: absolute; inset: 0; transform-origin: 0 0; pointer-events: none; }
+	.shufl { position: absolute; inset: 0; transform-origin: 0 0; pointer-events: none; }
+	.shp { position: absolute; }
+	.shp svg { width: 100%; height: 100%; display: block; overflow: visible; }
 	.shbox { position: absolute; }
 	/* the minion modifiers: a small shield over each minion that counts, the total over the defender */
 	.badges { position: absolute; inset: 0; transform-origin: 0 0; pointer-events: none; z-index: 2; }

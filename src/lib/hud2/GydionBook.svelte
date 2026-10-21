@@ -33,33 +33,39 @@
 	const PT = SCHOOLS.map((_, i) => { const t = ((-90 + (i * 360) / 7) * Math.PI) / 180; return [60 + 55 * Math.cos(t), 60 + 55 * Math.sin(t)] })
 	const logo = heroLogo('gydion')
 
-	function wheel(m: string, sc: string | null, u: boolean) {
+	// L = the layer drawn: 0 the drawing itself, 1 its breathing glows UNDER it, 2 those OVER it — each layer is a whole svg
+	// on its own span, so the breathing is an opacity animation the GPU does (an animated opacity on shapes inside an svg
+	// re-painted the svg, blur filters included, on every frame: ~15 ms/s with the book open)
+	const on0 = (L: number, x: string) => (L === 0 ? x : '')
+	function wheel(m: string, sc: string | null, u: boolean, L = 0) {
 		const spellC = (m === 'cast' || m === 'picked') && sch(sc) ? COL[sch(sc)!] : null
 		const ring = spellC ?? (u ? COL.purple : SILVER), web = spellC ?? SILVER
 		const lit = (s: string) => (m === 'loaded' || m === 'open' ? true : m === 'picked' || m === 'cast' ? s === sc : false)
 		const op = m === 'idle' ? 0.4 : spellC ? 0.95 : 0.7, w = m === 'idle' ? 0.7 : spellC ? 1.1 : 0.9
 		const ln = (p: number[], q: number[], c = web, ww = w) => `<line x1="${f(p[0])}" y1="${f(p[1])}" x2="${f(q[0])}" y2="${f(q[1])}" stroke="${c}" stroke-width="${ww}"/>`
 		return `<svg viewBox="-9 -9 138 138">
-			<circle cx="60" cy="60" r="55" fill="none" stroke="${ring}" stroke-width="${m === 'idle' ? 1.4 : 2}" opacity="${m === 'idle' ? (u ? 0.6 : 0.8) : 1}"/>
-			<circle cx="60" cy="60" r="63" fill="none" stroke="${ring}" stroke-width="1" opacity="${m === 'idle' ? 0.3 : 0.55}" stroke-dasharray="2 4"/>
-			${m !== 'idle' ? `<circle cx="60" cy="60" r="59" fill="none" stroke="${ring}" stroke-width="5" opacity=".35" class="br"/>` : ''}
-			<g opacity="${op}" stroke-linecap="round">${PT.map((p, i) => ln(p, PT[(i + 1) % 7])).join('')}${PT.map((p, i) => ln(p, PT[(i + 2) % 7])).join('')}
+			${on0(L, `<circle cx="60" cy="60" r="55" fill="none" stroke="${ring}" stroke-width="${m === 'idle' ? 1.4 : 2}" opacity="${m === 'idle' ? (u ? 0.6 : 0.8) : 1}"/>
+			<circle cx="60" cy="60" r="63" fill="none" stroke="${ring}" stroke-width="1" opacity="${m === 'idle' ? 0.3 : 0.55}" stroke-dasharray="2 4"/>`)}
+			${L === 1 && m !== 'idle' ? `<circle cx="60" cy="60" r="59" fill="none" stroke="${ring}" stroke-width="5" opacity=".35"/>` : ''}
+			${on0(L, `<g opacity="${op}" stroke-linecap="round">${PT.map((p, i) => ln(p, PT[(i + 1) % 7])).join('')}${PT.map((p, i) => ln(p, PT[(i + 2) % 7])).join('')}
 				<circle cx="60" cy="60" r="44" fill="none" stroke="${web}" stroke-width="${w}"/><circle cx="60" cy="60" r="41.5" fill="none" stroke="${web}" stroke-width="${w * 0.6}"/>
-				${PT.map((p) => ln(p, [60 + (p[0] - 60) * 0.8, 60 + (p[1] - 60) * 0.8])).join('')}</g>
-			${spellC ? `<g stroke-linecap="round" opacity=".5" class="br">${PT.map((p, i) => ln(p, PT[(i + 2) % 7], spellC, 2.6)).join('')}</g>` : ''}
+				${PT.map((p) => ln(p, [60 + (p[0] - 60) * 0.8, 60 + (p[1] - 60) * 0.8])).join('')}</g>`)}
+			${L === 1 && spellC ? `<g stroke-linecap="round" opacity=".5">${PT.map((p, i) => ln(p, PT[(i + 2) % 7], spellC, 2.6)).join('')}</g>` : ''}
 			${SCHOOLS.map((s, i) => { const on = lit(s), c = COL[SCHOOL_COLOR[s]]
 				return `<g transform="translate(${f(PT[i][0])} ${f(PT[i][1])})" opacity="${m === 'idle' ? 0.6 : 1}">
-					${on && (m === 'picked' || m === 'cast') ? `<circle r="13" fill="${c}" opacity=".5" class="br"/>` : ''}
-					<circle r="9" fill="${on ? c : '#0b1422'}" stroke="${c}" stroke-width="${on ? 1.6 : 1.1}" ${on ? '' : 'stroke-opacity=".6"'}/>
-					<image href="${schoolIcon(s)}" x="-6" y="-6" width="12" height="12" opacity="${on ? 1 : 0.42}"/></g>` }).join('')}</svg>`
+					${L === 1 && on && (m === 'picked' || m === 'cast') ? `<circle r="13" fill="${c}" opacity=".5"/>` : ''}
+					${on0(L, `<circle r="9" fill="${on ? c : '#0b1422'}" stroke="${c}" stroke-width="${on ? 1.6 : 1.1}" ${on ? '' : 'stroke-opacity=".6"'}/>
+					<image href="${schoolIcon(s)}" x="-6" y="-6" width="12" height="12" opacity="${on ? 1 : 0.42}"/>`)}</g>` }).join('')}</svg>`
 	}
-	function owl(m: string, sc: string | null, u: boolean) {
+	function owl(m: string, sc: string | null, u: boolean, L = 0) {
 		const awake = m !== 'idle'
 		const c = sch(sc) ? COL[sch(sc)!] : '#e6edf5', eye = u ? COL.purple : c
-		const eyes = (x: number) => awake ? `<circle cx="${x}" cy="-7" r="4.4" fill="#120c06"/><circle cx="${x}" cy="-7" r="3.2" fill="${eye}" class="br"/><circle cx="${x}" cy="-7" r="1.2" fill="#000"/>`
-			: `<path d="M${x - 3.6} -7 Q${x} -4.6 ${x + 3.6} -7" stroke="#1a120a" stroke-width="1.5" fill="none" stroke-linecap="round"/>`
+		// the iris breathes over the socket (layer 2 repeats the pupil so it stays on top)
+		const eyes = (x: number) => awake ? (L === 2 ? `<circle cx="${x}" cy="-7" r="3.2" fill="${eye}"/><circle cx="${x}" cy="-7" r="1.2" fill="#000"/>` : `<circle cx="${x}" cy="-7" r="4.4" fill="#120c06"/><circle cx="${x}" cy="-7" r="1.2" fill="#000"/>`)
+			: on0(L, `<path d="M${x - 3.6} -7 Q${x} -4.6 ${x + 3.6} -7" stroke="#1a120a" stroke-width="1.5" fill="none" stroke-linecap="round"/>`)
+		if (L === 1) return awake ? `<g transform="translate(60 62)"><ellipse cx="0" cy="0" rx="17" ry="20" fill="${c}" opacity=".45" filter="url(#gyb-soft)"/></g>` : ''
+		if (L === 2) return `<g transform="translate(60 62)">${eyes(-4.6)}${eyes(4.6)}</g>`
 		return `<g transform="translate(60 62)">
-			${awake ? `<ellipse cx="0" cy="0" rx="17" ry="20" fill="${c}" opacity=".45" class="br" filter="url(#gyb-soft)"/>` : ''}
 			<path d="M-8 -16 L-6 -10 M8 -16 L6 -10" stroke="#6b5338" stroke-width="3" stroke-linecap="round"/>
 			<path d="M-11 -2 Q-14 8 -9 16 L-7 3 Z M11 -2 Q14 8 9 16 L7 3 Z" fill="#3d2c1b" stroke="#d8b36a" stroke-width=".5"/>
 			<ellipse cx="0" cy="4" rx="10" ry="13" fill="#6b5338" stroke="#d8b36a" stroke-width=".6"/>
@@ -69,16 +75,16 @@
 			${awake && sc ? `<image href="${schoolIcon(sc)}" x="-5" y="2" width="10" height="10" filter="url(#gyb-t-${sch(sc)})"/>` : `<path d="M-4 6 q2 2 4 0 q2 2 4 0 M-3 10 q1.5 1.5 3 0 q1.5 1.5 3 0" stroke="#3d2c1b" stroke-width=".8" fill="none"/>`}
 			<path d="M-6 17 l2 -2 M-2 17 l1 -2 M2 17 l-1 -2 M6 17 l-2 -2" stroke="#d8b36a" stroke-width="1"/></g>`
 	}
-	const closed = (m: string, sc: string | null, u: boolean) => `<svg viewBox="-9 -9 138 138">
+	const closed = (m: string, sc: string | null, u: boolean, L = 0) => L ? `<svg viewBox="-9 -9 138 138"><g transform="translate(61 60) scale(1.32) translate(-60 -62)">${owl(m, sc, u, L)}</g></svg>` : `<svg viewBox="-9 -9 138 138">
 		<rect x="37" y="28" width="50" height="66" rx="4" fill="#c9b994"/>
 		<rect x="33" y="26" width="50" height="67" rx="5" fill="#f2ece0" stroke="#d8b36a" stroke-width="1.5"/>
 		<rect x="33" y="26" width="8" height="67" rx="2.5" fill="#b8a77f" opacity=".55"/>
 		<rect x="44" y="32" width="34" height="55" rx="3" fill="none" stroke="#b8923f" stroke-width="1" opacity=".8"/>
 		<rect x="81" y="54" width="6" height="9" rx="1.5" fill="#d8b36a"/>
 		<g transform="translate(61 60) scale(1.32) translate(-60 -62)">${owl(m, sc, u)}</g></svg>`
-	const opened = (sc: string | null, n: number) => { const k = sch(sc) ? COL[sch(sc)!] : '#d8b36a'
+	const opened = (sc: string | null, n: number, L = 0) => { const k = sch(sc) ? COL[sch(sc)!] : '#d8b36a'
+		if (L) return `<svg viewBox="-9 -9 138 138"><g transform="translate(60 62) scale(.88) translate(-60 -62)"><circle cx="60" cy="58" r="24" fill="${k}" opacity=".45" filter="url(#gyb-soft)"/></g></svg>`
 		return `<svg viewBox="-9 -9 138 138"><g transform="translate(60 62) scale(.88) translate(-60 -62)">
-		<circle cx="60" cy="58" r="24" fill="${k}" opacity=".45" class="br" filter="url(#gyb-soft)"/>
 		<path d="M24 42 Q42 35 60 41 Q78 35 96 42 V84 Q78 77 60 83 Q42 77 24 84 Z" fill="#3b2618" stroke="#d8b36a" stroke-width="1.2"/>
 		<path d="M29 44 Q44 38 59 44 V78 Q44 72 29 78 Z" fill="#efe3c6"/><path d="M91 44 Q76 38 61 44 V78 Q76 72 91 78 Z" fill="#e6d6b2"/>
 		<text x="44" y="66" text-anchor="middle" font-family="Georgia,serif" font-weight="800" font-size="17" fill="#3a250f">${n}</text>
@@ -101,9 +107,9 @@
 </defs></svg>
 
 <button class="gyb" class:ph={phone} class:still={!fx} class:on={isOpen} class:spin style="--s:{S}px" title={label} aria-label={label} on:click={onPress}>
-	<span class="wh">{@html wheel(mode, school, ult)}</span>
-	<span class="cl">{@html closed(mode, school, ult)}</span>
-	<span class="op">{@html opened(school, left)}{#if motes}{#each [0, 1, 2, 3] as i}<i class="mote" style="left:{30 + i * 11}%;bottom:{50 + (i % 2) * 6}%;animation-delay:{i * 0.6}s;--k:{motes}"></i>{/each}{/if}</span>
+	<span class="wh"><span class="ly gl">{@html wheel(mode, school, ult, 1)}</span><span class="ly">{@html wheel(mode, school, ult)}</span></span>
+	<span class="cl"><span class="ly gl">{@html closed(mode, school, ult, 1)}</span><span class="ly">{@html closed(mode, school, ult)}</span><span class="ly gl">{@html closed(mode, school, ult, 2)}</span></span>
+	<span class="op"><span class="ly gl">{@html opened(school, left, 1)}</span><span class="ly">{@html opened(school, left)}</span>{#if motes}{#each [0, 1, 2, 3] as i}<i class="mote" style="left:{30 + i * 11}%;bottom:{50 + (i % 2) * 6}%;animation-delay:{i * 0.6}s;--k:{motes}"></i>{/each}{/if}</span>
 	{#if ult}
 		<span class="wisps">{#each WISPS as [t, d], i}{@const lit = i < wishes}
 			<span class="wisp" class:lit>{#each [6, 5, 4, 3, 2, 1, 0] as k}<i class="wo" class:hd={!k} class:tr={k > 0} style="--t:{t}s;--dl:{(d + k * 0.11).toFixed(2)}s;--w:{1.6 + i * 0.45}s;--k:{k};--a:{i * 120 + 30}deg"><i class="wr"><i class="wp" class:lit></i></i></i>{/each}</span>
@@ -124,7 +130,8 @@
 	.op { transform: scaleX(0); transition: transform 0.28s 0.18s cubic-bezier(0.2, 0.9, 0.3, 1.25); }
 	.gyb.on .cl { transform: scaleX(0); }
 	.gyb.on .op { transform: scaleX(1); }
-	.gyb :global(.br) { animation: gybr 2.6s ease-in-out infinite; }
+	.ly { position: absolute; inset: 0; }
+	.gl { animation: gybr 2.6s ease-in-out infinite; }
 	@keyframes gyspin { to { transform: rotate(360deg); } }
 	@keyframes gybr { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
 	.mote { position: absolute; width: calc(var(--s) * 0.045); height: calc(var(--s) * 0.045); border-radius: 50%; background: var(--k); opacity: 0; animation: gymote 2.8s linear infinite; }
@@ -133,10 +140,10 @@
 	.wisps { z-index: 3; }
 	.wisp { position: absolute; inset: 0; }
 	.wisp:not(.lit) { opacity: 0.5; }
-	.wo { position: absolute; left: 50%; top: 50%; width: 0; height: 0; animation: gyspin var(--t) linear infinite, gywz calc(var(--w) * 2) step-end infinite; animation-delay: var(--dl), var(--dl); z-index: 3; }
+	.wo { position: absolute; left: 50%; top: 50%; width: 0; height: 0; animation: gyspin var(--t) linear infinite; animation-delay: var(--dl); }
 	.wr { position: absolute; left: 0; top: 0; animation: gyweave var(--w) ease-in-out infinite alternate; animation-delay: var(--dl); }
 	@keyframes gyweave { from { transform: translateX(calc(var(--s) * 0.3)); } to { transform: translateX(calc(var(--s) * 0.5)); } }
-	@keyframes gywz { 0% { z-index: 3; } 50% { z-index: 0; } }
+	/* (no z-index animation: it ran on the main thread — 21 lights cost ~160 ms/s — and inside .wisps' own stacking context it changed nothing) */
 	.hd .wp { position: absolute; width: calc(var(--s) * 0.05); height: calc(var(--s) * 0.05); margin: calc(var(--s) * -0.025); border-radius: 50%;
 		background: radial-gradient(circle, #fff 0 30%, #ead9ff 45%, #b98cf5 70%, rgba(185, 140, 245, 0) 100%); animation: gytw 1.7s ease-in-out infinite; animation-delay: var(--dl); }
 	.hd .wp::before { content: ''; position: absolute; inset: -180%; border-radius: 50%; background: radial-gradient(circle, rgba(205, 170, 255, 0.55) 0, rgba(165, 110, 240, 0.22) 35%, rgba(140, 80, 230, 0) 70%); }
@@ -151,7 +158,7 @@
 		background: radial-gradient(circle, #f3e8ff 0 25%, rgba(190, 145, 250, 0.8) 45%, rgba(160, 110, 240, 0) 75%); opacity: calc(0.75 - var(--k) * 0.11); }
 	.tr .wp.lit { background: radial-gradient(circle, #fff7d8 0 25%, rgba(255, 206, 90, 0.85) 45%, rgba(255, 180, 50, 0) 75%); }
 	/* the Dashboard switch off: nothing moves (the trails go, the lights sit still) */
-	.gyb.still .wh, .gyb.still :global(.br), .gyb.still .mote, .gyb.still .wo, .gyb.still .wr, .gyb.still .wp { animation: none; }
+	.gyb.still .wh, .gyb.still .gl, .gyb.still .mote, .gyb.still .wo, .gyb.still .wr, .gyb.still .wp { animation: none; }
 	.gyb.still .tr { display: none; }
 	.gyb.still .wo { transform: rotate(var(--a)); }
 	.gyb.still .wr { transform: translateX(calc(var(--s) * 0.4)); }

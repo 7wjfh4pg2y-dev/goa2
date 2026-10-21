@@ -70,10 +70,16 @@
 	.flash { left: 50%; top: 50%; width: calc(var(--s) * 2.4); height: calc(var(--s) * 2.4); margin: calc(var(--s) * -1.2); border-radius: 50%; mix-blend-mode: screen; opacity: 0;
 		background: radial-gradient(circle, #ffffff 0 10%, rgba(230, 200, 255, 0.95) 20%, rgba(160, 90, 255, 0.55) 38%, transparent 66%); animation: cfflash 0.55s 0.52s ease-out both; }
 	@keyframes cfflash { 0% { opacity: 0; transform: scale(0.15); } 14% { opacity: 1; transform: scale(0.75); } 100% { opacity: 0; transform: scale(1.15); } }
-	.wave { left: 50%; top: 50%; width: var(--s); height: var(--s); margin: calc(var(--s) * -0.5); border-radius: 50%; opacity: 0; animation: cfwave 0.75s 0.55s cubic-bezier(0.1, 0.7, 0.3, 1) both; }
-	.w1 { border: 6px solid #f4e6ff; box-shadow: 0 0 22px rgba(200, 150, 255, 0.9), inset 0 0 22px rgba(200, 150, 255, 0.9); }
-	.w2 { border: 4px solid #ffb060; box-shadow: 0 0 18px rgba(255, 140, 40, 0.8); animation-delay: 0.6s; }
-	.w3 { border: 4px solid #6fd8ff; box-shadow: 0 0 18px rgba(60, 170, 255, 0.8); animation-delay: 0.66s; }
+	/* the shockwave rings: ONE radial gradient each (a bright ring with a soft glow either side) — a border + blurred
+	   box-shadows scaled 3× had the compositor re-rasterising big blurs (a 150 ms stall as the coin landed). The box is
+	   1.4 × the old ring, the ring on its old radius (71.4 % of the box), so the scale animation is unchanged. */
+	.wave, .land { left: 50%; top: 50%; width: calc(var(--s) * 1.4); height: calc(var(--s) * 1.4); margin: calc(var(--s) * -0.7); border-radius: 50%; opacity: 0;
+		--bw: 3.4%; --gi: 12%; --go: 12%;
+		background: radial-gradient(circle closest-side, transparent calc(71.4% - var(--bw) - var(--gi)), var(--gin) calc(71.4% - var(--bw)), var(--rc) calc(71.4% - var(--bw)), var(--rc) 71.4%, var(--gout) 71.4%, transparent calc(71.4% + var(--go))); }
+	.wave { animation: cfwave 0.75s 0.55s cubic-bezier(0.1, 0.7, 0.3, 1) both; }
+	.w1 { --rc: #f4e6ff; --gin: rgba(200, 150, 255, 0.6); --gout: rgba(200, 150, 255, 0.6); }
+	.w2 { --rc: #ffb060; --gin: transparent; --gout: rgba(255, 140, 40, 0.55); --bw: 2.3%; --go: 10%; animation-delay: 0.6s; }
+	.w3 { --rc: #6fd8ff; --gin: transparent; --gout: rgba(60, 170, 255, 0.55); --bw: 2.3%; --go: 10%; animation-delay: 0.66s; }
 	@keyframes cfwave { 0% { opacity: 0; transform: scale(0.2); } 10% { opacity: 1; } 100% { opacity: 0; transform: scale(3.2); } }
 	/* the corona: two sets of plasma rays turning opposite ways behind the spinning coin */
 	.corona { left: 50%; top: 50%; width: calc(var(--s) * 1.7); height: calc(var(--s) * 1.7); margin: calc(var(--s) * -0.85); opacity: 0; animation: cfcor 1.3s 0.53s ease-out both; }
@@ -96,8 +102,8 @@
 	@keyframes cfspin { 0%, 14.3%, 28.6%, 42.9%, 57.1%, 71.4%, 85.7%, 100% { transform: scaleX(1); } 7.1%, 21.4%, 35.7%, 50%, 64.3%, 78.6%, 92.9% { transform: scaleX(0.04); } }
 	@keyframes cfland { from { scale: 1.25; } to { scale: 1; } }
 	/* landing: the new team's colour blasts out */
-	.land { left: 50%; top: 50%; width: var(--s); height: var(--s); margin: calc(var(--s) * -0.5); border-radius: 50%; border: 5px solid var(--land2); box-shadow: 0 0 26px var(--land), inset 0 0 20px var(--land); opacity: 0; animation: cfwave 0.65s 1.25s cubic-bezier(0.1, 0.7, 0.3, 1) both; }
-	.l2 { border-width: 3px; animation-delay: 1.33s; }
+	.land { --rc: var(--land2); --gin: color-mix(in srgb, var(--land) 55%, transparent); --gout: color-mix(in srgb, var(--land) 60%, transparent); --bw: 2.9%; --gi: 11.4%; --go: 14.8%; animation: cfwave 0.65s 1.25s cubic-bezier(0.1, 0.7, 0.3, 1) both; }
+	.l2 { --bw: 1.7%; animation-delay: 1.33s; }
 	.landglow { left: 50%; top: 50%; width: calc(var(--s) * 2); height: calc(var(--s) * 2); margin: calc(var(--s) * -1); border-radius: 50%; mix-blend-mode: screen; opacity: 0;
 		background: radial-gradient(circle, transparent 22%, color-mix(in srgb, var(--land) 70%, transparent) 30%, transparent 60%); animation: cflg 0.7s 1.25s ease-out both; }
 	@keyframes cflg { 0% { opacity: 0; transform: scale(0.5); } 20% { opacity: 1; } 100% { opacity: 0; transform: scale(1.3); } }
