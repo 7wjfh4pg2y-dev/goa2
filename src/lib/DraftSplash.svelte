@@ -3,9 +3,11 @@
 	// The hero-draft splash: ONE ceremony per draft system, made from the game's own art (2026-10-22, second
 	// round — the first three looks were generic emblems + chips):
 	//   All Pick     = THE MUSTER  — every hero's symbol drops onto a honeycomb of board hexes, rippling out from the middle
-	//   All Random   = THE DEAL    — a deck of hero cards is riffled, dealt face down to every seat, then turned up
+	//   All Random   = THE DEAL    — a deck with the GoA crest on its backs is riffled; each card dealt to a seat lands
+	//                                as that hero's real card back, then they turn up
 	//   Single Draft = THREE FATES — three cards rise into your hand and turn over: your three heroes, yours alone
-	//   Pick & Ban   = THE STRIKE  — a frieze of hero paintings; each team's blade cuts one in two
+	//   Pick & Ban   = THE BAN     — a frieze of hero paintings; one per team steps forward, a ban sign stamps it grey,
+	//                                '<Team> ban' under it (the team without the coin first)
 	// Mounting plays it once (after the art has loaded, ≤ 1.2 s), then it fades and removes itself.
 	export const DRAFT_SPLASH_MS: Record<DraftSystem, number> = { 'all-pick': 4800, 'all-random': 6000, 'single-draft': 5400, 'pick-ban': 5400 };
 	export const DRAFT_TITLES: Record<DraftSystem, string> = { 'all-pick': 'All Pick', 'all-random': 'All Random', 'single-draft': 'Single Draft', 'pick-ban': 'Pick & Ban' };
@@ -16,6 +18,7 @@
 	import { HEROES, heroById, heroLogo, heroSplash, splashFace } from '$lib/heroes';
 	import { teamName } from '$lib/teams';
 	import CardBack from '$lib/cards/CardBack.svelte';
+	import crest from '$lib/images/goa-crest.webp';
 
 	export let system: DraftSystem = 'all-pick';
 	export let seats = 4; // 4 or 6
@@ -81,11 +84,11 @@
 	const watcher = system === 'single-draft' && offer.length < 3;
 	const fan = system === 'single-draft' ? [0, 1, 2].map((k) => ({ k, id: offer[k] ?? '', x: (k - 1) * (FW + (ph ? 8 : 22)), y: k === 1 ? 0 : 16, r: (k - 1) * 7 })) : [];
 
-	// ── Pick & Ban: the frieze; the second slice falls to the left team's blade, the second-last to the right's ──
+	// ── Pick & Ban: the frieze; the left team bans the second slice, the right team the second-last ──
 	const SN = ph ? 5 : 7, SW = ph ? 112 : 116, SH = ph ? 380 : 330;
 	const slices = system === 'pick-ban' ? mixed.slice(0, SN).map((id, i) => ({ id, i })) : [];
 	const cut = (i: number): Team | null => (i === 1 ? left : i === SN - 2 ? right : null);
-	const cutAt = (t: Team) => (t === other ? 1.5 : 2.15); // seconds: the team without the coin strikes first
+	const cutAt = (t: Team) => (t === other ? 1.4 : 2.3); // seconds: the team without the coin bans first
 
 	// wait for the art (≤ 1.2 s) so nothing slams in blank, then play; fade out at the end
 	let go = false, out = false, alive = true;
@@ -123,7 +126,7 @@
 			{#if line === 'pool'}Every hero in the pool <i>·</i> everyone picks at once
 			{:else if line === 'swap'}One hero dealt to each <i>·</i> teammates may trade
 			{:else if line === 'mine'}{watcher ? 'Three heroes for each player' : 'Dealt to you alone'} <i>·</i> <b class="t-{other}">the {teamName(other)}</b> pick first
-			{:else}One ban a team <i>·</i> <b class="t-{other}">the {teamName(other)}</b> strike first{/if}
+			{:else}Each team bans one hero <i>·</i> <b class="t-{other}">the {teamName(other)}</b> ban first <i>·</i> then the picks{/if}
 		</span>
 	</div>
 {/snippet}
@@ -157,7 +160,7 @@
 					<div class="deck" style="--x:{deck.x}; --y:{deck.y}; width:calc(var(--u) * {deckW})">
 						<span class="dk">
 							{#each Array(8) as _, k (k)}
-								<span class="rf" style="--k:{k}; --s:{k % 2 ? 1 : -1}"><CardBack hero={k === 7 ? mixed[0] : ''} blank={k !== 7} /></span>
+								<span class="rf" style="--k:{k}; --s:{k % 2 ? 1 : -1}"><CardBack blank /><img class="crest" src={crest} alt="" /></span>
 							{/each}
 						</span>
 					</div>
@@ -202,17 +205,18 @@
 
 		{:else}
 			<div class="stage">
-				<div class="frieze" style="height:calc(var(--u) * {SH + 30})">
+				<div class="frieze" style="height:calc(var(--u) * {SH + 90})">
 					{#each slices as s (s.id)}
 						{@const t = cut(s.i)}
-						<div class="sl" class:cut={t} style="--i:{s.i}; --n:{SN}; --at:{t ? cutAt(t) : 0}s; --c:var(--{t ?? 'orange'}); width:calc(var(--u) * {SW}); height:calc(var(--u) * {SH})">
+						<div class="sl" class:cut={t} style="--i:{s.i}; --n:{SN}; --at:{t ? cutAt(t) : 0}s; --c:var(--{t ?? 'orange'}-hi); width:calc(var(--u) * {SW}); height:calc(var(--u) * {SH})">
 							<span class="sin">
+								<span class="whole">
+									{#if t}<img class="grey" src={heroSplash(s.id)} alt="" style="object-position:{face(s.id)}" />{/if}
+									<img class="col" src={heroSplash(s.id)} alt="" style="object-position:{face(s.id)}" />
+								</span>
 								{#if t}
-									<span class="half a"><img class="grey" src={heroSplash(s.id)} alt="" style="object-position:{face(s.id)}" /><img class="col" src={heroSplash(s.id)} alt="" style="object-position:{face(s.id)}" /></span>
-									<span class="half b"><img class="grey" src={heroSplash(s.id)} alt="" style="object-position:{face(s.id)}" /><img class="col" src={heroSplash(s.id)} alt="" style="object-position:{face(s.id)}" /></span>
-									<span class="slash"></span>
-								{:else}
-									<span class="whole"><img src={heroSplash(s.id)} alt="" style="object-position:{face(s.id)}" /></span>
+									<span class="stamp"><svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="38" /><path d="M23 23L77 77" /></svg></span>
+									<span class="cap t-{t}">{teamName(t)} ban</span>
 								{/if}
 							</span>
 						</div>
@@ -257,7 +261,7 @@
 	.ph .ttl { font-size: calc(var(--u) * 82); }
 	.rule { width: calc(var(--u) * 420); height: calc(var(--u) * 2); background: linear-gradient(90deg, transparent, var(--brass) 20%, var(--brass-hi) 50%, var(--brass) 80%, transparent); transform: scaleX(0); }
 	.line { font-size: calc(var(--u) * 22); letter-spacing: .04em; color: #cfd8e3; opacity: 0; white-space: nowrap; }
-	.ph .line { font-size: calc(var(--u) * 28); }
+	.ph .line { font-size: calc(var(--u) * 28); white-space: normal; max-width: min(92vw, calc(var(--u) * 700)); line-height: 1.35; }
 	.line i { font-style: normal; color: var(--brass); padding: 0 .3em; }
 	.line b { font-weight: normal; color: var(--th); }
 	.go .kick { animation: rise .6s cubic-bezier(.2, .9, .2, 1) var(--hd, .25s) both; }
@@ -321,6 +325,8 @@
 		0% { transform: translateY(calc(var(--u) * var(--k) * -1.6)); }
 		30%, 48% { transform: translate(calc(var(--u) * var(--s) * 74), calc(var(--u) * (var(--k) * -1.6 - 10))) rotate(calc(var(--s) * 11deg)); }
 		100% { transform: translateY(calc(var(--u) * var(--k) * -1.6)); } }
+	/* the deck's backs: the gear-and-ice crest (its gear hub at 257, 352 of 720 × 667, centred on the card) */
+	.rf .crest { position: absolute; width: 71%; height: auto; left: 24.66%; top: 25.14%; filter: drop-shadow(0 calc(var(--u) * 2) calc(var(--u) * 4) rgba(0, 0, 0, .55)); }
 	.seat { position: absolute; left: 0; top: 50%; transform: translate(-50%, -50%) translate(calc(var(--u) * var(--x)), calc(var(--u) * var(--y))); }
 	.seat .flip { opacity: 0; }
 	.go .seat .flip { animation: deal .6s cubic-bezier(.2, .8, .25, 1) calc(1.7s + var(--k) * .17s) both; }
@@ -355,30 +361,30 @@
 
 	/* ── PICK & BAN · the strike ── */
 	.pick-ban { --hd: .9s; --ld: 2.9s; }
-	.frieze { display: flex; align-items: center; gap: calc(var(--u) * 12); }
+	.frieze { display: flex; align-items: flex-start; padding-top: calc(var(--u) * 24); box-sizing: border-box; gap: calc(var(--u) * 12); }
 	.sl { position: relative; flex: none; opacity: 0; transform: skewX(-8deg); }
 	.go .sl { animation: slicein .6s cubic-bezier(.16, 1, .3, 1) calc(.1s + var(--i) * .07s) both; }
 	@keyframes slicein { from { opacity: 0; transform: translateY(calc(var(--u) * (var(--i) - var(--n) / 2) * 30)) skewX(-8deg) scaleY(.6); } to { opacity: 1; transform: skewX(-8deg); } }
 	.sin { position: absolute; inset: 0; }
-	.go .cut .sin { animation: jolt .3s ease-out calc(var(--at) + .05s); }
-	@keyframes jolt { 30% { transform: translateX(calc(var(--u) * 8)); } }
-	.whole, .half { position: absolute; inset: 0; overflow: hidden; border: calc(var(--u) * 2) solid rgba(216, 179, 106, .7); box-shadow: 0 calc(var(--u) * 10) calc(var(--u) * 20) rgba(0, 0, 0, .55); }
+	/* a banned hero steps out of the row, the ban sign slams onto it and its colour drains; '<Team> ban' under it */
+	.go .cut .sin { animation: stepout .45s cubic-bezier(.2, .9, .3, 1) calc(var(--at) - .3s) forwards; }
+	@keyframes stepout { to { transform: translateY(calc(var(--u) * -16)) scale(1.07); } }
+	.cut { z-index: 1; }
+	.whole { position: absolute; inset: 0; overflow: hidden; border: calc(var(--u) * 2) solid rgba(216, 179, 106, .7); box-shadow: 0 calc(var(--u) * 10) calc(var(--u) * 20) rgba(0, 0, 0, .55); }
+	.cut .whole { border-color: var(--c); }
 	.sl img { max-width: none; position: absolute; top: 0; left: -25%; width: 150%; height: 100%; object-fit: cover; transform: skewX(8deg); }
-	.half.a { clip-path: polygon(-5% -5%, 105% -5%, 105% 40%, -5% 60%); }
-	.half.b { clip-path: polygon(-5% 60%, 105% 40%, 105% 105%, -5% 105%); }
-	.half .grey { filter: grayscale(1) brightness(.45) contrast(1.1); }
-	.go .half .col { animation: drain .5s ease calc(var(--at) + .12s) forwards; }
+	.whole .grey { filter: grayscale(1) brightness(.42) contrast(1.1); }
+	.go .cut .col { animation: drain .45s ease calc(var(--at) + .08s) forwards; }
 	@keyframes drain { to { opacity: 0; } }
-	.go .half.a { animation: parta .7s cubic-bezier(.2, .9, .3, 1) calc(var(--at) + .08s) forwards; }
-	.go .half.b { animation: partb .7s cubic-bezier(.2, .9, .3, 1) calc(var(--at) + .08s) forwards; }
-	@keyframes parta { to { transform: translate(calc(var(--u) * -9), calc(var(--u) * -14)) rotate(-3deg); } }
-	@keyframes partb { to { transform: translate(calc(var(--u) * 9), calc(var(--u) * 16)) rotate(3deg); } }
-	/* the blade: a white-hot core in the striking team's colour, drawn across the slice along the cut */
-	.slash { position: absolute; left: -45%; right: -45%; top: 50%; height: calc(var(--u) * 7); margin-top: calc(var(--u) * -3.5); border-radius: 999px;
-		background: linear-gradient(90deg, transparent, var(--c) 18%, #fff 50%, var(--c) 82%, transparent);
-		box-shadow: 0 0 calc(var(--u) * 14) var(--c); transform: rotate(-34deg) scaleX(0); opacity: 0; }
-	.go .slash { animation: slash .55s cubic-bezier(.7, 0, .2, 1) var(--at) both; }
-	@keyframes slash { 0% { opacity: 1; transform: rotate(-34deg) scaleX(0); } 35% { opacity: 1; transform: rotate(-34deg) scaleX(1); } 100% { opacity: .55; transform: rotate(-34deg) scaleX(1); } }
+	.stamp { position: absolute; left: 50%; top: 42%; width: 150%; aspect-ratio: 1; margin: -75% 0 0 -75%; opacity: 0; }
+	.stamp svg { width: 100%; height: 100%; transform: skewX(8deg); overflow: visible; filter: drop-shadow(0 0 calc(var(--u) * 8) rgba(255, 40, 40, .6)); }
+	.stamp circle, .stamp path { fill: none; stroke: #ff3b3b; stroke-width: 9; stroke-linecap: round; }
+	.go .stamp { animation: stamp .42s cubic-bezier(.3, 1.5, .5, 1) var(--at) both; }
+	@keyframes stamp { from { opacity: 0; transform: scale(2.2) rotate(-25deg); } 50% { opacity: 1; } to { opacity: 1; transform: none; } }
+	.cap { position: absolute; left: 50%; top: 100%; margin-top: calc(var(--u) * 14); white-space: nowrap; font-size: calc(var(--u) * 19); letter-spacing: .14em; text-transform: uppercase;
+		color: var(--th); transform: translateX(-50%) skewX(8deg); opacity: 0; }
+	.ph .cap { font-size: calc(var(--u) * 24); }
+	.go .cap { animation: fadein .4s ease calc(var(--at) + .15s) both; }
 
 	@media (prefers-reduced-motion: reduce) {
 		.go * { animation-duration: .01s !important; animation-delay: 0s !important; }
