@@ -38,6 +38,8 @@
 	import { BOOK } from '$lib/gydion';
 	import { schoolOf, SCHOOL_COLOR } from '$lib/cards/spells';
 	import { portraitCss, altFace } from '$lib/heroes';
+	import DraftSplash, { DRAFT_SPLASH_LOOKS, type DraftSplashLook } from '$lib/DraftSplash.svelte';
+	import { DRAFT_SYSTEMS, DRAFT_LABELS, type DraftSystem } from '$lib/match';
 	import RevealCurtain, { type RevealEntry, type RevealFace } from '$lib/RevealCurtain.svelte';
 	import { heroCards } from '$lib/cards/deck';
 	import YourTurn, { TURN_CUE_LOOKS, TURN_CUE_DEFAULT, type TurnCueLook } from '$lib/YourTurn.svelte';
@@ -227,6 +229,9 @@
 		[[1, 'j', 'a'], [4, 'h', 'e', 'g'], [4, 'd', 'i', 'a'], [7, 'g', 'b', 'j'], [7, 'i', 'f', 'b', 'h'], [7, 'c', 'd'], [11, 'a', 'j', 'f'], [12, 'f', 'c', 'e'], [14, 'b', 'g', 'i'],
 			[17, 'e', 'h', 'd', 'b'], [18, 'g', 'f'], [18, 'c', 'b', 'j'], [21, 'i', 'd', 'h'], [22, 'a', 'b', 'f'], [23, 'j', 'e'], [25, 'g', 'j', 'd'], [25, 'e', 'f', 'b'], [26, 'c', 'h', 'd'], [26, 'a', 'b']]) }
 	];
+	// the draft-mode splash (three looks to choose from)
+	let dsLook: DraftSplashLook = 'herald', dsSys: DraftSystem = 'single-draft', dsSeats = 4, dsRun = 0;
+	function playDraft(l: DraftSplashLook = dsLook) { dsLook = l; dsRun++; }
 	let stats: GameStatsData = REPORTS[2].stats;
 	function over(team: Team, reason: string, s: GameStatsData = REPORTS[2].stats) { stats = s; won = { team, reason }; }
 </script>
@@ -242,6 +247,17 @@
 		<button class="b" class:off={me !== 'blue'} on:click={() => (me = 'blue')}>Titan player</button>
 		<button class:off={me !== null} on:click={() => (me = null)}>Spectator</button>
 	</div>
+	<section>
+		<h2>Hero draft begins <small>(what kind of draft — pick a look)</small></h2>
+		<div class="row">
+			{#each DRAFT_SPLASH_LOOKS as l (l.id)}<button class:off={dsLook !== l.id} on:click={() => playDraft(l.id)}>{l.label}</button>{/each}
+		</div>
+		<div class="row sm">
+			{#each DRAFT_SYSTEMS as sy (sy)}<button class:off={dsSys !== sy} on:click={() => { dsSys = sy; playDraft(); }}>{DRAFT_LABELS[sy]}</button>{/each}
+			<button class:off={dsSeats !== 4} on:click={() => { dsSeats = 4; playDraft(); }}>2 v 2</button>
+			<button class:off={dsSeats !== 6} on:click={() => { dsSeats = 6; playDraft(); }}>3 v 3</button>
+		</div>
+	</section>
 	<section>
 		<h2>Your turn <small>(pick a look)</small></h2>
 		<div class="row">
@@ -486,6 +502,7 @@
 <DefeatSplash news={kill} {cards} names={(i) => names[i] ?? i} {lifeArt} {mobile} myTeam={side} />
 <TurnSplash bind:this={turnSplash} {mobile} />
 <YourTurn bind:this={cue} look={cueLook} {mobile} />
+{#if dsRun}{#key dsRun}<DraftSplash look={dsLook} system={dsSys} seats={dsSeats} coin="orange" myTeam={me} {mobile} />{/key}{/if}
 {#if revealShow}{#key revealShow}<RevealCurtain {...revealShow} me={revealShow.entries.find((e) => e.team === (me ?? 'blue'))?.pid ?? null} turn={revealTurn} {mobile} myTeam={me ?? 'blue'} onClose={() => (revealShow = null)} />{/key}{/if}
 <LevelSplash bind:this={levelSplash} {mobile} />
 <NebkherSplash bind:this={nkSplash} phone={mobile} />
