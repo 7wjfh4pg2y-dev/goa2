@@ -43,7 +43,7 @@ describe('Gydion: the spellbook', () => {
 	it('is a lab hero with a power', () => {
 		expect(hasPower('gydion')).toBe(true)
 		expect(FOUR_STAR_LAB).toContain('gydion')
-		expect(isLabHero('gydion')).toBe(true)
+		expect(isLabHero('gydion')).toBe(false) // live since 2026-10-22
 		expect(BOOK).toHaveLength(21)
 		expect(SPAWN).toBeTruthy()
 	})

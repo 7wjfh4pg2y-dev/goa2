@@ -47,7 +47,8 @@ export interface Hero {
 /** 4★ heroes, brought in one at a time (each breaks a rule of the game, so each gets its own dash button):
  *  LIVE = draftable by everyone; LAB = a GM can test them (Create → 4★ shows to GMs only, and the room's games never
  *  reach the Hall). Any other 4★ hero stays "coming soon". */
-export const FOUR_STAR_LIVE: string[] = []
+// every 4★ hero went live on 2026-10-22 (the lab list is kept so a new hero can be tried there first)
+export const FOUR_STAR_LIVE: string[] = ['ignatia', 'snorri', 'takahide', 'emmitt', 'nebkher', 'razzle', 'gydion']
 export const FOUR_STAR_LAB: string[] = ['ignatia', 'snorri', 'takahide', 'emmitt', 'nebkher', 'razzle', 'gydion']
 export const isLabHero = (id: string) => FOUR_STAR_LAB.includes(id) && !FOUR_STAR_LIVE.includes(id)
 /** a hero the draft may offer: its complexity is picked, and a 4★ one is live (or in the lab, in a GM's room) */

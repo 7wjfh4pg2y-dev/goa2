@@ -78,7 +78,7 @@
 	function stepLife(d: number) { goCustom(); customLife = Math.min(10, Math.max(3, customLife + d)); }
 	let draftSystem: DraftSystem = 'all-pick';
 	let labRules = false; // GMs: Lab rules = the 1–3★ card automation still in the lab (autocards.ts); these games aren't recorded
-	let draftStars = [1, 2, 3]; // 4★ heroes disabled for now (extra dev work pending)
+	let draftStars = [1, 2, 3]; // 4★ is the host's pick (live for everyone since 2026-10-22)
 	let maps: MapChoice[] = [];
 	let mapId = '';
 

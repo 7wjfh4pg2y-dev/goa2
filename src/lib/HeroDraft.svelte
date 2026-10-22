@@ -409,7 +409,7 @@
 								class:dim={d.system === 'single-draft' && myTurn && inPool.has(h.id) && !d.offer.includes(h.id) && !blocked.has(h.id)}
 								class:filtered={off} class:viewlock={viewLocked}
 								disabled={!inPool.has(h.id) || off || viewLocked}
-								title={soon4(h) ? `${h.name} — 4★ heroes coming soon` : tk ? `${h.name} — picked by ${tk.name}` : bannedSet.has(h.id) ? `${h.name} — banned` : h.name}
+								title={soon4(h) ? `${h.name} — 4★ heroes are off in this game` : tk ? `${h.name} — picked by ${tk.name}` : bannedSet.has(h.id) ? `${h.name} — banned` : h.name}
 								on:pointerenter={() => prefer(h.id)} on:pointerdown={() => prefer(h.id)} on:focus={() => prefer(h.id)}
 								on:click={() => (sel = h.id)}>
 								<img src={heroAvatar(h.id)} alt={h.name} />
