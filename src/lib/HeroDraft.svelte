@@ -12,7 +12,7 @@
 	} from '$lib/heroes';
 	import {
 		teamRosters, teamForSeat, draftTurn, draftActor, draftBlocked, draftComplete,
-		draftAdvance, draftSetPick, draftSwap, draftSeal, colorHex, DRAFT_LABELS, DRAFT_TURN_MS,
+		draftAdvance, draftSetPick, draftSwap, draftSeal, draftTimeUp, colorHex, DRAFT_LABELS, DRAFT_TURN_MS, DRAFT_STEP_MS, DRAFT_OT_MS,
 		type MatchState, type Player, type MatchSession, type Team, type DraftAction
 	} from '$lib/match';
 	import coinOrange from '$lib/images/tiebreaker_orange.png';
@@ -191,17 +191,26 @@
 	$: isAllPick = !!d && d.order.length === 0 && d.system === 'all-pick';
 	// my time is up but I haven't locked in → grace/overtime: extra time on a red
 	// clock; you can still switch heroes, and whatever you're on locks in at 0.
-	$: overtime = isAllPick && !!d && d.deadline > 0 && !complete && !myPick && now >= d.deadline;
+	// turn-based (single-draft / pick-ban): 30 s a turn, then the acting team's shared overtime (DRAFT_OT_MS) runs down
+	$: stepped = !!d && d.order.length > 0 && !!d.ot;
+	$: teamOT = stepped && d && turn ? Math.max(0, d.ot?.[turn.team] ?? 0) : 0;
+	$: inOT = stepped && !!d && d.deadline > 0 && !complete && now >= d.deadline;
+	$: overtime = (isAllPick && !!d && d.deadline > 0 && !complete && !myPick && now >= d.deadline) || inOT;
 	$: secsLeft = (() => {
 		if (!d || !d.deadline || complete) return null;
-		const dl = isAllPick && !myPick && now >= d.deadline ? d.deadline + GRACE_MS : d.deadline;
+		const dl = stepped ? (now >= d.deadline ? d.deadline + teamOT : d.deadline)
+			: isAllPick && !myPick && now >= d.deadline ? d.deadline + GRACE_MS : d.deadline;
 		return Math.max(0, Math.ceil((dl - now) / 1000));
 	})();
+	// the acting team's overtime left, shown beside the clock while the turn's own time runs
+	$: otLeft = stepped && !inOT && !complete ? `+${Math.floor(Math.ceil(teamOT / 1000) / 60)}:${String(Math.ceil(teamOT / 1000) % 60).padStart(2, '0')}` : '';
+	$: otWord = !overtime ? '' : !stepped ? 'Lock in!' : myTurn ? (isBanTurn ? 'Ban now!' : 'Lock in!') : `Overtime · ${turn ? nameOf(turn.actor) : ''}`;
 	$: countdown = secsLeft == null ? '' : `${Math.floor(secsLeft / 60)}:${String(secsLeft % 60).padStart(2, '0')}`;
 	// display only: the share of the clock that is left (the line along the bottom of the turn pill)
 	$: timeFrac = (() => {
 		if (!d || !d.deadline || complete) return 0;
-		const f = isAllPick && !myPick && now >= d.deadline ? (d.deadline + GRACE_MS - now) / GRACE_MS : (d.deadline - now) / DRAFT_TURN_MS;
+		const f = stepped ? (now >= d.deadline ? (d.deadline + teamOT - now) / DRAFT_OT_MS : (d.deadline - now) / DRAFT_STEP_MS)
+			: isAllPick && !myPick && now >= d.deadline ? (d.deadline + GRACE_MS - now) / GRACE_MS : (d.deadline - now) / DRAFT_TURN_MS;
 		return Math.max(0, Math.min(1, f));
 	})();
 
@@ -244,7 +253,7 @@
 			if (sel && canAct(sel)) act();
 		}
 		if (!iAmHost) { absentActor = ''; return; }
-		const timedOut = d.deadline > 0 && now >= d.deadline;
+		const timedOut = d.deadline > 0 && now >= (stepped ? draftTimeUp(d) : d.deadline);
 		if (isRandom) { if (timedOut) sealTeams(); return; }
 		if (d.order.length) {
 			const actor = activeActor;
@@ -371,9 +380,9 @@
 			<div class="topmid">
 				<div class="turn t-{bannerTeam ?? 'orange'}" class:wordy={!overtime && banner.length > 26} class:overtime class:urgent={secsLeft != null && secsLeft <= 10 && !complete}>
 					<span class="dot"></span>
-					<span class="btxt full" class:long={!overtime && banner.length > 20}>{overtime ? 'Lock in!' : banner}</span>
-					<span class="btxt short">{overtime ? 'Lock in!' : bannerShort}</span>
-					{#if countdown}<span class="sep"></span><span class="clock" class:urgent={secsLeft != null && secsLeft <= 10}>{countdown}</span>{/if}
+					<span class="btxt full" class:long={(otWord || banner).length > 20}>{otWord || banner}</span>
+					<span class="btxt short">{overtime ? (stepped && !myTurn ? 'Overtime' : otWord) : bannerShort}</span>
+					{#if countdown}<span class="sep"></span><span class="clock" class:urgent={secsLeft != null && secsLeft <= 10}>{countdown}</span>{#if otLeft}<span class="otl" class:none={teamOT <= 0} title="Overtime left for the {turn ? teamName(turn.team) : ''}">{otLeft}</span>{/if}{/if}
 					{#if !complete}<span class="sep modesep"></span><span class="mode">{DRAFT_LABELS[d.system]}</span>{/if}
 					{#if watchers.length}<span class="sep"></span><span class="watchn" title="Watching: {watchers.map((w) => w.name).join(', ')}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></svg>{watchers.length}</span>{/if}
 					{#if countdown}<span class="left" style="--p:{timeFrac.toFixed(3)}"></span>{/if}
@@ -573,6 +582,9 @@
 	.watchn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; }
 	.sep { flex: none; width: 1px; height: 24px; background: var(--brass-line); }
 	.clock { flex: none; font-size: 27px; color: var(--brass-hi); font-variant-numeric: tabular-nums; min-width: 2.3em; text-align: center; }
+	/* turn-based drafts: the acting team's shared overtime, beside the clock */
+	.otl { flex: none; margin-left: -6px; font-size: 15px; color: var(--ink-2, #bccbd9); font-variant-numeric: tabular-nums; }
+	.otl.none { color: var(--danger-hi); }
 	.mode, .modesep { display: none; } /* the pill is centred now; the draft system shows on the Create form and in the lobby */
 	/* time left, as a line along the bottom of the pill */
 	.left { position: absolute; left: 0; bottom: 0; height: 3px; width: 100%; transform-origin: 0 50%; transform: scaleX(var(--p, 1)); background: var(--brass); transition: transform 1s linear; }

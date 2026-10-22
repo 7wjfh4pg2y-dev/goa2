@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
-	buildDraft, draftAdvance, draftComplete, draftActor, draftTurn, draftPoolMin, draftSwap, draftSeal, pickSequence, transferSeat, initialMatchState,
+	buildDraft, draftAdvance, draftComplete, draftActor, draftTurn, draftPoolMin, draftSwap, draftSeal, pickSequence, draftTimeUp, DRAFT_STEP_MS, DRAFT_OT_MS, transferSeat, initialMatchState,
 	type Player, type DraftState
 } from './match';
 
@@ -101,5 +101,26 @@ describe('draft engine', () => {
 		expect(p.draft!.order.map((t) => t.actor)).toEqual(['b1', 'o1b', 'o2', 'b2']);
 		expect(p.draft!.offers!.o1b).toEqual(draft.offers!.o1);
 		expect(p.draft!.offers!.o1).toBeUndefined();
+	});
+	it('turn-based: 30 s a turn, then the team\'s shared overtime runs down', () => {
+		vi.useFakeTimers({ now: 1_000_000 });
+		try {
+			let d = buildDraft('single-draft', pool, players4, seats4, 'orange'); // B O O B
+			expect(d.deadline).toBe(1_000_000 + DRAFT_STEP_MS);
+			expect(d.ot).toEqual({ orange: DRAFT_OT_MS, blue: DRAFT_OT_MS });
+			expect(draftTimeUp(d)).toBe(d.deadline + DRAFT_OT_MS);
+			vi.setSystemTime(d.deadline + 12_000); // blue's first pick takes 12 s of overtime
+			d = draftAdvance(d, d.offer[0]);
+			expect(d.ot).toEqual({ orange: DRAFT_OT_MS, blue: DRAFT_OT_MS - 12_000 });
+			vi.setSystemTime(d.deadline - 5_000); // orange inside its own time: no overtime spent
+			d = draftAdvance(d, d.offer[0]);
+			expect(d.ot!.orange).toBe(DRAFT_OT_MS);
+			vi.setSystemTime(draftTimeUp(d)); // orange runs out completely (the auto-pick)
+			d = draftAdvance(d, d.offer[0], true);
+			expect(d.ot!.orange).toBe(0);
+			// blue's last pick: its own 30 s + what's left of blue's pool
+			expect(d.order[d.step].team).toBe('blue');
+			expect(draftTimeUp(d)).toBe(d.deadline + DRAFT_OT_MS - 12_000);
+		} finally { vi.useRealTimers(); }
 	});
 });

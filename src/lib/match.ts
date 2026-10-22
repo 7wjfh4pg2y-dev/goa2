@@ -421,7 +421,9 @@ export interface DraftState {
 	offers?: Record<string, string[]> // single-draft: each player's own three heroes (dealt at the start, no overlap; only theirs is shown)
 	swaps?: Record<string, string> // all-random: a swap offer, player → teammate (both offering = the heroes trade)
 	sealed?: boolean // all-random: the host locked the teams (or the clock ran out) — the draft is complete
-	deadline: number // epoch ms the current turn auto-picks at (0 = no timer)
+	deadline: number // epoch ms the current turn auto-picks at (0 = no timer); turn-based: when its OWN time ends
+	ot?: Record<Team, number> // turn-based (single-draft / pick-ban): each team's shared overtime left, ms — a turn past its
+	// own 30 s eats into it, and once it's gone the host picks / bans at random at `deadline` (see draftTimeUp)
 	lastAction: DraftAction | null // most recent pick/ban, for the announcement toast
 }
 
@@ -437,6 +439,16 @@ export interface DraftAction {
 
 /** How long each turn-based turn (and the all-pick phase) lasts before auto-resolve. */
 export const DRAFT_TURN_MS = 80_000 // 1:20 to pick (a 10s red grace follows)
+// turn-based drafts (the user's rule, 2026-10-22): 30 s a turn (picks and bans alike), then the team's shared 30 s of overtime
+export const DRAFT_STEP_MS = 30_000
+export const DRAFT_OT_MS = 30_000
+const turnBased = (s: DraftSystem) => s === 'single-draft' || s === 'pick-ban'
+/** Turn-based: the moment the current turn runs out for good (its own time + what's left of its team's overtime). */
+export function draftTimeUp(d: DraftState): number {
+	if (!d.deadline) return 0
+	const t = d.order[d.step]?.team
+	return d.deadline + (d.ot && t ? Math.max(0, d.ot[t]) : 0)
+}
 
 export const TEAMS: Team[] = ['orange', 'blue']
 export const TURNS_PER_ROUND = 4
@@ -964,10 +976,11 @@ export function buildDraft(
 	// every mode gets a timer (per turn for turn-based, the whole phase for all-pick, the swaps for all-random) so the
 	// draft can never hang
 	// all-random: a clock for the swaps too — the host seals the teams when it runs out
-	const deadline = Date.now() + DRAFT_TURN_MS
+	const deadline = Date.now() + (turnBased(system) ? DRAFT_STEP_MS : DRAFT_TURN_MS)
 	return {
 		system, pool, order: owned, step: 0, picks, bans: [], offer, offered: offers ? Object.values(offers).flat() : [], deadline, lastAction: null,
-		...(offers ? { offers } : {}), ...(system === 'all-random' ? { swaps: {} } : {})
+		...(offers ? { offers } : {}), ...(system === 'all-random' ? { swaps: {} } : {}),
+		...(turnBased(system) ? { ot: { orange: DRAFT_OT_MS, blue: DRAFT_OT_MS } } : {})
 	}
 }
 
@@ -1010,9 +1023,13 @@ export function draftAdvance(d: DraftState, heroId: string, auto = false): Draft
 			offered = [...d.offered, ...offer]
 		}
 	}
-	const deadline = step < d.order.length ? Date.now() + DRAFT_TURN_MS : 0
-	const lastAction: DraftAction = { team: turn.team, type: turn.type, actor: turn.actor, hero: heroId, at: Date.now(), auto }
-	return { ...d, picks, bans, step, offer, offered, deadline, lastAction }
+	const now = Date.now()
+	// a turn that went past its own time spends that much of its team's overtime (an auto-pick at the very end spends it all)
+	let ot = d.ot
+	if (ot && d.deadline && now > d.deadline) ot = { ...ot, [turn.team]: Math.max(0, ot[turn.team] - (now - d.deadline)) }
+	const deadline = step < d.order.length ? now + (turnBased(d.system) ? DRAFT_STEP_MS : DRAFT_TURN_MS) : 0
+	const lastAction: DraftAction = { team: turn.team, type: turn.type, actor: turn.actor, hero: heroId, at: now, auto }
+	return { ...d, picks, bans, step, offer, offered, deadline, lastAction, ...(ot ? { ot } : {}) }
 }
 
 /**
