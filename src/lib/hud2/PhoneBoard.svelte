@@ -7,6 +7,7 @@
 	import TurnSlot from '$lib/cards/TurnSlot.svelte';
 	import RuneMark from './RuneMark.svelte';
 	import SpellMark from './SpellMark.svelte';
+	import EtherChip from './EtherChip.svelte';
 	import type { RuneSlots } from './runes';
 	import Card from '$lib/cards/Card.svelte';
 	import StatBubbles from './StatBubbles.svelte';
@@ -34,6 +35,9 @@
 	/** Gydion's spell each turn cast this round (public; a sigil under the slot, tap = read it) */
 	export let spells: (string[] | null)[] | null = null;
 	export let onSpell: (ids: string[]) => void = () => {};
+	/** Gydion's ether (spells out of his book; public) */
+	export let ether: string[] | null = null;
+	export let onEther: (ids: string[]) => void = () => {};
 	/** is this board yours? (face-down cards: yours under a veil, everyone else's as a card back) */
 	export let own = false;
 
@@ -68,6 +72,7 @@
 				<button class="mk" class:on={!!status[k as 'poison']} on:click={() => onStatus(k as 'poison')} title={k === 'poison' ? 'Poison' : 'Bounty'} aria-pressed={!!status[k as 'poison']}><img src={markArt(k as 'poison')} alt={k} /></button>
 			{/each}
 		</span>
+		{#if ether}<EtherChip count={ether.length} size={14} label onOpen={() => ether && onEther(ether)} />{/if}
 	</div>
 	<StatBubbles {cs} size={30} />
 	<div class="turns">

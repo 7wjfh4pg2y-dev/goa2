@@ -9,6 +9,7 @@
 	import StatBubbles from './StatBubbles.svelte';
 	import RuneMark from './RuneMark.svelte';
 	import SpellMark from './SpellMark.svelte';
+	import EtherChip from './EtherChip.svelte';
 	import type { RuneSlots } from './runes';
 	import { heroCards, heroName } from '$lib/cards/deck';
 	import { portraitCss, heroSplash, splashFace } from '$lib/heroes';
@@ -32,6 +33,9 @@
 	/** Gydion's spell each turn cast this round (public; a sigil under the slot, tap = read it) */
 	export let spells: (string[] | null)[] | null = null;
 	export let onSpell: (ids: string[]) => void = () => {};
+	/** Gydion's ether (spells out of his book; public): a chip by the hand count, tap = read them */
+	export let ether: string[] | null = null;
+	export let onEther: (ids: string[]) => void = () => {};
 	/** is this board yours? (face-down cards: yours under a veil, everyone else's as a card back) */
 	export let own = false;
 
@@ -68,6 +72,7 @@
 			{#if runes?.at[turnIdx]}<RuneMark rune={runes.at[turnIdx]} size={16} on fx={runeFx} />{/if}{#if runes?.second}<RuneMark rune={runes.second} size={16} second fx={false} />{/if}{#if spells?.[turnIdx]}<SpellMark spells={spells[turnIdx]} size={16} now onOpen={onSpell} />{/if}
 		{/if}
 		{#if !revealed}<i class="rdy" class:ok={ready} title={ready ? 'Ready' : 'Choosing'}></i>{/if}
+		{#if ether}<EtherChip count={ether.length} size={small ? 13 : 14} onOpen={() => ether && onEther(ether)} />{/if}
 		<span class="hand" title="Cards in hand"><svg viewBox="0 0 24 24"><rect x="4" y="6" width="11" height="15" rx="2" /><path d="M9 3h9a2 2 0 0 1 2 2v13" /></svg>{cs.hand.length}</span>
 	</span>
 	{#if !compact}

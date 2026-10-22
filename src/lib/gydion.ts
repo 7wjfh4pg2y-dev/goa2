@@ -91,6 +91,13 @@ export const bookSpells = (s: GyS, pid: string) => [...BOOK, 'wish'].filter((id)
 /** spells out of the book this cycle (cast and struck) */
 export const goneSpells = (s: GyS, pid: string) => gyOf(s, pid).gone ?? []
 /** "for each OTHER spell card removed from the spellbook" */
+/** the ether = every spell out of his book, public (the window's deck, his player board's chip): before the first Prepare
+ *  all of them, then the ones spent / struck this cycle in the order they left (the latest last) */
+export function etherSpells(s: GyS, pid: string): string[] {
+	if (!isGy(s, pid)) return []
+	const g = gyOf(s, pid), gone = g.gone ?? []
+	return g.prep ? [...gone] : [...BOOK, ...gone.filter((x) => !BOOK.includes(x))]
+}
 export const othersGone = (s: GyS, pid: string, id: string) => goneSpells(s, pid).filter((x) => x !== id).length
 
 /** his card acting now (revealed, his turn), or null */

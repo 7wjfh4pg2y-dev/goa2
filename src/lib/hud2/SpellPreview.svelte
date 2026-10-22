@@ -5,6 +5,8 @@
 	export let ids: string[] | null = null
 	export let phone = false
 	export let title = ''
+	/** a row of school-coloured pips to jump through a long list (the ether) */
+	export let pips = false
 	const COL: Record<string, string> = { gold: '#ffd25e', red: '#ff6a5e', green: '#55d071', blue: '#6a9cff', purple: '#c08cff' }
 	let i = 0, was: string[] | null = null
 	$: if (ids !== was) { was = ids; i = ids ? ids.length - 1 : 0 }
@@ -31,6 +33,9 @@
 				{#if ids.length > 1}<button class="nav" on:click={() => step(1)} aria-label="Next">›</button>{/if}
 				<button class="x" on:click={close} aria-label="Close">✕</button>
 			</div>
+			{#if pips && ids.length > 1}
+				<div class="pips">{#each ids as pid, k (pid)}{@const sc = spellOf(pid)?.school.toLowerCase() ?? ''}<button class="pip" class:on={k === i} style="--c:{COL[SCHOOL_COLOR[sc] ?? 'gold']}" title={spellOf(pid)?.name} aria-label={spellOf(pid)?.name} on:click={() => (i = k)}></button>{/each}</div>
+			{/if}
 		</div>
 	</div>
 {/if}
@@ -47,4 +52,7 @@
 	.nm small { color: #b9c6d4; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 	.nav, .x { width: 38px; height: 38px; border-radius: 50%; border: 1px solid rgba(216, 179, 106, 0.5); background: rgba(2, 11, 22, 0.75); color: #f4dfa8; font: 700 20px/1 system-ui; cursor: pointer; padding: 0; flex: none; }
 	.x { font-size: 14px; }
+	.pips { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+	.pip { width: 12px; height: 12px; padding: 0; border-radius: 50%; border: 1.5px solid var(--c); background: transparent; cursor: pointer; opacity: 0.7; }
+	.pip.on { background: var(--c); opacity: 1; box-shadow: 0 0 6px var(--c); }
 </style>

@@ -4,7 +4,7 @@ import { newPlayerCardState, type PlayerCardState } from './cards/cardstate'
 import { heroCards } from './cards/deck'
 import { hasPower, takaHit, type TurnCtx } from './heropower'
 import { FOUR_STAR_LAB, isLabHero } from './heroes'
-import { BOOK, castsByTurn, inBook, bookSpells, castOptions, gyMode, canPrepare, canWish, spellNums, othersGone, forceTargets, raiseSpots, canStrike, canDrink, guardNow, gyOf, castNow } from './gydion'
+import { BOOK, castsByTurn, etherSpells, inBook, bookSpells, castOptions, gyMode, canPrepare, canWish, spellNums, othersGone, forceTargets, raiseSpots, canStrike, canDrink, guardNow, gyOf, castNow } from './gydion'
 import { zoneTable } from './zones'
 import map from './maps/forgotten_island.json'
 
@@ -302,5 +302,16 @@ describe('Gydion: the host fix, and nothing for other heroes', () => {
 	it('casting never touches his cards (only Midas / Vampiric Touch do, as asked)', () => {
 		const s = actingAs(gg(GEVO, {}, book()), 'G')
 		for (const sp of ['burning-hands', 'fireball', 'sunburst']) expect(pw(s, 'G', 'gyCast', { spell: sp }).cards).toBeUndefined()
+	})
+})
+
+describe('the ether (public, on his player board)', () => {
+	it('is every spell before the first Prepare, then what left the book in order; nobody else has one', () => {
+		const fresh = gg(CANTRIP)
+		expect(etherSpells(fresh, 'G')).toEqual(BOOK)
+		const s = gg(CANTRIP, {}, book(['sunburst', 'shield', 'wish']))
+		expect(etherSpells(s, 'G')).toEqual(['sunburst', 'shield', 'wish'])
+		expect(etherSpells(gg(CANTRIP, {}, book()), 'G')).toEqual([])
+		expect(etherSpells(s, 'B')).toEqual([])
 	})
 })
