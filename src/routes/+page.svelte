@@ -35,6 +35,8 @@
 		draftPoolMin,
 		DRAFT_SYSTEMS,
 		DRAFT_LABELS,
+		DRAFT_SUBS,
+		DRAFT_BLURBS,
 		type MatchState,
 		type Player,
 		type MatchSession,
@@ -579,7 +581,10 @@
 		lastStartFlip = $state.startFlip.at;
 		const side = $state.startFlip.side;
 		playCoin(side, {
-			caption: `The ${teamName(side)} go first`,
+			// turn-based drafts: the team WITHOUT the coin picks first (and last)
+			caption: $state.draftSystem === 'single-draft' || $state.draftSystem === 'pick-ban'
+				? `The ${teamName(side)} hold the coin · the ${teamName(side === 'orange' ? 'blue' : 'orange')} pick first`
+				: `The ${teamName(side)} go first`,
 			label: 'Tie-breaker', sub: 'The hero draft begins in a moment…',
 			after: () => { if (iAmHost) startDraft(side); }
 		});
@@ -1028,7 +1033,7 @@
 									<span class="t-label">Hero draft</span>
 									<div class="seg seg--fill seg--grid">
 										{#each DRAFT_SYSTEMS as sys (sys)}
-											<button class="seg-opt has-sub" class:is-on={draftSystem === sys} class:is-soon={sys !== 'all-pick'} class:locked={sys !== 'all-pick'} disabled={sys !== 'all-pick'} title={sys !== 'all-pick' ? 'Coming soon' : ''} on:click={() => (draftSystem = sys)}>{DRAFT_LABELS[sys]}{#if sys !== 'all-pick'}<span class="soon">soon</span>{:else}<span class="sub">Everyone picks at once</span>{/if}</button>
+											<button class="seg-opt has-sub" class:is-on={draftSystem === sys} title={DRAFT_BLURBS[sys]} on:click={() => (draftSystem = sys)}>{DRAFT_LABELS[sys]}<span class="sub">{DRAFT_SUBS[sys]}</span></button>
 										{/each}
 									</div>
 								</div>

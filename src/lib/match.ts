@@ -390,11 +390,18 @@ export const DRAFT_LABELS: Record<DraftSystem, string> = {
 	'single-draft': 'Single Draft',
 	'pick-ban': 'Pick & Ban'
 }
+// the Create form's one-line caption under each system
+export const DRAFT_SUBS: Record<DraftSystem, string> = {
+	'all-pick': 'Everyone picks at once',
+	'all-random': 'Dealt at random',
+	'single-draft': 'Three heroes each',
+	'pick-ban': 'One ban a team'
+}
 export const DRAFT_BLURBS: Record<DraftSystem, string> = {
 	'all-pick': 'Everyone picks at once from the full pool.',
 	'all-random': 'Everyone is dealt a random hero.',
-	'single-draft': 'Each turn you’re offered three heroes — pick one.',
-	'pick-ban': 'Teams alternate bans and picks in turn.'
+	'single-draft': 'You’re dealt three heroes of your own — pick one when it’s your turn.',
+	'pick-ban': 'One ban per team, then picks in turn.'
 }
 
 export interface DraftTurn {
@@ -409,8 +416,11 @@ export interface DraftState {
 	step: number // index into order (turn-based modes)
 	picks: Record<string, string> // clientId -> heroId (committed)
 	bans: string[]
-	offer: string[] // single-draft: heroes offered to the current actor
-	offered: string[] // single-draft: every hero offered so far (never re-offered)
+	offer: string[] // single-draft: the current actor's three heroes (= offers[actor])
+	offered: string[] // single-draft: every hero dealt (never re-dealt)
+	offers?: Record<string, string[]> // single-draft: each player's own three heroes (dealt at the start, no overlap; only theirs is shown)
+	swaps?: Record<string, string> // all-random: a swap offer, player → teammate (both offering = the heroes trade)
+	sealed?: boolean // all-random: the host locked the teams (or the clock ran out) — the draft is complete
 	deadline: number // epoch ms the current turn auto-picks at (0 = no timer)
 	lastAction: DraftAction | null // most recent pick/ban, for the announcement toast
 }
@@ -422,6 +432,7 @@ export interface DraftAction {
 	hero: string // heroId
 	at: number // epoch ms (also the toast nonce)
 	auto?: boolean // resolved by the timer/watchdog rather than a player
+	swap?: string // all-random: `actor` and this teammate traded heroes (hero = what the actor got)
 }
 
 /** How long each turn-based turn (and the all-pick phase) lasts before auto-resolve. */
@@ -689,9 +700,20 @@ export function transferSeat(s: MatchState, from: string, to: string, toName: st
 		else pieces[id] = pc.attachedTo === from ? { ...pc, attachedTo: to } : pc
 	}
 	let draft = s.draft
-	if (draft && draft.picks[from]) {
-		const picks = { ...draft.picks }; picks[to] = picks[from]; delete picks[from]
-		draft = { ...draft, picks }
+	if (draft) {
+		// the draft follows the seat too: the pick, the turns it owns, the dealt heroes, swap offers
+		const picks = { ...draft.picks }
+		if (picks[from]) { picks[to] = picks[from]; delete picks[from] }
+		const order = draft.order.map((t) => (t.actor === from ? { ...t, actor: to } : t))
+		let offers = draft.offers
+		if (offers?.[from]) { offers = { ...offers, [to]: offers[from] }; delete offers[from] }
+		let swaps = draft.swaps
+		if (swaps) {
+			const sw: Record<string, string> = {}
+			for (const [a, b] of Object.entries(swaps)) sw[a === from ? to : a] = b === from ? to : b
+			swaps = sw
+		}
+		draft = { ...draft, picks, order, ...(offers ? { offers } : {}), ...(swaps ? { swaps } : {}) }
 	}
 	const seatMap = { ...(s.seatMap ?? {}) }; seatMap[String(seat)] = { id: to, name: toName }
 	const patch: Partial<MatchState> = { cards, pieces, seatMap }
@@ -837,7 +859,7 @@ export interface Player {
 /** Minimum eligible heroes needed to run a system for N total players. */
 export function draftPoolMin(system: DraftSystem, totalPlayers: number): number {
 	if (system === 'single-draft') return totalPlayers * 3
-	if (system === 'pick-ban') return totalPlayers * 2
+	if (system === 'pick-ban') return totalPlayers + 2
 	return totalPlayers
 }
 
@@ -853,20 +875,14 @@ function rollOffer(pool: string[], exclude: Set<string>, n: number): string[] {
 	return shuffle(pool.filter((h) => !exclude.has(h))).slice(0, n)
 }
 
-// Master pick/ban sequence (rulebook draft); sliced to totalPlayers*2 and
-// remapped so the tie-breaker-winning team acts first.
-const PICK_BAN_SEQ: Array<{ team: Team; type: 'pick' | 'ban' }> = [
-	{ team: 'orange', type: 'ban' }, { team: 'blue', type: 'ban' },
-	{ team: 'orange', type: 'pick' }, { team: 'blue', type: 'pick' },
-	{ team: 'blue', type: 'ban' }, { team: 'orange', type: 'ban' },
-	{ team: 'blue', type: 'pick' }, { team: 'orange', type: 'pick' },
-	{ team: 'orange', type: 'ban' }, { team: 'blue', type: 'ban' },
-	{ team: 'blue', type: 'pick' }, { team: 'orange', type: 'pick' },
-	{ team: 'blue', type: 'ban' }, { team: 'orange', type: 'ban' },
-	{ team: 'orange', type: 'pick' }, { team: 'blue', type: 'pick' },
-	{ team: 'blue', type: 'ban' }, { team: 'orange', type: 'ban' },
-	{ team: 'blue', type: 'pick' }, { team: 'orange', type: 'pick' }
-]
+// Turn-based pick order (the user's rule, 2026-10-22): the team WITHOUT the tie-breaker coin (A) picks first and last —
+// 2 v 2 = A B B A, 3 v 3 = A B B A B A; past that the snake carries on (A B B A B A A B B A …)
+const PICK_TEAMS = [0, 1, 1, 0, 1, 0, 0, 1, 1, 0]
+export function pickSequence(total: number): number[] {
+	const out: number[] = []
+	for (let i = 0; i < total; i++) out.push(PICK_TEAMS[i % PICK_TEAMS.length])
+	return out
+}
 
 const otherTeamOf = (t: Team): Team => (t === 'orange' ? 'blue' : 'orange')
 
@@ -910,21 +926,18 @@ export function buildDraft(
 	const total = rosters.orange.length + rosters.blue.length
 	const order: DraftTurn[] = []
 
-	if (system === 'pick-ban') {
-		const pickPtr: Record<Team, number> = { orange: 0, blue: 0 }
-		const banPtr: Record<Team, number> = { orange: 0, blue: 0 }
-		for (const t of PICK_BAN_SEQ.slice(0, total * 2)) {
-			const team = startingTeam === 'orange' ? t.team : otherTeamOf(t.team)
-			const roster = rosters[team]
-			let actor = ''
-			if (t.type === 'pick') { actor = roster[pickPtr[team]] ?? ''; pickPtr[team]++ }
-			else { actor = roster[banPtr[team] % Math.max(1, roster.length)] ?? ''; banPtr[team]++ }
-			order.push({ team, type: t.type, actor })
+	if (system === 'pick-ban' || system === 'single-draft') {
+		// A = the team without the coin: it bans first (pick-ban) and picks first and last
+		const teams: [Team, Team] = [otherTeamOf(startingTeam), startingTeam]
+		const seq = pickSequence(total)
+		if (system === 'pick-ban') {
+			// one ban per team, by the player who picks LAST for that team (so the ban spreads the load)
+			const lastPicker = (team: Team) => rosters[team][rosters[team].length - 1] ?? ''
+			for (const team of teams) order.push({ team, type: 'ban', actor: lastPicker(team) })
 		}
-	} else if (system === 'single-draft') {
 		const pickPtr: Record<Team, number> = { orange: 0, blue: 0 }
-		for (let i = 0; i < total; i++) {
-			const team = i % 2 === 0 ? startingTeam : otherTeamOf(startingTeam)
+		for (const k of seq) {
+			const team = teams[k]
 			order.push({ team, type: 'pick', actor: rosters[team][pickPtr[team]] ?? '' })
 			pickPtr[team]++
 		}
@@ -939,11 +952,23 @@ export function buildDraft(
 
 	// drop any turns with no owner (can happen if teams are uneven at Begin)
 	const owned = order.filter((t) => t.actor)
-	const offer = system === 'single-draft' ? rollOffer(pool, new Set(), 3) : []
-	// all-random resolves instantly; every other mode gets a timer (per-turn for
-	// turn-based, whole-phase for all-pick) so the draft can never hang
-	const deadline = system === 'all-random' ? 0 : Date.now() + DRAFT_TURN_MS
-	return { system, pool, order: owned, step: 0, picks, bans: [], offer, offered: [...offer], deadline, lastAction: null }
+	// single-draft: every seated player is dealt three heroes of their own up front, no two players sharing one
+	let offers: Record<string, string[]> | undefined
+	if (system === 'single-draft') {
+		const rolled = shuffle(pool)
+		offers = {}
+		let i = 0
+		for (const id of [...rosters.orange, ...rosters.blue]) { offers[id] = rolled.slice(i, i + 3); i += 3 }
+	}
+	const offer = offers ? (offers[owned[0]?.actor ?? ''] ?? []) : []
+	// every mode gets a timer (per turn for turn-based, the whole phase for all-pick, the swaps for all-random) so the
+	// draft can never hang
+	// all-random: a clock for the swaps too — the host seals the teams when it runs out
+	const deadline = Date.now() + DRAFT_TURN_MS
+	return {
+		system, pool, order: owned, step: 0, picks, bans: [], offer, offered: offers ? Object.values(offers).flat() : [], deadline, lastAction: null,
+		...(offers ? { offers } : {}), ...(system === 'all-random' ? { swaps: {} } : {})
+	}
 }
 
 export const draftTurn = (d: DraftState): DraftTurn | null => d.order[d.step] ?? null
@@ -957,7 +982,8 @@ export function draftBlocked(d: DraftState): Set<string> {
 /** Is the draft finished? */
 export function draftComplete(d: DraftState, seatedIds: string[]): boolean {
 	if (d.order.length) return d.step >= d.order.length
-	return seatedIds.length > 0 && seatedIds.every((id) => d.picks[id]) // all-pick / all-random
+	if (d.system === 'all-random') return !!d.sealed // the heroes are dealt at once; teammates may swap until the host seals it
+	return seatedIds.length > 0 && seatedIds.every((id) => d.picks[id]) // all-pick
 }
 
 /**
@@ -976,13 +1002,40 @@ export function draftAdvance(d: DraftState, heroId: string, auto = false): Draft
 	let offer = d.offer
 	let offered = d.offered
 	if (d.system === 'single-draft' && step < d.order.length) {
-		const exclude = new Set([...Object.values(picks), ...bans, ...d.offered])
-		offer = rollOffer(d.pool, exclude, 3)
-		offered = [...d.offered, ...offer]
+		const next = d.order[step].actor
+		if (d.offers) offer = d.offers[next] ?? []
+		else { // an older draft (one offer rolled per turn)
+			const exclude = new Set([...Object.values(picks), ...bans, ...d.offered])
+			offer = rollOffer(d.pool, exclude, 3)
+			offered = [...d.offered, ...offer]
+		}
 	}
 	const deadline = step < d.order.length ? Date.now() + DRAFT_TURN_MS : 0
 	const lastAction: DraftAction = { team: turn.team, type: turn.type, actor: turn.actor, hero: heroId, at: Date.now(), auto }
 	return { ...d, picks, bans, step, offer, offered, deadline, lastAction }
+}
+
+/**
+ * All-random: `from` offers `to` (a teammate — the caller checks) a swap of their dealt heroes; if `to` already offered
+ * `from` one, the heroes trade at once. Offering the same teammate again takes the offer back.
+ */
+export function draftSwap(d: DraftState, from: string, to: string, team?: Team): DraftState {
+	if (d.system !== 'all-random' || d.sealed || from === to || !d.picks[from] || !d.picks[to]) return d
+	const swaps = { ...(d.swaps ?? {}) }
+	if (swaps[to] === from) {
+		const picks = { ...d.picks, [from]: d.picks[to], [to]: d.picks[from] }
+		delete swaps[to]; delete swaps[from]
+		for (const k in swaps) if (swaps[k] === from || swaps[k] === to) delete swaps[k] // their other offers name heroes they no longer hold
+		const lastAction: DraftAction | null = team ? { team, type: 'pick', actor: from, hero: picks[from], at: Date.now(), auto: false, swap: to } : d.lastAction
+		return { ...d, picks, swaps, lastAction }
+	}
+	if (swaps[from] === to) delete swaps[from]
+	else swaps[from] = to
+	return { ...d, swaps }
+}
+/** All-random: the teams are final (the host's Lock teams, or the clock). */
+export function draftSeal(d: DraftState): DraftState {
+	return d.system === 'all-random' ? { ...d, sealed: true, swaps: {}, deadline: 0 } : d
 }
 
 /** All-pick: set (or change) a single player's own pick. */

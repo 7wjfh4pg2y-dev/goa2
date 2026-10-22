@@ -12,7 +12,7 @@
 	} from '$lib/heroes';
 	import {
 		teamRosters, teamForSeat, draftTurn, draftActor, draftBlocked, draftComplete,
-		draftAdvance, draftSetPick, colorHex, DRAFT_LABELS, DRAFT_TURN_MS,
+		draftAdvance, draftSetPick, draftSwap, draftSeal, colorHex, DRAFT_LABELS, DRAFT_TURN_MS,
 		type MatchState, type Player, type MatchSession, type Team, type DraftAction
 	} from '$lib/match';
 	import coinOrange from '$lib/images/tiebreaker_orange.png';
@@ -45,6 +45,10 @@
 	$: blocked = d ? draftBlocked(d) : new Set<string>();
 	$: complete = d ? draftComplete(d, seatedIds) : false;
 	$: myPick = d ? d.picks[clientId] : undefined; // all-pick: my committed hero
+	// single-draft: the three heroes dealt to you (private — only yours is shown; a watcher sees none)
+	$: myOffer = d?.system === 'single-draft' && !watching && !d.picks[clientId] ? (d.offers?.[clientId] ?? (myTurn ? d.offer : [])) : [];
+	$: isRandom = d?.system === 'all-random';
+	$: myMates = myTeam ? rosters[myTeam].filter((id) => id !== clientId) : [];
 
 	const nameOf = (id: string) => $players.find((p) => p.id === id)?.name ?? 'Player';
 	const colorOf = (id: string) => colorHex($players.find((p) => p.id === id)?.color ?? '');
@@ -100,17 +104,19 @@
 	let myWant = ''; // all-pick self-heal target
 	// initial highlight: first available hero (don't reset after every action —
 	// leave `sel` on what you just picked/banned)
+	$: if (d && !sel && myOffer.length) sel = myOffer[0];
+	$: if (d && !sel && isRandom && myPick) sel = myPick;
 	$: if (d && !sel) sel = HEROES_ALPHA.find((h) => inPool.has(h.id) && !blocked.has(h.id))?.id ?? HEROES_ALPHA[0].id;
 	// when it BECOMES your turn, snap to a fresh valid option (once per step)
 	let snapStep = -1;
 	$: if (d && d.order.length && myTurn && d.step !== snapStep) {
 		snapStep = d.step;
 		sel = d.system === 'single-draft'
-			? (d.offer[0] ?? sel)
+			? (myOffer.includes(sel) ? sel : (myOffer[0] ?? d.offer[0] ?? sel))
 			: (HEROES_ALPHA.find((h) => inPool.has(h.id) && !blocked.has(h.id))?.id ?? sel);
 	}
 	// once you've locked in (and aren't acting), you can only view your own hero
-	$: lockedIn = !!myPick && !myTurn;
+	$: lockedIn = !!myPick && !myTurn && !(isRandom && !d?.sealed); // all-random: browse freely (read a teammate's hero) until sealed
 	$: if (lockedIn && myPick && sel !== myPick) sel = myPick;
 	// all-pick: if someone takes the hero you're looking at, move to the next available one
 	$: if (d && d.system === 'all-pick' && !lockedIn && sel && blocked.has(sel) && sel !== myPick) sel = firstFor(filter) ?? sel;
@@ -133,7 +139,7 @@
 		if (d.system === 'all-random') return false;
 		if (d.system === 'all-pick') return !myPick;
 		if (!myTurn) return false;
-		if (d.system === 'single-draft') return d.offer.includes(h);
+		if (d.system === 'single-draft') return (d.offers?.[clientId] ?? d.offer).includes(h);
 		return true; // pick-ban
 	}
 	$: isBanTurn = d?.order.length ? turn?.type === 'ban' : false;
@@ -150,6 +156,15 @@
 	// self-heal a rare all-pick clobber (two players locking at once)
 	$: if (d && d.system === 'all-pick' && myWant && !watching && d.picks[clientId] !== myWant) {
 		session.update({ draft: draftSetPick(d, clientId, myWant, myTeam ?? undefined) });
+	}
+	// all-random: offer a teammate a swap (or accept theirs — both offering = the heroes trade)
+	function swapWith(id: string) {
+		if (!d || !isRandom || watching || d.sealed || !myMates.includes(id)) return;
+		session.update({ draft: draftSwap(d, clientId, id, myTeam ?? undefined) });
+	}
+	// all-random: the host locks the teams (the clock does it too)
+	function sealTeams() {
+		if (d && iAmHost && isRandom && !d.sealed) session.update({ draft: draftSeal(d) });
 	}
 	function startGame() {
 		if (iAmHost) session.update({ started: true });
@@ -230,6 +245,7 @@
 		}
 		if (!iAmHost) { absentActor = ''; return; }
 		const timedOut = d.deadline > 0 && now >= d.deadline;
+		if (isRandom) { if (timedOut) sealTeams(); return; }
 		if (d.order.length) {
 			const actor = activeActor;
 			const present = !!actor && $players.some((p) => p.id === actor);
@@ -258,10 +274,10 @@
 		if (complete) return 'Draft complete';
 		if (watching && d.system === 'all-pick') return 'Watching the draft';
 		if (d.system === 'all-pick') return myPick ? 'Waiting for the others…' : 'Choose your hero';
-		if (d.system === 'all-random') return 'Heroes assigned';
+		if (d.system === 'all-random') return watching ? 'Heroes dealt' : 'Swap with a teammate';
 		if (!turn) return '';
 		if (turn.actor === clientId) return turn.type === 'ban' ? 'Your ban' : 'Your pick';
-		return `${teamName(turn.team)} · ${nameOf(turn.actor)} is ${turn.type === 'ban' ? 'banning' : 'picking'}…`;
+		return `${nameOf(turn.actor)} is ${turn.type === 'ban' ? 'banning' : 'picking'}…`; // the pill is in their team's colour
 	})();
 	// phones: the same message, short enough to sit beside Leave
 	$: bannerShort = (() => {
@@ -269,7 +285,7 @@
 		if (complete) return 'Complete';
 		if (watching && d.system === 'all-pick') return 'Watching';
 		if (d.system === 'all-pick') return myPick ? 'Waiting…' : DRAFT_LABELS[d.system];
-		if (d.system === 'all-random') return 'Assigned';
+		if (d.system === 'all-random') return 'Dealt';
 		if (!turn) return '';
 		if (turn.actor === clientId) return turn.type === 'ban' ? 'Your ban' : 'Your pick';
 		return `${nameOf(turn.actor)} ${turn.type === 'ban' ? 'bans' : 'picks'}…`;
@@ -281,12 +297,12 @@
 	// canAct reads the draft, your pick, the turn and the pool inside the call, where `$:` can't see them:
 	// name them here so the button follows them (it used to stay lit after you had locked in)
 	let actionEnabled = false;
-	$: { d; myPick; myTurn; unavailable; watching; actionEnabled = complete ? iAmHost : canAct(sel); }
+	$: { d; myPick; myTurn; unavailable; watching; actionEnabled = complete || isRandom ? iAmHost : canAct(sel); }
 	$: actionLabel = (() => {
 		if (complete) return iAmHost ? 'Start game →' : 'Waiting for host…';
 		if (!d || !selHero) return '';
 		if (watching) return 'Watching';
-		if (d.system === 'all-random') return 'Heroes assigned';
+		if (d.system === 'all-random') return iAmHost ? 'Lock teams →' : 'Waiting for host…';
 		if (d.system === 'all-pick') return myPick ? 'Locked ✓' : `Lock in ${selHero.name}`;
 		if (!myTurn) return 'Waiting…';
 		return isBanTurn ? `Ban ${selHero.name}` : `Lock in ${selHero.name}`;
@@ -298,6 +314,7 @@
 	let confirmAt = 0;
 	function onAction() {
 		if (complete) return startGame();
+		if (isRandom) return sealTeams();
 		if (confirmHero !== sel) { confirmHero = sel; confirmAt = Date.now(); return; }
 		if (Date.now() - confirmAt < 450) return;
 		confirmHero = '';
@@ -370,7 +387,7 @@
 					<div class="tav"><img src={heroAvatar(toastAction.hero)} alt="" />{#if toastAction.type === 'ban'}<span class="tban">✕</span>{/if}</div>
 					<div class="ttext">
 						<span class="twho"><span class="tteam">{teamName(toastAction.team)}</span> · {nameOf(toastAction.actor)}{toastAction.auto ? ' · auto' : ''}</span>
-						<span class="tact"><span class="tverb">{toastAction.type === 'ban' ? 'Banned' : 'Picked'}</span> {toastHero.name} <span class="ttitle">{toastHero.title}</span></span>
+						{#if toastAction.swap}<span class="tact"><span class="tverb">Swapped</span> with {nameOf(toastAction.swap)} · now {toastHero.name}</span>{:else}<span class="tact"><span class="tverb">{toastAction.type === 'ban' ? 'Banned' : 'Picked'}</span> {toastHero.name} <span class="ttitle">{toastHero.title}</span></span>{/if}
 					</div>
 				</div>
 			{/if}
@@ -399,14 +416,15 @@
 					</button>
 				</div>
 				<div class="browse panel panel--tight">
-					<div class="fcap"><span class="t-label">{lockedIn ? 'Locked in' : filterLabel}</span><span class="fcount">{lockedIn ? (selHero.name) : viewFilter === 'all' ? `${openCount} to choose from` : `${filterCount} heroes`}</span></div>
+					<div class="fcap"><span class="t-label">{lockedIn ? (isRandom && !complete ? 'Dealt to you' : 'Locked in') : myOffer.length && viewFilter === 'all' ? 'Your three heroes' : filterLabel}</span><span class="fcount">{lockedIn ? (selHero.name) : myOffer.length && viewFilter === 'all' ? `${myOffer.filter((h) => !blocked.has(h)).length} to choose from` : viewFilter === 'all' ? `${openCount} to choose from` : `${filterCount} heroes`}</span></div>
 					<div class="grid">
 						{#each HEROES_ALPHA as h (h.id)}
 							{@const off = !matches(h, viewFilter)}
 							{@const viewLocked = lockedIn && h.id !== myPick}
 							{@const tk = takenBy[h.id]}
 							<button class="hero" class:on={sel === h.id} class:gone={unavailable(h.id) && h.id !== myPick} class:locked={soon4(h)}
-								class:dim={d.system === 'single-draft' && myTurn && inPool.has(h.id) && !d.offer.includes(h.id) && !blocked.has(h.id)}
+								class:dim={d.system === 'single-draft' && myOffer.length > 0 && inPool.has(h.id) && !myOffer.includes(h.id) && !blocked.has(h.id)}
+								class:mine={myOffer.includes(h.id) && !blocked.has(h.id)}
 								class:filtered={off} class:viewlock={viewLocked}
 								disabled={!inPool.has(h.id) || off || viewLocked}
 								title={soon4(h) ? `${h.name} — 4★ heroes are off in this game` : tk ? `${h.name} — picked by ${tk.name}` : bannedSet.has(h.id) ? `${h.name} — banned` : h.name}
@@ -449,7 +467,14 @@
 			<div class="rail {r.pos} is-{r.team}" aria-label="{teamName(r.team)}">
 				{#each r.ids as id (id)}
 					{@const ph = d.picks[id] ? heroById(d.picks[id]) : undefined}
-					<div class="pcard" class:filled={!!ph} class:active={id === activeActor} class:me={id === clientId} title={ph ? `${nameOf(id)} — ${ph.name}, ${ph.title}` : nameOf(id)}>
+					{@const offered = !!d.swaps && d.swaps[clientId] === id}
+					{@const asked = !!d.swaps && d.swaps[id] === clientId}
+					<div class="pcard" class:filled={!!ph} class:active={id === activeActor} class:me={id === clientId} class:asks={asked && !d.sealed} class:peek={isRandom && !!ph} on:click={() => { if (isRandom && ph) sel = ph.id; }} role="presentation" title={ph ? `${nameOf(id)} — ${ph.name}, ${ph.title}` : nameOf(id)}>
+						{#if isRandom && !d.sealed && !watching && myMates.includes(id) && ph}
+							<button class="swapb" class:go={asked} class:sent={offered} on:click={() => swapWith(id)} title={asked ? `${nameOf(id)} wants to swap — take ${ph.name}` : offered ? 'Take the offer back' : `Offer ${nameOf(id)} a swap`}>{asked ? 'Accept swap' : offered ? 'Offered · undo' : 'Swap'}</button>
+						{:else if isRandom && !d.sealed && id === clientId && myMates.some((m) => d.swaps?.[m] === clientId)}
+							<span class="swapb note">Swap offered</span>
+						{/if}
 						<div class="pav">{#if ph}<img src={heroAvatar(ph.id)} alt="" />{:else}<span class="pq">?</span>{/if}</div>
 						<div class="pinfo">
 							<span class="pn" class:long={!!ph && ph.name.length >= 9}>{ph ? ph.name : 'Choosing…'}</span>
@@ -650,6 +675,8 @@
 	.hero.gone { pointer-events: none; } /* outside the pool, taken or banned */
 	.hero.gone img { filter: grayscale(1) brightness(0.36); }
 	.hero.dim { filter: brightness(0.55); }
+	/* single-draft: the three heroes dealt to you */
+	.hero.mine::after { content: ""; position: absolute; inset: 0; border: 2px solid var(--brass); border-radius: inherit; pointer-events: none; }
 	.hero.locked { pointer-events: none; } /* 4★: coming soon */
 	.hero.locked img { filter: grayscale(1) brightness(0.45); }
 	.soon { position: absolute; left: 0; right: 0; bottom: 0; padding: 2px 0 3px; background: rgba(3,11,21,0.84); color: var(--ink-2); font-size: var(--fs-micro); line-height: 1; letter-spacing: 0.14em; text-transform: uppercase; text-align: center; }
@@ -688,6 +715,16 @@
 	.rail { display: flex; gap: 10px; min-width: 0; }
 	.rail.sl { justify-content: flex-end; }
 	.rail.sr { justify-content: flex-start; }
+	/* all-random: a swap pill on a teammate's card, riding its top edge (nothing moves) */
+	.pcard { position: relative; }
+	.swapb { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); z-index: 2; height: 22px; padding: 0 10px; border-radius: 11px; white-space: nowrap;
+		font: inherit; font-size: 13px; line-height: 20px; letter-spacing: 0.04em; color: var(--ink); background: #10263d; border: 1px solid var(--brass); cursor: pointer; }
+	.swapb:hover { background: #1a3550; }
+	.swapb.go { color: #1a1206; background: var(--brass-hi); border-color: var(--brass-hi); }
+	.swapb.sent { color: var(--ink-2); border-color: var(--hair); }
+	.swapb.note { cursor: default; color: var(--brass-hi); border-color: var(--brass); }
+	.pcard.asks { border-color: var(--brass); }
+	.pcard.peek { cursor: pointer; }
 	.pcard { flex: 1 1 0; max-width: 372px; min-width: 0; height: 74px; box-sizing: border-box; display: flex; align-items: center; gap: 10px; padding: 8px 10px 8px 8px; border-radius: var(--r-md);
 		background: var(--well); border: 1px solid var(--hair); border-bottom: 3px solid var(--tc); transition: border-color 0.2s, box-shadow 0.2s; }
 	.pav { flex: none; width: 72px; height: 56px; border-radius: 7px; overflow: hidden; display: grid; place-items: center; background: rgba(255,255,255,0.04); border: 1px solid var(--hair); }
