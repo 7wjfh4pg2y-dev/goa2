@@ -523,7 +523,7 @@ export interface MatchState {
 	/** Razzle's comic bursts: the last one, for everyone (heropower comicNewsOf) */
 	comicNews?: ComicNews | null
 	/** forced discards, keyed by the hero who must discard: who forces it, and whether it's "…or die" */
-	forced?: Record<string, { by: string; die: boolean; at: number; only?: 'basic' | 'nonbasic' }>
+	forced?: Record<string, { by: string; die: boolean; at: number; only?: 'basic' | 'nonbasic'; color?: string }>
 	/** what Gydion just cast (everyone's toast; gydion.ts) */
 	gyNews?: GyNews | null
 	/** the latest lane push — every client plays the "wave advances" splash when `id` changes */
@@ -1735,6 +1735,7 @@ export function joinMatch(
 			if (req.op === 'gyWish') { const w = (patch.power as Record<string, PowerState>)?.[req.pid]?.gy?.wish ?? 0; note(req.pid, `casts Wish (${w} of 3)${patch.wonBy ? ' — the third Wish!' : ''} instead of preparing his spells`) }
 			if (req.op === 'gyCast') { const p2 = patch.power as Record<string, PowerState> | undefined; note(req.pid, `casts ${sn(req.spell)}${p2?.[req.pid]?.gy?.cast?.wish ? ' (Wish)' : ''}${req.spell === 'midas-touch' && patch.cards ? ` — +${(patch.cards[req.pid]?.coins ?? 0) - (local.cards?.[req.pid]?.coins ?? 0)} coins` : ''}${req.spell === 'energy-drain' && patch.life ? ' — his team regains a Life counter' : ''}`) }
 			if (req.op === 'gyStrike') note(req.pid, req.spells?.length ? `removes ${req.spells.map(sn).join(', ')} from his spellbook (Find Familiar)` : 'removes no spells (Find Familiar)')
+			if (req.op === 'nkDoubt' && patch.forced) { const f = patch.forced as MatchState['forced']; const ts = (req.targets ?? []).filter((t) => f?.[t]); const c = f?.[ts[0]]?.color ?? ''; if (ts.length) note(req.pid, `makes ${ts.map(nameOf).join(' and ')} discard a ${c[0] + c.slice(1).toLowerCase()} card, if able`) }
 			if (req.op === 'gyForce' && req.target) { const f = (patch.forced as MatchState['forced'])?.[req.target]; note(req.pid, `makes ${nameOf(req.target)} discard ${f?.only === 'basic' ? 'a basic card' : f?.only === 'nonbasic' ? 'a non-basic card' : 'a card'}, if able`) }
 			if (req.op === 'gyRaise') note(req.pid, 'raises a minion from the dead (Create Undead)')
 			if (req.op === 'gyDrink' && req.idx != null) note(req.pid, `retrieves ${heroCards('gydion')[req.idx]?.name ?? 'a card'} from his discard (Vampiric Touch)`)

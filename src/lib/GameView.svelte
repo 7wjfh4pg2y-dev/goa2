@@ -1365,7 +1365,7 @@
 				</div>
 				<div class="aktitle"><i></i>{forcedMe.die ? 'Discard or die' : 'Forced discard'}<i></i></div>
 				<div class="akwho"><b>{heroOf(forcedMe.by)}</b><em>{playerName(forcedMe.by)}</em></div>
-				<div class="akhint">{forcedMe.die ? 'Discard a card — or be defeated' : forcedMe.only === 'basic' ? 'Discard a basic card, if able' : forcedMe.only === 'nonbasic' ? 'Discard a non-basic card, if able' : 'Discard a card'}</div>
+				<div class="akhint">{forcedMe.die ? 'Discard a card — or be defeated' : forcedMe.color ? `Discard a ${forcedMe.color[0] + forcedMe.color.slice(1).toLowerCase()} card, if able` : forcedMe.only === 'basic' ? 'Discard a basic card, if able' : forcedMe.only === 'nonbasic' ? 'Discard a non-basic card, if able' : 'Discard a card'}</div>
 			</div>
 		</div>
 	{/if}

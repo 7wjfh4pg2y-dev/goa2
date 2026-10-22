@@ -44,7 +44,9 @@ export type PowerState = {
 	/** NebKher: the enemy heroes his card swaps have already been told about this turn (one toast each per turn) */
 	told?: { key: string; pids: string[] }
 	/** NebKher: the colour he named (Imbue Doubt…) and the turn he named it in — shown till the next turn ends */
-	doubt?: { key: string; color: NkColor }
+	/** the colour he named (Imbue Doubt · Time to Reconsider · An Illusion of Choice): `r` = the card's radius + Area items,
+	 *  `n` = how many heroes discard, `done` = next turn's discard has been dealt out */
+	doubt?: { key: string; color: NkColor; r?: number; n?: number; done?: boolean }
 	/** NebKher: the enemy hero whose previous card he took with Mind Grip / Probe, for this acting card */
 	grip?: { mark: string; target: string }
 	/** NebKher: the Crack in Reality / Shift Reality line for this turn: through `hex`, along axis `dir` (0–2) */
@@ -71,7 +73,9 @@ export const NK_COLORS: NkColor[] = ['GOLD', 'SILVER', 'RED', 'BLUE', 'GREEN']
 export type NkEnemy = { pid: string; hero: string; name: string; player: string; dist: number | null; prev: number | null; prevHidden: boolean
 	/** every turn slot I–IV as it stands (this turn's = the card in play), and whether Laughter may swap it */
 	cards: { t: number; idx: number | null; hidden: boolean; ok: boolean; now: boolean }[] }
-export type PowerReq = { kind: 'power'; pid: string; op: 'ignatiaFlip' | 'snorriInscribe' | 'snorriSecond' | 'takaSwap' | 'mateSwap' | 'emReverse' | 'emWarp' | 'warpSwap' | 'capsule' | 'nkLaugh' | 'nkSwap' | 'nkName' | 'nkCrack' | 'nkGrip' | 'rzSpawn' | 'rzRemove' | 'rzMain' | 'rzClear' | 'rzRetrieve' | 'rzTwin' | 'emCommit2' | 'emUncommit2' | 'emKeep' | 'emOne' | 'gyPrepare' | 'gyWish' | 'gyCast' | 'gyStrike' | 'gyForce' | 'gyRaise' | 'gyDrink' | 'gyFix';
+export type PowerReq = { kind: 'power'; pid: string; op: 'ignatiaFlip' | 'snorriInscribe' | 'snorriSecond' | 'takaSwap' | 'mateSwap' | 'emReverse' | 'emWarp' | 'warpSwap' | 'capsule' | 'nkLaugh' | 'nkSwap' | 'nkName' | 'nkCrack' | 'nkGrip' | 'nkDoubt' | 'rzSpawn' | 'rzRemove' | 'rzMain' | 'rzClear' | 'rzRetrieve' | 'rzTwin' | 'emCommit2' | 'emUncommit2' | 'emKeep' | 'emOne' | 'gyPrepare' | 'gyWish' | 'gyCast' | 'gyStrike' | 'gyForce' | 'gyRaise' | 'gyDrink' | 'gyFix';
+	/** nkDoubt: the enemy heroes who discard ([] = nobody this time) */
+	targets?: string[]
 	/** takaSwap: the gold card from his deck to take; mateSwap: the hand / discard card to swap in; warpSwap: the turn slot (0–3) */
 	idx?: number
 	/** mateSwap: where the swapped-in card comes from */
@@ -504,6 +508,21 @@ export const prevCard = (cs: PlayerCardState | undefined, turnIdx: number) => { 
 export const nkSwapsLeft = (s: S, pid: string, ctx: TurnCtx) => { const n = s.power?.[pid]?.nsw; return 3 - (n && n.mark === markOf(ctx) ? n.n : 0) }
 /** the turn after `key` ("r-t" → "r-(t+1)"; none after the 4th) */
 const keyAfter = (key: string) => { const [r, t] = key.split('-').map(Number); return t < 4 ? `${r}-${t + 1}` : null }
+/** Imbue Doubt & co, NEXT turn after the cards are revealed: the enemy heroes in the card's radius who may be made to
+ *  discard a card of the named colour (on the board, not already forced); empty once dealt out or out of time */
+export function doubtTargets(s: S, pid: string, ctx: TurnCtx): string[] {
+	const d = s.power?.[pid]?.doubt, me = ctx.teams?.[pid]
+	if (!d || d.done || !ctx.revealed || keyAfter(d.key) !== ctx.key || !me || s.pieces?.[pid]?.kind !== 'hero') return []
+	const r = d.r ?? 3
+	return Object.keys(s.cards ?? {}).filter((t) => {
+		const team = ctx.teams?.[t]
+		if (!team || team === me || s.pieces?.[t]?.kind !== 'hero' || s.forced?.[t]) return false
+		const dd = pieceDist(s, pid, t)
+		return dd != null && dd <= r
+	})
+}
+/** how many heroes his doubt reaches (An Illusion of Choice: up to two) */
+export const doubtCount = (s: S, pid: string) => s.power?.[pid]?.doubt?.n ?? 1
 /** the colour he named, while it still matters (the turn he named it and the next) */
 /** naming a colour / drawing the Crack IS playing that card: its lingering effect (Next turn / This turn, from the
  *  card text) switches on with it, so the card glows and the ring's 'Effect?' ask is answered (2026-10-18) */
@@ -763,7 +782,18 @@ export function applyPower(s: S & { tieTurn?: { key: string; coin: Team } | null
 	if (req.op === 'nkName') {
 		if (nkPower(s, req.pid, ctx) !== 'name' || !req.color || !NK_COLORS.includes(req.color)) return {}
 		const fx = withCardFx(s, req.pid, ctx)
-		return { ...(fx ? { effects: fx } : {}), power: { ...s.power, [req.pid]: { ...s.power?.[req.pid], doubt: { key: ctx.key, color: req.color } } }, nkNews: nkNewsOf('doubt', req.pid, { detail: req.color[0] + req.color.slice(1).toLowerCase(), to: Object.keys(s.cards ?? {}).filter((p) => ctx.teams?.[p] && ctx.teams[p] !== ctx.teams?.[req.pid]) }) }
+		const cs = s.cards?.[req.pid], card = cs && cs.pending != null && cs.pending >= 0 ? heroCards(cs.hero)[cs.pending] : undefined
+		const r = (card?.modifier === 'AREA' || card?.modifier === 'RADIUS' ? card.modifierValue ?? 0 : 3) + (cs ? statDeltas(cs).radius ?? 0 : 0)
+		const n = /up to two/i.test(card?.description ?? '') ? 2 : 1
+		return { ...(fx ? { effects: fx } : {}), power: { ...s.power, [req.pid]: { ...s.power?.[req.pid], doubt: { key: ctx.key, color: req.color, r, n } } }, nkNews: nkNewsOf('doubt', req.pid, { detail: req.color[0] + req.color.slice(1).toLowerCase(), to: Object.keys(s.cards ?? {}).filter((p) => ctx.teams?.[p] && ctx.teams[p] !== ctx.teams?.[req.pid]) }) }
+	}
+	if (req.op === 'nkDoubt') {
+		const d = s.power?.[req.pid]?.doubt, ok = doubtTargets(s, req.pid, ctx), ts = req.targets ?? []
+		if (!d || !ok.length || ts.length > doubtCount(s, req.pid) || ts.some((t) => !ok.includes(t)) || new Set(ts).size !== ts.length) return {}
+		const at = Date.now()
+		const out: Record<string, unknown> = { power: { ...s.power, [req.pid]: { ...s.power?.[req.pid], doubt: { ...d, done: true } } } }
+		if (ts.length) out.forced = { ...(s.forced ?? {}), ...Object.fromEntries(ts.map((t) => [t, { by: req.pid, die: false, at, color: d.color }])) }
+		return out
 	}
 	if (req.op === 'nkCrack') {
 		const hex = s.pieces?.[req.pid]?.hex
