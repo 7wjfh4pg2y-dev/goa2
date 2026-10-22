@@ -555,7 +555,9 @@
 	let timeSeen: string | null = reversedTurn($ms, `${$ms.round}-${$ms.turn}`) && (($ms.revealAt ?? 0) > 0) ? `${$ms.round}-${$ms.turn}` : null;
 	$: timeCheck(turnReversed, revealed, curtain, battlePhase);
 	function timeCheck(..._: unknown[]) {
-		if (!turnReversed || !revealed || curtain || battlePhase) return;
+		// !wasRevealed: this reactive line runs BEFORE syncCurtain opens the curtain on the reveal tick, so without it the
+		// clock played under the curtain and nobody saw it — it waits until this player clicks the curtain off
+		if (!turnReversed || !revealed || !wasRevealed || curtain || battlePhase) return;
 		const key = pctx.key;
 		if (key === timeSeen) return;
 		timeSeen = key;
@@ -565,7 +567,7 @@
 	let cueKey = '';
 	$: cueCheck(actor, revealed, curtain, actAt);
 	function cueCheck(..._: unknown[]) {
-		if (!revealed || curtain || actor !== clientId || !mine || !$boardPrefs.turnCue) return;
+		if (!revealed || !wasRevealed || curtain || actor !== clientId || !mine || !$boardPrefs.turnCue) return;
 		const key = `${$ms.round}-${$ms.turn}-${actAt}`;
 		if (key === cueKey) return;
 		cueKey = key;
