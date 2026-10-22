@@ -1039,7 +1039,8 @@
 								</div>
 								<i class="vrule"></i>
 								<div class="fld g-cx">
-									<span class="t-label">Hero complexity</span>
+									<!-- GMs: Lab rules sits beside this heading (in the footer it pushed Create game out of the panel) -->
+									<div class="lblrow"><span class="t-label">Hero complexity</span>{#if gmCreate}<button class="pill labr" class:on={labRules} aria-pressed={labRules} title="Lab rules: the card automation still being tested (GM test games, not recorded)" on:click={() => (labRules = !labRules)}>Lab rules</button>{/if}</div>
 									<div class="cxchips">
 										{#each [1, 2, 3, 4] as s (s)}
 											{@const shut = s === 4 && !fourOpen}
@@ -1055,7 +1056,6 @@
 					</div>
 					<footer class="cfoot">
 						<button class="btn btn-ghost" on:click={() => (mode = 'menu')}><Icon name="back" /> Back</button>
-						{#if gmCreate}<button class="pill labr" class:on={labRules} aria-pressed={labRules} title="Lab rules: the card automation still being tested (GM test games, not recorded)" on:click={() => (labRules = !labRules)}>Lab rules</button>{/if}
 						<div class="csum">{@render counts()}<span class="pill">{playerCount} seats</span><span class="pill" class:pill--bad={poolShort} title={poolShort ? `Only ${eligibleCount} heroes — ${DRAFT_LABELS[draftSystem]} with ${playerCount} players needs ${poolNeed}` : 'Heroes in the pool'}>{eligibleCount}{poolShort ? ` / ${poolNeed}` : ''} heroes</span></div>
 						<button class="btn btn-duo createbtn" on:click={createGame} disabled={poolShort || !name.trim()}>Create game</button>
 					</footer>
@@ -1278,8 +1278,10 @@
 	.cxchips :global(.ico) { width: 20px; height: 20px; }
 	.cfoot { display: flex; align-items: center; gap: 16px; margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--hair); }
 	.labr { cursor: pointer; flex: none; }
+	.lblrow { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 0; }
+	.lblrow .labr { padding-block: 2px; font-size: 12px; line-height: 1.2; }
 	.labr.on { border-color: var(--brass, #d8b36a); color: var(--brass, #d8b36a); box-shadow: inset 0 0 0 1px var(--brass, #d8b36a); }
-	.csum { display: flex; flex-wrap: nowrap; justify-content: center; align-items: center; gap: 8px; margin: 0 auto; white-space: nowrap; }
+	.csum { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px 8px; margin: 0 auto; min-width: 0; white-space: nowrap; }
 	/* waves / Life with their own ± — the counts are edited where they are shown */
 	.pstep { gap: 6px; padding-left: 4px; padding-right: 4px; }
 	.pstep.is-custom { border-color: var(--brass); }
@@ -1288,7 +1290,7 @@
 		color: var(--brass-hi); background: rgba(13, 40, 66, 0.9); border: 1px solid var(--brass-line); font-size: 12px; }
 	.pbtn:hover:not(:disabled) { border-color: var(--brass); }
 	.pbtn:disabled { opacity: 0.35; cursor: default; }
-	.createbtn { min-width: 220px; }
+	.createbtn { min-width: 220px; flex: none; }
 
 	/* ------------------------------------------------------------------------- lobby */
 	.s-lobby { padding: 0 28px; }
