@@ -66,9 +66,7 @@
 	$: filterLabel = viewFilter === 'all' ? 'All heroes' : viewFilter[0] === 's' ? `Complexity ${viewFilter.slice(1)}` : TRAIT_LABELS[viewFilter.slice(2) as Trait];
 	$: filterCount = HEROES_ALPHA.filter((h) => matches(h, viewFilter)).length;
 	$: inPool = d ? new Set(d.pool) : new Set<string>();
-	// pickable right now: in the pool, not taken/banned, not a 4★ "soon"
-	// a 4★ hero not in this room's pool = 'coming soon' (in a GM's lab room the ones being tested are in it)
-	const soon4 = (h: Hero) => h.stars === 4 && !inPool.has(h.id);
+	// pickable right now: in the pool, not taken/banned
 	const pickable = (h: Hero) => inPool.has(h.id) && !blocked.has(h.id);
 	const firstFor = (f: string) => HEROES_ALPHA.find((h) => matches(h, f) && pickable(h))?.id;
 	// choosing a tab (tap the active one again → All) jumps to its first available hero
@@ -431,18 +429,17 @@
 							{@const off = !matches(h, viewFilter)}
 							{@const viewLocked = lockedIn && h.id !== myPick}
 							{@const tk = takenBy[h.id]}
-							<button class="hero" class:on={sel === h.id} class:gone={unavailable(h.id) && h.id !== myPick} class:locked={soon4(h)}
+							<button class="hero" class:on={sel === h.id} class:gone={unavailable(h.id) && h.id !== myPick}
 								class:dim={d.system === 'single-draft' && myOffer.length > 0 && inPool.has(h.id) && !myOffer.includes(h.id) && !blocked.has(h.id)}
 								class:mine={myOffer.includes(h.id) && !blocked.has(h.id)}
 								class:filtered={off} class:viewlock={viewLocked}
 								disabled={!inPool.has(h.id) || off || viewLocked}
-								title={soon4(h) ? `${h.name} — 4★ heroes are off in this game` : tk ? `${h.name} — picked by ${tk.name}` : bannedSet.has(h.id) ? `${h.name} — banned` : h.name}
+								title={!inPool.has(h.id) ? `${h.name} — not in this game` : tk ? `${h.name} — picked by ${tk.name}` : bannedSet.has(h.id) ? `${h.name} — banned` : h.name}
 								on:pointerenter={() => prefer(h.id)} on:pointerdown={() => prefer(h.id)} on:focus={() => prefer(h.id)}
 								on:click={() => (sel = h.id)}>
 								<img src={heroAvatar(h.id)} alt={h.name} />
 								{#if tk}<span class="tk" style="--pc:{tk.color}"></span>{/if}
 								{#if bannedSet.has(h.id)}<span class="bx">✕</span>{/if}
-								{#if soon4(h)}<span class="soon">soon</span>{/if}
 							</button>
 						{/each}
 					</div>
@@ -689,9 +686,7 @@
 	.hero.dim { filter: brightness(0.55); }
 	/* single-draft: the three heroes dealt to you */
 	.hero.mine::after { content: ""; position: absolute; inset: 0; border: 2px solid var(--brass); border-radius: inherit; pointer-events: none; }
-	.hero.locked { pointer-events: none; } /* 4★: coming soon */
 	.hero.locked img { filter: grayscale(1) brightness(0.45); }
-	.soon { position: absolute; left: 0; right: 0; bottom: 0; padding: 2px 0 3px; background: rgba(3,11,21,0.84); color: var(--ink-2); font-size: var(--fs-micro); line-height: 1; letter-spacing: 0.14em; text-transform: uppercase; text-align: center; }
 	/* whose it is: a ring in the picking player's own colour · banned: a red cross */
 	.tk { position: absolute; inset: 0; border-radius: inherit; pointer-events: none; box-shadow: inset 0 0 0 3px var(--pc), inset 0 0 12px var(--pc); }
 	.bx { position: absolute; inset: 0; display: grid; place-items: center; font-size: 30px; line-height: 1; color: var(--danger); text-shadow: 0 1px 4px #000; }
@@ -912,7 +907,6 @@
 		.hero { aspect-ratio: 1; border-radius: 6px; }
 		.hero:hover { transform: none; box-shadow: none; }
 		.hero.on, .hero.on:hover { box-shadow: 0 0 0 2px var(--brass-hi), 0 0 12px rgba(216,179,106,0.6); }
-		.soon { padding: 1px 0 2px; letter-spacing: 0.04em; }
 		.tk { box-shadow: inset 0 0 0 2px var(--pc), inset 0 0 8px var(--pc); }
 		.bx { font-size: 22px; }
 		.actslot { height: 50px; }
