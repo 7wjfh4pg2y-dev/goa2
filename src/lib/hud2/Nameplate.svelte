@@ -27,6 +27,7 @@
 	export let runeFx = true;
 	/** Gydion's spell each turn cast this round (public; a sigil under the slot, tap = read it) */
 	export let spells: (string[] | null)[] | null = null;
+	export let doubt: import('../heropower').NkColor | null = null;
 	export let onSpell: (ids: string[]) => void = () => {};
 
 	export let onSlot: (e: Event, t: number) => void = () => {};
@@ -39,6 +40,7 @@
 	};
 	$: roomy = width >= 205; // the hand count, when there's room for it
 	$: narrow = width < 150;
+	import DoubtChip from './DoubtChip.svelte';
 </script>
 
 <div class="np is-{team}" class:me class:narrow class:ult={cs.ultimate} style="--w:{width}px">
@@ -53,12 +55,14 @@
 		<TurnSlot heroId={cs.hero} played={cs.turns[turnIdx]} pending={cs.pending} isCurrent {revealed} label={ROMAN[turnIdx] ?? ''} back={!me && isHidden(cs, cs.turns[turnIdx])} veil={me && isHidden(cs, cs.turns[turnIdx])} examinable on:click={(e) => onSlot(e, turnIdx)} />
 		{#if !revealed && ready}<i class="ok" title="Card in">✓</i>{/if}
 		{#if runes?.at[turnIdx]}<span class="nr"><RuneMark rune={runes.at[turnIdx]} size={15} on fx={runeFx} /></span>{/if}
+		{#if doubt}<span class="ndb"><DoubtChip color={doubt} size={15} mini /></span>{/if}
 		{#if spells?.[turnIdx]}<span class="nr nsp"><SpellMark spells={spells[turnIdx]} size={15} now onOpen={onSpell} /></span>{/if}
 	</span>
 	{#if roomy}<span class="hd" title="Cards in hand"><svg viewBox="0 0 24 24"><rect x="5" y="6" width="10" height="14" rx="2" /><path d="M9 3h8.5a2 2 0 0 1 2 2v12" /></svg>{cs.hand.length}</span>{/if}
 </div>
 
 <style>
+	.ndb { position: absolute; right: -6px; bottom: -4px; z-index: 1; display: grid; pointer-events: auto; }
 	.np { --brass: #d8b36a; --brass-hi: #f4dfa8; --line: rgba(216, 179, 106, 0.4); position: relative; width: var(--w); height: 50px; display: flex; align-items: center; gap: 6px; padding: 0 8px 0 4px; box-sizing: border-box;
 		border-radius: 12px; color: #f5f1e8; pointer-events: auto; background: linear-gradient(180deg, var(--tg), transparent 60%), linear-gradient(180deg, rgba(16, 44, 72, 0.97), rgba(6, 21, 38, 0.97));
 		border: 1px solid var(--line); border-bottom: 3px solid var(--tc); box-shadow: 0 8px 18px rgba(0, 0, 0, 0.5); }
