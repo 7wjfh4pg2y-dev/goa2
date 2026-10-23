@@ -92,7 +92,19 @@ export type Extras = {
 	noDefDied: number | null // fell without discarding a card (an attack, or discard-or-die)
 	beatDefended: number | null // defeated a hero who had defended
 	relentless: number | null // defeats of a hero they had already attacked that round
+	// ── match moments (see MOMENTS) ──
+	savior: number | null // defeated an enemy who had attacked a teammate this turn or the turn before
+	punisher: number // defeated the hero who defeated a teammate, in the same turn or the next
+	coup: number // the defeat that took the enemy team's last Life (a Life win)
+	denied: number | null // rounds survived after defending 2+ attacks / forced discards from ONE enemy hero
+	breakwater: number | null // rounds survived after defending attacks / forced discards from 2+ different enemy heroes
+	lastStand: number | null // attacks defended while their team was on its last Life
+	riptide: number // turns with 3+ minions defeated
+	dawn: number // hero defeats in round 1
+	risingTide: number // 1 = their team defeated more minions in round 1 than it has heroes
 }
+/** what extrasOf needs to know about the game beyond its events */
+export type GameFacts = { lifeMax?: number; winner?: Team | null; type?: WinType }
 export type LeagueGame = {
 	id: string
 	room: string
@@ -167,7 +179,7 @@ const minionRoles = (ev: unknown, id: string) => {
 
 const other = (t: Team): Team => (t === 'orange' ? 'blue' : 'orange')
 /** The extras for every player of one game, from its events (see Extras). */
-export function extrasOf(evIn: unknown, clashes: boolean, team: Record<string, Team>): Record<string, Extras> {
+export function extrasOf(evIn: unknown, clashes: boolean, team: Record<string, Team>, facts: GameFacts = {}): Record<string, Extras> {
 	const ev = (Array.isArray(evIn) ? evIn : []) as GameEvent[]
 	const ids = Object.keys(team)
 	const H = ev.map((e, i) => ({ e, i })).filter((x): x is { e: Extract<GameEvent, { k: 'hero' }>; i: number } => x.e.k === 'hero' && x.e.by in team && x.e.v in team)
@@ -175,7 +187,8 @@ export function extrasOf(evIn: unknown, clashes: boolean, team: Record<string, T
 	const levels = H.some((h) => h.e.kl != null)
 	const out: Record<string, Extras> = {}
 	for (const id of ids) out[id] = { firstBlood: 0, wipe: 0, shutdowns: 0, paybacks: 0, multis: 0, aces: 0, heavies: 0, bounty: 0,
-		giants: levels ? 0 : null, defends: clashes ? 0 : null, defDied: clashes ? 0 : null, noDefDied: clashes ? 0 : null, beatDefended: clashes ? 0 : null, relentless: clashes ? 0 : null }
+		giants: levels ? 0 : null, defends: clashes ? 0 : null, defDied: clashes ? 0 : null, noDefDied: clashes ? 0 : null, beatDefended: clashes ? 0 : null, relentless: clashes ? 0 : null,
+		savior: clashes ? 0 : null, punisher: 0, coup: 0, denied: clashes ? 0 : null, breakwater: clashes ? 0 : null, lastStand: clashes && facts.lifeMax ? 0 : null, riptide: 0, dawn: 0, risingTide: 0 }
 	if (H[0]) out[H[0].e.by].firstBlood = 1
 	const streak: Record<string, number> = {}, lastKiller: Record<string, string> = {}, turnKills: Record<string, number> = {}
 	for (const { e, i } of H) {
@@ -208,7 +221,63 @@ export function extrasOf(evIn: unknown, clashes: boolean, team: Record<string, T
 		if (e.out === 'died' && e.disc && e.kind === 'attack') { if (out[e.v]) out[e.v].defDied!++; if (out[e.by]) out[e.by].beatDefended!++ }
 		if (e.out === 'died' && !e.disc && out[e.v]) out[e.v].noDefDied!++
 	}
+	moments(ev, H, C, clashes, team, out, facts)
 	return out
+}
+
+// turns counted through the game (round 2 turn 1 comes right after round 1 turn 4)
+const tix = (e: { r: number; t: number }) => (e.r - 1) * 4 + (e.t - 1)
+/** the match moments (one per occurrence; a player can earn one several times in a game) */
+function moments(ev: GameEvent[], H: { e: Extract<GameEvent, { k: 'hero' }>; i: number }[], C: { e: Extract<GameEvent, { k: 'clash' }>; i: number }[],
+	clashes: boolean, team: Record<string, Team>, out: Record<string, Extras>, facts: GameFacts) {
+	const mates = (a: string, b: string) => a !== b && team[a] != null && team[a] === team[b]
+	for (const { e, i } of H) {
+		const x = out[e.by]
+		if (!x) continue
+		const k = tix(e)
+		// Savior: the hero fell after attacking a teammate of the killer this turn or the turn before
+		if (clashes && C.some((c) => c.i < i && c.e.kind === 'attack' && c.e.out !== 'cancel' && c.e.by === e.v && mates(c.e.v, e.by) && k - tix(c.e) <= 1)) x.savior!++
+		// Punisher: the hero had defeated a teammate of the killer in the same turn or the one before
+		if (H.some((h) => h.i < i && h.e.by === e.v && mates(h.e.v, e.by) && k - tix(h.e) <= 1)) x.punisher++
+		if (e.r === 1) x.dawn++
+	}
+	// Coup de Grâce: a Life win — the last defeat of a loser's hero by the winners
+	if (facts.type === 'life' && facts.winner) {
+		const last = [...H].reverse().find((h) => team[h.e.by] === facts.winner && team[h.e.v] && team[h.e.v] !== facts.winner)
+		if (last && out[last.e.by]) out[last.e.by].coup = 1
+	}
+	if (clashes) {
+		// a round survived after defending: 2+ from one enemy = Denied (once per enemy), from 2+ enemies = Breakwater
+		const fell = new Set(H.map((h) => `${h.e.v}|${h.e.r}`))
+		const held: Record<string, string[]> = {}
+		for (const { e } of C) if (e.out === 'defended' && out[e.v]) (held[`${e.v}|${e.r}`] ??= []).push(e.by)
+		for (const [k, bys] of Object.entries(held)) {
+			if (fell.has(k)) continue
+			const v = k.split('|')[0], n: Record<string, number> = {}
+			for (const b of bys) n[b] = (n[b] ?? 0) + 1
+			out[v].denied! += Object.values(n).filter((c) => c >= 2).length
+			if (Object.keys(n).length >= 2) out[v].breakwater!++
+		}
+		// Last Stand: an attack defended while their team's Life was down to its last
+		if (facts.lifeMax) {
+			const life: Record<string, number> = { orange: facts.lifeMax, blue: facts.lifeMax }
+			for (const e of ev) {
+				if (e.k === 'hero' && team[e.v]) life[team[e.v]] -= e.l ?? 0
+				if (e.k === 'clash' && e.kind === 'attack' && e.out === 'defended' && out[e.v] && life[team[e.v]] <= 1) out[e.v].lastStand!++
+			}
+		}
+	}
+	// Riptide: 3+ minions in one turn · Rising Tide: a team out-killing its own size in minions in round 1
+	const turnMin: Record<string, number> = {}, early: Record<string, number> = {}
+	for (const e of ev) if (e.k === 'minion' && out[e.by]) {
+		const k = `${e.by}|${e.r}|${e.t}`
+		if ((turnMin[k] = (turnMin[k] ?? 0) + 1) === 3) out[e.by].riptide++
+		if (e.r === 1) early[team[e.by]] = (early[team[e.by]] ?? 0) + 1
+	}
+	for (const t of ['orange', 'blue'] as Team[]) {
+		const ids = Object.keys(team).filter((id) => team[id] === t)
+		if (ids.length && (early[t] ?? 0) > ids.length) for (const id of ids) if (out[id]) out[id].risingTide = 1
+	}
 }
 
 /** One game, ready to count — or null when the row can't say who won or who played. */
@@ -224,7 +293,7 @@ export function gameOfRow(row: GameRowIn): LeagueGame | null {
 	const teamOfId: Record<string, Team> = {}
 	for (const [id, p] of Object.entries((d.players ?? {}) as Record<string, { name: string; seat: number; hero: string; team?: Team }>))
 		if (p?.hero && p.name) teamOfId[id] = exact?.players.find((x) => x.id === id)?.team ?? p.team ?? (p.seat < Math.floor((d.seats || 2) / 2) ? 'orange' : 'blue')
-	const xs = exact ? extrasOf(d.ev, (d.evv ?? 0) >= 2, teamOfId) : null
+	const xs = exact ? extrasOf(d.ev, (d.evv ?? 0) >= 2, teamOfId, { lifeMax: d.lifeMax, winner, type: winType(row.reason ?? d.final?.wonBy?.reason) }) : null
 	// the brink: the battle zone on a team's own beach (Atlanteans: lane 0, Titans: lane 2), or its Life down to 1
 	const snaps = [...(Array.isArray(d.turns) ? d.turns : []), ...(d.final ? [d.final] : [])] as { lane?: number; life?: Record<Team, number> }[]
 	const brinkOf = (t: Team) => snaps.some((x) => x.lane === (t === 'orange' ? 0 : 2) || (x.life?.[t] != null && x.life[t] <= 1))
@@ -381,7 +450,7 @@ export type League = { games: LeagueGame[]; players: PlayerAgg[]; heroes: HeroAg
 
 export const START_RATING = 1200
 const K = 32
-const ZERO_EX: Record<keyof Extras, number> = { firstBlood: 0, wipe: 0, shutdowns: 0, paybacks: 0, multis: 0, aces: 0, heavies: 0, bounty: 0, giants: 0, defends: 0, defDied: 0, noDefDied: 0, beatDefended: 0, relentless: 0 }
+const ZERO_EX: Record<keyof Extras, number> = { firstBlood: 0, wipe: 0, shutdowns: 0, paybacks: 0, multis: 0, aces: 0, heavies: 0, bounty: 0, giants: 0, defends: 0, defDied: 0, noDefDied: 0, beatDefended: 0, relentless: 0, savior: 0, punisher: 0, coup: 0, denied: 0, breakwater: 0, lastStand: 0, riptide: 0, dawn: 0, risingTide: 0 }
 const heroTraits = (id: string) => (HEROES.find((h) => h.id === id)?.traits ?? []) as Trait[]
 
 export function buildLeague(rows: GameRowIn[], extra: LeagueGame[] = []): League {
@@ -548,7 +617,17 @@ export const worstMateOf = (p: PlayerAgg): Mate | null => {
 // ── match moments: awards given in a game each time something special happens (a player can earn one several
 // times in a game); the career awards count them up ──
 export const MOMENTS: { id: string; title: string; blurb: string; of: (x: Extras) => number }[] = [
-	{ id: 'eye', title: 'Eye for an Eye', blurb: 'Exacted revenge: defeated the hero who last defeated them', of: (x) => x.paybacks }
+	{ id: 'eye', title: 'Eye for an Eye', blurb: 'Exacted revenge: defeated the hero who last defeated them', of: (x) => x.paybacks },
+	{ id: 'savior', title: 'Savior', blurb: 'Defeated an enemy hero who attacked a teammate this turn or the turn before', of: (x) => x.savior ?? 0 },
+	{ id: 'punisher', title: 'Punisher', blurb: 'Defeated the hero who defeated a teammate, in the same turn or the next', of: (x) => x.punisher },
+	{ id: 'coup', title: 'Coup de Grâce', blurb: "Defeated the hero who took the enemy team's last Life", of: (x) => x.coup },
+	{ id: 'denied', title: 'Denied', blurb: 'Defended 2+ attacks or forced discards from the same enemy hero in a round, and survived it', of: (x) => x.denied ?? 0 },
+	{ id: 'breakwater', title: 'Breakwater', blurb: 'Defended attacks or forced discards from 2+ different enemy heroes in a round, and survived it', of: (x) => x.breakwater ?? 0 },
+	{ id: 'last-stand', title: 'Last Stand', blurb: 'Defended an attack while their team was on its last Life', of: (x) => x.lastStand ?? 0 },
+	{ id: 'ace', title: 'Ace', blurb: 'Their team had every enemy hero down at once', of: (x) => x.aces },
+	{ id: 'riptide', title: 'Riptide', blurb: 'Defeated 3+ minions in one turn', of: (x) => x.riptide },
+	{ id: 'dawn', title: 'Dawn Strike', blurb: 'Defeated a hero in the first round', of: (x) => x.dawn },
+	{ id: 'rising-tide', title: 'Rising Tide', blurb: 'Their team defeated more minions in the first round than it has heroes (3 in a 2v2, 4 in a 3v3…)', of: (x) => x.risingTide }
 ]
 /** the moments one player earned in one game, each with how many times */
 export const momentsOf = (x?: Extras | null) => (x ? MOMENTS.map((m) => ({ ...m, n: m.of(x) })).filter((m) => m.n > 0) : [])
@@ -635,7 +714,17 @@ export function awardsOf(games: LeagueGame[], players: PlayerAgg[]): Award[] {
 
 	// ── MOBA extras ──
 	const X = { extra: true }
-	career('ace', 'ACE!', 'Most times their team had every enemy hero down at once', ex('aces', true), (n) => plural(n, 'ace'), X)
+	career('ace', 'Ace of Aces', 'Most Ace awards', ex('aces', true), (n) => plural(n, 'Ace'), X)
+	// careers counting the match moments
+	career('guardian-angel', 'Guardian Angel', 'Most Savior awards', ex('savior', true), (n) => `${n} Savior`, X)
+	career('avenging-angel', 'Avenging Angel', 'Most Punisher awards', ex('punisher'), (n) => `${n} Punisher`, X)
+	career('closer', 'Last Rites', 'Most Coup de Grâce awards', ex('coup'), (n) => `${n} Coup de Grâce`, X)
+	career('denied', 'Untouchable', 'Most Denied awards', ex('denied', true), (n) => `${n} Denied`, X)
+	career('unbroken', 'The Unbroken', 'Most Breakwater awards', ex('breakwater', true), (n) => `${n} Breakwater`, X)
+	career('clutch', 'Clutch', 'Most Last Stand awards', ex('lastStand', true), (n) => `${n} Last Stand`, X)
+	career('undertow', 'Undertow', 'Most Riptide awards', ex('riptide'), (n) => `${n} Riptide`, X)
+	career('early-bird', 'Early Bird', 'Most Dawn Strike awards', ex('dawn'), (n) => `${n} Dawn Strike`, X)
+	career('spring-tide', 'Spring Tide', 'Most Rising Tide awards', ex('risingTide'), (n) => `${n} Rising Tide`, X)
 	career('shutdown', 'Shutdown', 'Most kills on a hero on a 3-kill streak', ex('shutdowns'), (n) => plural(n, 'shutdown'), X)
 	career('payback', 'Payback!', 'Most Eye for an Eye awards', ex('paybacks'), (n) => `${n} Eye for an Eye`, X)
 	career('two-birds', 'Two Birds, One Turn', 'Most turns with two or more kills', ex('multis'), (n) => plural(n, 'double'), X)

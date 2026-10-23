@@ -247,3 +247,39 @@ describe('Eye for an Eye: only the hero who last killed you', () => {
 		expect([x3.A.paybacks, x3.B.paybacks]).toEqual([1, 1])
 	})
 })
+
+describe('match moments: the rest', () => {
+	const team = { A: 'orange', M: 'orange', B: 'blue', C: 'blue' } as const
+	const h = (by: string, v: string, r: number, t: number, l = 1) => ({ k: 'hero', by, v, r, t, a: [], c: 1, ac: 0, l })
+	const cl = (by: string, v: string, r: number, t: number, out = 'defended', kind = 'attack') => ({ k: 'clash', by, v, r, t, out, kind, disc: true })
+	const mn = (by: string, r: number, t: number) => ({ k: 'minion', by, r, t, role: 'melee' })
+	it('Savior, Punisher, Dawn Strike', async () => {
+		const { extrasOf } = await import('./league')
+		// B attacks M (turn 1), A defeats B (turn 2) = Savior; B defeats M (r2 t4), A defeats B (r3 t1) = Punisher
+		const x = extrasOf([cl('B', 'M', 1, 1), h('A', 'B', 1, 2), h('B', 'M', 2, 4), h('A', 'B', 3, 1)], true, { ...team })
+		expect([x.A.savior, x.A.punisher, x.A.dawn]).toEqual([1, 1, 1])
+		// too late: two turns after
+		const y = extrasOf([h('B', 'M', 2, 1), h('A', 'B', 2, 3)], true, { ...team })
+		expect(y.A.punisher).toBe(0)
+	})
+	it('Coup de Grâce: the last defeat in a Life win', async () => {
+		const { extrasOf } = await import('./league')
+		const x = extrasOf([h('A', 'B', 1, 1), h('M', 'C', 2, 1)], false, { ...team }, { winner: 'orange', type: 'life' })
+		expect([x.A.coup, x.M.coup]).toEqual([0, 1])
+		expect(extrasOf([h('A', 'B', 1, 1)], false, { ...team }, { winner: 'orange', type: 'throne' }).A.coup).toBe(0)
+	})
+	it('Denied, Breakwater (survive the round), Last Stand', async () => {
+		const { extrasOf } = await import('./league')
+		const x = extrasOf([cl('B', 'A', 1, 1), cl('B', 'A', 1, 2), cl('C', 'A', 1, 3)], true, { ...team })
+		expect([x.A.denied, x.A.breakwater]).toEqual([1, 1])
+		const y = extrasOf([cl('B', 'A', 1, 1), cl('B', 'A', 1, 2), h('C', 'A', 1, 4)], true, { ...team })
+		expect([y.A.denied, y.A.breakwater]).toEqual([0, 0])
+		const z = extrasOf([h('B', 'M', 1, 1, 5), cl('C', 'A', 1, 2)], true, { ...team }, { lifeMax: 6 })
+		expect(z.A.lastStand).toBe(1)
+	})
+	it('Riptide and Rising Tide', async () => {
+		const { extrasOf } = await import('./league')
+		const x = extrasOf([mn('A', 1, 1), mn('A', 1, 1), mn('A', 1, 1), mn('M', 1, 2)], false, { ...team })
+		expect([x.A.riptide, x.M.riptide, x.A.risingTide, x.M.risingTide, x.B.risingTide]).toEqual([1, 0, 1, 1, 0])
+	})
+})
