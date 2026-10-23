@@ -7,7 +7,8 @@ const ODDR = [
 	[[1, 0], [0, -1], [-1, -1], [-1, 0], [-1, 1], [0, 1]],
 	[[1, 0], [1, -1], [0, -1], [-1, 0], [0, 1], [1, 1]]
 ] as const;
-const ZONE_TYPES = ['forest', 'beach', 'middle', 'terrain', 'baseOrange', 'baseBlue'];
+// grounds: the first six are the originals; stone / marsh / ash / snow came with the new map editor (2026-10-23)
+export const ZONE_TYPES = ['forest', 'beach', 'middle', 'terrain', 'baseOrange', 'baseBlue', 'stone', 'marsh', 'ash', 'snow'];
 
 // odd-r offset → cube, for hex distance
 function cube(id: string): [number, number, number] {
@@ -20,9 +21,11 @@ const dist = (a: [number, number, number], b: [number, number, number]) =>
 	Math.max(Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1]), Math.abs(a[2] - b[2]));
 
 // underlying zone for a hex (spawn tiles borrow the majority zone around them)
-export function zoneType(cells: Record<string, string>, id: string): string {
+export function zoneType(cells: Record<string, string>, id: string, ground?: Record<string, string>): string {
 	const t = cells[id];
 	if (ZONE_TYPES.includes(t)) return t;
+	const g = ground?.[id];
+	if (g && ZONE_TYPES.includes(g)) return g; // the map says what lies under a spawn point
 	const [c, r] = id.split('_').map(Number);
 	const counts: Record<string, number> = {};
 	for (const [dc, dr] of ODDR[r & 1]) {
@@ -38,10 +41,12 @@ export function zoneType(cells: Record<string, string>, id: string): string {
 export function zoneName(map: GameMap | null | undefined, hex: string): string {
 	const cells = map?.cells ?? {};
 	if (!cells[hex]) return 'the board';
-	const z = zoneType(cells, hex);
+	const named = map?.zones?.[hex];
+	if (named) return named; // painted in the map editor
+	const z = zoneType(cells, hex, map?.ground);
 	if (z === 'baseOrange') return 'Orange Base';
 	if (z === 'baseBlue') return 'Blue Base';
-	if (z === 'middle' || z === 'terrain') return 'Center';
+	if (z === 'middle' || z === 'terrain' || z === 'stone' || z === 'ash' || z === 'snow') return 'Center';
 
 	// jungle (forest) / beach need a side: whichever base is nearer
 	const oBase = Object.keys(cells).filter((k) => cells[k] === 'baseOrange' || cells[k] === 'baseOrangeSpawn').map(cube);
@@ -49,7 +54,7 @@ export function zoneName(map: GameMap | null | undefined, hex: string): string {
 	const h = cube(hex);
 	const near = (bs: [number, number, number][]) => bs.length ? Math.min(...bs.map((b) => dist(h, b))) : Infinity;
 	const side = near(oBase) <= near(bBase) ? 'Orange' : 'Blue';
-	const kind = z === 'forest' ? 'Jungle' : z === 'beach' ? 'Beach' : 'Lane';
+	const kind = z === 'forest' || z === 'marsh' ? 'Jungle' : z === 'beach' ? 'Beach' : 'Lane';
 	return `${side} ${kind}`;
 }
 

@@ -20,6 +20,8 @@
 		scatter?: Record<string, string>;
 		grid?: { size?: number };
 		name?: string;
+		ground?: Record<string, string>;
+		zones?: Record<string, string>;
 	} = {};
 	export let interactive = true;
 	export let rotation = 0; // base orientation in degrees (e.g. 180 so your base sits at the bottom)
@@ -202,12 +204,16 @@
 	const isSpawn = (t: string) => t === 'spawnOrange' || t === 'spawnBlue';
 	const isThrone = (t: string) => t === 'baseOrangeSpawn' || t === 'baseBlueSpawn';
 	const baseTileFor = (t: string) => (t === 'baseOrangeSpawn' ? 'baseOrange' : 'baseBlue');
-	const ZONE_TYPES = ['forest', 'beach', 'middle', 'terrain', 'baseOrange', 'baseBlue'];
+	const ZONE_TYPES = ['forest', 'beach', 'middle', 'terrain', 'baseOrange', 'baseBlue', 'stone', 'marsh', 'ash', 'snow'];
+	// the classic look has tiles for the six original grounds only: the map editor's extra grounds borrow the nearest one
+	const CLASSIC: Record<string, string> = { stone: 'middle', ash: 'middle', marsh: 'forest', snow: 'beach' };
 	const ODDR = [
 		[[1, 0], [0, -1], [-1, -1], [-1, 0], [-1, 1], [0, 1]],
 		[[1, 0], [1, -1], [0, -1], [-1, 0], [0, 1], [1, 1]]
 	];
 	function zoneOf(id: string): string {
+		const g = map.ground?.[id];
+		if (g && ZONE_TYPES.includes(g) && g !== 'terrain') return g;
 		const [c, r] = id.split('_').map(Number);
 		const counts: Record<string, number> = {};
 		for (const [dc, dr] of ODDR[r & 1]) {
@@ -218,11 +224,11 @@
 		for (const k in counts) if (counts[k] > bc) { bc = counts[k]; best = k; }
 		return best;
 	}
-	const zoneTile = (z: string) => tileSprites[`./images/tiles/${z}.png`];
+	const zoneTile = (z: string) => tileSprites[`./images/tiles/${CLASSIC[z] ?? z}.png`];
 	function spriteFor(id: string, t: string): string | undefined {
 		if (t === 'spawnOrange') return minionSprites[`./images/minions/orange_${meta[id]?.m ?? 'melee'}.png`];
 		if (t === 'spawnBlue') return minionSprites[`./images/minions/blue_${meta[id]?.m ?? 'melee'}.png`];
-		return tileSprites[`./images/tiles/${t}.png`];
+		return tileSprites[`./images/tiles/${CLASSIC[t] ?? t}.png`];
 	}
 	function poly(cx: number, cy: number, sz: number) {
 		const p = [];
@@ -754,7 +760,7 @@
 	{#if look === 'island' && viewM}
 		<Ocean {bounds} view={viewM} {coast} {size} still={seaStill || !effects || !sea} />
 		<svg class="land" class:moving viewBox={vb} preserveAspectRatio="xMidYMid meet" style:transform={landTf} aria-hidden="true" bind:this={landEl}>
-			<IslandLayer {cells} {meta} {size} rot={rotEff} zones={zoneNames} {activeZone} thrones={throneAt} {coast} scatter={map.scatter ?? {}} />
+			<IslandLayer {cells} {meta} {size} rot={rotEff} zones={zoneNames} {activeZone} thrones={throneAt} {coast} scatter={map.scatter ?? {}} ground={map.ground ?? {}} />
 		</svg>
 		<!-- the battle zone's outline is its own svg so that its pulse is an opacity animation on a whole element
 		     (GPU work); pulsing a path inside the land svg re-styled and repainted that layer every frame -->

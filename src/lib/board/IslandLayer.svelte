@@ -35,6 +35,8 @@
 	export let coast = '';
 	/** terrain hex → a kind of scatter terrain (scatter.ts); none = a boulder */
 	export let scatter: Record<string, string> = {};
+	/** what lies under a spawn point (map.ground; zones.ts) — without it the spawn point borrows its neighbours' ground */
+	export let ground: Record<string, string> = {};
 	// every island on the page gets its OWN ids for its drawings: two islands sharing ids (the backdrop
 	// plus the Create preview) made the browser re-resolve every <use> on the page on each mount / unmount
 	const P = `isl${++islands}-`;
@@ -42,14 +44,19 @@
 	const roleOf = (m?: string): MinionRole => (m === 'ranged' || m === 'heavy' ? m : 'melee');
 
 	// ── palette: [hue, saturation, lightness] of the tile and of the darker seam under it
-	type Z = 'beach' | 'middle' | 'forest' | 'terrain' | 'baseOrange' | 'baseBlue';
+	type Z = 'beach' | 'middle' | 'forest' | 'terrain' | 'baseOrange' | 'baseBlue' | 'stone' | 'marsh' | 'ash' | 'snow';
 	const PAL: Record<Z, { t: [number, number, number]; g: [number, number, number] }> = {
 		beach: { t: [43, 64, 73], g: [38, 46, 55] },
 		middle: { t: [34, 42, 55], g: [30, 40, 38] },
 		forest: { t: [98, 40, 43], g: [108, 42, 27] },
 		terrain: { t: [28, 16, 40], g: [26, 16, 28] },
 		baseOrange: { t: [24, 60, 47], g: [18, 58, 25] }, // copper deck plates
-		baseBlue: { t: [202, 62, 69], g: [209, 54, 43] } // glacier ice
+		baseBlue: { t: [202, 62, 69], g: [209, 54, 43] }, // glacier ice
+		// the map editor's extra grounds (2026-10-23)
+		stone: { t: [214, 9, 50], g: [216, 12, 32] }, // old flagstones
+		marsh: { t: [118, 24, 31], g: [150, 30, 18] }, // dark wet ground
+		ash: { t: [12, 9, 25], g: [8, 14, 13] }, // volcanic ash
+		snow: { t: [206, 34, 88], g: [210, 30, 66] } // packed snow
 	};
 	const ZS = Object.keys(PAL) as Z[];
 	const VARIANTS = [-2.6, 0, 2.6]; // three slightly different lightnesses, so no two neighbours match exactly
@@ -59,7 +66,7 @@
 		const t = cells[id];
 		if (t === 'baseOrangeSpawn') return 'baseOrange';
 		if (t === 'baseBlueSpawn') return 'baseBlue';
-		const z = zoneType(cells, id);
+		const z = zoneType(cells, id, ground);
 		return (z in PAL ? z : 'middle') as Z;
 	};
 
@@ -207,9 +214,34 @@
 				if (h(54) < 0.24) put(low, 1, 'snow', at(t.c, h(55) * 360, size * (0.3 + 0.2 * h(56))), 1);
 				const n = h(57) < 0.42 ? (h(58) < 0.35 ? 2 : 1) : 0, a0 = h(59) * 360;
 				for (let i = 0; i < n; i++) put(tall, 2 + i, 'shard', at(t.c, a0 + i * 150, size * (0.56 + 0.1 * h(160 + i))), 0.8 + 0.4 * h(162 + i), { shade: true });
+			} else if (t.z === 'stone') {
+				// old flagstones: a slab on most hexes, a crack, now and then pebbles
+				if (!t.spawn) {
+					if (h(40) < 0.7) put(low, 0, 'slab', at(t.c, h(41) * 360, size * 0.2 * h(42)), 1.15);
+					if (h(43) < 0.4) put(low, 1, 'crack', at(t.c, h(44) * 360, size * (0.3 + 0.2 * h(45))), 1);
+					if (h(46) < 0.25) put(low, 2, 'pebbles', at(t.c, h(47) * 360, size * (0.4 + 0.15 * h(48))), 0.8);
+				}
+			} else if (t.z === 'marsh') {
+				// wet ground: dark pools, reeds round the rim
+				for (let i = 0; i < 2; i++) patch(`m${i}`, at(t.c, h(60 + i) * 360, size * 0.38 * h(62 + i)), 0.24 + 0.18 * h(64 + i), 0.15 + 0.12 * h(66 + i), h(68 + i) * 180, i ? 'rgba(120,170,150,.18)' : 'rgba(8,30,30,.34)');
+				if (!t.spawn && h(30) < 0.5) put(low, 0, 'ripple', at(t.c, h(31) * 360, size * 0.25 * h(32)), 0.9);
+				const n = t.spawn ? 1 : 2, a0 = h(71) * 360;
+				for (let i = 0; i < n; i++) put(low, 3 + i, h(80 + i) < 0.6 ? 'tuft' : 'fern', at(t.c, a0 + i * 170, size * (0.55 + 0.1 * h(76 + i))), 0.85);
+			} else if (t.z === 'ash') {
+				// volcanic ash: cracks, cinders and now and then a glowing seam
+				if (!t.spawn) {
+					if (h(40) < 0.5) put(low, 0, 'crack', at(t.c, h(41) * 360, size * (0.2 + 0.3 * h(42))), 1.1);
+					if (h(43) < 0.4) put(low, 1, 'pebbles', at(t.c, h(44) * 360, size * (0.35 + 0.2 * h(45))), 0.9);
+					if (h(46) < 0.14) put(low, 2, 'lava', at(t.c, h(47) * 360, size * (0.45 + 0.1 * h(48))), 0.32);
+				}
+			} else if (t.z === 'snow') {
+				// packed snow: drifts and frost
+				for (let i = 0; i < 2; i++) patch(`s${i}`, at(t.c, h(60 + i) * 360, size * 0.42 * h(62 + i)), 0.26 + 0.2 * h(64 + i), 0.16 + 0.12 * h(66 + i), h(68 + i) * 180, i ? 'rgba(255,255,255,.4)' : 'rgba(90,130,170,.14)');
+				if (!t.spawn && h(54) < 0.4) put(low, 1, 'snow', at(t.c, h(55) * 360, size * (0.3 + 0.2 * h(56))), 1);
+				if (!t.spawn && h(51) < 0.25) put(low, 0, 'icecrack', at(t.c, h(52) * 360, size * 0.22 * h(53)), 0.9);
 			}
 			// the jungle creeps out: grass, and sometimes a fern, where open ground meets forest
-			if (t.z === 'beach' || t.z === 'middle') {
+			if (t.z === 'beach' || t.z === 'middle' || t.z === 'stone') {
 				for (let k = 0; k < 6; k++) {
 					const nb = hexNeighbour(t.id, k);
 					if (!cells[nb] || zoneOf(nb) !== 'forest') continue;

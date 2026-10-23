@@ -16,6 +16,13 @@ export interface GameMap {
 	waves?: { quick: number; long: number }
 	/** Scatter terrain: terrain hex → what stands there instead of a boulder (board/scatter.ts keys; set in the editor). */
 	scatter?: Record<string, string>
+	/** Zone of every hex by name ('Orange Base' · 'Orange Jungle' · 'Orange Beach' · 'Center' · 'Blue Beach' · 'Blue Jungle' ·
+	 *  'Blue Base'; zones.ts). Painted in the map editor; a map without it gets its zones worked out from the ground. */
+	zones?: Record<string, string>
+	/** The ground under a spawn point / hero spawn / obstacle (zones.ts ZONE_TYPES), where `cells` holds the feature instead. */
+	ground?: Record<string, string>
+	/** Map editor only: the symmetry it was drawn with ({mode, cx, cy} in board units). The game ignores it. */
+	sym?: { mode: string; cx?: number; cy?: number }
 }
 
 export interface MapChoice {
@@ -61,7 +68,9 @@ export function availableMaps(): MapChoice[] {
 		sorted(m.cells),
 		sorted(m.meta).map(([k, v]) => { const x = v as { m: string; dir?: number; start?: boolean }; return [k, x.m, x.dir ?? 0, !!x.start] }),
 		(m.battleZone ?? []).map((b) => `${b.hex}|${b.team}|${b.kind}`).sort(),
-		sorted(m.scatter)
+		sorted(m.scatter),
+		sorted(m.zones),
+		sorted(m.ground)
 	])
 	const add = (id: string, label: string, data: GameMap) => {
 		let key = keyOf(label)
