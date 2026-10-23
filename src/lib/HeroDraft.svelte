@@ -5,6 +5,7 @@
 	import { warmSplashes, warmNow } from '$lib/warmArt';
 	import type { Readable } from 'svelte/store';
 	import MatchupSplash from '$lib/MatchupSplash.svelte';
+	import DraftSplash from '$lib/DraftSplash.svelte';
 	import {
 		HEROES_ALPHA, heroAvatar, heroSplash, heroLogo, heroById, splashFace,
 		statIcon, traitIcon, starIcon, STAT_LABELS, STAT_PIPS, TRAIT_LABELS, PACK_LABELS,
@@ -48,6 +49,16 @@
 	// single-draft: the three heroes dealt to you (private — only yours is shown; a watcher sees none)
 	$: myOffer = d?.system === 'single-draft' && !watching && !d.picks[clientId] ? (d.offers?.[clientId] ?? (myTurn ? d.offer : [])) : [];
 	$: isRandom = d?.system === 'all-random';
+	// the draft-mode splash: once per draft per tab, only while the draft is fresh (built ≤ 12 s ago on the host's
+	// clock, nothing picked yet) — a reload or a late join goes straight to the draft
+	let introKey = '', intro = false;
+	$: if (d && browser && !introKey) {
+		introKey = `goa2-dsplash:${$state.gameId ?? d.startedAt ?? ''}`;
+		let seen = false;
+		try { seen = sessionStorage.getItem(introKey) === '1'; } catch { /* storage off */ }
+		const fresh = !!d.startedAt && session.hostNow() - d.startedAt < 12_000 && !d.lastAction && !d.sealed;
+		if (fresh && !seen) { intro = true; try { sessionStorage.setItem(introKey, '1'); } catch { /* storage off */ } }
+	}
 	$: myMates = myTeam ? rosters[myTeam].filter((id) => id !== clientId) : [];
 
 	const nameOf = (id: string) => $players.find((p) => p.id === id)?.name ?? 'Player';
@@ -535,6 +546,12 @@
 	<!-- every hero locked: Team vs Team war banners; the host begins from here -->
 	{#if complete}
 		<MatchupSplash orange={rosters.orange} blue={rosters.blue} picks={d.picks} {nameOf} {colorOf} {clientId} {iAmHost} {myTeam} onStart={startGame} />
+	{/if}
+	{#if intro && d}
+		<DraftSplash system={d.system} seats={seatedIds.length} coin={d.coin ?? $state.tieBreaker} {myTeam} mobile={browser && window.innerWidth <= 760}
+			pool={d.pool} offer={d.offers?.[clientId] ?? []}
+			dealt={{ orange: rosters.orange.map((id) => d.picks[id]).filter(Boolean), blue: rosters.blue.map((id) => d.picks[id]).filter(Boolean) }}
+			onDone={() => (intro = false)} />
 	{/if}
 </div>
 {/if}

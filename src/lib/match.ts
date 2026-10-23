@@ -425,6 +425,8 @@ export interface DraftState {
 	ot?: Record<Team, number> // turn-based (single-draft / pick-ban): each team's shared overtime left, ms — a turn past its
 	// own 30 s eats into it, and once it's gone the host picks / bans at random at `deadline` (see draftTimeUp)
 	lastAction: DraftAction | null // most recent pick/ban, for the announcement toast
+	startedAt?: number // host clock when the draft was built (the draft-mode splash plays only for a fresh draft)
+	coin?: Team // the team holding the tie-breaker as the draft began
 }
 
 export interface DraftAction {
@@ -932,7 +934,8 @@ export function buildDraft(
 	pool: string[],
 	players: Player[],
 	seats: number,
-	startingTeam: Team
+	startingTeam: Team,
+	intro = 0 // ms of the draft-mode splash: added to the first turn's clock so the splash doesn't eat it
 ): DraftState {
 	const rosters = teamRosters(players, seats)
 	const total = rosters.orange.length + rosters.blue.length
@@ -976,9 +979,11 @@ export function buildDraft(
 	// every mode gets a timer (per turn for turn-based, the whole phase for all-pick, the swaps for all-random) so the
 	// draft can never hang
 	// all-random: a clock for the swaps too — the host seals the teams when it runs out
-	const deadline = Date.now() + (turnBased(system) ? DRAFT_STEP_MS : DRAFT_TURN_MS)
+	const now = Date.now()
+	const deadline = now + intro + (turnBased(system) ? DRAFT_STEP_MS : DRAFT_TURN_MS)
 	return {
 		system, pool, order: owned, step: 0, picks, bans: [], offer, offered: offers ? Object.values(offers).flat() : [], deadline, lastAction: null,
+		startedAt: now, coin: startingTeam,
 		...(offers ? { offers } : {}), ...(system === 'all-random' ? { swaps: {} } : {}),
 		...(turnBased(system) ? { ot: { orange: DRAFT_OT_MS, blue: DRAFT_OT_MS } } : {})
 	}

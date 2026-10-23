@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { DRAFT_SPLASH_MS } from '$lib/DraftSplash.svelte';
 	import { inPlay } from '$lib/busy';
 	import { warmSplashes } from '$lib/warmArt';
 	import { uiScale } from '$lib/layout';
@@ -592,7 +593,8 @@
 	// host builds the shared draft from the seed config; the tie-breaker winner drafts first
 	function startDraft(startingTeam: Team) {
 		const pool = HEROES.filter((hr) => draftable(hr, $state.draftStars, !!$state.draftLab)).map((hr) => hr.id);
-		const d = buildDraft($state.draftSystem, pool, $players, $state.seats, startingTeam);
+		// + the draft-mode splash (and up to 1.2 s while its art loads) on the first turn's clock
+		const d = buildDraft($state.draftSystem, pool, $players, $state.seats, startingTeam, DRAFT_SPLASH_MS[$state.draftSystem] + 1200);
 		session?.update({ draft: d, startFlip: null, seatMap: buildSeatMap($players, $state.seats), gameId: Date.now().toString(36) });
 	}
 	// join reached a room code with no host → don't create one

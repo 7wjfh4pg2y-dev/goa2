@@ -29,8 +29,8 @@
 	export let pool: string[] = [];
 	/** Single Draft: the viewer's three dealt heroes (fewer = a watcher: the cards stay face down) */
 	export let offer: string[] = [];
-	/** All Random: the hero dealt to each seat, in seat order (first half Atlanteans); empty = made up (demo) */
-	export let dealt: string[] = [];
+	/** All Random: the heroes dealt to each team, in seat order; empty = made up (demo) */
+	export let dealt: Partial<Record<Team, string[]>> = {};
 	export let onDone: (() => void) | null = null;
 
 	// everything below is fixed once per run (a reactive pick would re-deal on every prop change)
@@ -62,22 +62,25 @@
 	// ── All Random: seats (desktop: enemy left / yours right, from the middle out; phone: enemy row on top),
 	// the deck in the gap between the teams; dealt alternately enemy, yours, enemy … ──
 	const CW = ph ? 180 : 128, CH = CW / 0.716, CG = 14, MID = 72;
+	let teamN: Record<Team, number> = { orange: half, blue: half };
 	const deals = (() => {
 		if (system !== 'all-random') return [];
-		const ids = dealt.length === seats ? dealt : mixed.slice(0, seats);
-		const byTeam: Record<Team, string[]> = { orange: ids.slice(0, half), blue: ids.slice(half) };
+		const byTeam: Record<Team, string[]> = dealt.orange?.length || dealt.blue?.length
+			? { orange: dealt.orange ?? [], blue: dealt.blue ?? [] }
+			: { orange: mixed.slice(0, half), blue: mixed.slice(half, seats) };
 		const out: { id: string; team: Team; x: number; y: number; k: number }[] = [];
 		for (const [t, side] of [[left, -1], [right, 1]] as [Team, number][])
 			byTeam[t].forEach((id, j) => out.push({
 				id, team: t, k: j * 2 + (side < 0 ? 0 : 1),
-				x: ph ? (j - (half - 1) / 2) * (CW + CG) : side * (MID + CW / 2 + j * (CW + CG)),
+				x: ph ? (j - (byTeam[t].length - 1) / 2) * (CW + CG) : side * (MID + CW / 2 + j * (CW + CG)),
 				y: ph ? side * (CH / 2 + 62) : 0
 			}));
+		teamN = { orange: byTeam.orange.length, blue: byTeam.blue.length };
 		return out;
 	})();
 	const deck = { x: 0, y: 0 };
 	const deckW = ph ? 84 : 96;
-	const teamW = half * (CW + CG) - CG;
+	const teamW = (t: Team) => teamN[t] * (CW + CG) - CG;
 
 	// ── Single Draft: the fan ──
 	const FW = ph ? 212 : 210, FH = FW / 0.716;
@@ -177,7 +180,7 @@
 						</div>
 					{/each}
 					{#each [left, right] as t (t)}
-						<span class="tname t-{t}" style="--tx:{ph ? 0 : (t === left ? -1 : 1) * (MID + teamW / 2)}; --ty:{ph ? (t === left ? -1 : 1) * (CH + 104) : CH / 2 + 34}">{teamName(t)}</span>
+						<span class="tname t-{t}" style="--tx:{ph ? 0 : (t === left ? -1 : 1) * (MID + teamW(t) / 2)}; --ty:{ph ? (t === left ? -1 : 1) * (CH + 104) : CH / 2 + 34}">{teamName(t)}</span>
 					{/each}
 				</div>
 			</div>
@@ -337,8 +340,8 @@
 	.go .seat .back { animation: flipout .14s ease-in calc(3.25s + var(--k) * .12s) forwards; }
 	.go .seat .front { animation: flipin .3s ease-out calc(3.39s + var(--k) * .12s) forwards; }
 	.go .seat .glint { animation: glint .7s ease-out calc(3.6s + var(--k) * .12s) both; }
-	.seat .plate { font-size: calc(var(--u) * 19); }
-	.ph .seat .plate { font-size: calc(var(--u) * 24); }
+	.seat .plate { font-size: calc(var(--u) * 16); letter-spacing: .02em; padding-left: calc(var(--u) * 4); padding-right: calc(var(--u) * 4); white-space: nowrap; }
+	.ph .seat .plate { font-size: calc(var(--u) * 21); }
 	.tname { position: absolute; left: 0; top: 50%; white-space: nowrap; font-size: calc(var(--u) * 20); letter-spacing: .3em; text-transform: uppercase; color: var(--th); opacity: 0;
 		transform: translate(-50%, -50%) translate(calc(var(--u) * var(--tx)), calc(var(--u) * var(--ty))); }
 	.ph .tname { font-size: calc(var(--u) * 26); }
