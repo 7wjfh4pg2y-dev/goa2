@@ -376,7 +376,7 @@ export type HeroAgg = { hero: string; games: number; wins: number; players: Reco
 /** An award: who holds it now (everyone tied at the top), with what. `scope` game = the best single game,
  *  career = the most over every game. `hidden` = not shown yet (the 4 v 4 / 5 v 5 ones). `extra` = one of the
  *  MOBA extras, beyond the user's list. No holders = still up for grabs. */
-export type Award = { id: string; title: string; blurb: string; scope: 'game' | 'career'; holders: { key: string; name: string }[]; value: string; at?: number; hidden?: boolean; extra?: boolean }
+export type Award = { id: string; title: string; blurb: string; scope: 'game' | 'career'; holders: { key: string; name: string; team?: Team; won?: boolean; hero?: string }[]; value: string; at?: number; hidden?: boolean; extra?: boolean }
 export type League = { games: LeagueGame[]; players: PlayerAgg[]; heroes: HeroAgg[]; awards: Award[]; withEvents: number; withClashes: number }
 
 export const START_RATING = 1200
@@ -578,47 +578,49 @@ export function awardsOf(games: LeagueGame[], players: PlayerAgg[]): Award[] {
 	const kills = (gp: GamePlayer) => gp.kills
 
 	// the killers, by size of game
-	game('double-killer', 'Double-Killer', 'Most hero kills in one 2 v 2 game', kills, (n) => plural(n, 'kill'), { only: (g) => g.side === 2 })
-	game('triple-killer', 'Triple-Killer', 'Most hero kills in one 3 v 3 game', kills, (n) => plural(n, 'kill'), { only: (g) => g.side === 3 })
-	game('ultra-killer', 'Ultra-Killer', 'Most hero kills in one 4 v 4 game', kills, (n) => plural(n, 'kill'), { only: (g) => g.side === 4, hidden: true })
-	game('mega-killer', 'Mega-Killer', 'Most hero kills in one 5 v 5 game', kills, (n) => plural(n, 'kill'), { only: (g) => g.side === 5, hidden: true })
+	game('double-killer', 'Double-Killer', 'Most hero kills in a 2v2 game', kills, (n) => plural(n, 'kill'), { only: (g) => g.side === 2 })
+	game('triple-killer', 'Triple-Killer', 'Most hero kills in a 3v3 game', kills, (n) => plural(n, 'kill'), { only: (g) => g.side === 3 })
+	game('ultra-killer', 'Ultra-Killer', 'Most hero kills in a 4v4 game', kills, (n) => plural(n, 'kill'), { only: (g) => g.side === 4, hidden: true })
+	game('mega-killer', 'Mega-Killer', 'Most hero kills in a 5v5 game', kills, (n) => plural(n, 'kill'), { only: (g) => g.side === 5, hidden: true })
 	// careers
-	career('bloodthirsty', 'Bloodthirsty!', 'Most hero kills', (p) => (p.kdaGames ? p.kills : null), (n) => plural(n, 'kill'))
-	career('respawn', 'Respawn Enthusiast!', 'Most deaths', (p) => (p.kdaGames ? p.deaths : null), (n) => plural(n, 'death'))
-	career('enabler', 'The Enabler', 'Most assists', (p) => (p.kdaGames ? p.assists : null), (n) => plural(n, 'assist'))
-	career('last-hit', 'Last-Hit Legend', 'Most minions defeated', (p) => (p.kdaGames ? p.minions : null), (n) => plural(n, 'minion'))
+	career('bloodthirsty', 'The Executioner', 'Most hero kills', (p) => (p.kdaGames ? p.kills : null), (n) => plural(n, 'kill'))
+	career('respawn', 'Death Magnet', 'Most defeats', (p) => (p.kdaGames ? p.deaths : null), (n) => plural(n, 'defeat'))
+	career('enabler', 'Ultimate Wingman', 'Most assists', (p) => (p.kdaGames ? p.assists : null), (n) => plural(n, 'assist'))
+	career('last-hit', 'Minion Reaper', 'Most minion kills', (p) => (p.kdaGames ? p.minions : null), (n) => plural(n, 'minion'))
 	// single games
-	game('killing-spree', 'Killing Spree', 'Most hero kills in one game', kills, (n) => plural(n, 'kill'))
-	game('indomitable', 'Indomitable', 'Most attacks defended in one game', (gp) => gp.x?.defends ?? null, (n) => plural(n, 'defence'))
-	game('wingman', 'Wingman', 'Most assists in one game', (gp) => gp.assists, (n) => plural(n, 'assist'))
-	game('wicked-sick', 'Wicked Sick', 'Most minions defeated in one game', (gp) => gp.minions, (n) => plural(n, 'minion'))
+	game('killing-spree', 'Killing Spree', 'Most hero kills in a game', kills, (n) => plural(n, 'kill'))
+	game('indomitable', 'Iron Wall', 'Most attacks defended in a game', (gp) => gp.x?.defends ?? null, (n) => plural(n, 'defence'))
+	game('wingman', 'Playmaker', 'Most assists in a game', (gp) => gp.assists, (n) => plural(n, 'assist'))
+	game('wicked-sick', 'Wicked Sick', 'Most minion kills in a game', (gp) => gp.minions, (n) => plural(n, 'minion'))
 	// defences
-	career('unstoppable', 'Unstoppable', 'Most kills on heroes who defended the attack', ex('beatDefended', true), (n) => plural(n, 'kill'))
-	career('untouchable', 'Untouchable', 'Most attacks defended', ex('defends', true), (n) => plural(n, 'defence'))
-	career('death-wish', 'Death Wish', 'Most deaths without defending — took the hit instead of discarding', ex('noDefDied', true), (n) => plural(n, 'death'))
-	career('swinging', 'Went Down Swinging', 'Most defences that still ended in death', ex('defDied', true), (n) => plural(n, 'defence'))
+	career('unstoppable', 'Unstoppable!', 'Most kills on heroes who defended the attack', ex('beatDefended', true), (n) => plural(n, 'kill'))
+	career('untouchable', 'Indomitable!', 'Most attacks defended', ex('defends', true), (n) => plural(n, 'defence'))
+	career('death-wish', 'Honorable End', 'Most deaths without defending', ex('noDefDied', true), (n) => plural(n, 'death'))
+	career('swinging', 'Defiant End', 'Most defences that still resulted in defeat', ex('defDied', true), (n) => plural(n, 'defence'))
 	// streaks and feats
-	career('dominating', 'Dominating!', 'Longest winning streak', (p) => p.bestStreak, (n) => `${n} in a row`, { min: 2 })
-	career('cursed', 'You Are Cursed!', 'Longest losing streak', (p) => -p.worstStreak, (n) => `${n} in a row`, { min: 2 })
-	career('first-blood', 'First Blood Hunter', 'Most first kills of a game', ex('firstBlood'), (n) => plural(n, 'first blood'))
-	career('godlike', 'Godlike', 'Most games won without dying', (p) => (p.kdaGames ? p.flawless : null), (n) => plural(n, 'flawless win'))
-	career('rampage', 'RAMPAGE!', 'Most games where they killed every enemy hero at least once', ex('wipe'), (n) => plural(n, 'rampage'))
-	career('relentless', 'Relentless', 'Most kills on a hero they had already attacked that round', ex('relentless', true), (n) => plural(n, 'kill'))
-	career('pacifist', 'Pacifist', 'Most games won without a single hero kill', (p) => (p.kdaGames ? p.pacifist : null), (n) => plural(n, 'peaceful win'))
+	career('dominating', 'Dominating!', 'Longest win streak', (p) => p.bestStreak, (n) => `${n} in a row`, { min: 2 })
+	career('cursed', 'Cursed!', 'Longest loss streak', (p) => -p.worstStreak, (n) => `${n} in a row`, { min: 2 })
+	career('first-blood', 'First Blood!', 'Most first kills', ex('firstBlood'), (n) => plural(n, 'first blood'))
+	career('godlike', 'Godlike!', 'Most games won without being defeated', (p) => (p.kdaGames ? p.flawless : null), (n) => plural(n, 'flawless win'))
+	career('rampage', 'Rampage!', 'Most games defeating every enemy hero', ex('wipe'), (n) => plural(n, 'rampage'))
+	career('relentless', 'Relentless!', 'Most kills on a hero already attacked that round', ex('relentless', true), (n) => plural(n, 'kill'))
+	career('pacifist', 'Pacifist', 'Most games won without a hero kill', (p) => (p.kdaGames ? p.pacifist : null), (n) => plural(n, 'peaceful win'))
 	// whole games
+	// the quickest / longest game: both teams, the winners first
+	const sides = (g: LeagueGame) => [...g.players].sort((a, b) => Number(b.won) - Number(a.won)).map((p) => ({ key: p.key, name: p.name, team: p.team, won: p.won, hero: p.hero }))
 	const timed = games.filter((g) => g.rounds > 0)
 	const fast = [...timed].sort((a, b) => a.rounds - b.rounds || a.minutes - b.minutes)[0]
-	out.push({ id: 'speedrun', title: 'Speedrun', blurb: 'The quickest game (fewest rounds) — its winners', scope: 'game', holders: fast ? fast.players.filter((p) => p.won).map((p) => ({ key: p.key, name: p.name })) : [], value: fast ? `${plural(fast.rounds, 'round')} · ${hm(fast.minutes)}` : '', at: fast?.at })
+	out.push({ id: 'speedrun', title: 'Blitz', blurb: 'The quickest game', scope: 'game', holders: fast ? sides(fast) : [], value: fast ? `${plural(fast.rounds, 'round')} · ${hm(fast.minutes)}` : '', at: fast?.at })
 	const long = [...timed].sort((a, b) => b.rounds - a.rounds || b.minutes - a.minutes)[0]
-	out.push({ id: 'marathon', title: 'Marathon', blurb: 'The longest game — everyone who played it', scope: 'game', holders: long ? long.players.map((p) => ({ key: p.key, name: p.name })) : [], value: long ? `${plural(long.rounds, 'round')} · ${hm(long.minutes)}` : '', at: long?.at })
+	out.push({ id: 'marathon', title: 'Long War', blurb: 'The longest game', scope: 'game', holders: long ? sides(long) : [], value: long ? `${plural(long.rounds, 'round')} · ${hm(long.minutes)}` : '', at: long?.at })
 	// the ultimate: few ever get there
-	career('ultimate', 'Transcendent', 'Unlocked their ultimate — the rarest feat in the game (most times)', (p) => p.ults, (n) => plural(n, 'ultimate'))
+	career('ultimate', 'Transcendent', 'Most Ultimates achieved', (p) => p.ults, (n) => plural(n, 'ultimate'))
 	// gold
-	game('hoard', "Dragon's Hoard", 'Most gold earned in one game', (gp) => gp.coins, (n) => plural(n, 'coin'))
-	career('old-money', 'Old Money', 'Most gold earned, all time', (p) => (p.coinGames ? p.coins : null), (n) => plural(n, 'coin'))
+	game('hoard', 'Gold Goblin', 'Most gold earned in a game', (gp) => gp.coins, (n) => plural(n, 'coin'))
+	career('old-money', 'Gold Standard', 'Most gold earned', (p) => (p.coinGames ? p.coins : null), (n) => plural(n, 'coin'))
 	// heroes
-	career('commitment', 'Commitment Issues', 'The most different heroes played', (p) => Object.keys(p.heroes).length, (n) => plural(n, 'hero').replace('heros', 'heroes'), { min: 2 })
-	career('one-trick', 'One-Trick', 'Most games on one hero', (p) => Math.max(0, ...Object.values(p.heroes).map((h) => h.games)), (n, p) => {
+	career('commitment', 'Hero Hopper', 'Most different heroes played', (p) => Object.keys(p.heroes).length, (n) => plural(n, 'hero').replace('heros', 'heroes'), { min: 2 })
+	career('one-trick', 'One-Trick Pony', 'Most games with a single hero', (p) => Math.max(0, ...Object.values(p.heroes).map((h) => h.games)), (n, p) => {
 		const h = Object.entries(p.heroes).sort((a, b) => b[1].games - a[1].games)[0]
 		return `${heroName(h[0])} × ${n}`
 	}, { min: 2 })

@@ -62,8 +62,8 @@ describe('the league', () => {
 		expect(L.players.find((p) => p.key === 'priya')!.teamKills).toBe(3)
 		// awards → titles: Priya has the most kills, Zara the most deaths
 		const T = titlesOf(L)
-		expect(T.priya?.map((t) => t.title)).toContain('Bloodthirsty!')
-		expect(T.zara?.map((t) => t.title)).toContain('Respawn Enthusiast!')
+		expect(T.priya?.map((t) => t.title)).toContain('The Executioner')
+		expect(T.zara?.map((t) => t.title)).toContain('Death Magnet')
 		expect(T.priya?.map((t) => t.title)).toContain('Double-Killer') // 2 kills in one 2 v 2
 	})
 
@@ -217,7 +217,7 @@ describe('reading the table', () => {
 			expect(online.players.find((p) => p.name === 'Zara')?.games).toBe(1)
 			expect(all.heroes.find((h) => h.hero === 'brogan')).toMatchObject({ games: 2, wins: 2 })
 			expect(all.heroes.find((h) => h.hero === 'trinkets')).toMatchObject({ games: 1, kills: 2, kdaGames: 1 })
-			// no rounds / minutes: never the Speedrun
+			// no rounds / minutes: never the Blitz
 			expect(legacy.awards.find((a) => a.id === 'speedrun')?.holders).toEqual([])
 		})
 	})

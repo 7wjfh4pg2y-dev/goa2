@@ -4,6 +4,7 @@
 	import type { Award } from '$lib/league';
 	import { portraitCss } from '$lib/heroes';
 	import Medal from './Medal.svelte';
+	import { teamName } from '$lib/teams';
 	import Glyph, { type GlyphName } from './Glyph.svelte';
 
 	export let a: Award;
@@ -15,6 +16,8 @@
 	$: metal = (a.extra ? 'violet' : a.scope === 'career' ? 'gold' : 'silver') as 'gold' | 'silver' | 'violet';
 	$: kind = a.extra ? 'Extra' : a.scope === 'career' ? 'Career' : 'Single game';
 	$: open = !a.holders.length;
+	// a whole game (Blitz / Long War): its two teams side by side, the winners first
+	$: teams = a.holders.some((h) => h.team) ? (['orange', 'blue'] as const).map((t) => ({ t, won: a.holders.some((h) => h.team === t && h.won), hs: a.holders.filter((h) => h.team === t) })).filter((x) => x.hs.length).sort((x, y) => Number(y.won) - Number(x.won)) : null;
 	// "5 kills" → a big 5 and a small "kills"
 	$: parts = (() => { const m = /^([\d.,]+%?)\s+(.*)$/.exec(a.value); return m ? { n: m[1], u: m[2] } : { n: a.value, u: '' }; })();
 	const day = (t: number) => new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
@@ -35,6 +38,23 @@
 			<span class="grab"><Glyph name="lock" size={14} /> Up for grabs</span>
 		{:else}
 			<div class="val"><b>{parts.n}</b>{#if parts.u}<span>{parts.u}</span>{/if}{#if a.at}<small>{day(a.at)}</small>{/if}</div>
+			{#if teams}
+				<div class="sides">
+					{#each teams as side (side.t)}
+						<div class="side t-{side.t}">
+							<span class="tn">{teamName(side.t)}{#if side.won}<em>Won</em>{/if}</span>
+							<div class="hold">
+								{#each side.hs as h (h.key)}
+									{@const w = who(h.key)}
+									<button class="h" on:click={() => onOpen(h.key)} style="--pc:{w?.color ?? 'var(--brass)'}" title="Open {h.name}">
+										{#if h.hero ?? w?.hero}<span class="face" style={portraitCss(h.hero ?? w?.hero ?? '')}></span>{/if}<span class="nm">{h.name}</span>
+									</button>
+								{/each}
+							</div>
+						</div>
+					{/each}
+				</div>
+			{:else}
 			<div class="hold">
 				{#each a.holders as h (h.key)}
 					{@const w = who(h.key)}
@@ -43,6 +63,7 @@
 					</button>
 				{/each}
 			</div>
+			{/if}
 		{/if}
 	</div>
 </article>
@@ -67,6 +88,12 @@
 	.val b { font-weight: 400; font-size: 30px; line-height: 1; color: var(--mt); }
 	.val span { font-size: 15px; color: var(--ink-2); }
 	.val small { margin-left: auto; font-size: 12px; color: var(--ink-3); }
+	.sides { display: flex; flex-direction: column; gap: 8px; }
+	.side { display: flex; flex-direction: column; gap: 4px; padding-left: 8px; border-left: 2px solid var(--tc); }
+	.t-orange { --tc: #ef7d22; --th: #ffb878; }
+	.t-blue { --tc: #2f7fe6; --th: #8fc0ff; }
+	.tn { display: flex; align-items: center; gap: 8px; font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--th); }
+	.tn em { font-style: normal; padding: 1px 7px; border-radius: 999px; background: rgba(22, 163, 74, 0.22); color: #7ee2a0; letter-spacing: 0.1em; }
 	.hold { display: flex; flex-wrap: wrap; gap: 6px; }
 	.h { display: inline-flex; align-items: center; gap: 7px; padding: 3px 11px 3px 3px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.1); background: rgba(255, 255, 255, 0.05); color: var(--ink); font: inherit; font-size: 15px; cursor: pointer; }
 	.h:hover { border-color: var(--mt); }
