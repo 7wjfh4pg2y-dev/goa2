@@ -104,9 +104,11 @@
 	// sizes follow the screen so a tab always fits without scrolling
 	let vw = 390, vh = 800;
 	const R = 1192 / 1664;
-	$: body = vh - 56 - 46 - 62 - 20;
-	$: TCW = Math.floor(Math.min((vw - 64 - 44 - 16) / 2, ((body - 3 * 26 - 2 * 8) / 3) * R));
-	$: HCW = Math.floor(Math.min((vw - 32 - 20) / 3, ((body - 3 * 18 - 28 - 72 - 18) / 1.8) * R));
+	// a phone on its side: shorter bars, the tiers run left to right (I · II · III) and the hand tab is one row
+	$: land = vw > vh && vh <= 520;
+	$: body = land ? vh - 44 - 40 - 48 - 16 : vh - 56 - 46 - 62 - 20;
+	$: TCW = Math.floor(land ? Math.min((vw - 24 - 44 - 60 - 26) / 5, (body - 34) * R) : Math.min((vw - 64 - 44 - 16) / 2, ((body - 3 * 26 - 2 * 8) / 3) * R));
+	$: HCW = Math.floor(land ? Math.min((vw - 24 - 60) / 4.6, (body - 18 - 56 - 30 - 18) * R) : Math.min((vw - 32 - 20) / 3, ((body - 3 * 18 - 28 - 72 - 18) / 1.8) * R));
 </script>
 
 <svelte:window bind:innerWidth={vw} bind:innerHeight={vh} on:keydown={(e) => e.key === 'Escape' && (sel != null ? (sel = null) : onClose())} />
@@ -134,7 +136,7 @@
 	</div>
 {/snippet}
 
-<div class="pd tide" style={teamStyle} role="dialog" aria-label="Deck">
+<div class="pd tide" class:land style={teamStyle} role="dialog" aria-label="Deck">
 	<div class="hd">
 		<span class="por"><img src={heroSplash(H)} alt="" /></span>
 		<span class="lvb" aria-label="Level {LV}">
@@ -338,6 +340,23 @@
 	.bar { flex: none; height: 62px; display: flex; align-items: center; gap: 6px; padding: 0 10px; border-top: 1px solid var(--brass-line); background: rgba(3, 11, 21, .7); }
 	.sn { flex: 1; min-width: 0; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 	.hint { flex: 1; text-align: center; font-size: 13px; color: var(--ink-3); }
+	/* ── a phone on its side ── */
+	.pd.land .hd { height: 44px; }
+	.pd.land .tabs { height: 40px; }
+	.pd.land .tb { height: 32px; }
+	.pd.land .bar { height: 48px; }
+	.pd.land .hb { height: 34px; }
+	.pd.land .body { display: grid; grid-template-columns: auto auto; grid-template-rows: auto 1fr auto; column-gap: 28px; row-gap: 6px; justify-content: center; align-content: start; }
+	.pd.land .body > .sh:nth-child(1) { grid-area: 1 / 1; }
+	.pd.land .body > .row:nth-child(2) { grid-area: 2 / 1; }
+	.pd.land .body > .sh:nth-child(3) { grid-area: 1 / 2; }
+	.pd.land .body > .row:nth-child(4) { grid-area: 2 / 2; }
+	.pd.land .body > .ult { grid-area: 3 / 1 / 4 / 3; height: 56px; margin-top: 0; }
+	.pd.land .body > .tree, .pd.land .body > .grid, .pd.land .body > .none { grid-column: 1 / 3; }
+	.pd.land .tree { flex-direction: row-reverse; align-items: flex-end; gap: 30px; padding: 26px 0 0; }
+	.pd.land .pipe, .pd.land .fill { display: none; }
+	.pd.land .tn { left: 50%; top: -24px; transform: translateX(-50%); font-size: 18px; }
+	.pd.land .grid { grid-template-columns: repeat(6, auto); }
 	.hb { flex: none; height: 38px; padding: 0 12px; border-radius: 999px; font-size: 14px; border: 1px solid rgba(255, 255, 255, .22); background: rgba(255, 255, 255, .05); }
 	.hb.hand { color: var(--ink-dark); background: linear-gradient(180deg, #f6e2ad, var(--brass) 50%, #b98e42); border-color: #f9ebc6; }
 	.hb.upg { background: rgba(26, 68, 104, .9); border-color: var(--brass-line); }

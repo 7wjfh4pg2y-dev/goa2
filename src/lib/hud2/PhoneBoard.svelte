@@ -150,5 +150,18 @@
 	.sc.rmv { filter: grayscale(1) brightness(0.6); }
 	.sc.rmv::after { content: ''; position: absolute; left: -2px; right: -2px; top: 50%; height: 2px; background: #e0533f; transform: rotate(-35deg); }
 	.wr { position: absolute; right: 0; bottom: 0; transform: translate(30%, 30%); z-index: 1; display: grid; pointer-events: none; }
+	/* a phone on its side: a centred sheet in two columns — who / level / stats / piles on the left, the turn slots on the right */
+	@media (orientation: landscape) and (max-height: 520px) {
+		.pb { left: 0; right: 0; margin: 0 auto; width: min(780px, calc(100vw - 16px)); max-height: calc(100dvh - 8px); overflow: hidden;
+			display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); grid-template-rows: auto auto auto 1fr; column-gap: 16px; row-gap: 8px; }
+		.head { grid-column: 1 / 3; height: 64px; }
+		.row { grid-area: 2 / 1; flex-wrap: wrap; row-gap: 6px; }
+		.pb > :global(.bubs) { grid-area: 3 / 1; }
+		.strips { grid-area: 4 / 1; align-self: start; }
+		.strip { min-height: 40px; }
+		.sl { width: 70px; }
+		.sc { width: 32px; }
+		.turns { grid-area: 2 / 2 / 5 / 3; align-self: start; gap: 6px; }
+	}
 	.wsp { position: absolute; right: 0; bottom: 0; transform: translate(30%, 30%); z-index: 2; display: grid; }
 </style>

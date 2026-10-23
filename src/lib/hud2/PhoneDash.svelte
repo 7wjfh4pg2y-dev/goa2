@@ -48,6 +48,8 @@
 	export let onPing: () => void = () => {};
 	export let onAutoHide: () => void = () => {};
 	export let onStyle: () => void = () => {};
+	/** a phone on its side: the dash becomes the right-hand column */
+	export let land = false;
 
 	const ROMAN = ['I', 'II', 'III', 'IV'];
 	$: lv = cs ? levelOf(cs) : 0;
@@ -65,39 +67,26 @@
 	const fire = (fn?: () => void) => { if (Date.now() - ringAt < 450) return; fn?.(); };
 </script>
 
-<div class="pdash is-{team}">
-	{#if !cs}
-	<div class="r1 host"><b>Host</b><small>watching · you move the game on</small></div>
-	{:else}
-	<div class="r1">
-		<button class="me" on:click={onMe} aria-label="Your board">
-			<svg viewBox="0 0 50 50" aria-hidden="true">{#each Array(8) as _, i (i)}<path d={arc(i)} class:on={i < lv || (i === 7 && cs.ultimate)} class:ult={i === 7} />{/each}</svg>
-			<span class="face" style="--pc:{color}; {portraitCss(cs.hero)}"></span>
+{#snippet meB(c: PlayerCardState)}<button class="me" on:click={onMe} aria-label="Your board">
+			<svg viewBox="0 0 50 50" aria-hidden="true">{#each Array(8) as _, i (i)}<path d={arc(i)} class:on={i < lv || (i === 7 && c.ultimate)} class:ult={i === 7} />{/each}</svg>
+			<span class="face" style="--pc:{color}; {portraitCss(c.hero)}"></span>
 			<span class="ini" class:off={ini == null}>{ini ?? '–'}</span>
-		</button>
-		<StatBubbles {cs} size={21} cols={3} />
-		<span class="wells">
-			{#each [0, 1, 2, 3] as t (t)}
-				<span class="w" class:now={t === turnIdx} class:glow={fxAt(t)} class:swapme={swapOffer && t === turnIdx}><TurnSlot heroId={cs.hero} played={cs.turns[t]} pending={cs.pending} isCurrent={t === turnIdx} {revealed} label={ROMAN[t]} veil={isHidden(cs, cs.turns[t])} peekable examinable on:click={(e) => onSlot(e, t)} />{#if runes}<span class="wr"><RuneMark rune={runes.at[t] ?? null} size={13} on={t === turnIdx && !!runes.at[t]} second={!!runes.second && runes.second === runes.at[t]} fx={runeFx} /></span>{/if}</span>
-			{/each}
-			<span class="sep"></span>
-			<span class="w pile">
-				<button class="wc" on:click={() => (cs.discard.length === 1 ? onDiscPick(cs.discard[0]) : (discOpen = !discOpen))} disabled={top == null} aria-label="Discard pile">
-					{#if top != null}<Card heroId={cs.hero} card={heroCards(cs.hero)[top]} /><em>{cs.discard.length}</em>
+		</button>{/snippet}
+{#snippet wellsB(c: PlayerCardState)}{#each [0, 1, 2, 3] as t (t)}
+				<span class="w" class:now={t === turnIdx} class:glow={fxAt(t)} class:swapme={swapOffer && t === turnIdx}><TurnSlot heroId={c.hero} played={c.turns[t]} pending={c.pending} isCurrent={t === turnIdx} {revealed} label={ROMAN[t]} veil={isHidden(c, c.turns[t])} peekable examinable on:click={(e) => onSlot(e, t)} />{#if runes}<span class="wr"><RuneMark rune={runes.at[t] ?? null} size={13} on={t === turnIdx && !!runes.at[t]} second={!!runes.second && runes.second === runes.at[t]} fx={runeFx} /></span>{/if}</span>
+			{/each}{/snippet}
+{#snippet pilesB(c: PlayerCardState)}<span class="w pile">
+				<button class="wc" on:click={() => (c.discard.length === 1 ? onDiscPick(c.discard[0]) : (discOpen = !discOpen))} disabled={top == null} aria-label="Discard pile">
+					{#if top != null}<Card heroId={c.hero} card={heroCards(c.hero)[top]} /><em>{c.discard.length}</em>
 					{:else}<svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4.5h6V7M6 7l1 13h10l1-13" /></svg>{/if}
 				</button>
-				{#if discOpen}<span class="dpop">{#each cs.discard as i (i)}<button on:click={() => { discOpen = false; onDiscPick(i); }}><Card heroId={cs.hero} card={heroCards(cs.hero)[i]} /></button>{/each}</span>{/if}
+				{#if discOpen}<span class="dpop">{#each c.discard as i (i)}<button on:click={() => { discOpen = false; onDiscPick(i); }}><Card heroId={c.hero} card={heroCards(c.hero)[i]} /></button>{/each}</span>{/if}
 			</span>
-			<button class="w deck" class:lvup={levelUp} on:click={onDeck} aria-label="Your deck"><span class="wc"><CardBack hero={cs.hero} /><em>{deckCount}</em></span></button>
-			<button class="w ult" class:on={cs.ultimate} class:ready={ultReady} on:click={onUlt} disabled={ultIdx < 0} aria-label="Ultimate">
-				<span class="wc">{#if cs.ultimate && ultIdx >= 0}<Card heroId={cs.hero} card={heroCards(cs.hero)[ultIdx]} />{:else}<b>IV</b>{/if}</span>
-			</button>
-		</span>
-	</div>
-	{/if}
-	<div class="r2">
-		{#if cs}
-		<span class="tools">
+			<button class="w deck" class:lvup={levelUp} on:click={onDeck} aria-label="Your deck"><span class="wc"><CardBack hero={c.hero} /><em>{deckCount}</em></span></button>
+			<button class="w ult" class:on={c.ultimate} class:ready={ultReady} on:click={onUlt} disabled={ultIdx < 0} aria-label="Ultimate">
+				<span class="wc">{#if c.ultimate && ultIdx >= 0}<Card heroId={c.hero} card={heroCards(c.hero)[ultIdx]} />{:else}<b>IV</b>{/if}</span>
+			</button>{/snippet}
+{#snippet toolsB()}<span class="tools">
 			{#if power}<span class="ts pw">{@render power(30)}</span>{/if}
 			<span class="ts">{#if tokens}{@render tokens()}{/if}</span>
 			<span class="ts">{#if radius}{@render radius()}{/if}</span>
@@ -106,9 +95,8 @@
 			<button class="tl" class:on={handStyle !== 'fan'} on:click={onStyle} aria-label="Hand: fan, side by side or banners">
 				<svg viewBox="0 0 24 24">{#if handStyle === 'banners'}<path d="M3 4.5h18v4H3zM3 10h18v4H3zM3 15.5h18v4H3z" class="cf" />{:else if handStyle === 'spread'}<rect x="1.5" y="6" width="6.2" height="10" rx="1.2" class="cf" /><rect x="8.9" y="6" width="6.2" height="10" rx="1.2" class="cf" /><rect x="16.3" y="6" width="6.2" height="10" rx="1.2" class="cf" />{:else}<rect x="8.5" y="4" width="7" height="11" rx="1.3" class="cf" transform="rotate(-22 12 21)" /><rect x="8.5" y="4" width="7" height="11" rx="1.3" class="cf" transform="rotate(22 12 21)" /><rect x="8.5" y="4" width="7" height="11" rx="1.3" class="cf" />{/if}</svg>
 			</button>
-		</span>
-		{/if}
-		{#if order.split}
+		</span>{/snippet}
+{#snippet actB()}{#if order.split}
 			<span class="act split"><button class="h l" style:background={order.split.left.bg} on:click={() => fire(order.split?.left.run)}>{order.split.left.label}</button><button class="h r" style:background={order.split.right.bg} on:click={() => fire(order.split?.right.run)}>{order.split.right.label}</button></span>
 		{:else if order.alt}
 			<!-- a second choice rides on the same pill: two thirds the main one (e.g. Waiting · hero), a third the other (Skip) -->
@@ -122,8 +110,45 @@
 			</button>
 		{/if}
 		{#if order.cancel}<button class="px" on:click={order.cancel} aria-label="Cancel"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17" /></svg></button>{/if}
+	{/snippet}
+
+{#if land}
+<!-- a phone on its side: the dash is the right-hand column — you, your stats, this round's wells, the piles, the tools,
+     and the action pill at the bottom under the right thumb -->
+<div class="pdash land is-{team}">
+	{#if !cs}
+	<div class="lhost"><b>Host</b><small>watching · you move the game on</small></div>
+	{:else}
+	<div class="lid">{@render meB(cs)}<StatBubbles {cs} size={20} cols={3} /></div>
+	<div class="lwells wells">{@render wellsB(cs)}</div>
+	<div class="lpiles wells">{@render pilesB(cs)}</div>
+	<div class="ltools">{@render toolsB()}</div>
+	{/if}
+	<div class="lact">{@render actB()}</div>
+</div>
+{:else}
+<div class="pdash is-{team}">
+	{#if !cs}
+	<div class="r1 host"><b>Host</b><small>watching · you move the game on</small></div>
+	{:else}
+	<div class="r1">
+		{@render meB(cs)}
+		<StatBubbles {cs} size={21} cols={3} />
+		<span class="wells">
+			{@render wellsB(cs)}
+			<span class="sep"></span>
+			{@render pilesB(cs)}
+		</span>
+	</div>
+	{/if}
+	<div class="r2">
+		{#if cs}
+		{@render toolsB()}
+		{/if}
+		{@render actB()}
 	</div>
 </div>
+{/if}
 
 <style>
 	.pdash { --brass: #d8b36a; --brass-hi: #f4dfa8; --line: rgba(216, 179, 106, 0.4); position: absolute; left: 0; right: 0; bottom: 0; z-index: 11; height: calc(100px + env(safe-area-inset-bottom, 0px)); box-sizing: border-box;
@@ -215,4 +240,33 @@
 	.joined .o { flex: 1; min-width: 0; height: 100%; border: 0; border-left: 1px solid rgba(255, 170, 160, 0.6); font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: #fff; background: linear-gradient(180deg, #e0533f, #8f1d12); }
 	.alt { flex: none; height: 30px; padding: 0 10px; border-radius: 999px; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: #fff; background: #b42318; border: 1px solid rgba(255, 170, 160, 0.6); }
 	@media (prefers-reduced-motion: reduce) { .act.pulse::after { animation: none; } }
+	/* ── a phone on its side: the right-hand column (width = GameView's --rw), under the top bar ── */
+	.pdash.land { left: auto; right: 0; top: 54px; bottom: 0; width: var(--rw, 200px); height: auto; gap: 6px; justify-content: space-between;
+		padding: 7px 7px calc(7px + env(safe-area-inset-bottom, 0px)); border-top: 0; border-left: 2px solid var(--tc);
+		background: linear-gradient(270deg, var(--tg), transparent 70%), linear-gradient(180deg, rgba(16, 44, 72, 0.98), rgba(6, 21, 38, 0.99)); }
+	.land .lid { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+	.land .lid .me { width: 54px; height: 54px; }
+	.land .lwells { flex: none; justify-content: space-between; gap: 5px; }
+	.land .lwells .w { max-width: none; flex: 1; }
+	.land .lpiles { flex: none; justify-content: center; gap: 10px; }
+	.land .lpiles .w { flex: none; width: 30px; }
+	.land .ltools .tools { width: 100%; justify-content: space-between; flex-wrap: wrap; gap: 4px 2px; }
+	.land .tl, .land .ts, .land .ts :global(.radbtn), .land .ts :global(.tokbtn) { width: 28px; height: 28px; }
+	.land .ts.pw { width: auto; }
+	/* the token drawer / radius pop open from the column's right edge, inside the screen */
+	.land .ltools { position: relative; }
+	.land .ts:not(.pw) { position: static; }
+	.land .ts :global(.radpop), .land .ts :global(.tokdrawer) { left: auto; right: 0; bottom: calc(100% + 8px); max-width: calc(100vw - 16px); }
+	.land .ltools .ts.pw { margin: 0 4px; }
+	.land .lact { display: flex; align-items: center; gap: 5px; }
+	.land .lact .act { height: 44px; }
+	.land .lact .act b { font-size: 15px; }
+	.land .lact .act small { display: none; }
+	.land .lact .act:not(.joined):not(.split) { flex-direction: column; gap: 0; padding: 0 10px; }
+	.land .lact .act:not(.joined):not(.split) small { display: block; max-width: 100%; }
+	.land .lact .px { width: 34px; height: 34px; }
+	.land .dpop { right: auto; left: auto; bottom: calc(100% + 8px); }
+	.lhost { display: flex; flex-direction: column; align-items: center; gap: 4px; padding-top: 20px; text-transform: uppercase; letter-spacing: 0.08em; }
+	.lhost b { font-weight: 400; font-size: 16px; color: var(--brass-hi); }
+	.lhost small { font-size: 11px; color: #bccbd9; text-align: center; }
 </style>

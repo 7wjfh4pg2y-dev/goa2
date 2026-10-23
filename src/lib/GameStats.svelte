@@ -46,7 +46,8 @@
 	$: stack = mobile || w < 1000;
 	const WIDE = 1240;
 	$: colW = Math.min(640, Math.max(300, w - 32)); // the stacked page's design width
-	$: scale = stack ? (w - 32) / colW : Math.max(0.35, Math.min(w / 1440, h / 900, 2.2));
+	// (a phone on its side keeps the stacked page at its own size, so more of it shows in the short window)
+	$: scale = stack ? Math.min(w > h && h <= 520 ? 1 : 9, (w - 32) / colW) : Math.max(0.35, Math.min(w / 1440, h / 900, 2.2));
 
 	const C: Record<Team, string> = { orange: '#ef7d22', blue: '#2f7fe6' };
 	const HI: Record<Team, string> = { orange: '#ffb878', blue: '#9ccbff' };

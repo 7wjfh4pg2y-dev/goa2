@@ -82,6 +82,8 @@
 	export let mobile = false; // phone layout (set by GameView at ≤760px wide): strip + compact dash
 	/** the 2.0 phone (segment 9): the restyled player strip with level pips, PhoneDash, PhoneBoard; arm-then-confirm like hud2 */
 	export let phone2 = false;
+	/** a phone on its side: the strip becomes the left column, the dash the right column, the hand rises from the board's foot */
+	export let land = false;
 	export let hud2 = false; // the 2.0 HUD (desktop / tablet): side boards, the Chronicle, the order row, the new dash
 	/** a board action waiting for its yes (GameView): the action ring confirms it, with Cancel beside it */
 	export let ringAsk: Order | null = null;
@@ -1456,18 +1458,18 @@
 {#if $ms.cards}
 	<!-- ───────── phone: the other players, a sideways-scrolling strip ───────── -->
 	{#if mobile}
-		<div class="mstrip" class:p2={phone2}>
+		<div class="mstrip" class:p2={phone2} class:land class:dense={land && h2enemies.length + h2allies.length >= 5}>
 			{#each phone2 ? [...h2enemies, ...h2allies] : others as p (p.id)}
 				{@const cs = viewCards[p.id]}
 				{#if cs}
 					{@const ini = initOf(cs, revealed, p.id)}
 					{@const cfx = fxFor(p.id, slotIdx(cs, turnIdx))}
-					<div class="mpc" class:fxon={effects.some((e) => e.pid === p.id)} style="{teamVars(pTeam(p))} --fxc:{colorOf(p.id)}" role="button" tabindex="0" on:click={() => (overlayId = p.id)} on:keydown={(e) => e.key === 'Enter' && (overlayId = p.id)}>
+					<div class="mpc" class:fxon={effects.some((e) => e.pid === p.id)} class:fally={phone2 && p.id === h2allies[0]?.id && h2enemies.length > 0} style="{teamVars(pTeam(p))} --fxc:{colorOf(p.id)}" role="button" tabindex="0" on:click={() => (overlayId = p.id)} on:keydown={(e) => e.key === 'Enter' && (overlayId = p.id)}>
 						<span class="mpic">{#if phone2}<svg class="lring" viewBox="0 0 50 50" aria-hidden="true">{#each Array(8) as _, i (i)}<path d={lvArc(i)} class:on={i < levelOf(cs) || (i === 7 && cs.ultimate)} class:ult={i === 7} />{/each}</svg>{/if}<PlayerIcon hero={cs.hero} team={pTeam(p)} color={colorHex(p.color)} size={phone2 ? '24px' : '28px'} ring={2} ult={cs.ultimate} /></span>
 						<span class="mpn"><b>{p.name}</b><small>{heroName(cs.hero)}</small></span>
 						<span class="mlv">{#if !phone2}<em>Lv {levelOf(cs)}</em>{/if}<i class="mini" class:off={ini == null}>{@html CLOCK}<b>{ini ?? '–'}</b></i></span>
 						<span class="mcard fxwrap" class:fx={!!cfx} style="--fxc:{colorOf(p.id)}"><TurnSlot heroId={cs.hero} played={cs.turns[turnIdx]} pending={cs.pending} isCurrent {revealed} peekable={p.id === clientId} examinable on:click={(e) => peekSlot(e, cs, turnIdx)} />{#if runeNow[p.id]}<span class="mrune"><RuneMark rune={runeNow[p.id]} size={13} on fx={false} /></span>{/if}{#if doubtMap[p.id]}<span class="mdoubt"><DoubtChip color={doubtMap[p.id]} size={13} mini /></span>{/if}</span>
-						{#if phone2}<span class="msb"><StatBubbles {cs} size={17} /></span>
+						{#if phone2}<span class="msb"><StatBubbles {cs} size={land ? 15 : 17} /></span>
 						{:else}<span class="msx">{#each allStats(cs) as r}<span class:up={r.delta > 0}>{#if r.delta > 0}<span class="pp">{#each Array(r.delta) as _}<i></i>{/each}</span>{/if}<img src={statImg(r.key)} alt={r.label} /></span>{/each}</span>{/if}
 					</div>
 				{/if}
@@ -2013,7 +2015,7 @@
 		<!-- ───────── phone: hand tips above a compact dash ───────── -->
 		{#if bannerHand}
 			<!-- hand as banners (the ultimate lives in the dash); hidden = tucked to the right edge, markers showing -->
-			<div class="bstack" class:p2={phone2}>
+			<div class="bstack" class:p2={phone2} class:land>
 				{#each handOrdered as idx (idx)}
 					<div class="bwrap" class:tucked={autoRetract && bannerOpen !== idx}>
 						<CardBanner heroId={mine.hero} {idx} sel={selected === idx} on:click={() => bannerTap(idx, () => { if (!mateTake(idx)) preview(idx); })} />
@@ -2021,7 +2023,7 @@
 				{/each}
 			</div>
 		{:else}
-			<div class="tray mob" class:p2={phone2} class:retracted class:spread={spreadHand}>
+			<div class="tray mob" class:p2={phone2} class:land class:retracted class:spread={spreadHand}>
 				{#each handOrdered as idx, k (idx)}
 					{@const f = fan(k, handOrdered.length)}
 					<button class="hc" class:armed={phone2 && armed === idx} style="--rot:{spreadHand ? 0 : f.rot}deg; --y:{spreadHand ? 0 : f.y}px" on:click={() => (phone2 ? handCardClick2(idx) : handCardClick(idx))}>
@@ -2031,7 +2033,7 @@
 			</div>
 		{/if}
 		{#if phone2}
-			<PhoneDash cs={mine} swapOffer={!!mateOff} runes={runeMap[clientId]} runeFx={dashFx} power={myPower ? powerBtn : undefined} color={colorHex(myColor)} team={myTeam === 'blue' ? 'blue' : 'orange'} {turnIdx} {revealed} ini={myInit} fxAt={(t) => !!fxFor(clientId, slotIdx(mine, t))}
+			<PhoneDash {land} cs={mine} swapOffer={!!mateOff} runes={runeMap[clientId]} runeFx={dashFx} power={myPower ? powerBtn : undefined} color={colorHex(myColor)} team={myTeam === 'blue' ? 'blue' : 'orange'} {turnIdx} {revealed} ini={myInit} fxAt={(t) => !!fxFor(clientId, slotIdx(mine, t))}
 				deckCount={deckCards(mine).length} levelUp={iMustLevel} ultIdx={myUlt} {ultReady} order={order2} {ringColor} autoHide={autoRetract}
 				handStyle={bannerHand ? 'banners' : spreadHand ? 'spread' : 'fan'} {pingArmed} radius={radiusCtl} tokens={tokenCtl}
 				onMe={() => (overlayId = clientId)} onSlot={(e, t) => peekSlot(e, mine, t)} onDiscPick={(i) => openDiscard(mine.hero, i, true)}
@@ -2293,7 +2295,7 @@
 	{:else if iAmHost}
 		<!-- the host without a hero (watching): no hand, coins or level-ups — only the action ring, to move the game on -->
 		{#if mobile}
-			<PhoneDash cs={null} order={order2} />
+			<PhoneDash {land} cs={null} order={order2} />
 		{:else}
 			<div class="h2dash"><HudDash cs={null} order={order2} /></div>
 		{/if}
@@ -2948,6 +2950,26 @@
 	.mstrip.p2 .mpc { grid-template-columns: 32px 1fr 32px 40px; }
 	.msb { grid-column: 1 / 4; grid-row: 2; align-self: end; }
 	.tray.mob.p2 { bottom: calc(100px + env(safe-area-inset-bottom, 0px)); }
+	/* ── a phone on its side (GameView `land`): Others | Board | You. The top bar stays (44 + the beam); the other players
+	   stack in the LEFT column (enemies, then your team), your dash is the RIGHT column, the hand rises from the board's foot.
+	   The column widths are GameView's --lw / --rw. */
+	.mstrip.land { top: 54px; bottom: 0; left: 0; right: auto; width: var(--lw); height: auto; flex-direction: column; gap: 5px; padding: 6px 5px calc(6px + env(safe-area-inset-bottom, 0px));
+		overflow-x: hidden; overflow-y: auto; border-bottom: 0; border-right: 1px solid rgba(216, 179, 106, 0.35); box-sizing: border-box; }
+	.mstrip.land .mpc { width: auto; flex: none; grid-template-columns: 32px minmax(0, 1fr) 34px; }
+	.mstrip.land .mcard { grid-column: 3; width: 34px; }
+	/* the initiative rides on the portrait's foot, so the name gets the middle */
+	.mstrip.land .mlv { grid-column: 1; grid-row: 1; align-self: end; justify-self: end; z-index: 1; transform: translate(7px, 5px); }
+	.mstrip.land .mini { width: auto; min-width: 20px; padding: 0 3px; height: 13px; background: #0a1a2c; }
+	.mstrip.land .mini :global(svg) { display: none; }
+	.mstrip.land .msb { grid-column: 1 / 3; }
+	/* 3 v 3 and up: slimmer chips (no stat row — a tap opens the board) so everyone fits the column */
+	.mstrip.land.dense .mpc { height: 46px; grid-template-rows: 36px; }
+	.mstrip.land.dense .msb { display: none; }
+	.mstrip.land.dense .mcard { grid-row: 1; width: 28px; }
+	.mstrip.land .mpc.fally { margin-top: 6px; position: relative; }
+	.mstrip.land .mpc.fally::before { content: ''; position: absolute; left: 10px; right: 10px; top: -7px; height: 1px; background: rgba(216, 179, 106, 0.45); }
+	.tray.mob.land { left: var(--lw); right: var(--rw); bottom: env(safe-area-inset-bottom, 0px); --cw: clamp(54px, 15vh, 66px); }
+	.bstack.land { right: calc(var(--rw) + 6px); bottom: calc(8px + env(safe-area-inset-bottom, 0px)); --bw: min(300px, calc(100vw - var(--lw) - var(--rw) - 12px)); }
 	.bstack.p2 { bottom: calc(108px + env(safe-area-inset-bottom, 0px)); }
 	.mpc { flex: none; width: 170px; height: 62px; display: grid; grid-template-columns: 30px 1fr 32px 40px; grid-template-rows: 32px 1fr; column-gap: 4px; row-gap: 2px;
 		padding: 3px 5px 3px 7px; border-radius: 10px; cursor: pointer; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.1); box-shadow: inset 3px 0 0 var(--tc); }
@@ -3049,5 +3071,13 @@
 		.bigcard { width: min(78vw, 320px); }
 		.exrow.multi .bigcard { width: min(68vw, 300px); }
 		.exrow .pvnav { width: 30px; height: 56px; margin: 0 5px; font-size: 24px; }
+	}
+	/* a phone on its side: the preview sits over the board column, sized by the height */
+	@media (orientation: landscape) and (max-height: 520px) {
+		.pvwrap { inset: 54px var(--rw, 0px) 46px var(--lw, 0px) !important; }
+		.pvcard { width: min(250px, calc((100dvh - 54px - 58px) / 1.396)); }
+		.pvbar { left: var(--lw, 0px) !important; right: var(--rw, 0px) !important; bottom: 8px !important; zoom: 1; }
+		.bigcard { width: min(320px, calc((100dvh - 96px) / 1.396)); }
+		.exrow.multi .bigcard { width: min(300px, calc((100dvh - 96px) / 1.396)); }
 	}
 </style>

@@ -213,7 +213,8 @@
 	// the 2.0 HUD (each player's own choice; phones keep their own layout)
 	$: hud2 = !mobile && $boardPrefs.hud === '2.0';
 	// the 2.0 phone (segment 9): PhoneTop + beam, the restyled strip, PhoneDash, PhoneBoard, ☰ = the lobby with the log
-	$: phone2 = mobile && $boardPrefs.hud === '2.0';
+	// a phone on its side (2026-10-23): always the 2.0 phone pieces, laid out as Others | Board | You (see `.land`)
+	$: phone2 = mobile && ($boardPrefs.hud === '2.0' || land);
 	let lobbyOpen = false;
 	$: zoneNow = battleZone($ms);
 	// how many minions each team's wave started with in the battle zone (its spawn points there)
@@ -230,7 +231,7 @@
 	$: allCompact = $boardPrefs.compact && $boardPrefs.cTop && $boardPrefs.cOrder && $boardPrefs.cLog;
 	$: platesTop = $boardPrefs.compact && $boardPrefs.cTop;
 	let topW = 640; // (from CardLayer) the compact top bar's width
-	$: boardInset = hud2 ? {
+	$: boardInset = land ? { t: 4, b: 34, l: 0, r: 0 } : hud2 ? {
 		t: ($boardPrefs.cTop ? 62 + ($boardPrefs.cOrder ? 30 : 60) + 6 : 172) * lay.s,
 		b: 112 * lay.s,
 		l: (platesTop ? 40 : $boardPrefs.compact ? 372 : 372) * lay.s,
@@ -1196,7 +1197,10 @@
 	let winW = 1440, winH = 900, wrapW = 0, wrapH = 0;
 	$: gvw = wrapW || winW;
 	$: gvh = wrapH || winH;
-	$: mobile = gvw <= 760;
+	// a SHORT, wide window = a phone turned sideways: the phone layout in its landscape form (`land`) instead of the
+	// desktop HUD shrunk to fit 900 design px into ~390
+	$: land = gvw > gvh && gvh <= 520;
+	$: mobile = gvw <= 760 || land;
 	// desktop/tablet: one UI scale for HUD, panels, dash and overlays (layout.ts)
 	$: lay = uiLayout(gvw, gvh);
 	let menuOpen = false, lwOpen = false;
@@ -1294,7 +1298,7 @@
 
 <svelte:window on:keydown={(e) => { if (e.key !== 'Escape') return; if (wheelOpen) wheelOpen = false; else if (lobbyOpen) lobbyOpen = false; else if (confirmLeave) confirmLeave = false; else if (ringAsk) ringDone(); else { pendingSpawn = null; pendingToken = null; pendingDouble = null; pingArmed = false; if (clearing) cancelClear(); } }} bind:innerWidth={winW} bind:innerHeight={winH} />
 
-<div class="gamewrap" bind:clientWidth={wrapW} bind:clientHeight={wrapH} class:sea={boardLook === 'island'} class:mob={mobile} class:p2={phone2} class:h2={hud2} class:dashfull={!mobile && !hud2 && lay.underHud} style={mobile ? '' : layoutVars(lay) + (hud2 ? `; --dh:${88 * lay.s}px` : '')}>
+<div class="gamewrap" bind:clientWidth={wrapW} bind:clientHeight={wrapH} class:sea={boardLook === 'island'} class:mob={mobile} class:p2={phone2} class:land class:h2={hud2} class:dashfull={!mobile && !hud2 && lay.underHud} style={mobile ? '' : layoutVars(lay) + (hud2 ? `; --dh:${88 * lay.s}px` : '')}>
 	{#if $ms.wonBy}
 		<button class="placehint won" on:click={() => (victoryClosed = false)} title="Show the victory screen again">🏆 {teamName($ms.wonBy.team)} win — {$ms.wonBy.reason}</button>
 	{:else if clearing}
@@ -1436,11 +1440,11 @@
 	<DefeatSplash news={$ms.lastDefeat ?? null} pieces={$ms.pieces} cards={$ms.cards ?? {}} defeated={$ms.defeated ?? {}} names={(id) => playerName(id)} {lifeArt} {mobile} myTeam={viewTeam} />
 	<div class="ocean"></div>
 	<!-- on a phone the board sits between the top bar + player strip and the dash -->
-	<div class="boardarea" class:mob={mobile} class:p2={phone2}>
+	<div class="boardarea" class:mob={mobile} class:p2={phone2} class:land>
 	<BoardCanvas bind:this={board} map={$ms.map ?? {}} inset={boardInset} look={boardLook} {glowZone} activeZone={$ms.wonBy ? null : battleZone($ms)} effects={!deckCovered} sea={$boardPrefs.sea} rims={$boardPrefs.rims} rotation={orientation} interactive={true} {placing} {placeGhost} holdColor={myHoldColor} onCancelPlace={cancelPlace} {areas} marks={boardMarks} badges={defBadges} zoomLock={mobile && $boardPrefs.zoomLock} wisps={$boardPrefs.wisps} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} pings={boardPings} onPing={doPing} {pingArmed} />
 	</div>
 
-	<CardLayer bind:this={cardLayer} bind:turnCtx bind:crackPreview bind:gyRaise areaW={gvw} areaH={gvh} {mobile} {hud2} {phone2} ringAsk={ringAsk ?? swapAsk ?? autoAsk} onResults={() => (victoryClosed = false)} compact={$boardPrefs.compact} cTop={$boardPrefs.cTop} cOrder={$boardPrefs.cOrder} cLog={$boardPrefs.cLog} bind:topW {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} bind:covered={deckCovered} bind:phoneStatus onRespawn={placeMyHero} onEnter={placeMyHero} onArmToken={armToken} onArmDouble={armDouble} placingDouble={pendingDouble} holdingToken={!!pendingToken} {pingArmed} onPing={pingButton} bind:previewId />
+	<CardLayer bind:this={cardLayer} bind:turnCtx bind:crackPreview bind:gyRaise areaW={gvw} areaH={gvh} {mobile} {hud2} {phone2} {land} ringAsk={ringAsk ?? swapAsk ?? autoAsk} onResults={() => (victoryClosed = false)} compact={$boardPrefs.compact} cTop={$boardPrefs.cTop} cOrder={$boardPrefs.cOrder} cLog={$boardPrefs.cLog} bind:topW {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} bind:covered={deckCovered} bind:phoneStatus onRespawn={placeMyHero} onEnter={placeMyHero} onArmToken={armToken} onArmDouble={armDouble} placingDouble={pendingDouble} holdingToken={!!pendingToken} {pingArmed} onPing={pingButton} bind:previewId />
 
 	<!-- selected minion/token: offer delete (heroes aren't deletable) -->
 	{#if hud2}
@@ -2285,6 +2289,11 @@
 	.boardarea { position: absolute; inset: 0; }
 	.boardarea.mob { top: 116px; bottom: calc(106px + env(safe-area-inset-bottom, 0px)); }
 	.boardarea.mob.p2 { top: 124px; bottom: calc(100px + env(safe-area-inset-bottom, 0px)); }
+	/* a phone on its side: Others (left column) | the board | You (right column); see CardLayer's `.land` */
+	.gamewrap.land { --lw: clamp(150px, 21vw, 184px); --rw: clamp(178px, 24vw, 220px); }
+	.boardarea.mob.p2.land { top: 54px; bottom: 0; left: var(--lw); right: var(--rw); }
+	.gamewrap.land .pietool, .gamewrap.land .placehint, .gamewrap.land .battlebox { top: 62px; left: calc(var(--lw) + (100% - var(--lw) - var(--rw)) / 2); max-width: calc(100% - var(--lw) - var(--rw) - 12px); width: auto; }
+	.gamewrap.land .placehint.lifeout { top: auto; bottom: 12px; }
 	/* phones: the attack emblem a size smaller */
 	.gamewrap.mob .akface { width: 56px; height: 56px; }
 	.gamewrap.mob .akseal { width: 48px; height: 48px; }
@@ -2369,6 +2378,13 @@
 	.lg.w { grid-template-columns: repeat(7, 1fr); }
 	.msheet .ltok { width: 44px; height: 42px; }
 	.msheet .wtok { width: 34px; height: 34px; }
+	/* a phone on its side: a centred sheet, every token of a kind on one line */
+	.gamewrap.land .msheet { left: 0; right: 0; margin: 0 auto; width: min(640px, 100%); max-height: calc(100dvh - 10px); padding-top: 14px; }
+	.gamewrap.land .lsec { margin-top: 6px; }
+	.gamewrap.land .lg { grid-template-columns: repeat(10, 1fr); gap: 4px; }
+	.gamewrap.land .msheet .ltok { width: 36px; height: 35px; }
+	/* the piece toolbar wraps inside the board column instead of running off it */
+	.gamewrap.land .pietool { flex-wrap: wrap; justify-content: center; row-gap: 6px; border-radius: 18px; }
 	.wtok.svgt { background: none; box-shadow: none; display: grid; place-items: center; }
 	.wtok.svgt svg { width: 100%; height: 100%; display: block; }
 </style>
