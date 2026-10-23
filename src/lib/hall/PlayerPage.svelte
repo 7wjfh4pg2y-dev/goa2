@@ -3,7 +3,7 @@
 	// with / against people, their roles, heroes, combat numbers against the table, feats, friends & foes, and
 	// every game (tap a row for the full record). Download CSV = the whole log as a spreadsheet.
 	import type { League, PlayerAgg, MatchLine, Path, TableMate } from '$lib/league';
-	import { WIN_LABEL, WIN_TYPES, START_RATING, nemesisOf, victimOf, rivalOf, bestMateOf, worstMateOf } from '$lib/league';
+	import { WIN_LABEL, WIN_TYPES, START_RATING, nemesisOf, victimOf, rivalOf, bestMateOf, worstMateOf, momentsOf } from '$lib/league';
 	import { heroById, heroSplash, splashFace, portraitCss, traitIcon, TRAIT_LABELS } from '$lib/heroes';
 	import { heroCards } from '$lib/cards/deck';
 	import { teamName } from '$lib/teams';
@@ -86,7 +86,7 @@
 	].filter(Boolean) as { k: string; x: { key: string; name: string }; line: string; good: boolean | null }[];
 	$: feats = [
 		{ k: 'First bloods', v: p.xGames ? p.ex.firstBlood : null }, { k: 'Rampages', v: p.xGames ? p.ex.wipe : null }, { k: 'Aces', v: p.clashGames ? p.ex.aces : null },
-		{ k: 'Shutdowns', v: p.xGames ? p.ex.shutdowns : null }, { k: 'Paybacks', v: p.xGames ? p.ex.paybacks : null }, { k: 'Double kills', v: p.xGames ? p.ex.multis : null },
+		{ k: 'Shutdowns', v: p.xGames ? p.ex.shutdowns : null }, { k: 'Eye for an Eye', v: p.xGames ? p.ex.paybacks : null }, { k: 'Double kills', v: p.xGames ? p.ex.multis : null },
 		{ k: 'Heavies', v: p.xGames ? p.ex.heavies : null }, { k: 'Flawless wins', v: p.kdaGames ? p.flawless : null }, { k: 'Comebacks', v: p.brinks },
 		{ k: 'Defended', v: p.clashGames ? p.ex.defends : null }, { k: 'Ultimates', v: p.ults }, { k: 'Best level', v: p.maxLevel || null }
 	];
@@ -113,6 +113,7 @@
 		if (x?.aces) b.push('Ace');
 		if (x?.multis) b.push('Double kill');
 		if (x?.shutdowns) b.push('Shutdown');
+		for (const mo of momentsOf(x)) b.push(mo.n > 1 ? `${mo.title} ×${mo.n}` : mo.title);
 		if (m.ultRound != null) b.push(`Ultimate R${m.ultRound}`);
 		return b;
 	}

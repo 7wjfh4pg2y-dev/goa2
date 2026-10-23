@@ -2,7 +2,7 @@
 	// One game in the Matches list: when, how it was won, the two teams as hero faces (winners lit), and — opened —
 	// every seat with K / D / M (kills, deaths, minions), gold and level, plus the defeats in order.
 	import type { LeagueGame } from '$lib/league';
-	import { WIN_LABEL } from '$lib/league';
+	import { WIN_LABEL, momentsOf } from '$lib/league';
 	import { heroById, portraitCss } from '$lib/heroes';
 	import { teamName } from '$lib/teams';
 
@@ -46,6 +46,9 @@
 					</tbody>
 				</table>
 			{/each}
+			{#if g.players.some((p) => momentsOf(p.x).length)}
+				<div class="tl mo"><span class="sub">Moments</span>{#each g.players as p (p.key + p.hero)}{#each momentsOf(p.x) as mo (mo.id)}<span class="dv" title={mo.blurb}><b class="mt">{mo.title}</b>{#if mo.n > 1} ×{mo.n}{/if} · {p.name}</span>{/each}{/each}</div>
+			{/if}
 			{#if g.defeats.length}
 				<div class="tl"><span class="sub">Defeats</span>{#each g.defeats as d, i (i)}<span class="dv">{nameOf(d.by)} <i>→</i> {nameOf(d.v)} <small>R{d.r}·T{d.t}</small></span>{/each}</div>
 			{/if}
@@ -81,6 +84,7 @@
 	.tl { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 	.tl .sub { margin: 0 6px 0 0; }
 	.dv { padding: 3px 8px; border-radius: 6px; background: var(--p3); font-size: 12.5px; }
+	.mt { font-weight: 400; color: #f4dfa8; }
 	.dv i { font-style: normal; color: var(--rd); }
 	.dv small { color: var(--mu); }
 	.rp { grid-column: 1 / -1; justify-self: start; }

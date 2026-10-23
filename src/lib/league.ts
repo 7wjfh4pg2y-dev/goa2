@@ -545,6 +545,14 @@ export const worstMateOf = (p: PlayerAgg): Mate | null => {
 	return w && w.wins < w.games ? w : null
 }
 
+// ── match moments: awards given in a game each time something special happens (a player can earn one several
+// times in a game); the career awards count them up ──
+export const MOMENTS: { id: string; title: string; blurb: string; of: (x: Extras) => number }[] = [
+	{ id: 'eye', title: 'Eye for an Eye', blurb: 'Exacted revenge: defeated the hero who last defeated them', of: (x) => x.paybacks }
+]
+/** the moments one player earned in one game, each with how many times */
+export const momentsOf = (x?: Extras | null) => (x ? MOMENTS.map((m) => ({ ...m, n: m.of(x) })).filter((m) => m.n > 0) : [])
+
 // ── the awards ──────────────────────────────────────────────────────────────────────────────────
 const hm = (m: number) => (m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`)
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`
@@ -629,7 +637,7 @@ export function awardsOf(games: LeagueGame[], players: PlayerAgg[]): Award[] {
 	const X = { extra: true }
 	career('ace', 'ACE!', 'Most times their team had every enemy hero down at once', ex('aces', true), (n) => plural(n, 'ace'), X)
 	career('shutdown', 'Shutdown', 'Most kills on a hero on a 3-kill streak', ex('shutdowns'), (n) => plural(n, 'shutdown'), X)
-	career('payback', 'Payback', 'Most kills on the hero who last killed them', ex('paybacks'), (n) => plural(n, 'revenge kill'), X)
+	career('payback', 'Payback!', 'Most Eye for an Eye awards', ex('paybacks'), (n) => `${n} Eye for an Eye`, X)
 	career('two-birds', 'Two Birds, One Turn', 'Most turns with two or more kills', ex('multis'), (n) => plural(n, 'double'), X)
 	career('giant-slayer', 'Giant Slayer', 'Most kills on heroes 2+ levels above them', (p) => (p.xGames && p.ex.giants ? p.ex.giants : null), (n) => plural(n, 'giant'), X)
 	career('bounty-hunter', 'Bounty Hunter', 'Most gold from hero kills and assists', ex('bounty'), (n) => plural(n, 'coin'), X)

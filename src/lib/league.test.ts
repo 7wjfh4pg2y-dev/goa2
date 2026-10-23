@@ -223,3 +223,13 @@ describe('reading the table', () => {
 	})
 })
 
+
+describe('match moments', () => {
+	it('Eye for an Eye: one per revenge kill, counted per game', async () => {
+		const { momentsOf } = await import('./league')
+		const x = { firstBlood: 0, wipe: 0, shutdowns: 0, paybacks: 2, multis: 0, aces: 0, heavies: 0, bounty: 0, giants: null, defends: null, defDied: null, noDefDied: null, beatDefended: null, relentless: null }
+		expect(momentsOf(x as never)).toMatchObject([{ id: 'eye', title: 'Eye for an Eye', n: 2 }])
+		expect(momentsOf({ ...x, paybacks: 0 } as never)).toEqual([])
+		expect(momentsOf(undefined)).toEqual([])
+	})
+})
