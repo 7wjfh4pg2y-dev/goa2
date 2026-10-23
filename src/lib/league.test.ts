@@ -233,3 +233,17 @@ describe('match moments', () => {
 		expect(momentsOf(undefined)).toEqual([])
 	})
 })
+
+describe('Eye for an Eye: only the hero who last killed you', () => {
+	it('A kills B, B kills A = one for B; B kills A again = none; A then kills B = one for A', async () => {
+		const { extrasOf } = await import('./league')
+		const k = (by: string, v: string, t: number) => ({ k: 'hero', by, v, r: 1, t })
+		const team = { A: 'orange', B: 'blue' } as const
+		const x1 = extrasOf([k('A', 'B', 1), k('B', 'A', 2)], false, { ...team })
+		expect([x1.A.paybacks, x1.B.paybacks]).toEqual([0, 1])
+		const x2 = extrasOf([k('A', 'B', 1), k('B', 'A', 2), k('B', 'A', 3)], false, { ...team })
+		expect([x2.A.paybacks, x2.B.paybacks]).toEqual([0, 1])
+		const x3 = extrasOf([k('A', 'B', 1), k('B', 'A', 2), k('B', 'A', 3), k('A', 'B', 4)], false, { ...team })
+		expect([x3.A.paybacks, x3.B.paybacks]).toEqual([1, 1])
+	})
+})

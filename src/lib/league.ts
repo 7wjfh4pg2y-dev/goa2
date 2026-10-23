@@ -167,7 +167,7 @@ const minionRoles = (ev: unknown, id: string) => {
 
 const other = (t: Team): Team => (t === 'orange' ? 'blue' : 'orange')
 /** The extras for every player of one game, from its events (see Extras). */
-function extrasOf(evIn: unknown, clashes: boolean, team: Record<string, Team>): Record<string, Extras> {
+export function extrasOf(evIn: unknown, clashes: boolean, team: Record<string, Team>): Record<string, Extras> {
 	const ev = (Array.isArray(evIn) ? evIn : []) as GameEvent[]
 	const ids = Object.keys(team)
 	const H = ev.map((e, i) => ({ e, i })).filter((x): x is { e: Extract<GameEvent, { k: 'hero' }>; i: number } => x.e.k === 'hero' && x.e.by in team && x.e.v in team)
