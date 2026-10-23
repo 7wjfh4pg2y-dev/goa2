@@ -417,6 +417,10 @@
 	$: if (dbI >= dbOpts.length) dbI = 0;
 	function combos(xs: string[], k: number): string[][] { if (k <= 0) return [[]]; if (xs.length < k) return []; const [h, ...t] = xs; return [...combos(t, k - 1).map((c) => [h, ...c]), ...combos(t, k)]; }
 	const dbSend = (ts: string[]) => session.cardAction({ kind: 'power', pid: clientId, op: 'nkDoubt', targets: ts });
+	// no choice to make (the heroes in radius are no more than the card reaches): it fires by itself the moment the
+	// cards are revealed (the user, 2026-10-23 — players missed the ring); a real choice still waits on the ring
+	let dbAuto = '';
+	$: if (dbOpts.length === 1 && dbAuto !== pctx.key) { dbAuto = pctx.key; dbSend(dbOpts[0]); }
 	$: dbColor = myPower === 'nebkher' ? ($ms.power?.[clientId]?.doubt?.color ?? '') : '';
 	const colName = (c: string) => (c ? c[0] + c.slice(1).toLowerCase() : '');
 	// a forced discard of one colour (Imbue Doubt): 'if able' — no card of it in hand = No <colour> card
