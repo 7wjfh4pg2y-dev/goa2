@@ -3001,11 +3001,13 @@
 	/* the hand follows the board column: centred between the columns, and the banners ride the right column's edge
 	   (shelved: just above the action pill, which stays in the corner) */
 	.tray.mob.land { left: var(--lw); right: var(--rw); bottom: 0; --cw: clamp(54px, 15vh, 66px); transition: left .25s ease, right .25s ease; }
-	.bstack.land { right: calc(var(--rw) + 6px); bottom: 8px; overflow: hidden; --bw: min(300px, calc(100vw - var(--lw) - var(--rw) - 12px)); transition: right .25s ease, bottom .25s ease; }
-	:global(.gamewrap.rshut) .bstack.land { bottom: calc(60px + env(safe-area-inset-bottom, 0px)); }
+	.bstack.p2.land { right: calc(var(--rw) + 6px); bottom: calc(60px + env(safe-area-inset-bottom, 0px)); overflow: hidden; --bw: min(300px, calc(100vw - var(--lw) - var(--rw) - 12px)); transition: right .25s ease, bottom .25s ease; }
+	/* same height open or shelved (clear of the action pill); shelved, the same gap from the screen edge as from the column */
+	:global(.gamewrap.rshut) .bstack.p2.land { right: calc(var(--sr, 0px) + 6px); }
 	:global(.gamewrap.lshut) .mstrip.land { transform: translateX(-100%); pointer-events: none; }
 	/* the grip tabs: drag or tap to shelve / bring back a column */
-	.sgrip { position: absolute; z-index: 13; top: 50%; width: 22px; height: 66px; margin-top: -33px; padding: 0; display: grid; place-items: center; cursor: pointer; touch-action: none;
+	/* both tabs at the top of their column, right under the top bar, clear of the hand and banners */
+	.sgrip { position: absolute; z-index: 13; top: 62px; width: 22px; height: 52px; padding: 0; display: grid; place-items: center; cursor: pointer; touch-action: none;
 		color: #f4dfa8; background: linear-gradient(180deg, rgba(16, 44, 72, 0.97), rgba(6, 21, 38, 0.97)); border: 1px solid rgba(216, 179, 106, 0.45); transition: left .25s ease, right .25s ease; }
 	.sgrip svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
 	/* both tabs sit at the same height on the column's inner edge; shelved, a tab rests against the screen edge and
