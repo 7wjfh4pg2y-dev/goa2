@@ -1151,7 +1151,8 @@
 	$: DASH_W = 900 + (myPower === 'takahide' ? 84 : myPower === 'snorri' ? 100 : myPower === 'emmitt' ? 104 : myPower === 'ignatia' ? 92 : myPower === 'nebkher' ? 136 : myPower === 'razzle' ? 94 : myPower === 'gydion' ? 85 : myPower ? 60 : 0); // the dash's width (design px) without the ultimate's compartment (+ a 4★ hero's button)
 	$: myUltOpen = !!mine && myUlt >= 0 && (mine.ultimate || ultReady);
 	$: logRoom = canvasW / 2 - DASH_W / 2 - 14 - (myUltOpen ? 96 : 0) - 36;
-	$: logBeside = logRoom >= 220;
+	// the ultimate's compartment narrows the log beside the dash rather than lifting it above (down to 130 wide)
+	$: logBeside = logRoom + (myUltOpen ? 96 : 0) >= 220 && logRoom >= 130;
 	$: logW = logBeside ? Math.min(340, logRoom) : 300;
 	// the host's Notes box, bottom-right: the same rule, less the docked hand's rack (HudDash slides the ring right by the
 	// rack, which is as long as the hand) — it stays beside the dash and narrows to the room left, like the Chronicle;

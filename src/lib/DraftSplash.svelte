@@ -328,8 +328,8 @@
 		0% { transform: translateY(calc(var(--u) * var(--k) * -1.6)); }
 		30%, 48% { transform: translate(calc(var(--u) * var(--s) * 74), calc(var(--u) * (var(--k) * -1.6 - 10))) rotate(calc(var(--s) * 11deg)); }
 		100% { transform: translateY(calc(var(--u) * var(--k) * -1.6)); } }
-	/* the deck's backs: the gear-and-ice crest (its gear hub at 257, 352 of 720 × 667, centred on the card) */
-	.rf .crest { position: absolute; width: 71%; height: auto; left: 24.66%; top: 25.14%; filter: drop-shadow(0 calc(var(--u) * 2) calc(var(--u) * 4) rgba(0, 0, 0, .55)); }
+	/* the deck's backs: the WHOLE gear-and-ice crest, centred inside the card's cream (its ice used to run off the edge) */
+	.rf .crest { position: absolute; width: 80%; max-width: none; height: auto; left: 50%; top: 50%; transform: translate(-50%, -50%); filter: drop-shadow(0 calc(var(--u) * 2) calc(var(--u) * 4) rgba(0, 0, 0, .55)); }
 	.seat { position: absolute; left: 0; top: 50%; transform: translate(-50%, -50%) translate(calc(var(--u) * var(--x)), calc(var(--u) * var(--y))); }
 	.seat .flip { opacity: 0; }
 	.go .seat .flip { animation: deal .6s cubic-bezier(.2, .8, .25, 1) calc(1.7s + var(--k) * .17s) both; }
