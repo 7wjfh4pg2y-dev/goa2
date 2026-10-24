@@ -60,7 +60,7 @@
 		// 2026-10-24: the Titan side runs snow → tundra → steppe → open ground, the Atlantean side ash → rocky → scrub
 		tundra: { t: [178, 11, 63], g: [186, 13, 43] }, // cold grey-green moss
 		steppe: { t: [70, 21, 53], g: [74, 22, 34] }, // frosty olive grass
-		rocky: { t: [20, 12, 37], g: [16, 14, 22] }, // broken dark rock
+		rocky: { t: [18, 34, 38], g: [14, 36, 22] }, // rust-red broken ground (not the grey of the rocks on it)
 		scrub: { t: [35, 34, 47], g: [30, 34, 30] }, // dry brush land
 		frostwood: { t: [192, 24, 44], g: [202, 32, 27] }, // a frozen forest
 		burntwood: { t: [22, 15, 22], g: [14, 18, 12] } // a burnt forest
@@ -73,6 +73,21 @@
 		const t = cells[id];
 		if (t === 'baseOrangeSpawn') return 'baseOrange';
 		if (t === 'baseBlueSpawn') return 'baseBlue';
+		if (t === 'terrain') {
+			// an obstacle stands on its zone's ground: what the map says lies under it, else its neighbours' ground
+			const g = ground[id];
+			if (g && g !== 'terrain' && g in PAL) return g as Z;
+			const counts: Record<string, number> = {};
+			for (let k = 0; k < 6; k++) {
+				const n = hexNeighbour(id, k);
+				if (!cells[n] || cells[n] === 'terrain') continue;
+				const nz = zoneOf(n);
+				counts[nz] = (counts[nz] ?? 0) + 1;
+			}
+			let best: Z = 'middle', bc = 0;
+			for (const k in counts) if (counts[k] > bc) { bc = counts[k]; best = k as Z; }
+			return best;
+		}
 		const z = zoneType(cells, id, ground);
 		return (z in PAL ? z : 'middle') as Z;
 	};
@@ -241,13 +256,12 @@
 				const n = t.spawn ? 1 : 2, a0 = h(71) * 360;
 				for (let i = 0; i < n; i++) put(low, 3 + i, h(80 + i) < 0.6 ? 'tuft' : 'fern', at(t.c, a0 + i * 170, size * (0.55 + 0.1 * h(76 + i))), 0.85);
 			} else if (t.z === 'ash') {
-				// a magma wasteland: a hot glow under the crust, glowing veins, embers, now and then a lava pool
+				// a magma wasteland: near-black basalt, a faint hot glow, embers and pebbles
 				patch('h0', at(t.c, h(60) * 360, size * 0.3 * h(61)), 0.3 + 0.16 * h(62), 0.2 + 0.12 * h(63), h(64) * 180, 'rgba(255,50,20,.12)');
 				if (!t.spawn) {
-					if (h(40) < 0.75) put(low, 0, 'vein', at(t.c, h(41) * 360, size * (0.15 + 0.25 * h(42))), 1 + 0.2 * h(43));
 					if (h(44) < 0.45) put(low, 1, 'ember', at(t.c, h(45) * 360, size * (0.35 + 0.2 * h(46))), 0.85);
-					if (h(47) < 0.18) put(low, 2, 'lava', at(t.c, h(48) * 360, size * (0.42 + 0.1 * h(49))), 0.34);
-					else if (h(47) < 0.4) put(low, 2, 'pebbles', at(t.c, h(48) * 360, size * (0.4 + 0.15 * h(49))), 0.85);
+					// no glowing cracks or lava pools here: those are the magma rocks' (scatter), so the two can't be confused
+					if (h(47) < 0.4) put(low, 2, 'pebbles', at(t.c, h(48) * 360, size * (0.4 + 0.15 * h(49))), 0.85);
 				}
 			} else if (t.z === 'snow') {
 				// packed snow: drifts and frost
