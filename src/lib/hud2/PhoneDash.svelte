@@ -12,6 +12,7 @@
 	import type { RuneSlots } from './runes';
 	import type { Order } from './HudDash.svelte';
 	import { heroCards } from '$lib/cards/deck';
+	import { shelf } from './shelf';
 	import { portraitCss } from '$lib/heroes';
 	import { levelOf, statDeltas, isHidden, type PlayerCardState } from '$lib/cards/cardstate';
 
@@ -50,6 +51,12 @@
 	export let onStyle: () => void = () => {};
 	/** a phone on its side: the dash becomes the right-hand column */
 	export let land = false;
+	// on its side the column can be shelved (dragged off to the right); the action pill stays
+	export let shut = false;
+	export let drag: number | null = null;
+	export let onShelf: (open: boolean) => void = () => {};
+	export let onDrag: (px: number | null) => void = () => {};
+	$: slideCss = drag == null ? '' : `transform: translateX(${shut ? `calc(100% - ${drag}px)` : `${drag}px`}); transition: none`;
 
 	const ROMAN = ['I', 'II', 'III', 'IV'];
 	$: lv = cs ? levelOf(cs) : 0;
@@ -115,7 +122,8 @@
 {#if land}
 <!-- a phone on its side: the dash is the right-hand column — you, your stats, this round's wells, the piles, the tools,
      and the action pill at the bottom under the right thumb -->
-<div class="pdash land is-{team}">
+<div class="pdash land is-{team}" class:shut>
+	<div class="lpanel" style={slideCss} use:shelf={{ side: 'right', open: !shut, set: onShelf, drag: onDrag }}>
 	{#if !cs}
 	<div class="lhost"><b>Host</b><small>watching · you move the game on</small></div>
 	{:else}
@@ -124,6 +132,7 @@
 	<div class="lpiles wells">{@render pilesB(cs)}</div>
 	<div class="ltools">{@render toolsB()}</div>
 	{/if}
+	</div>
 	<div class="lact">{@render actB()}</div>
 </div>
 {:else}
@@ -241,9 +250,14 @@
 	.alt { flex: none; height: 30px; padding: 0 10px; border-radius: 999px; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: #fff; background: #b42318; border: 1px solid rgba(255, 170, 160, 0.6); }
 	@media (prefers-reduced-motion: reduce) { .act.pulse::after { animation: none; } }
 	/* ── a phone on its side: the right-hand column (width = GameView's --rw), under the top bar ── */
-	.pdash.land { left: auto; right: 0; top: 54px; bottom: 0; width: var(--rw, 200px); height: auto; gap: 6px; justify-content: space-between;
-		padding: 7px 7px calc(7px + env(safe-area-inset-bottom, 0px)); border-top: 0; border-left: 2px solid var(--tc);
-		background: linear-gradient(270deg, var(--tg), transparent 70%), linear-gradient(180deg, rgba(16, 44, 72, 0.98), rgba(6, 21, 38, 0.99)); }
+	.pdash.land { left: auto; right: 0; top: 54px; bottom: 0; width: var(--rwo, 200px); height: auto; padding: 0; border: 0; background: none; pointer-events: none; }
+	.land .lpanel { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 6px; justify-content: space-between; pointer-events: auto; touch-action: pan-y;
+		padding: 7px calc(7px + env(safe-area-inset-right, 0px)) calc(58px + env(safe-area-inset-bottom, 0px)) 7px; border-left: 2px solid var(--tc);
+		background: linear-gradient(270deg, var(--tg), transparent 70%), linear-gradient(180deg, rgba(16, 44, 72, 0.98), rgba(6, 21, 38, 0.99)); transition: transform 0.25s ease; }
+	.pdash.land.shut .lpanel { transform: translateX(100%); pointer-events: none; }
+	.land .lact { position: absolute; left: 7px; right: calc(7px + env(safe-area-inset-right, 0px)); bottom: calc(7px + env(safe-area-inset-bottom, 0px)); pointer-events: auto; }
+	/* shelved: the pill shrinks to a thumb-sized button in the corner */
+	.pdash.land.shut .lact { left: auto; width: 150px; }
 	.land .lid { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
 	.land .lid .me { width: 54px; height: 54px; }
 	.land .lwells { flex: none; justify-content: space-between; gap: 5px; }

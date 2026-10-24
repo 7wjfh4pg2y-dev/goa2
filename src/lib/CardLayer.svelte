@@ -62,6 +62,7 @@
 	import HostNotes from '$lib/hud2/HostNotes.svelte';
 	import { segOf } from '$lib/recorder';
 	import { boardPrefs } from '$lib/boardPrefs';
+	import { shelf as shelfDrag } from '$lib/hud2/shelf';
 
 	export let session: MatchSession;
 	export let ms: Readable<MatchState>;
@@ -84,6 +85,22 @@
 	export let phone2 = false;
 	/** a phone on its side: the strip becomes the left column, the dash the right column, the hand rises from the board's foot */
 	export let land = false;
+	// sideways: each column can be shelved (dragged off the screen, a grip tab stays to pull it back); remembered per
+	// player (boardPrefs shelfL / shelfR). With nobody else at the table the left column stays shut. GameView binds these
+	// to free the board's room (--lw / --rw).
+	export let lShut = false;
+	export let rShut = false;
+	$: lHas = phone2 && h2enemies.length + h2allies.length > 0;
+	$: lShut = land && (!lHas || !$boardPrefs.shelfL);
+	$: rShut = land && !$boardPrefs.shelfR;
+	let lDrag: number | null = null, rDrag: number | null = null;
+	const setL = (open: boolean) => boardPrefs.set({ shelfL: open });
+	const setR = (open: boolean) => boardPrefs.set({ shelfR: open });
+	const slide = (side: 'left' | 'right', shut: boolean, d: number | null) => {
+		if (d == null) return '';
+		const k = side === 'left' ? -1 : 1;
+		return `transform: translateX(${shut ? `calc(${k * 100}% - ${k * d}px)` : `${k * d}px`}); transition: none`;
+	};
 	export let hud2 = false; // the 2.0 HUD (desktop / tablet): side boards, the Chronicle, the order row, the new dash
 	/** a board action waiting for its yes (GameView): the action ring confirms it, with Cancel beside it */
 	export let ringAsk: Order | null = null;
@@ -1458,7 +1475,13 @@
 {#if $ms.cards}
 	<!-- ───────── phone: the other players, a sideways-scrolling strip ───────── -->
 	{#if mobile}
-		<div class="mstrip" class:p2={phone2} class:land class:dense={land && h2enemies.length + h2allies.length >= 5}>
+		{#if land && lHas}
+			<button class="sgrip l" class:shut={lShut} use:shelfDrag={{ side: 'left', open: !lShut, set: setL, drag: (v) => (lDrag = v) }} on:click={() => setL(lShut)} aria-label={lShut ? 'Show the other players' : 'Hide the other players'}>
+				<svg viewBox="0 0 24 24"><path d={lShut ? 'M9 5l7 7-7 7' : 'M15 5l-7 7 7 7'} /></svg>
+			</button>
+		{/if}
+		<div class="mstrip" class:p2={phone2} class:land class:dense={land && h2enemies.length + h2allies.length >= 5} style={land ? slide('left', lShut, lDrag) : ''}
+			use:shelfDrag={{ side: 'left', open: !lShut, set: setL, drag: (v) => (lDrag = land && lHas ? v : null) }}>
 			{#each phone2 ? [...h2enemies, ...h2allies] : others as p (p.id)}
 				{@const cs = viewCards[p.id]}
 				{#if cs}
@@ -2033,7 +2056,12 @@
 			</div>
 		{/if}
 		{#if phone2}
-			<PhoneDash {land} cs={mine} swapOffer={!!mateOff} runes={runeMap[clientId]} runeFx={dashFx} power={myPower ? powerBtn : undefined} color={colorHex(myColor)} team={myTeam === 'blue' ? 'blue' : 'orange'} {turnIdx} {revealed} ini={myInit} fxAt={(t) => !!fxFor(clientId, slotIdx(mine, t))}
+			{#if land}
+				<button class="sgrip r" class:shut={rShut} use:shelfDrag={{ side: 'right', open: !rShut, set: setR, drag: (v) => (rDrag = v) }} on:click={() => setR(rShut)} aria-label={rShut ? 'Show your dash' : 'Hide your dash'}>
+					<svg viewBox="0 0 24 24"><path d={rShut ? 'M15 5l-7 7 7 7' : 'M9 5l7 7-7 7'} /></svg>
+				</button>
+			{/if}
+			<PhoneDash {land} shut={rShut} drag={rDrag} onShelf={setR} onDrag={(v) => (rDrag = v)} cs={mine} swapOffer={!!mateOff} runes={runeMap[clientId]} runeFx={dashFx} power={myPower ? powerBtn : undefined} color={colorHex(myColor)} team={myTeam === 'blue' ? 'blue' : 'orange'} {turnIdx} {revealed} ini={myInit} fxAt={(t) => !!fxFor(clientId, slotIdx(mine, t))}
 				deckCount={deckCards(mine).length} levelUp={iMustLevel} ultIdx={myUlt} {ultReady} order={order2} {ringColor} autoHide={autoRetract}
 				handStyle={bannerHand ? 'banners' : spreadHand ? 'spread' : 'fan'} {pingArmed} radius={radiusCtl} tokens={tokenCtl}
 				onMe={() => (overlayId = clientId)} onSlot={(e, t) => peekSlot(e, mine, t)} onDiscPick={(i) => openDiscard(mine.hero, i, true)}
@@ -2295,7 +2323,7 @@
 	{:else if iAmHost}
 		<!-- the host without a hero (watching): no hand, coins or level-ups — only the action ring, to move the game on -->
 		{#if mobile}
-			<PhoneDash {land} cs={null} order={order2} />
+			<PhoneDash {land} shut={rShut} drag={rDrag} onShelf={setR} onDrag={(v) => (rDrag = v)} cs={null} order={order2} />
 		{:else}
 			<div class="h2dash"><HudDash cs={null} order={order2} /></div>
 		{/if}
@@ -2953,7 +2981,7 @@
 	/* ── a phone on its side (GameView `land`): Others | Board | You. The top bar stays (44 + the beam); the other players
 	   stack in the LEFT column (enemies, then your team), your dash is the RIGHT column, the hand rises from the board's foot.
 	   The column widths are GameView's --lw / --rw. */
-	.mstrip.land { top: 54px; bottom: 0; left: 0; right: auto; width: var(--lw); height: auto; flex-direction: column; gap: 5px; padding: 6px 5px calc(6px + env(safe-area-inset-bottom, 0px));
+	.mstrip.land { top: 54px; bottom: 0; left: 0; right: auto; width: var(--lwo); height: auto; transition: transform .25s ease; touch-action: pan-y; padding-left: calc(5px + env(safe-area-inset-left, 0px)) !important; flex-direction: column; gap: 5px; padding: 6px 5px calc(6px + env(safe-area-inset-bottom, 0px));
 		overflow-x: hidden; overflow-y: auto; border-bottom: 0; border-right: 1px solid rgba(216, 179, 106, 0.35); box-sizing: border-box; }
 	.mstrip.land .mpc { width: auto; flex: none; grid-template-columns: 32px minmax(0, 1fr) 34px; }
 	.mstrip.land .mcard { grid-column: 3; width: 34px; }
@@ -2968,8 +2996,17 @@
 	.mstrip.land.dense .mcard { grid-row: 1; width: 28px; }
 	.mstrip.land .mpc.fally { margin-top: 6px; position: relative; }
 	.mstrip.land .mpc.fally::before { content: ''; position: absolute; left: 10px; right: 10px; top: -7px; height: 1px; background: rgba(216, 179, 106, 0.45); }
-	.tray.mob.land { left: var(--lw); right: var(--rw); bottom: env(safe-area-inset-bottom, 0px); --cw: clamp(54px, 15vh, 66px); }
-	.bstack.land { right: calc(var(--rw) + 6px); bottom: calc(8px + env(safe-area-inset-bottom, 0px)); --bw: min(300px, calc(100vw - var(--lw) - var(--rw) - 12px)); }
+	/* the hand stays clear of the action pill (it floats there when the dash is shelved); its tucked tips meet the
+	   screen's very bottom (the old inset left a strip of board under the cut) */
+	.tray.mob.land { left: var(--lw); right: var(--rwo); bottom: 0; --cw: clamp(54px, 15vh, 66px); }
+	.bstack.land { right: calc(var(--rwo) + 6px); bottom: 8px; overflow: hidden; --bw: min(300px, calc(100vw - var(--lw) - var(--rwo) - 12px)); }
+	:global(.gamewrap.lshut) .mstrip.land { transform: translateX(-100%); pointer-events: none; }
+	/* the grip tabs: drag or tap to shelve / bring back a column */
+	.sgrip { position: absolute; z-index: 13; top: 50%; width: 22px; height: 66px; margin-top: -33px; padding: 0; display: grid; place-items: center; cursor: pointer; touch-action: none;
+		color: #f4dfa8; background: linear-gradient(180deg, rgba(16, 44, 72, 0.97), rgba(6, 21, 38, 0.97)); border: 1px solid rgba(216, 179, 106, 0.45); transition: left .25s ease, right .25s ease; }
+	.sgrip svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+	.sgrip.l { left: max(var(--lw), env(safe-area-inset-left, 0px)); border-left: 0; border-radius: 0 12px 12px 0; }
+	.sgrip.r { top: 40%; right: max(var(--rw), env(safe-area-inset-right, 0px)); border-right: 0; border-radius: 12px 0 0 12px; }
 	.bstack.p2 { bottom: calc(108px + env(safe-area-inset-bottom, 0px)); }
 	.mpc { flex: none; width: 170px; height: 62px; display: grid; grid-template-columns: 30px 1fr 32px 40px; grid-template-rows: 32px 1fr; column-gap: 4px; row-gap: 2px;
 		padding: 3px 5px 3px 7px; border-radius: 10px; cursor: pointer; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.1); box-shadow: inset 3px 0 0 var(--tc); }

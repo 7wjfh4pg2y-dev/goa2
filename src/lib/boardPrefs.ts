@@ -11,8 +11,8 @@ import { writable } from 'svelte/store'
 // corner, as tall as the dash
 // wisps: the spirit swirl on hexes to act on (spawn points, minions to remove, …); off = a still glowing hex
 // dash: the 4★ heroes' own dash buttons' effects (Ignatia's flames, …) — one switch for all of them
-export type BoardPrefs = { dash: boolean; rims: boolean; zone: boolean; sea: boolean; look: 'island' | 'classic'; hud: '2.0' | 'classic'; compact: boolean; cTop: boolean; cOrder: boolean; cLog: boolean; beam: boolean; wisps: boolean; zoomLock: boolean; turnCue: boolean; laugh: boolean; sparkle: boolean; spells: boolean; essence: boolean; emToast: boolean; emClock: boolean; snInscribe: boolean; runeFlare: boolean; igEq: boolean; igSwirl: boolean; igChaos: boolean; tkSwap: boolean; tkWave: boolean; tkWar: boolean; rzShuffle: boolean; rzComic: boolean; rzPoof: boolean; rzApplause: boolean; rzTickets: boolean }
-export const DEFAULT_PREFS: BoardPrefs = { dash: true, rims: true, zone: true, sea: true, look: 'island', hud: '2.0', compact: false, cTop: false, cOrder: false, cLog: false, beam: true, wisps: true, zoomLock: false, turnCue: true, laugh: true, sparkle: true, spells: true, essence: true, emToast: true, emClock: true, snInscribe: true, runeFlare: true, igEq: true, igSwirl: true, igChaos: true, tkSwap: true, tkWave: true, tkWar: true, rzShuffle: true, rzComic: true, rzPoof: true, rzApplause: true, rzTickets: true }
+export type BoardPrefs = { dash: boolean; rims: boolean; zone: boolean; sea: boolean; look: 'island' | 'classic'; hud: '2.0' | 'classic'; compact: boolean; cTop: boolean; cOrder: boolean; cLog: boolean; beam: boolean; wisps: boolean; zoomLock: boolean; turnCue: boolean; laugh: boolean; sparkle: boolean; spells: boolean; essence: boolean; emToast: boolean; emClock: boolean; snInscribe: boolean; runeFlare: boolean; igEq: boolean; igSwirl: boolean; igChaos: boolean; tkSwap: boolean; tkWave: boolean; tkWar: boolean; rzShuffle: boolean; rzComic: boolean; rzPoof: boolean; rzApplause: boolean; rzTickets: boolean; shelfL: boolean; shelfR: boolean }
+export const DEFAULT_PREFS: BoardPrefs = { dash: true, rims: true, zone: true, sea: true, look: 'island', hud: '2.0', compact: false, cTop: false, cOrder: false, cLog: false, beam: true, wisps: true, zoomLock: false, turnCue: true, laugh: true, sparkle: true, spells: true, essence: true, emToast: true, emClock: true, snInscribe: true, runeFlare: true, igEq: true, igSwirl: true, igChaos: true, tkSwap: true, tkWave: true, tkWar: true, rzShuffle: true, rzComic: true, rzPoof: true, rzApplause: true, rzTickets: true, shelfL: true, shelfR: true }
 const VERSION = 2
 const KEY = 'goa2-board-prefs'
 
@@ -32,6 +32,8 @@ export function readPrefs(raw: string | null): BoardPrefs {
 			cOrder: p.cOrder === true,
 			cLog: p.cLog === true,
 			zoomLock: p.zoomLock === true, // phones: a pinch never zooms the board
+			shelfL: p.shelfL !== false, // a phone on its side: the left column (the other players) is out
+			shelfR: p.shelfR !== false, // … and the right column (your dash); shelved = dragged off the screen
 			beam: fx.beam !== false,
 			wisps: fx.wisps !== false,
 			turnCue: fx.turnCue !== false, // the YOUR TURN cue (YourTurn.svelte)

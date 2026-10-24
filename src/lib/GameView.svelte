@@ -215,6 +215,8 @@
 	// the 2.0 phone (segment 9): PhoneTop + beam, the restyled strip, PhoneDash, PhoneBoard, ☰ = the lobby with the log
 	// a phone on its side (2026-10-23): always the 2.0 phone pieces, laid out as Others | Board | You (see `.land`)
 	$: phone2 = mobile && ($boardPrefs.hud === '2.0' || land);
+	// a phone on its side: the side columns can be shelved (CardLayer drives these from boardPrefs shelfL / shelfR)
+	let lShut = false, rShut = false;
 	let lobbyOpen = false;
 	$: zoneNow = battleZone($ms);
 	// how many minions each team's wave started with in the battle zone (its spawn points there)
@@ -243,7 +245,7 @@
 	type Fam = 'fight' | 'move' | 'off' | 'power';
 	type Pill = { label: string; fam: Fam; run?: () => void; kind?: 'go' | 'bad' | 'rem' | 'move' | 'imm' | 'force' | 'swap' | 'time'; coin?: number; off?: boolean; title?: string };
 	$: if (!selPieceId) carryingSel = false;
-	$: pills = !hud2 || !selPiece || ringAsk || carryingSel || swapFrom ? [] : forceMenu ? ([
+	$: pills = !(hud2 || land) || !selPiece || ringAsk || carryingSel || swapFrom ? [] : forceMenu ? ([
 		{ label: 'Discard', fam: 'fight', kind: 'force', run: () => forceSel(false), title: 'They discard a card' },
 		{ label: 'Discard or die', fam: 'fight', kind: 'bad', coin: heroDefeatSummary($ms, clientId, selHero ?? '').coins, run: () => forceSel(true), title: 'They discard a card — or are defeated (you take the rewards)' },
 		{ label: 'Back', fam: 'off', run: () => (forceMenu = false) }
@@ -1149,7 +1151,7 @@
 	function trackTip() {
 		if (typeof window === 'undefined') return;
 		cancelAnimationFrame(tipRaf);
-		if (!tipId || mobile) { tipPos = null; return; }
+		if (!tipId || (mobile && !land)) { tipPos = null; return; }
 		const loop = () => {
 			const p = tipId ? board?.clientPos(tipId) : null;
 			// only touch the toolbar when the piece actually moved (not 60 re-renders a second)
@@ -1161,7 +1163,7 @@
 		loop();
 	}
 	$: tipId = actId && confirmKind ? actId : selPieceId;
-	$: tipId, mobile, hud2, trackTip();
+	$: tipId, mobile, hud2, land, trackTip();
 	onDestroy(() => { if (typeof window !== 'undefined') cancelAnimationFrame(tipRaf); });
 	// hero / minion names read in their team colour (a lighter tint so they stay legible)
 	const teamText = (p: { kind?: string; role?: string; team: string } | null | undefined) =>
@@ -1298,7 +1300,7 @@
 
 <svelte:window on:keydown={(e) => { if (e.key !== 'Escape') return; if (wheelOpen) wheelOpen = false; else if (lobbyOpen) lobbyOpen = false; else if (confirmLeave) confirmLeave = false; else if (ringAsk) ringDone(); else { pendingSpawn = null; pendingToken = null; pendingDouble = null; pingArmed = false; if (clearing) cancelClear(); } }} bind:innerWidth={winW} bind:innerHeight={winH} />
 
-<div class="gamewrap" bind:clientWidth={wrapW} bind:clientHeight={wrapH} class:sea={boardLook === 'island'} class:mob={mobile} class:p2={phone2} class:land class:h2={hud2} class:dashfull={!mobile && !hud2 && lay.underHud} style={mobile ? '' : layoutVars(lay) + (hud2 ? `; --dh:${88 * lay.s}px` : '')}>
+<div class="gamewrap" bind:clientWidth={wrapW} bind:clientHeight={wrapH} class:sea={boardLook === 'island'} class:mob={mobile} class:p2={phone2} class:land class:lshut={lShut} class:rshut={rShut} class:h2={hud2} class:dashfull={!mobile && !hud2 && lay.underHud} style={mobile ? '' : layoutVars(lay) + (hud2 ? `; --dh:${88 * lay.s}px` : '')}>
 	{#if $ms.wonBy}
 		<button class="placehint won" on:click={() => (victoryClosed = false)} title="Show the victory screen again">🏆 {teamName($ms.wonBy.team)} win — {$ms.wonBy.reason}</button>
 	{:else if clearing}
@@ -1444,11 +1446,11 @@
 	<BoardCanvas bind:this={board} map={$ms.map ?? {}} inset={boardInset} look={boardLook} {glowZone} activeZone={$ms.wonBy ? null : battleZone($ms)} effects={!deckCovered} sea={$boardPrefs.sea} rims={$boardPrefs.rims} rotation={orientation} interactive={true} {placing} {placeGhost} holdColor={myHoldColor} onCancelPlace={cancelPlace} {areas} marks={boardMarks} badges={defBadges} zoomLock={mobile && $boardPrefs.zoomLock} wisps={$boardPrefs.wisps} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} pings={boardPings} onPing={doPing} {pingArmed} />
 	</div>
 
-	<CardLayer bind:this={cardLayer} bind:turnCtx bind:crackPreview bind:gyRaise areaW={gvw} areaH={gvh} {mobile} {hud2} {phone2} {land} ringAsk={ringAsk ?? swapAsk ?? autoAsk} onResults={() => (victoryClosed = false)} compact={$boardPrefs.compact} cTop={$boardPrefs.cTop} cOrder={$boardPrefs.cOrder} cLog={$boardPrefs.cLog} bind:topW {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} bind:covered={deckCovered} bind:phoneStatus onRespawn={placeMyHero} onEnter={placeMyHero} onArmToken={armToken} onArmDouble={armDouble} placingDouble={pendingDouble} holdingToken={!!pendingToken} {pingArmed} onPing={pingButton} bind:previewId />
+	<CardLayer bind:this={cardLayer} bind:lShut bind:rShut bind:turnCtx bind:crackPreview bind:gyRaise areaW={gvw} areaH={gvh} {mobile} {hud2} {phone2} {land} ringAsk={ringAsk ?? swapAsk ?? autoAsk} onResults={() => (victoryClosed = false)} compact={$boardPrefs.compact} cTop={$boardPrefs.cTop} cOrder={$boardPrefs.cOrder} cLog={$boardPrefs.cLog} bind:topW {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} bind:covered={deckCovered} bind:phoneStatus onRespawn={placeMyHero} onEnter={placeMyHero} onArmToken={armToken} onArmDouble={armDouble} placingDouble={pendingDouble} holdingToken={!!pendingToken} {pingArmed} onPing={pingButton} bind:previewId />
 
 	<!-- selected minion/token: offer delete (heroes aren't deletable) -->
-	{#if hud2}
-		<!-- (the 2.0 HUD rings the piece with pills: see the .h2top layer) -->
+	{#if hud2 || land}
+		<!-- (the 2.0 HUD rings the piece with pills: see the .h2top layer; a phone on its side: .lpills below) -->
 	{:else if confirmKind && actPiece}
 		<div class="pietool confirm" class:anchored={!!tipPos} style={tipPos ? `left:${tipPos.x / lay.s}px; top:${tipPos.y / lay.s}px` : ''}>
 			{#if (confirmKind === 'attack' || confirmKind === 'defeat') && attackSum}
@@ -1501,6 +1503,25 @@
 			{#if canBattleSel}<button class="piedefeat" on:click={battleTakeSel}>Remove for the battle</button>{/if}
 			{#if canRemoveSel && selPiece.kind !== 'hero' && (!selImmune || iAmHost)}<button class="piedel" on:click={openRemove}>Remove</button>{/if}
 			{/if}
+		</div>
+	{/if}
+
+	{#if land && tipPos && tipPos.cy != null && tipPos.r != null && pills.length}
+		<!-- a phone on its side: the same four sides of pills round the picked piece as the desktop (real px, no zoom) -->
+		<div class="lpills">
+			<div class="h2pills" style="left:{tipPos.x}px; top:{tipPos.cy}px; --r:{tipPos.r + 6}px; --half:{fan.half}px">
+				{#each SIDES as [f, at] (f)}
+					{#if fan[f].length}
+						<div class="pside {at}">
+							{#each fan[f] as pl, k (pl.label + k)}
+								{#if pl.kind === 'imm'}<span class="pp imm" title={pl.title}>Immune</span>
+								{:else}<button class="pp {pl.kind ?? ''}" disabled={pl.off} on:click={() => pl.run?.()} title={pl.title}>{pl.label}{#if pl.coin != null}<i class="gc"></i>{pl.coin}{/if}</button>{/if}
+							{/each}
+						</div>
+					{/if}
+				{/each}
+				{#if selLabel}<span class="pname" class:low={fan.off.length > 0} style:color={teamText(selPiece)}>{selLabel}</span>{/if}
+			</div>
 		</div>
 	{/if}
 
@@ -2290,7 +2311,14 @@
 	.boardarea.mob { top: 116px; bottom: calc(106px + env(safe-area-inset-bottom, 0px)); }
 	.boardarea.mob.p2 { top: 124px; bottom: calc(100px + env(safe-area-inset-bottom, 0px)); }
 	/* a phone on its side: Others (left column) | the board | You (right column); see CardLayer's `.land` */
-	.gamewrap.land { --lw: clamp(150px, 21vw, 184px); --rw: clamp(178px, 24vw, 220px); }
+	/* full width (the side columns pad themselves past the notch); a column shelved = 0 wide */
+	.gamewrap.land { left: 0; right: 0; --lwo: calc(clamp(150px, 21vw, 184px) + env(safe-area-inset-left, 0px)); --rwo: calc(clamp(178px, 24vw, 220px) + env(safe-area-inset-right, 0px)); --lw: var(--lwo); --rw: var(--rwo); }
+	.gamewrap.land.lshut { --lw: 0px; } .gamewrap.land.rshut { --rw: 0px; }
+	.lpills { position: absolute; inset: 0; pointer-events: none; z-index: 9; overflow: hidden; --line: rgba(201, 162, 90, 0.45); --brass: #c9a25a; --brass-hi: #ecd08e; }
+	.lpills .pp { height: 30px; padding: 0 11px; font-size: 13px; }
+	.lpills .pp.x { width: 30px; }
+	.lpills .gc { display: inline-block; width: 14px; height: 14px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff2c0, #e2b54f 60%, #a8792a); box-shadow: 0 0 0 1px #6b4a14; }
+	.lpills .pname { top: calc(var(--r) + 42px); }
 	.boardarea.mob.p2.land { top: 54px; bottom: 0; left: var(--lw); right: var(--rw); }
 	.gamewrap.land .pietool, .gamewrap.land .placehint, .gamewrap.land .battlebox { top: 62px; left: calc(var(--lw) + (100% - var(--lw) - var(--rw)) / 2); max-width: calc(100% - var(--lw) - var(--rw) - 12px); width: auto; }
 	.gamewrap.land .placehint.lifeout { top: auto; bottom: 12px; }
