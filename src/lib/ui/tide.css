@@ -92,7 +92,7 @@
 	--t-slow: 520ms;
 }
 /* phones: one step down on the big sizes, never below 15 for sentences */
-@media (max-width: 760px) {
+@media (max-width: 760px) and (orientation: portrait) {
 	.tide {
 		--fs-hero: 46px;
 		--fs-display: 36px;

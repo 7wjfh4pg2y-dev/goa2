@@ -139,7 +139,11 @@
 	// real size instead — their own portrait CSS takes over (see @media max-width 760px).
 	let mobile = false; // phone layout (≤760px wide): also tells the backdrop how to stage the island
 	let portrait = false; // a tablet held upright: the menu column is centred over the island
-	const fitUi = () => { if (browser) { mobile = innerWidth <= 760; portrait = innerWidth < innerHeight; ui = mobile ? 1 : uiScale(innerWidth, innerHeight); } };
+	// a phone on its side (short and wide): the desktop layout, never the portrait phone one. The lobby and hero select
+	// are laid out on a SHORTER canvas there (600 tall instead of 900), so their words stay readable.
+	let land = false;
+	let uiL = 1; // the lobby / hero select scale on a phone on its side
+	const fitUi = () => { if (browser) { land = innerWidth > innerHeight && innerHeight <= 520; mobile = innerWidth <= 760 && !land; portrait = innerWidth < innerHeight; ui = mobile ? 1 : uiScale(innerWidth, innerHeight); uiL = land ? Math.min(innerWidth / 1100, innerHeight / 600) : ui; } };
 	fitUi();
 	let coinCaption = '';
 	let coinPending = 'Flipping…'; // caption while the coin spins
@@ -810,7 +814,7 @@
 {/snippet}
 
 {#if mode === 'draft' && session}
-	<div class="uiscale" style="--ui:{ui}">
+	<div class="uiscale" style="--ui:{uiL}">
 		<HeroDraft {session} {state} {players} clientId={session.clientId} onLeave={leaveRoom} />
 	</div>
 {:else if mode === 'game' && session}
@@ -818,7 +822,7 @@
 	{#if seatNotice}<div class="seattoast">{seatNotice}</div>{/if}
 {:else}
 <SeaBackdrop bind:this={sea} scene={bgScene} map={bgMap} mobile={mobile || (portrait && family)} effects={!seaCalm} />
-<div class="uiscale tide pre" style="--ui:{ui}">
+<div class="uiscale tide pre" class:land={land && mode === 'lobby'} style="--ui:{mode === 'lobby' ? uiL : ui}">
 	{#if family}
 		<!-- landing · role · admin · menu · join: the crest and one column of steps beside the island -->
 		<main class="screen s-col" class:landing={mode === 'landing'} class:compact={mode === 'join' || mode === 'admin'} class:placed={!!crestW} style:--crest-w={crestW ? crestW + 'px' : null} style:--crest-x={crestW ? Math.round(crestL / 2 - crestW / 2) + 'px' : null} transition:reveal>
@@ -1194,7 +1198,7 @@
 	.s-col.compact .home { width: 124px; margin-bottom: 14px; }
 	.s-col.landing .home { width: 400px; margin: 0 0 22px -14px; }
 	/* landscape desktop: the crest centred in the gap left of the island, sized to it */
-	@media (min-width: 761px) and (min-aspect-ratio: 1001/1000) {
+	@media (min-width: 761px) and (min-aspect-ratio: 1001/1000), (orientation: landscape) and (max-height: 520px) {
 		.s-col.landing.placed { padding-left: 0; padding-right: 0; }
 		.s-col.landing.placed .leftcol { width: var(--crest-w); margin-left: var(--crest-x); align-items: center; }
 		.s-col.landing.placed .home { width: 100%; margin: 0 0 22px; }
@@ -1369,7 +1373,7 @@
 		.head { align-items: center; text-align: center; }
 	}
 	/* a narrow window (the canvas is under 1440 wide): the lobby's settings stack */
-	@media (min-width: 761px) and (max-width: 1007px) {
+	@media (min-width: 761px) and (max-width: 1007px), (orientation: landscape) and (max-height: 520px) {
 		.ltable { grid-template-columns: 290px minmax(0, 1fr) 290px; gap: 14px; }
 		.lbody .setup { grid-template-columns: minmax(0, 1fr); gap: 14px; }
 		.seat-top { flex-wrap: wrap; row-gap: 2px; }
@@ -1377,8 +1381,29 @@
 		.lyou { gap: 10px; }
 		}
 
+	/* a phone on its side: the desktop lobby on a 600-tall canvas (`uiL`) — everything fits one screen: a slim header,
+	   the teams and the board filling the middle, the token colours on one line, the buttons along the foot */
+	.pre.land .s-lobby { padding: 0 20px; overflow: hidden; }
+	.pre.land .lbox { width: 100%; height: 100%; margin: 0; padding: 10px 0; gap: 10px; }
+	.pre.land .lbody { flex: 1; min-height: 0; gap: 10px; }
+	.pre.land .ltable { flex: 1; min-height: 0; height: auto; grid-template-columns: 300px minmax(0, 1fr) 300px; gap: 14px; }
+	.pre.land .ltop .home { width: 58px; }
+	.pre.land .roomblock .roomcode { font-size: 40px; }
+	.pre.land .lbody .setup { padding: 8px 16px; }
+	.pre.land .scol { flex-direction: row; align-items: center; gap: 16px; }
+	.pre.land .scol .lblrow { flex: none; }
+	.pre.land .lblrow .hint { display: none; }
+	.pre.land .scol .swatches { flex: 1; min-width: 0; min-height: 40px; }
+	.pre.land .scol .swatches .swatch { flex: 0 1 40px; width: 40px; min-width: 0; max-width: 40px; height: auto; aspect-ratio: 1; }
+	.pre.land .specs { flex: 1; min-width: 0; height: auto; justify-content: flex-end; }
+	.pre.land .lbox .lactions { padding: 8px 12px; }
+	.pre.land .lhead { gap: 14px; }
+	.pre.land .lyou { gap: 10px; min-width: 0; }
+	.pre.land .lyou .connlbl { display: none; }
+	.pre.land .lyou .you { font-size: 18px; white-space: nowrap; }
+
 	/* ------------------------------------------------------------------------ phones */
-	@media (max-width: 760px) {
+	@media (max-width: 760px) and (orientation: portrait) {
 		.deskonly { display: none; }
 		.phoneonly { display: inline; }
 		.pre, .coinoverlay { --fs-label: 15px; } /* labels are sentences here: nothing under 15px on a phone */
@@ -1542,7 +1567,7 @@
 	@media (max-width: 380px) {
 		.lbody :global(.band) { font-size: 14px; }
 	}
-	@media (max-width: 760px) and (max-height: 800px) {
+	@media (max-width: 760px) and (orientation: portrait) and (max-height: 800px) {
 		.tseats .seat.seat--open :global(.state) { display: none; }
 		.tseats .seat, .tseats.many .seat { min-height: clamp(36px, 6dvh, 50px); }
 		.lblrow .hint { display: none; }

@@ -548,7 +548,7 @@
 		<MatchupSplash orange={rosters.orange} blue={rosters.blue} picks={d.picks} {nameOf} {colorOf} {clientId} {iAmHost} {myTeam} onStart={startGame} />
 	{/if}
 	{#if intro && d}
-		<DraftSplash system={d.system} seats={seatedIds.length} coin={d.coin ?? $state.tieBreaker} {myTeam} mobile={browser && window.innerWidth <= 760}
+		<DraftSplash system={d.system} seats={seatedIds.length} coin={d.coin ?? $state.tieBreaker} {myTeam} mobile={browser && window.innerWidth <= 760 && !(window.innerWidth > window.innerHeight && window.innerHeight <= 520)}
 			pool={d.pool} offer={d.offers?.[clientId] ?? []}
 			dealt={{ orange: rosters.orange.map((id) => d.picks[id]).filter(Boolean), blue: rosters.blue.map((id) => d.picks[id]).filter(Boolean) }}
 			onDone={() => (intro = false)} />
@@ -842,7 +842,7 @@
 	   art on top (Leave and the turn pill at its head; at its foot the name with the stats under it on the left, the
 	   roles stacked on the right — the upper art stays clear, where the faces are, left or right) ·
 	   filter row · hero grid · Lock In · two team rows */
-	@media (max-width: 760px) {
+	@media (max-width: 760px) and (orientation: portrait) {
 		.draft { min-height: 0; }
 		.stage { display: flex; flex-direction: column; overflow: visible; }
 		.artbox { position: relative; inset: auto; flex: 1 1 0; min-height: 0; overflow: hidden; }

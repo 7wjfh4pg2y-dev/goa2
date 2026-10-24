@@ -64,8 +64,9 @@
 	$: seamAt = 0.15 + 2 * n * 0.11 + 0.12;
 
 	// the measured row (one team's slices), for sizing names and framing the art
-	let vw = 1440, rowW = 0, rowH = 0;
-	$: phone = vw <= 760;
+	let vw = 1440, vh = 900, rowW = 0, rowH = 0;
+	// a phone on its side keeps the wide layout
+	$: phone = vw <= 760 && !(vw > vh && vh <= 520);
 	$: sw = phone ? rowW || 370 : ((rowW || 616) - (n - 1) * 12) / n; // one slice's width
 	$: sh = phone ? ((rowH || 280) - (n - 1) * 9) / n : rowH || 610; // … and height
 	// the hero's big painting (2:1; never the small avatar art — it goes soft at this size) inside a box of
@@ -85,7 +86,7 @@
 	const coin = (team: string) => (team === 'orange' ? coinOrange : coinBlue);
 </script>
 
-<svelte:window bind:innerWidth={vw} />
+<svelte:window bind:innerWidth={vw} bind:innerHeight={vh} />
 
 {#snippet slices(side: { team: string; ids: string[]; pos: string })}
 	<!-- the team's symbol, looming behind its heroes (it shows in the gaps; each slice carries the same drawing over its art) -->
@@ -287,7 +288,7 @@
 	@keyframes glintL { 0% { opacity: 1; transform: translateX(260%); } 100% { opacity: 0; transform: translateX(-100%); } }
 	@keyframes loomFlat { from { opacity: 0; transform: scale(1.35); } to { opacity: var(--lo); transform: scale(1.15); } }
 	@keyframes bladeX { from { opacity: 0; transform: skewY(-4deg) scaleX(0); } to { opacity: 1; transform: skewY(-4deg) scaleX(1); } }
-	@media (max-width: 760px) {
+	@media (max-width: 760px) and (orientation: portrait) {
 		.splash { height: 100%; }
 		.head { margin-top: 62px; font-size: 17px; letter-spacing: 0.12em; }
 		.hrule { display: none; }
