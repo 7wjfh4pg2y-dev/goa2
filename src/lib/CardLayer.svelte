@@ -2998,8 +2998,11 @@
 	.mstrip.land .mpc.fally::before { content: ''; position: absolute; left: 10px; right: 10px; top: -7px; height: 1px; background: rgba(216, 179, 106, 0.45); }
 	/* the hand stays clear of the action pill (it floats there when the dash is shelved); its tucked tips meet the
 	   screen's very bottom (the old inset left a strip of board under the cut) */
-	.tray.mob.land { left: var(--lw); right: var(--rwo); bottom: 0; --cw: clamp(54px, 15vh, 66px); }
-	.bstack.land { right: calc(var(--rwo) + 6px); bottom: 8px; overflow: hidden; --bw: min(300px, calc(100vw - var(--lw) - var(--rwo) - 12px)); }
+	/* the hand follows the board column: centred between the columns, and the banners ride the right column's edge
+	   (shelved: just above the action pill, which stays in the corner) */
+	.tray.mob.land { left: var(--lw); right: var(--rw); bottom: 0; --cw: clamp(54px, 15vh, 66px); transition: left .25s ease, right .25s ease; }
+	.bstack.land { right: calc(var(--rw) + 6px); bottom: 8px; overflow: hidden; --bw: min(300px, calc(100vw - var(--lw) - var(--rw) - 12px)); transition: right .25s ease, bottom .25s ease; }
+	:global(.gamewrap.rshut) .bstack.land { bottom: calc(60px + env(safe-area-inset-bottom, 0px)); }
 	:global(.gamewrap.lshut) .mstrip.land { transform: translateX(-100%); pointer-events: none; }
 	/* the grip tabs: drag or tap to shelve / bring back a column */
 	.sgrip { position: absolute; z-index: 13; top: 50%; width: 22px; height: 66px; margin-top: -33px; padding: 0; display: grid; place-items: center; cursor: pointer; touch-action: none;

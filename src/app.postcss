@@ -10,7 +10,9 @@
 }
 /* the whole app speaks in the Guards font; it has a single weight, so never fake a bold */
 /* fixed root size: layouts look the same whatever the browser's default text size */
-html { font-size: 16px; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+/* the page's own ground is the deep navy: an iPhone shows it behind the status bar and wherever the app doesn't paint */
+html { font-size: 16px; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; background: #0c1220; color-scheme: dark; }
+body { background: #0c1220; }
 body { font-family: 'Modesto Poster', serif; font-synthesis: none; }
 @font-face {
 	font-family: 'Atlantis';
