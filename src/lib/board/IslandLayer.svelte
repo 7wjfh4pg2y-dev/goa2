@@ -55,7 +55,7 @@
 		// the map editor's extra grounds (2026-10-23)
 		stone: { t: [214, 9, 50], g: [216, 12, 32] }, // old flagstones
 		marsh: { t: [118, 24, 31], g: [150, 30, 18] }, // dark wet ground
-		ash: { t: [12, 9, 25], g: [8, 14, 13] }, // volcanic ash
+		ash: { t: [8, 44, 23], g: [4, 62, 11] }, // a magma wasteland: dark red basalt (2026-10-24; was grey ash)
 		snow: { t: [206, 34, 88], g: [210, 30, 66] }, // packed snow
 		// 2026-10-24: the Titan side runs snow → tundra → steppe → open ground, the Atlantean side ash → rocky → scrub
 		tundra: { t: [178, 11, 63], g: [186, 13, 43] }, // cold grey-green moss
@@ -235,11 +235,13 @@
 				const n = t.spawn ? 1 : 2, a0 = h(71) * 360;
 				for (let i = 0; i < n; i++) put(low, 3 + i, h(80 + i) < 0.6 ? 'tuft' : 'fern', at(t.c, a0 + i * 170, size * (0.55 + 0.1 * h(76 + i))), 0.85);
 			} else if (t.z === 'ash') {
-				// volcanic ash: cracks, cinders and now and then a glowing seam
+				// a magma wasteland: a hot glow under the crust, glowing veins, embers, now and then a lava pool
+				patch('h0', at(t.c, h(60) * 360, size * 0.3 * h(61)), 0.3 + 0.16 * h(62), 0.2 + 0.12 * h(63), h(64) * 180, 'rgba(255,96,24,.2)');
 				if (!t.spawn) {
-					if (h(40) < 0.5) put(low, 0, 'crack', at(t.c, h(41) * 360, size * (0.2 + 0.3 * h(42))), 1.1);
-					if (h(43) < 0.4) put(low, 1, 'pebbles', at(t.c, h(44) * 360, size * (0.35 + 0.2 * h(45))), 0.9);
-					if (h(46) < 0.14) put(low, 2, 'lava', at(t.c, h(47) * 360, size * (0.45 + 0.1 * h(48))), 0.32);
+					if (h(40) < 0.75) put(low, 0, 'vein', at(t.c, h(41) * 360, size * (0.15 + 0.25 * h(42))), 1 + 0.2 * h(43));
+					if (h(44) < 0.45) put(low, 1, 'ember', at(t.c, h(45) * 360, size * (0.35 + 0.2 * h(46))), 0.85);
+					if (h(47) < 0.18) put(low, 2, 'lava', at(t.c, h(48) * 360, size * (0.42 + 0.1 * h(49))), 0.34);
+					else if (h(47) < 0.4) put(low, 2, 'pebbles', at(t.c, h(48) * 360, size * (0.4 + 0.15 * h(49))), 0.85);
 				}
 			} else if (t.z === 'snow') {
 				// packed snow: drifts and frost
@@ -576,6 +578,12 @@
 		<path d="M-10 -1.4H4M-5 1.8H9" stroke="#0e0a08" stroke-width="1.2" stroke-linecap="round" fill="none" />
 		<path d="M-6 -1.6H-2M5 1.6H7" stroke="#ff7a2a" stroke-opacity=".6" stroke-width="1" stroke-linecap="round" />
 		<ellipse cx="13.6" cy="0" rx="2.8" ry="3.8" fill="#3a2c22" stroke="#0e0a08" stroke-width=".9" />
+	</g>
+	<!-- a glowing magma vein in dark basalt -->
+	<g id="{P}vein" fill="none" stroke-linecap="round" stroke-linejoin="round">
+		<path d="M-22 -4L-11 -7L-4 2L6 -3L13 4L22 1M-4 2L-6 12M6 -3L9 -12" stroke="#ff4a12" stroke-opacity=".28" stroke-width="7" />
+		<path d="M-22 -4L-11 -7L-4 2L6 -3L13 4L22 1M-4 2L-6 12M6 -3L9 -12" stroke="#ff6a1a" stroke-width="2.6" />
+		<path d="M-22 -4L-11 -7L-4 2L6 -3L13 4L22 1" stroke="#ffd36a" stroke-width=".9" />
 	</g>
 	<!-- an ember still glowing in the ash -->
 	<g id="{P}ember">
