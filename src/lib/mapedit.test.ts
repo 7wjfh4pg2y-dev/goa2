@@ -287,3 +287,17 @@ describe('ground under obstacles', () => {
 		expect(toMap(d).ground?.[beach]).toBe('beach')
 	})
 })
+
+describe('a renamed copy of Forgotten Island', () => {
+	it('is a new map: its boulders sit on their neighbours\' ground', () => {
+		const d = fromMap(fi as unknown as GameMap)
+		d.name = 'My Island'
+		const m = toMap(d)
+		const rocks = Object.keys(m.cells ?? {}).filter((h) => m.cells?.[h] === 'terrain')
+		expect(rocks.every((h) => !!m.ground?.[h] && m.ground[h] !== 'terrain')).toBe(true)
+		expect(rocks.some((h) => m.ground?.[h] !== 'middle')).toBe(true)
+		// reopening the saved copy keeps them
+		const back = toMap(fromMap(m))
+		expect(rocks.every((h) => back.ground?.[h] === m.ground?.[h])).toBe(true)
+	})
+})

@@ -157,6 +157,11 @@ export function neighbours(id: string): string[] {
 	return NB[r & 1].map(([dc, dr]) => idOf(c + dc, r + dr))
 }
 
+/** Built-in maps whose obstacles keep the plain stone tile (the user: Forgotten Island stays as it is). A copy keeps
+ *  it only while it still has that name; renamed, it is a new map and every obstacle sits on its zone's ground. */
+export const STONE_MAPS = ['forgotten island']
+export const keepsStone = (d: Doc): boolean => STONE_MAPS.includes(d.name.trim().toLowerCase())
+
 // ── reading / writing the game's map ─────────────────────────────────────────
 export function fromMap(m: GameMap): Doc {
 	const d = blankDoc(m.name ?? 'Map')
@@ -170,6 +175,7 @@ export function fromMap(m: GameMap): Doc {
 		if (isGround(t)) ground = t
 		else if (t === 'baseOrangeSpawn') ground = isGround(m.ground?.[id]) ? (m.ground![id] as Ground) : 'baseOrange'
 		else if (t === 'baseBlueSpawn') ground = isGround(m.ground?.[id]) ? (m.ground![id] as Ground) : 'baseBlue'
+		else if (isGround(m.ground?.[id])) ground = m.ground![id] as Ground // what the map says lies under a spawn / obstacle
 		else {
 			const z = zoneType(cells, id, m.ground)
 			ground = isGround(z) ? z : 'middle'
@@ -182,6 +188,8 @@ export function fromMap(m: GameMap): Doc {
 		} else if (t === 'baseOrangeSpawn' || t === 'baseBlueSpawn') d.feat[id] = { kind: 'hero', team: t === 'baseOrangeSpawn' ? 'orange' : 'blue' }
 		else if (t === 'terrain') d.feat[id] = { kind: 'obstacle', ...(m.scatter?.[id] ? { scatter: m.scatter[id] } : {}), ...(isGround(m.ground?.[id]) ? {} : { bare: true }) }
 	}
+	// a map that names no ground under its obstacles: their ground is their neighbours' (shown once the map is renamed)
+	for (const id in d.feat) { const f = d.feat[id]; if (f?.kind === 'obstacle' && f.bare) d.ground[id] = groundGuess(d, id) }
 	let mc = 0, mr = 0
 	for (const id in cells) { const [c, r] = parse(id); mc = Math.max(mc, c + 1); mr = Math.max(mr, r + 1) }
 	d.cols = Math.max(g.cols ?? 0, mc, 6)
@@ -222,7 +230,7 @@ export function toMap(d: Doc): GameMap {
 		const f = d.feat[id], g = d.ground[id]
 		zones[id] = d.zone[id] ?? 'Center'
 		if (!f) { cells[id] = g; continue }
-		if (!(f.kind === 'obstacle' && f.bare)) ground[id] = g
+		if (!(f.kind === 'obstacle' && f.bare && keepsStone(d))) ground[id] = g
 		if (f.kind === 'minion') {
 			cells[id] = f.team === 'orange' ? 'spawnOrange' : 'spawnBlue'
 			meta[id] = { m: f.role, dir: f.dir, ...(zones[id] === START_ZONE ? { start: true } : {}) }
@@ -266,7 +274,7 @@ function groundGuess(d: Doc, id: string): Ground {
 	const n: Record<string, number> = {}
 	for (const h of neighbours(id)) { const g = d.ground[h]; if (g && d.feat[h]?.kind !== 'obstacle') n[g] = (n[g] ?? 0) + 1 }
 	let best: Ground = 'middle', bc = 0
-	for (const g in n) if (n[g] > bc && g !== 'baseOrange' && g !== 'baseBlue') { bc = n[g]; best = g as Ground }
+	for (const { key } of GROUNDS) if ((n[key] ?? 0) > bc && key !== 'baseOrange' && key !== 'baseBlue') { bc = n[key]; best = key } // ties: a fixed order, so twins agree
 	return best
 }
 const ensure = (d: Doc, id: string, g: Ground = 'middle') => {

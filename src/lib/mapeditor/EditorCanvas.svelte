@@ -9,7 +9,7 @@
 	import SpawnMark from '$lib/board/SpawnMark.svelte';
 	import { SCATTER_BY_KEY } from '$lib/board/scatter';
 	import { placeName } from '$lib/teams';
-	import { GROUNDS, zonesOf, hexIds, idOf, pieces, traceTf, type Doc, type Trace, type SymMode } from '$lib/mapedit';
+	import { GROUNDS, keepsStone, zonesOf, hexIds, idOf, pieces, traceTf, type Doc, type Trace, type SymMode } from '$lib/mapedit';
 
 	export let doc: Doc;
 	export let trace: Trace | null = null;
@@ -56,12 +56,13 @@
 		return d;
 	})();
 	$: ids = hexIds(doc);
+	$: stone = keepsStone(doc);
 	// one path per ground
-	$: groundPaths = GROUNDS.map((g) => ({ key: g.key, color: g.color, d: ids.filter((h) => doc.ground[h] === g.key && !isBare(h)).map((h) => poly(hexCenter(h, S), S)).join('') }));
+	$: groundPaths = GROUNDS.map((g) => ({ key: g.key, color: g.color, d: ids.filter((h) => doc.ground[h] === g.key && !(stone && isBare(h))).map((h) => poly(hexCenter(h, S), S)).join('') }));
 	$: zoneDefs = zonesOf(doc);
 	$: zonePaths = zoneDefs.map((z) => ({ key: z.key, color: z.color, d: ids.filter((h) => doc.zone[h] === z.key).map((h) => poly(hexCenter(h, S), S)).join('') }));
 	$: zoneLines = showZones ? borderPath(ids, (h) => (doc.ground[h] ? doc.zone[h] ?? '' : undefined), S) : '';
-	$: seams = borderPath(ids, (h) => (doc.ground[h] ? (isBare(h) ? '#' : doc.ground[h]) : undefined), S);
+	$: seams = borderPath(ids, (h) => (doc.ground[h] ? (stone && isBare(h) ? '#' : doc.ground[h]) : undefined), S);
 	// a dark rim round every hex, under the ground: what shows past the outer hexes is the coast
 	$: coast = ids.map((h) => poly(hexCenter(h, S), S)).join('');
 	$: labels = showZones
@@ -75,7 +76,7 @@
 	const isBare = (h: string) => { const f = doc.feat[h]; return f?.kind === 'obstacle' && !!f.bare; };
 	$: obstacles = ids.filter((h) => doc.feat[h]?.kind === 'obstacle').map((h) => {
 		const f = doc.feat[h] as { scatter?: string };
-		return { id: h, c: hexCenter(h, S), bare: !!(f as { bare?: boolean }).bare, dot: f.scatter ? SCATTER_BY_KEY[f.scatter]?.dot : null };
+		return { id: h, c: hexCenter(h, S), bare: stone && isBare(h), dot: f.scatter ? SCATTER_BY_KEY[f.scatter]?.dot : null };
 	});
 	$: minions = ids.flatMap((h) => { const f = doc.feat[h]; return f?.kind === 'minion' ? [{ id: h, c: hexCenter(h, S), team: f.team, role: f.role, dir: f.dir }] : []; });
 	$: heroes = ids.flatMap((h) => { const f = doc.feat[h]; return f?.kind === 'hero' ? [{ id: h, c: hexCenter(h, S), team: f.team }] : []; });
