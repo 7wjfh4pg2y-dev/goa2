@@ -74,19 +74,11 @@
 		if (t === 'baseOrangeSpawn') return 'baseOrange';
 		if (t === 'baseBlueSpawn') return 'baseBlue';
 		if (t === 'terrain') {
-			// an obstacle stands on its zone's ground: what the map says lies under it, else its neighbours' ground
+			// an obstacle stands on the ground the map says lies under it (maps from the editor); a map without
+			// one (Forgotten Island) keeps the plain stone tile under its boulders
 			const g = ground[id];
 			if (g && g !== 'terrain' && g in PAL) return g as Z;
-			const counts: Record<string, number> = {};
-			for (let k = 0; k < 6; k++) {
-				const n = hexNeighbour(id, k);
-				if (!cells[n] || cells[n] === 'terrain') continue;
-				const nz = zoneOf(n);
-				counts[nz] = (counts[nz] ?? 0) + 1;
-			}
-			let best: Z = 'middle', bc = 0;
-			for (const k in counts) if (counts[k] > bc) { bc = counts[k]; best = k as Z; }
-			return best;
+			return 'terrain';
 		}
 		const z = zoneType(cells, id, ground);
 		return (z in PAL ? z : 'middle') as Z;
