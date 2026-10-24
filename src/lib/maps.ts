@@ -21,6 +21,10 @@ export interface GameMap {
 	zones?: Record<string, string>
 	/** The ground under a spawn point / hero spawn / obstacle (zones.ts ZONE_TYPES), where `cells` holds the feature instead. */
 	ground?: Record<string, string>
+	/** What each zone is (map editor, 2026-10-24): 'lane' · 'offlane' · 'base', its colour and side — the built-in zones
+	 *  whose kind was changed and the map's own zones. The game reads only the names (`zones`); its minion battle still
+	 *  runs the three standard lane zones. */
+	zoneKinds?: Record<string, { kind: string; color?: string; team?: string }>
 	/** Map editor only: the symmetry it was drawn with ({mode, cx, cy} in board units). The game ignores it. */
 	sym?: { mode: string; cx?: number; cy?: number }
 }

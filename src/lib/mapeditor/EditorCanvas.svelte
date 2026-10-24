@@ -9,7 +9,7 @@
 	import SpawnMark from '$lib/board/SpawnMark.svelte';
 	import { SCATTER_BY_KEY } from '$lib/board/scatter';
 	import { placeName } from '$lib/teams';
-	import { GROUNDS, ZONES, ZONE_BY, hexIds, idOf, pieces, traceTf, type Doc, type Trace, type SymMode } from '$lib/mapedit';
+	import { GROUNDS, zonesOf, hexIds, idOf, pieces, traceTf, type Doc, type Trace, type SymMode } from '$lib/mapedit';
 
 	export let doc: Doc;
 	export let trace: Trace | null = null;
@@ -58,13 +58,14 @@
 	$: ids = hexIds(doc);
 	// one path per ground
 	$: groundPaths = GROUNDS.map((g) => ({ key: g.key, color: g.color, d: ids.filter((h) => doc.ground[h] === g.key && doc.feat[h]?.kind !== 'obstacle').map((h) => poly(hexCenter(h, S), S)).join('') }));
-	$: zonePaths = ZONES.map((z) => ({ key: z.key, color: z.color, d: ids.filter((h) => doc.zone[h] === z.key).map((h) => poly(hexCenter(h, S), S)).join('') }));
+	$: zoneDefs = zonesOf(doc);
+	$: zonePaths = zoneDefs.map((z) => ({ key: z.key, color: z.color, d: ids.filter((h) => doc.zone[h] === z.key).map((h) => poly(hexCenter(h, S), S)).join('') }));
 	$: zoneLines = showZones ? borderPath(ids, (h) => (doc.ground[h] ? doc.zone[h] ?? '' : undefined), S) : '';
 	$: seams = borderPath(ids, (h) => (doc.ground[h] ? (doc.feat[h]?.kind === 'obstacle' ? '#' : doc.ground[h]) : undefined), S);
 	// a dark rim round every hex, under the ground: what shows past the outer hexes is the coast
 	$: coast = ids.map((h) => poly(hexCenter(h, S), S)).join('');
 	$: labels = showZones
-		? ZONES.flatMap((z) => pieces(ids.filter((h) => doc.zone[h] === z.key)).filter((p) => p.length >= 3).map((p, i) => {
+		? zoneDefs.flatMap((z) => pieces(ids.filter((h) => doc.zone[h] === z.key)).filter((p) => p.length >= 3).map((p, i) => {
 			const cs = p.map((h) => hexCenter(h, S));
 			const c = { x: cs.reduce((s, q) => s + q.x, 0) / cs.length, y: cs.reduce((s, q) => s + q.y, 0) / cs.length };
 			return { key: `${z.key}${i}`, text: placeName(z.key), x: c.x, y: c.y, color: z.color };

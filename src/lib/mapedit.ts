@@ -3,12 +3,13 @@
 // maths, the checks a playable map has to pass, and the trace image's calibration. Pure functions, tested in
 // mapedit.test.ts. `toMap` writes the GameMap the game plays (maps.ts); `fromMap` reads any map, old ones too.
 import type { GameMap } from './maps'
+import { placeName } from './teams'
 import { hexCenter, SQRT3, type Pt } from './board/hexgeo'
-import { zoneTable, zoneType, hexCube, cubeDist } from './zones'
+import { zoneTable, zoneType, hexCube, cubeDist, FOREST_TYPES } from './zones'
 
 export type Team = 'orange' | 'blue'
 export type Role = 'melee' | 'ranged' | 'heavy'
-export type Ground = 'forest' | 'beach' | 'middle' | 'stone' | 'marsh' | 'ash' | 'snow' | 'baseOrange' | 'baseBlue'
+export type Ground = 'forest' | 'beach' | 'middle' | 'stone' | 'marsh' | 'ash' | 'snow' | 'tundra' | 'steppe' | 'rocky' | 'scrub' | 'frostwood' | 'burntwood' | 'baseOrange' | 'baseBlue'
 export type Feature =
 	| { kind: 'minion'; team: Team; role: Role; dir: number }
 	| { kind: 'hero'; team: Team }
@@ -25,7 +26,12 @@ export interface Doc {
 	feat: Record<string, Feature>
 	waves: { quick: number; long: number }
 	sym: { mode: SymMode; cx?: number; cy?: number }
+	/** the map's own zones beyond the seven built-in ones, and a built-in's kind changed (same key) */
+	zdefs?: ZoneDef[]
 }
+/** What a zone is: part of a minion LANE, an OFF-LANE (jungles and the like), or a team's BASE. */
+export type ZoneKind = 'lane' | 'offlane' | 'base'
+export interface ZoneDef { key: string; color: string; kind: ZoneKind; team?: Team; lane?: number }
 
 export const GROUNDS: Array<{ key: Ground; label: string; color: string }> = [
 	{ key: 'forest', label: 'Jungle', color: '#3f7a35' },
@@ -35,23 +41,70 @@ export const GROUNDS: Array<{ key: Ground; label: string; color: string }> = [
 	{ key: 'marsh', label: 'Marsh', color: '#3a5a3a' },
 	{ key: 'ash', label: 'Ash', color: '#4a3c38' },
 	{ key: 'snow', label: 'Snow', color: '#dbe8f4' },
+	// the Titan side's run snow → tundra → steppe → open ground, the Atlantean side's ash → rocky → scrub → open ground,
+	// and the two side forests (2026-10-24)
+	{ key: 'tundra', label: 'Tundra', color: '#9fb3b0' },
+	{ key: 'steppe', label: 'Frost steppe', color: '#9aa576' },
+	{ key: 'rocky', label: 'Rocky ground', color: '#6e5f56' },
+	{ key: 'scrub', label: 'Scrubland', color: '#a2804f' },
+	{ key: 'frostwood', label: 'Frost forest', color: '#5f8f9a' },
+	{ key: 'burntwood', label: 'Burnt forest', color: '#4b3a2c' },
 	{ key: 'baseOrange', label: 'Atlantean base', color: '#c4612c' },
 	{ key: 'baseBlue', label: 'Titan base', color: '#7fb6e6' }
 ]
 export const GROUND_BY: Record<string, (typeof GROUNDS)[number]> = Object.fromEntries(GROUNDS.map((g) => [g.key, g]))
 const isGround = (g: unknown): g is Ground => typeof g === 'string' && g in GROUND_BY
 
-/** The zones, Atlantean end first. `lane` = its place in the minion lane (battle.ts LANE). */
-export const ZONES: Array<{ key: string; color: string; lane?: number; team?: Team }> = [
-	{ key: 'Orange Base', color: '#e0702a', team: 'orange' },
-	{ key: 'Orange Jungle', color: '#9a5a1e', team: 'orange' },
-	{ key: 'Orange Beach', color: '#f2b04a', lane: 0, team: 'orange' },
-	{ key: 'Center', color: '#c9c3b2', lane: 1 },
-	{ key: 'Blue Beach', color: '#7fd0f0', lane: 2, team: 'blue' },
-	{ key: 'Blue Jungle', color: '#2c5f9e', team: 'blue' },
-	{ key: 'Blue Base', color: '#3d8ef0', team: 'blue' }
+/** The built-in zones, Atlantean end first. `lane` = its place in the game's minion lane (battle.ts LANE). */
+export const ZONES: ZoneDef[] = [
+	{ key: 'Orange Base', color: '#e0702a', kind: 'base', team: 'orange' },
+	{ key: 'Orange Jungle', color: '#9a5a1e', kind: 'offlane', team: 'orange' },
+	{ key: 'Orange Beach', color: '#f2b04a', kind: 'lane', lane: 0, team: 'orange' },
+	{ key: 'Center', color: '#c9c3b2', kind: 'lane', lane: 1 },
+	{ key: 'Blue Beach', color: '#7fd0f0', kind: 'lane', lane: 2, team: 'blue' },
+	{ key: 'Blue Jungle', color: '#2c5f9e', kind: 'offlane', team: 'blue' },
+	{ key: 'Blue Base', color: '#3d8ef0', kind: 'base', team: 'blue' }
 ]
-export const ZONE_BY: Record<string, (typeof ZONES)[number]> = Object.fromEntries(ZONES.map((z) => [z.key, z]))
+export const ZONE_BY: Record<string, ZoneDef> = Object.fromEntries(ZONES.map((z) => [z.key, z]))
+/** Every zone of this map: the built-in seven (with any kind the map gave them) and then its own. */
+export function zonesOf(d: Doc): ZoneDef[] {
+	const own = d.zdefs ?? [], by = new Map(own.map((z) => [z.key, z]))
+	const base = ZONES.map((z) => { const o = by.get(z.key); return o ? { ...z, kind: o.kind } : z })
+	return [...base, ...own.filter((z) => !ZONE_BY[z.key])]
+}
+export const zoneDef = (d: Doc, key: string): ZoneDef | undefined => zonesOf(d).find((z) => z.key === key)
+/** A colour for a new zone of the map (a palette that keeps clear of the built-in ones). */
+const ZONE_PAL = ['#c47ad8', '#6bd1a1', '#e0c84a', '#e07a9c', '#7ab0e0', '#a3d65c', '#d98f5a', '#62c8c8']
+/** Add a zone (and, for a team's side, its twin on the other side — named the same, so mirrored painting works).
+ *  Returns the new zone's key (the Atlantean one), or null when the name is empty or taken. */
+export function addZone(d: Doc, name: string, side: Team | null, kind: ZoneKind): string | null {
+	const nm = name.trim().replace(/\b(Orange|Blue|Atlantean|Titan)\b\s*/gi, '').replace(/\s+/g, ' ').trim()
+	if (!nm) return null
+	const keys = side ? [`Orange ${nm}`, `Blue ${nm}`] : [nm]
+	const all = zonesOf(d)
+	if (keys.some((k) => all.some((z) => z.key.toLowerCase() === k.toLowerCase()))) return null
+	const n = (d.zdefs ?? []).filter((z) => !ZONE_BY[z.key]).length
+	d.zdefs = [...(d.zdefs ?? []), ...keys.map((key, i) => ({ key, kind, color: ZONE_PAL[(n + i) % ZONE_PAL.length], ...(side ? { team: (i ? 'blue' : 'orange') as Team } : {}) }))]
+	return keys[0]
+}
+/** Mark a zone (and its twin) as lane / off-lane / base. */
+export function setZoneKind(d: Doc, key: string, kind: ZoneKind) {
+	const twin = swapZone(key)
+	for (const k of new Set([key, twin])) {
+		const z = zoneDef(d, k)
+		if (!z) continue
+		const own = (d.zdefs ?? []).filter((x) => x.key !== k)
+		d.zdefs = ZONE_BY[k] && ZONE_BY[k].kind === kind ? own : [...own, { ...z, kind }]
+	}
+}
+/** Take a map's own zone (and its twin) away; its hexes go back to the zone the ground gives them. */
+export function removeZone(d: Doc, key: string) {
+	if (ZONE_BY[key]) return
+	const gone = new Set([key, swapZone(key)])
+	d.zdefs = (d.zdefs ?? []).filter((z) => !gone.has(z.key))
+	for (const h of hexIds(d)) if (gone.has(d.zone[h])) d.zone[h] = 'Center'
+}
+export const isLaneZone = (d: Doc, key: string) => zoneDef(d, key)?.kind === 'lane'
 export const LANE_ZONES = ZONES.filter((z) => z.lane != null).map((z) => z.key)
 export const START_ZONE = 'Center'
 
@@ -137,6 +190,20 @@ export function fromMap(m: GameMap): Doc {
 	const s = m.sym
 	d.sym = s && ['none', 'rotate', 'mirrorV', 'mirrorH'].includes(s.mode) ? { mode: s.mode as SymMode, cx: s.cx, cy: s.cy } : { mode: 'rotate' }
 	if (d.sym.mode !== 'none' && (d.sym.cx == null || d.sym.cy == null)) { const c = autoCentre(d); d.sym.cx = c.x; d.sym.cy = c.y } // an older map: its middle
+	// the map's own zones and kinds; a zone name nobody defined becomes an off-lane of its own
+	const kinds = m.zoneKinds ?? {}
+	const defs: ZoneDef[] = Object.entries(kinds).map(([key, z]) => ({
+		key, kind: z.kind === 'lane' || z.kind === 'base' ? z.kind : 'offlane', color: z.color ?? ZONE_BY[key]?.color ?? '#9a9a9a',
+		...(z.team === 'orange' || z.team === 'blue' ? { team: z.team } : ZONE_BY[key]?.team ? { team: ZONE_BY[key].team } : {})
+	}))
+	const known = new Set([...ZONES.map((z) => z.key), ...defs.map((z) => z.key)])
+	for (const id in d.zone) {
+		const k = d.zone[id]
+		if (known.has(k)) continue
+		known.add(k)
+		defs.push({ key: k, kind: 'offlane', color: ZONE_PAL[defs.length % ZONE_PAL.length], ...(/^Orange\b/.test(k) ? { team: 'orange' as Team } : /^Blue\b/.test(k) ? { team: 'blue' as Team } : {}) })
+	}
+	if (defs.length) d.zdefs = defs
 	return d
 }
 
@@ -162,7 +229,9 @@ export function toMap(d: Doc): GameMap {
 		} else if (f.kind === 'hero') cells[id] = f.team === 'orange' ? 'baseOrangeSpawn' : 'baseBlueSpawn'
 		else { cells[id] = 'terrain'; if (f.scatter) scatter[id] = f.scatter }
 	}
+	const zoneKinds = d.zdefs?.length ? Object.fromEntries(d.zdefs.map((z) => [z.key, { kind: z.kind, color: z.color, ...(z.team ? { team: z.team } : {}) }])) : undefined
 	return {
+		...(zoneKinds ? { zoneKinds } : {}),
 		name: d.name.trim() || 'Untitled map',
 		grid: { size: d.size, cols: d.cols, rows: d.rows },
 		cells, meta, ground, zones, scatter,
@@ -253,7 +322,13 @@ export function pick(d: Doc, id: string, layer: 'ground' | 'zone' | 'feature'): 
 
 // ── team swaps (for the twin of a hex) ───────────────────────────────────────
 export const otherTeam = (t: Team): Team => (t === 'orange' ? 'blue' : 'orange')
-export const swapGround = (g: Ground): Ground => (g === 'baseOrange' ? 'baseBlue' : g === 'baseBlue' ? 'baseOrange' : g)
+/** The ground on the twin hex: the bases swap, and so do the two sides' themed grounds — the Titans' snow · tundra ·
+ *  frost steppe · frost forest against the Atlanteans' ash · rocky ground · scrubland · burnt forest. */
+const TWIN_GROUND: Partial<Record<Ground, Ground>> = {
+	baseOrange: 'baseBlue', baseBlue: 'baseOrange', snow: 'ash', ash: 'snow', tundra: 'rocky', rocky: 'tundra',
+	steppe: 'scrub', scrub: 'steppe', frostwood: 'burntwood', burntwood: 'frostwood'
+}
+export const swapGround = (g: Ground): Ground => TWIN_GROUND[g] ?? g
 export const swapZone = (z: string): string => z.replace(/\b(Orange|Blue)\b/g, (w) => (w === 'Orange' ? 'Blue' : 'Orange'))
 /** A minion's facing on the twin hex. dir k = facing the hex's edge k × 60° clockwise from the lower-right one
  *  (Forgotten Island: the Atlanteans 0, the Titans 3). */
@@ -446,7 +521,7 @@ export function autoZones(d: Doc): void {
 	for (const h of ids) {
 		const g = d.ground[h]
 		d.zone[h] = g === 'baseOrange' ? 'Orange Base' : g === 'baseBlue' ? 'Blue Base'
-			: g === 'forest' || g === 'marsh' ? `${side(h)} Jungle` : g === 'beach' ? `${side(h)} Beach` : 'Center'
+			: FOREST_TYPES.includes(g) ? `${side(h)} Jungle` : g === 'beach' ? `${side(h)} Beach` : 'Center'
 	}
 	for (const h of ids) {
 		if (d.feat[h]?.kind !== 'obstacle') continue
@@ -490,7 +565,7 @@ export interface ZoneStat {
 export function zoneStats(d: Doc): ZoneStat[] {
 	const by: Record<string, ZoneStat> = {}
 	const blank = (zone: string): ZoneStat => ({ zone, hexes: 0, open: 0, obstacles: 0, minions: { orange: { melee: 0, ranged: 0, heavy: 0 }, blue: { melee: 0, ranged: 0, heavy: 0 } }, heroes: { orange: 0, blue: 0 } })
-	for (const z of ZONES) by[z.key] = blank(z.key)
+	for (const z of zonesOf(d)) by[z.key] = blank(z.key)
 	for (const h of hexIds(d)) {
 		const z = (by[d.zone[h]] ??= blank(d.zone[h])), f = d.feat[h]
 		z.hexes++
@@ -548,14 +623,17 @@ export function validate(d: Doc, opts: { builtinNames?: string[] } = {}): Issue[
 	const c = st(START_ZONE)
 	if (c.hexes && minionTotal(c, 'orange') !== minionTotal(c, 'blue'))
 		out.push({ level: 'warn', text: `The starting wave is uneven: ${minionTotal(c, 'orange')} Atlantean v ${minionTotal(c, 'blue')} Titan minions in the Center.` })
-	const stray = ids.filter((h) => d.feat[h]?.kind === 'minion' && !LANE_ZONES.includes(d.zone[h]))
-	if (stray.length) out.push({ level: 'warn', text: `${stray.length} minion spawn point${stray.length === 1 ? ' is' : 's are'} outside the lane — minions only spawn in the battle zone.`, hexes: stray })
+	const stray = ids.filter((h) => d.feat[h]?.kind === 'minion' && !isLaneZone(d, d.zone[h]))
+	if (stray.length) out.push({ level: 'warn', text: `${stray.length} minion spawn point${stray.length === 1 ? ' is' : 's are'} outside a lane zone — minions only spawn in the battle zone.`, hexes: stray })
+	const extra = zonesOf(d).filter((z) => z.kind === 'lane' && !LANE_ZONES.includes(z.key) && st(z.key)?.hexes)
+	if (extra.length) out.push({ level: 'warn', text: `More lanes (${extra.map((z) => placeName(z.key)).join(', ')}) are marked on the map, but the game's minion battle still runs Atlantean Beach · Center · Titan Beach.`, hexes: ids.filter((h) => extra.some((z) => z.key === d.zone[h])) })
 	// zones in one piece
-	for (const z of ZONES) {
+	for (const z of zonesOf(d)) {
 		const parts = pieces(ids.filter((h) => d.zone[h] === z.key))
-		if (parts.length > 1) out.push({ level: 'warn', text: `The ${z.key.replace('Orange', 'Atlantean').replace('Blue', 'Titan')} is in ${parts.length} separate pieces.`, hexes: parts.slice(1).flat() })
+		if (parts.length > 1) out.push({ level: 'warn', text: `The ${placeName(z.key)} is in ${parts.length} separate pieces.`, hexes: parts.slice(1).flat() })
 	}
-	const odd = ids.filter((h) => !ZONE_BY[d.zone[h]])
+	const defined = new Set(zonesOf(d).map((z) => z.key))
+	const odd = ids.filter((h) => !defined.has(d.zone[h]))
 	if (odd.length) out.push({ level: 'warn', text: `${odd.length} hex${odd.length === 1 ? ' has' : 'es have'} no zone.`, hexes: odd })
 	// can you walk everywhere?
 	const open = ids.filter((h) => d.feat[h]?.kind !== 'obstacle')

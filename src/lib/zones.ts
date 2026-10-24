@@ -7,8 +7,11 @@ const ODDR = [
 	[[1, 0], [0, -1], [-1, -1], [-1, 0], [-1, 1], [0, 1]],
 	[[1, 0], [1, -1], [0, -1], [-1, 0], [0, 1], [1, 1]]
 ] as const;
-// grounds: the first six are the originals; stone / marsh / ash / snow came with the new map editor (2026-10-23)
-export const ZONE_TYPES = ['forest', 'beach', 'middle', 'terrain', 'baseOrange', 'baseBlue', 'stone', 'marsh', 'ash', 'snow'];
+// grounds: the first six are the originals; stone / marsh / ash / snow came with the new map editor (2026-10-23), the
+// rest on 2026-10-24
+export const ZONE_TYPES = ['forest', 'beach', 'middle', 'terrain', 'baseOrange', 'baseBlue', 'stone', 'marsh', 'ash', 'snow', 'tundra', 'steppe', 'rocky', 'scrub', 'frostwood', 'burntwood'];
+/** grounds that are woods (a jungle when the map names no zones) */
+export const FOREST_TYPES = ['forest', 'marsh', 'frostwood', 'burntwood'];
 
 // odd-r offset → cube, for hex distance
 function cube(id: string): [number, number, number] {
@@ -46,7 +49,7 @@ export function zoneName(map: GameMap | null | undefined, hex: string): string {
 	const z = zoneType(cells, hex, map?.ground);
 	if (z === 'baseOrange') return 'Orange Base';
 	if (z === 'baseBlue') return 'Blue Base';
-	if (z === 'middle' || z === 'terrain' || z === 'stone' || z === 'ash' || z === 'snow') return 'Center';
+	if (!FOREST_TYPES.includes(z) && z !== 'beach') return 'Center';
 
 	// jungle (forest) / beach need a side: whichever base is nearer
 	const oBase = Object.keys(cells).filter((k) => cells[k] === 'baseOrange' || cells[k] === 'baseOrangeSpawn').map(cube);
@@ -54,7 +57,7 @@ export function zoneName(map: GameMap | null | undefined, hex: string): string {
 	const h = cube(hex);
 	const near = (bs: [number, number, number][]) => bs.length ? Math.min(...bs.map((b) => dist(h, b))) : Infinity;
 	const side = near(oBase) <= near(bBase) ? 'Orange' : 'Blue';
-	const kind = z === 'forest' || z === 'marsh' ? 'Jungle' : z === 'beach' ? 'Beach' : 'Lane';
+	const kind = FOREST_TYPES.includes(z) ? 'Jungle' : 'Beach';
 	return `${side} ${kind}`;
 }
 

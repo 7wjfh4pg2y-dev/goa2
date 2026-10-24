@@ -17,10 +17,10 @@
 	import type { GameMap } from '$lib/maps';
 	import fiPainting from '$lib/images/board/forgotten_island.webp';
 	import {
-		GROUNDS, GROUND_BY, ZONES, ZONE_BY, blankDoc, fromMap, toMap, paint, brush, floodFill, pick, hexAtPoint, inGrid, twinOf,
+		GROUNDS, GROUND_BY, zonesOf, zoneDef, addZone, setZoneKind, removeZone, swapZone, ZONE_BY, blankDoc, fromMap, toMap, paint, brush, floodFill, pick, hexAtPoint, inGrid, twinOf,
 		twinDir, symCentre, snapCentre, autoCentre, setSymMode, symmetryReport, symmetryScore, mirrorHalf, validate, zoneStats, minionTotal, autoZones,
 		faceEnemy, growGrid, fitGrid, toImage, calibrate, fitTrace, legacyTrace, startingWave,
-		type Doc, type Ground, type Paint, type Team, type Role, type SymMode, type Trace
+		type Doc, type Ground, type ZoneKind, type Paint, type Team, type Role, type SymMode, type Trace
 	} from '$lib/mapedit';
 
 	const WORK = 'goa2-map-work-v1', SAVED = 'goa2-maps-v1', TRACE = 'goa2-map-trace-v2';
@@ -37,12 +37,27 @@
 
 	// ── the document + history ──
 	let doc: Doc = blankDoc();
+	// every change — a stroke, a button, the map's name, the trace image's place — becomes one undo step: `commit`
+	// files the snapshot the map had before it (strokes and buttons commit at once; typing and slider drags a moment
+	// after they stop)
 	let hist: string[] = [], fut: string[] = [];
-	const freeze = () => JSON.stringify(doc);
-	function push(before: string) { hist = [...hist.slice(-119), before]; fut = []; }
-	function act(fn: () => void) { const b = freeze(); fn(); doc = doc; if (freeze() !== b) push(b); }
-	function undo() { if (!hist.length) return; fut = [...fut, freeze()]; doc = JSON.parse(hist[hist.length - 1]); hist = hist.slice(0, -1); }
-	function redo() { if (!fut.length) return; hist = [...hist, freeze()]; doc = JSON.parse(fut[fut.length - 1]); fut = fut.slice(0, -1); }
+	const freeze = () => JSON.stringify({ doc, trace });
+	let committed = '';
+	function commit() {
+		clearTimeout(commitTimer);
+		const f = freeze();
+		if (!committed) { committed = f; return; }
+		if (f === committed) return;
+		hist = [...hist.slice(-149), committed]; fut = []; committed = f;
+	}
+	let commitTimer: ReturnType<typeof setTimeout> | undefined;
+	function act(fn: () => void) { commit(); fn(); doc = doc; commit(); }
+	function restore(snap: string) {
+		const x = JSON.parse(snap) as { doc: Doc; trace: Trace | null };
+		doc = x.doc; trace = x.trace; committed = snap; saveTrace();
+	}
+	function undo() { commit(); if (!hist.length) return; fut = [...fut, committed]; const s = hist[hist.length - 1]; hist = hist.slice(0, -1); restore(s); }
+	function redo() { commit(); if (!fut.length) return; hist = [...hist, committed]; const s = fut[fut.length - 1]; fut = fut.slice(0, -1); restore(s); }
 
 	// ── tools ──
 	type Layer = 'ground' | 'obstacle' | 'zone' | 'minion' | 'hero' | 'erase';
@@ -77,6 +92,19 @@
 	const ROLES: Role[] = ['melee', 'ranged', 'heavy'];
 	const teamLabel = (t: Team) => (t === 'orange' ? 'Atlanteans' : 'Titans');
 	const zoneLabel = (z: string) => placeName(z);
+	// zones: lane / off-lane / base, and the map's own zones
+	const KINDS: ZoneKind[] = ['lane', 'offlane', 'base'];
+	const KIND_LBL: Record<ZoneKind, string> = { lane: 'Lane', offlane: 'Off-lane', base: 'Base' };
+	const KIND_TIP: Record<ZoneKind, string> = { lane: 'Part of a minion lane — minions spawn and fight here', offlane: 'Off the lanes: jungles, side paths…', base: "A team's base" };
+	$: zoneList = zonesOf(doc);
+	$: curZone = zoneList.find((z) => z.key === zone) ?? null;
+	let newZOpen = false, newZName = '', newZSide: 'pair' | 'none' = 'pair', newZKind: ZoneKind = 'offlane', newZErr = '';
+	function makeZone() {
+		let k: string | null = null;
+		act(() => { k = addZone(doc, newZName, newZSide === 'pair' ? 'orange' : null, newZKind); });
+		if (!k) { newZErr = newZName.trim() ? 'A zone with that name is already on the map.' : ''; return; }
+		zone = k; newZName = ''; newZErr = ''; newZOpen = false; layer = 'zone'; tool = 'paint';
+	}
 
 	// the facing a new spawn point gets: what that team's spawn points already face, else towards the other end
 	function dirFor(t: Team): number {
@@ -99,7 +127,7 @@
 	$: point = layer === 'minion' || layer === 'hero';
 	$: rEff = point ? 0 : radius;
 	$: mirrorOn = mirror && doc.sym.mode !== 'none';
-	$: footColor = layer === 'erase' ? '#ff8a8a' : layer === 'ground' ? GROUND_BY[ground].color : layer === 'zone' ? ZONE_BY[zone]?.color ?? '#fff' : layer === 'minion' || layer === 'hero' ? (team === 'orange' ? '#ffb878' : '#9ccbff') : '#f4dfa8';
+	$: footColor = layer === 'erase' ? '#ff8a8a' : layer === 'ground' ? GROUND_BY[ground].color : layer === 'zone' ? zoneDef(doc, zone)?.color ?? '#fff' : layer === 'minion' || layer === 'hero' ? (team === 'orange' ? '#ffb878' : '#9ccbff') : '#f4dfa8';
 
 	// ── the pointer ──
 	let hover: string | null = null;
@@ -137,7 +165,8 @@
 			});
 			return;
 		}
-		stroke = { before: freeze(), last: h, changed: false };
+		commit();
+		stroke = { before: '', last: h, changed: false };
 		apply(h);
 		if (fill) cUp();
 	}
@@ -156,11 +185,11 @@
 		stroke.last = h;
 	}
 	function cUp() {
-		if (traceDrag) { traceDrag = null; saveTrace(); }
+		if (traceDrag) { traceDrag = null; saveTrace(); commit(); }
 		if (stroke?.changed) {
 			if (layer === 'zone') autoZ = false;
 			else if (autoZ) { autoZones(doc); doc = doc; }
-			push(stroke.before);
+			commit();
 		}
 		stroke = null;
 	}
@@ -194,6 +223,7 @@
 	let showDiff = false;
 	$: issues = validate(doc, { builtinNames });
 	$: stats = zoneStats(doc).filter((s) => s.hexes || ZONE_BY[s.zone]?.lane != null);
+	const zColor = (k: string) => zoneDef(doc, k)?.color ?? '#888';
 	$: diffs = doc.sym.mode === 'none' ? [] : symmetryReport(doc);
 	$: score = symmetryScore(doc);
 	$: centre = doc.sym.mode === 'none' ? null : symCentre(doc);
@@ -352,6 +382,8 @@
 		setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 	}
 
+	// changes that came without a commit (the name, sliders, the trace) become an undo step once they stop
+	$: if (loaded && !stroke && (doc || trace)) { clearTimeout(commitTimer); commitTimer = setTimeout(commit, 450); }
 	// autosave the working map
 	let loaded = false, saveTimer: ReturnType<typeof setTimeout> | undefined;
 	$: if (loaded && doc) { clearTimeout(saveTimer); const m = toMap(doc); saveTimer = setTimeout(() => { saveFail = !store.set(WORK, JSON.stringify(m)); savedAt = Date.now(); }, 350); }
@@ -364,7 +396,8 @@
 	// ── keys ──
 	function keydown(e: KeyboardEvent) {
 		const t = e.target as HTMLElement;
-		if (t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+		// typing in a text box keeps its own keys; checkboxes, sliders and buttons don't (Ctrl+Z after a tick undoes the map)
+		if (t && (t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || (t.tagName === 'INPUT' && /^(text|search|number|)$/.test((t as HTMLInputElement).type)))) return;
 		const k = e.key.toLowerCase();
 		if ((e.ctrlKey || e.metaKey) && k === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
 		if ((e.ctrlKey || e.metaKey) && k === 'y') { e.preventDefault(); redo(); return; }
@@ -387,10 +420,13 @@
 		try { const s = store.get(SAVED); if (s) saved = JSON.parse(s); } catch { /* ignore */ }
 		try { const w = store.get(WORK); if (w) { const m = JSON.parse(w) as GameMap; if (m?.cells && Object.keys(m.cells).length) { doc = fromMap(m); autoZ = false; } } } catch { /* ignore */ }
 		loadTrace();
+		committed = freeze();
 		loaded = true;
 		tick().then(() => canvas?.fit());
 	});
 	$: empty = !Object.keys(doc.ground).length;
+	let startHidden = false; // the 'Start a map' card: gone for good once closed, or once a map / trace is open
+	$: if (!empty || traceSrc) startHidden = true;
 	const g = (h: string) => GROUND_BY[h];
 </script>
 
@@ -448,11 +484,33 @@
 					{/each}
 				</div>
 			{:else if layer === 'zone'}
-				<div class="sw1">
-					{#each ZONES as z (z.key)}
-						<button class="sw" class:on={zone === z.key} on:click={() => (zone = z.key)}><span class="dot" style:background={z.color}></span>{zoneLabel(z.key)}{#if z.lane != null}<em>lane</em>{/if}</button>
+				<div class="sw1 zl">
+					{#each zoneList as z (z.key)}
+						<button class="sw" class:on={zone === z.key} on:click={() => (zone = z.key)}><span class="dot" style:background={z.color}></span><span class="zn">{zoneLabel(z.key)}</span><em class="k-{z.kind}">{KIND_LBL[z.kind]}</em></button>
 					{/each}
 				</div>
+				{#if curZone}
+					<div class="zk">
+						<span class="cap">{zoneLabel(curZone.key)}{curZone.team && zoneDef(doc, swapZone(curZone.key)) ? ' + twin' : ''}</span>
+						<div class="seg full">
+							{#each KINDS as k (k)}<button class:on={curZone.kind === k} on:click={() => act(() => setZoneKind(doc, curZone.key, k))} title={KIND_TIP[k]}>{KIND_LBL[k]}</button>{/each}
+						</div>
+						{#if !ZONE_BY[curZone.key]}<button class="b2 wide danger" class:warn={confirmKey === 'zdel'} on:click={() => sure('zdel', () => { const k = curZone.key; act(() => removeZone(doc, k)); zone = 'Center'; })}>{confirmKey === 'zdel' ? 'Tap again — its hexes go to the Center' : 'Remove this zone'}</button>{/if}
+					</div>
+				{/if}
+				<details class="newz" bind:open={newZOpen}>
+					<summary>+ New zone</summary>
+					<input class="nzn" bind:value={newZName} placeholder="Name, e.g. North Jungle" maxlength="24" on:keydown={(e) => { if (e.key === 'Enter') makeZone(); }} />
+					<div class="seg full">
+						<button class:on={newZSide === 'pair'} on:click={() => (newZSide = 'pair')} title="One for each team (Atlantean X and Titan X) — mirrored painting swaps them">Each side</button>
+						<button class:on={newZSide === 'none'} on:click={() => (newZSide = 'none')} title="One zone, nobody's side">Neutral</button>
+					</div>
+					<div class="seg full">
+						{#each KINDS as k (k)}<button class:on={newZKind === k} on:click={() => (newZKind = k)} title={KIND_TIP[k]}>{KIND_LBL[k]}</button>{/each}
+					</div>
+					<button class="go wide" disabled={!newZName.trim()} on:click={makeZone}>Add zone</button>
+					<p class="hint slot">{newZErr}</p>
+				</details>
 				<label class="ck" title="Bases, jungles and beaches get their zone from the ground (the side by the nearer base); everything else is the Center"><input type="checkbox" bind:checked={autoZ} on:change={() => { if (autoZ) act(() => autoZones(doc)); }} /> Follow the ground</label>
 				<p class="hint">Painting a zone yourself turns this off.</p>
 			{:else if layer === 'minion' || layer === 'hero'}
@@ -508,8 +566,9 @@
 				<button on:click={() => canvas.fit()} aria-label="Fit">⤢</button>
 			</div>
 			<div class="hov" class:gone={!hoverInfo && tool === 'paint'}>{tool === 'calib' ? `Calibrate · ${CAL_STEPS[cal.length]}` : tool === 'centre' ? 'Click where the symmetry centre goes' : tool === 'trace' ? 'Drag to move the trace image' : hoverInfo}</div>
-			{#if empty}
+			{#if empty && !traceSrc && !startHidden}
 				<div class="emptycard">
+					<button class="ecx" on:click={() => (startHidden = true)} aria-label="Hide">✕</button>
 					<b>Start a map</b>
 					<p>Paint hexes with the ground tools, or open Forgotten Island to change it.</p>
 					<div class="row2">
@@ -549,8 +608,8 @@
 					<thead><tr><th>Zone</th><th title="Hexes (open)">Hexes</th><th class="o" title="Atlantean minion spawn points · melee / ranged / heavy">Atl</th><th class="b" title="Titan minion spawn points · melee / ranged / heavy">Tit</th><th title="Hero spawn points">Hero</th></tr></thead>
 					<tbody>
 						{#each stats as s (s.zone)}
-							<tr class:lane={ZONE_BY[s.zone]?.lane != null}>
-								<td><span class="dot" style:background={ZONE_BY[s.zone]?.color ?? '#888'}></span>{zoneLabel(s.zone)}</td>
+							<tr class:lane={zoneDef(doc, s.zone)?.kind === 'lane'}>
+								<td><span class="dot" style:background={zColor(s.zone)}></span>{zoneLabel(s.zone)}</td>
 								<td>{s.hexes}<small>{s.open}</small></td>
 								<td title="{s.minions.orange.melee} melee · {s.minions.orange.ranged} ranged · {s.minions.orange.heavy} heavy">{minionTotal(s, 'orange') || '—'}</td>
 								<td title="{s.minions.blue.melee} melee · {s.minions.blue.ranged} ranged · {s.minions.blue.heavy} heavy">{minionTotal(s, 'blue') || '—'}</td>
@@ -761,6 +820,19 @@
 	.sw { display: flex; align-items: center; gap: 6px; padding: 5px 6px; border-radius: 7px; border: 1px solid transparent; text-align: left; color: var(--ink2); font-size: 12px; min-width: 0; }
 	.sw.on { border-color: var(--brass); color: var(--ink); background: rgba(216, 179, 106, 0.1); }
 	.sw em { margin-left: auto; font-style: normal; font-size: 10px; color: var(--brass); }
+	.sw .zn { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.sw em.k-offlane { color: #8fd0a6; } .sw em.k-base { color: var(--ink3); }
+	.sw1.zl { flex: 0 1 auto; min-height: 64px; overflow: auto; }
+	.zk { display: grid; gap: 5px; border-top: 1px solid var(--hair); padding-top: 7px; }
+	.zk .cap { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-transform: none; letter-spacing: 0; font-size: 12px; color: var(--ink2); }
+	.newz { border-top: 1px solid var(--hair); padding-top: 6px; }
+	.newz summary { cursor: pointer; color: var(--brass-hi); font-size: 12.5px; list-style: none; }
+	.newz[open] { display: grid; gap: 5px; }
+	.newz[open] summary { margin-bottom: 2px; }
+	.nzn { width: 100%; box-sizing: border-box; padding: 6px 8px; border-radius: 7px; border: 1px solid var(--hair); background: rgba(0, 0, 0, 0.25); color: var(--ink); font: inherit; font-size: 12.5px; }
+	.go.wide { width: 100%; }
+	.go:disabled { opacity: 0.45; }
+	.hint.slot { min-height: 1.2em; margin: 0; color: #ffb0a0; }
 	.dot { width: 13px; height: 13px; border-radius: 3px; flex: none; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35); display: inline-block; }
 	.brush.off { opacity: 0.35; pointer-events: none; }
 	.cap { display: block; font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink3); margin: 2px 0 4px; }
@@ -780,8 +852,10 @@
 	.zoom button { width: 34px; height: 34px; border-radius: 9px; background: rgba(6, 21, 38, 0.92); border: 1px solid var(--line); font-size: 17px; }
 	.hov { position: absolute; left: 12px; bottom: 12px; right: 60px; height: 28px; line-height: 28px; padding: 0 10px; border-radius: 8px; background: rgba(6, 21, 38, 0.86); border: 1px solid var(--hair); color: var(--ink2); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; width: fit-content; max-width: calc(100% - 72px); }
 	.hov.gone { opacity: 0; }
-	.emptycard { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(380px, 86%); background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px; display: grid; gap: 8px; text-align: center; }
-	.emptycard b { color: var(--brass-hi); font-size: 16px; }
+	.emptycard { position: absolute; left: 12px; bottom: 12px; width: min(320px, 70%); background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: grid; gap: 6px; text-align: left; z-index: 2; }
+	.emptycard b { color: var(--brass-hi); font-size: 15px; }
+	.ecx { position: absolute; right: 6px; top: 4px; width: 24px; height: 24px; color: var(--ink3); border-radius: 6px; }
+	.ecx:hover { color: var(--ink); background: rgba(255, 255, 255, 0.06); }
 	.emptycard p { color: var(--ink2); margin: 0 0 4px; }
 
 	.side { grid-area: side; background: var(--panel); border-left: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }

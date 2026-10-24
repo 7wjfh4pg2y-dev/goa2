@@ -6,7 +6,7 @@ import { hexCenter } from './board/hexgeo'
 import {
 	fromMap, toMap, blankDoc, paint, paintHex, brush, floodFill, twinOf, symmetryReport, symmetryScore, mirrorHalf,
 	autoCentre, snapCentre, hexAtPoint, hexAtCentre, validate, autoZones, faceEnemy, growGrid, fitGrid, calibrate, toBoard,
-	toImage, legacyTrace, twinDir, startingWave, symCentre, setSymMode, type Doc
+	toImage, legacyTrace, twinDir, startingWave, symCentre, setSymMode, addZone, setZoneKind, removeZone, zonesOf, zoneDef, type Doc
 } from './mapedit'
 
 const FI = fi as unknown as GameMap
@@ -199,5 +199,76 @@ describe('the symmetry centre', () => {
 		for (const h of ['5_5', '9_10']) { const t = twinOf(d, h); if (t) expect(twinOf(d, t)).toBe(h) }
 		setSymMode(d, 'rotate')
 		expect(twinOf(d, twinOf(d, '7_7')!)).toBe('7_7')
+	})
+})
+
+describe('zones: lanes, off-lanes and a map\'s own zones', () => {
+	it('the built-in zones know what they are', () => {
+		const d = blankDoc()
+		expect(zoneDef(d, 'Center')!.kind).toBe('lane')
+		expect(zoneDef(d, 'Orange Jungle')!.kind).toBe('offlane')
+		expect(zoneDef(d, 'Blue Base')!.kind).toBe('base')
+	})
+	it('a new zone on each side comes as a twin pair; a taken or empty name is refused', () => {
+		const d = blankDoc()
+		expect(addZone(d, 'North Jungle', 'orange', 'offlane')).toBe('Orange North Jungle')
+		expect(zonesOf(d).map((z) => z.key)).toContain('Blue North Jungle')
+		expect(zoneDef(d, 'Blue North Jungle')!.team).toBe('blue')
+		expect(addZone(d, 'north jungle', 'orange', 'lane')).toBeNull()
+		expect(addZone(d, '  ', null, 'lane')).toBeNull()
+		expect(addZone(d, 'Top Lane', null, 'lane')).toBe('Top Lane')
+	})
+	it('marking a zone sets its twin too, and a built-in back to its own kind leaves no override', () => {
+		const d = blankDoc()
+		setZoneKind(d, 'Orange Jungle', 'lane')
+		expect(zoneDef(d, 'Orange Jungle')!.kind).toBe('lane')
+		expect(zoneDef(d, 'Blue Jungle')!.kind).toBe('lane')
+		setZoneKind(d, 'Blue Jungle', 'offlane')
+		expect(d.zdefs ?? []).toEqual([])
+	})
+	it('the kinds and own zones survive a save; Forgotten Island gains nothing', () => {
+		const d = blankDoc()
+		paint(d, ['3_3', '4_3'], { layer: 'ground', ground: 'frostwood' })
+		addZone(d, 'Pass', 'orange', 'lane')
+		paint(d, ['3_3'], { layer: 'zone', zone: 'Orange Pass' })
+		const back = fromMap(toMap(d))
+		expect(back.zone['3_3']).toBe('Orange Pass')
+		expect(back.ground['3_3']).toBe('frostwood')
+		expect(zoneDef(back, 'Blue Pass')!.kind).toBe('lane')
+		expect(toMap(fromMap(FI)).zoneKinds).toBeUndefined()
+	})
+	it('a minion spawn in a lane zone of the map\'s own is fine; more lanes than the game plays get a note', () => {
+		const d = fromMap(FI)
+		addZone(d, 'Side Lane', null, 'lane')
+		const h = Object.keys(d.feat).find((x) => d.feat[x].kind === 'minion' && d.zone[x] === 'Center')!
+		d.zone[h] = 'Side Lane'
+		const txt = validate(d).map((i) => i.text).join(' | ')
+		expect(txt).not.toMatch(/outside a lane zone/)
+		expect(txt).toMatch(/More lanes \(Side Lane\)/)
+	})
+	it('removing a zone sends its hexes to the Center', () => {
+		const d = blankDoc()
+		paint(d, ['1_1'], { layer: 'ground', ground: 'middle' })
+		addZone(d, 'Grove', 'orange', 'offlane')
+		paint(d, ['1_1'], { layer: 'zone', zone: 'Blue Grove' })
+		removeZone(d, 'Orange Grove')
+		expect(d.zone['1_1']).toBe('Center')
+		expect(zonesOf(d).some((z) => /Grove/.test(z.key))).toBe(false)
+	})
+	it('mirrored painting gives the twin the other side\'s ground', () => {
+		const d = fromMap(FI)
+		const h = Object.keys(d.ground).find((x) => d.ground[x] === 'middle' && twinOf(d, x) && twinOf(d, x) !== x)!
+		paint(d, [h], { layer: 'ground', ground: 'frostwood' }, true)
+		expect(d.ground[twinOf(d, h)!]).toBe('burntwood')
+		paint(d, [h], { layer: 'ground', ground: 'tundra' }, true)
+		expect(d.ground[twinOf(d, h)!]).toBe('rocky')
+		expect(symmetryReport(d).filter((x) => x.hex === h)).toEqual([])
+	})
+	it('the new woods are jungles when zones follow the ground', () => {
+		const d = fromMap(FI)
+		const h = Object.keys(d.ground).find((x) => d.ground[x] === 'forest' && !d.feat[x])!
+		d.ground[h] = 'burntwood'
+		autoZones(d)
+		expect(d.zone[h]).toMatch(/Jungle$/)
 	})
 })

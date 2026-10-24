@@ -204,9 +204,9 @@
 	const isSpawn = (t: string) => t === 'spawnOrange' || t === 'spawnBlue';
 	const isThrone = (t: string) => t === 'baseOrangeSpawn' || t === 'baseBlueSpawn';
 	const baseTileFor = (t: string) => (t === 'baseOrangeSpawn' ? 'baseOrange' : 'baseBlue');
-	const ZONE_TYPES = ['forest', 'beach', 'middle', 'terrain', 'baseOrange', 'baseBlue', 'stone', 'marsh', 'ash', 'snow'];
+	const ZONE_TYPES = ['forest', 'beach', 'middle', 'terrain', 'baseOrange', 'baseBlue', 'stone', 'marsh', 'ash', 'snow', 'tundra', 'steppe', 'rocky', 'scrub', 'frostwood', 'burntwood'];
 	// the classic look has tiles for the six original grounds only: the map editor's extra grounds borrow the nearest one
-	const CLASSIC: Record<string, string> = { stone: 'middle', ash: 'middle', marsh: 'forest', snow: 'beach' };
+	const CLASSIC: Record<string, string> = { stone: 'middle', ash: 'middle', marsh: 'forest', snow: 'beach', tundra: 'middle', steppe: 'middle', rocky: 'middle', scrub: 'middle', frostwood: 'forest', burntwood: 'forest' };
 	const ODDR = [
 		[[1, 0], [0, -1], [-1, -1], [-1, 0], [-1, 1], [0, 1]],
 		[[1, 0], [1, -1], [0, -1], [-1, 0], [0, 1], [1, 1]]

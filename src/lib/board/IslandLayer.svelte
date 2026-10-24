@@ -44,7 +44,7 @@
 	const roleOf = (m?: string): MinionRole => (m === 'ranged' || m === 'heavy' ? m : 'melee');
 
 	// ── palette: [hue, saturation, lightness] of the tile and of the darker seam under it
-	type Z = 'beach' | 'middle' | 'forest' | 'terrain' | 'baseOrange' | 'baseBlue' | 'stone' | 'marsh' | 'ash' | 'snow';
+	type Z = 'beach' | 'middle' | 'forest' | 'terrain' | 'baseOrange' | 'baseBlue' | 'stone' | 'marsh' | 'ash' | 'snow' | 'tundra' | 'steppe' | 'rocky' | 'scrub' | 'frostwood' | 'burntwood';
 	const PAL: Record<Z, { t: [number, number, number]; g: [number, number, number] }> = {
 		beach: { t: [43, 64, 73], g: [38, 46, 55] },
 		middle: { t: [34, 42, 55], g: [30, 40, 38] },
@@ -56,7 +56,14 @@
 		stone: { t: [214, 9, 50], g: [216, 12, 32] }, // old flagstones
 		marsh: { t: [118, 24, 31], g: [150, 30, 18] }, // dark wet ground
 		ash: { t: [12, 9, 25], g: [8, 14, 13] }, // volcanic ash
-		snow: { t: [206, 34, 88], g: [210, 30, 66] } // packed snow
+		snow: { t: [206, 34, 88], g: [210, 30, 66] }, // packed snow
+		// 2026-10-24: the Titan side runs snow → tundra → steppe → open ground, the Atlantean side ash → rocky → scrub
+		tundra: { t: [178, 11, 63], g: [186, 13, 43] }, // cold grey-green moss
+		steppe: { t: [70, 21, 53], g: [74, 22, 34] }, // frosty olive grass
+		rocky: { t: [20, 12, 37], g: [16, 14, 22] }, // broken dark rock
+		scrub: { t: [35, 34, 47], g: [30, 34, 30] }, // dry brush land
+		frostwood: { t: [192, 24, 44], g: [202, 32, 27] }, // a frozen forest
+		burntwood: { t: [22, 15, 22], g: [14, 18, 12] } // a burnt forest
 	};
 	const ZS = Object.keys(PAL) as Z[];
 	const VARIANTS = [-2.6, 0, 2.6]; // three slightly different lightnesses, so no two neighbours match exactly
@@ -239,6 +246,62 @@
 				for (let i = 0; i < 2; i++) patch(`s${i}`, at(t.c, h(60 + i) * 360, size * 0.42 * h(62 + i)), 0.26 + 0.2 * h(64 + i), 0.16 + 0.12 * h(66 + i), h(68 + i) * 180, i ? 'rgba(255,255,255,.4)' : 'rgba(90,130,170,.14)');
 				if (!t.spawn && h(54) < 0.4) put(low, 1, 'snow', at(t.c, h(55) * 360, size * (0.3 + 0.2 * h(56))), 1);
 				if (!t.spawn && h(51) < 0.25) put(low, 0, 'icecrack', at(t.c, h(52) * 360, size * 0.22 * h(53)), 0.9);
+			} else if (t.z === 'tundra') {
+				// cold moss: frost patches, dry tufts, a few stones
+				for (let i = 0; i < 2; i++) patch(`t${i}`, at(t.c, h(60 + i) * 360, size * 0.4 * h(62 + i)), 0.24 + 0.2 * h(64 + i), 0.15 + 0.12 * h(66 + i), h(68 + i) * 180, i ? 'rgba(240,250,255,.28)' : 'rgba(60,90,90,.18)');
+				if (!t.spawn) {
+					if (h(40) < 0.5) put(low, 0, 'tuft-dry', at(t.c, h(41) * 360, size * (0.3 + 0.25 * h(42))), 0.9);
+					if (h(43) < 0.35) put(low, 1, 'pebbles', at(t.c, h(44) * 360, size * (0.35 + 0.2 * h(45))), 0.85);
+					if (h(46) < 0.18) put(low, 2, 'snow', at(t.c, h(47) * 360, size * (0.3 + 0.2 * h(48))), 0.8);
+				}
+			} else if (t.z === 'steppe') {
+				// frosty grassland: tufts, now and then a pale frost patch
+				if (h(60) < 0.45) patch('s0', at(t.c, h(61) * 360, size * 0.35 * h(62)), 0.22 + 0.16 * h(63), 0.14 + 0.1 * h(64), h(65) * 180, 'rgba(235,245,255,.2)');
+				if (!t.spawn) {
+					put(low, 0, h(40) < 0.6 ? 'tuft' : 'tuft-dry', at(t.c, h(41) * 360, size * (0.25 + 0.3 * h(42))), 0.9);
+					if (h(43) < 0.5) put(low, 1, 'tuft-dry', at(t.c, h(44) * 360, size * (0.4 + 0.2 * h(45))), 0.8);
+					if (h(46) < 0.18) put(low, 2, 'pebbles', at(t.c, h(47) * 360, size * (0.35 + 0.2 * h(48))), 0.8);
+				}
+			} else if (t.z === 'rocky') {
+				// broken rock: boulders on the rim, cracks and gravel
+				if (!t.spawn) {
+					if (h(40) < 0.55) put(low, 0, 'crack', at(t.c, h(41) * 360, size * (0.2 + 0.3 * h(42))), 1.05);
+					if (h(43) < 0.5) put(low, 1, 'pebbles', at(t.c, h(44) * 360, size * (0.3 + 0.25 * h(45))), 1);
+				}
+				const n = t.spawn ? (h(70) < 0.4 ? 1 : 0) : h(70) < 0.55 ? 1 : h(70) < 0.8 ? 2 : 0, a0 = h(71) * 360;
+				for (let i = 0; i < n; i++) put(tall, 3 + i, 'rock', at(t.c, a0 + i * 160, size * (0.55 + 0.1 * h(72 + i))), 0.75 + 0.35 * h(74 + i), { sr: 13 });
+			} else if (t.z === 'scrub') {
+				// dry brush: tufts, a shrub, cracked earth
+				if (!t.spawn) {
+					put(low, 0, 'tuft-dry', at(t.c, h(40) * 360, size * (0.25 + 0.3 * h(41))), 1);
+					if (h(42) < 0.4) put(low, 1, 'shrub', at(t.c, h(43) * 360, size * (0.4 + 0.2 * h(44))), 0.85);
+					else if (h(42) < 0.65) put(low, 1, 'crack', at(t.c, h(43) * 360, size * (0.3 + 0.2 * h(44))), 0.9);
+					if (h(45) < 0.3) put(low, 2, 'pebbles', at(t.c, h(46) * 360, size * (0.4 + 0.15 * h(47))), 0.75);
+				}
+			} else if (t.z === 'frostwood') {
+				// a frozen forest: snow on the floor, frosted pines and ice round the rim
+				for (let i = 0; i < 2; i++) patch(`w${i}`, at(t.c, h(60 + i) * 360, size * 0.4 * h(62 + i)), 0.26 + 0.18 * h(64 + i), 0.16 + 0.12 * h(66 + i), h(68 + i) * 180, i ? 'rgba(240,250,255,.32)' : 'rgba(10,40,60,.22)');
+				const n = t.spawn ? 2 : 3 + (h(70) > 0.5 ? 1 : 0), a0 = h(71) * 360;
+				for (let i = 0; i < n; i++) {
+					const p = at(t.c, a0 + (i * 360) / n + (h(72 + i) - 0.5) * 44, size * (0.52 + 0.13 * h(76 + i)));
+					const w = h(80 + i), sc = 0.85 + 0.35 * h(84 + i);
+					if (w < 0.5) put(tall, i, 'pine', p, sc * 0.8, { sr: 20 });
+					else if (w < 0.75) put(tall, i, 'frostbush', p, sc * 0.85, { sr: 14 });
+					else if (w < 0.88) put(tall, i, 'shard', p, sc * 0.75, { shade: true });
+					else put(low, i, 'snow', p, sc * 0.9);
+				}
+			} else if (t.z === 'burntwood') {
+				// a burnt forest: ash on the floor, dead trees and stumps round the rim, an ember still glowing
+				for (let i = 0; i < 2; i++) patch(`b${i}`, at(t.c, h(60 + i) * 360, size * 0.4 * h(62 + i)), 0.26 + 0.18 * h(64 + i), 0.16 + 0.12 * h(66 + i), h(68 + i) * 180, i ? 'rgba(120,110,100,.22)' : 'rgba(0,0,0,.3)');
+				const n = t.spawn ? 2 : 3, a0 = h(71) * 360;
+				for (let i = 0; i < n; i++) {
+					const p = at(t.c, a0 + (i * 360) / n + (h(72 + i) - 0.5) * 44, size * (0.53 + 0.12 * h(76 + i)));
+					const w = h(80 + i), sc = 0.85 + 0.3 * h(84 + i);
+					if (w < 0.45) put(tall, i, 'deadtree', p, sc * 0.7, { shade: true });
+					else if (w < 0.75) put(low, i, 'stump', p, sc * 0.9);
+					else put(low, i, 'charlog', p, sc * 0.85);
+				}
+				if (!t.spawn && h(90) < 0.3) put(low, 9, 'ember', at(t.c, h(91) * 360, size * 0.3 * h(92)), 0.9);
 			}
 			// the jungle creeps out: grass, and sometimes a fern, where open ground meets forest
 			if (t.z === 'beach' || t.z === 'middle' || t.z === 'stone') {
@@ -484,6 +547,46 @@
 	</g>
 	<g id="{P}deadtree-shade" fill="none" stroke="currentColor" stroke-linecap="round">
 		{#each [0, 68, 141, 207, 289] as a}<path transform="rotate({a})" d="M0 0C4 -8 2 -16 6 -24M3.6 -13C9 -16 13 -15 17 -19M6 -24C10 -27 12 -31 15 -32" stroke-width="4.6" />{/each}
+	</g>
+	<!-- ── the side forests and rough ground (2026-10-24) ── -->
+	<!-- a frosted pine from above: needle stars, dark under light, snow on the tips -->
+	<g id="{P}pine">
+		{#each Array(8) as _, n}<path transform="rotate({n * 45})" d="M0 0L5 -6L0 -23L-5 -6Z" fill="#1f4a4e" />{/each}
+		{#each Array(8) as _, n}<path transform="rotate({n * 45 + 22.5})" d="M0 0L4 -5L0 -17L-4 -5Z" fill="#2f6a6c" />{/each}
+		{#each Array(8) as _, n}<path transform="rotate({n * 45})" d="M0 -14L2.6 -18L0 -22L-2.6 -18Z" fill="#eef8ff" fill-opacity=".9" />{/each}
+		{#each Array(6) as _, n}<path transform="rotate({n * 60 + 10})" d="M0 0L2.8 -4L0 -10L-2.8 -4Z" fill="#dff1fa" fill-opacity=".8" />{/each}
+		<circle r="2.6" fill="#f4fbff" />
+	</g>
+	<!-- a frosted bush -->
+	<g id="{P}frostbush">
+		<circle cx="-6" cy="3.5" r="9" fill="#2c5a63" /><circle cx="6" cy="4" r="9.4" fill="#2c5a63" /><circle cx="0" cy="-6" r="9.6" fill="#2c5a63" />
+		<circle cx="-5" cy="2" r="6.6" fill="#4a8790" /><circle cx="5" cy="2.6" r="7" fill="#4a8790" /><circle cx="0" cy="-5.6" r="7" fill="#4a8790" />
+		<circle cx="-3" cy="-3" r="4" fill="#e8f6ff" fill-opacity=".85" /><circle cx="5" cy="1" r="2.6" fill="#e8f6ff" fill-opacity=".8" /><circle cx="-4" cy="5" r="2" fill="#e8f6ff" fill-opacity=".7" />
+	</g>
+	<!-- a burnt stump: charred rings, cracked bark -->
+	<g id="{P}stump">
+		<circle r="8.5" fill="#1d1612" stroke="#0c0907" stroke-width="1" />
+		<circle r="6" fill="none" stroke="#3a2c22" stroke-width="1" /><circle r="3.2" fill="none" stroke="#3a2c22" stroke-width=".9" />
+		<path d="M-8 -2L-3 -1M7 3L2 1M1 -8L0 -3" stroke="#0c0907" stroke-width="1.2" stroke-linecap="round" />
+		<circle cx="1.5" cy="-1" r="1.1" fill="#ff7a2a" fill-opacity=".75" />
+	</g>
+	<!-- a charred log -->
+	<g id="{P}charlog">
+		<rect x="-15" y="-4.2" width="30" height="8.4" rx="4.2" fill="#241b15" stroke="#0e0a08" stroke-width="1" />
+		<path d="M-10 -1.4H4M-5 1.8H9" stroke="#0e0a08" stroke-width="1.2" stroke-linecap="round" fill="none" />
+		<path d="M-6 -1.6H-2M5 1.6H7" stroke="#ff7a2a" stroke-opacity=".6" stroke-width="1" stroke-linecap="round" />
+		<ellipse cx="13.6" cy="0" rx="2.8" ry="3.8" fill="#3a2c22" stroke="#0e0a08" stroke-width=".9" />
+	</g>
+	<!-- an ember still glowing in the ash -->
+	<g id="{P}ember">
+		<circle r="7" fill="#ff6a1a" fill-opacity=".16" /><circle r="3.6" fill="#ff7a2a" fill-opacity=".45" />
+		<circle r="2" fill="#ffc06a" /><circle cx="5" cy="3" r="1" fill="#ff9a3a" /><circle cx="-4" cy="4" r=".8" fill="#ff9a3a" />
+	</g>
+	<!-- a small boulder with a smaller one beside it -->
+	<g id="{P}rock">
+		<path d="M-11 2L-8 -7L0 -10L8 -6L10 3L3 8L-7 7Z" fill="#5b524c" stroke="#2a2420" stroke-width="1.1" stroke-linejoin="round" />
+		<path d="M-8 -6L0 -9L7 -5L1 -2L-5 -2Z" fill="#7d726a" />
+		<path d="M9 6L14 3L17 7L13 11L9 10Z" fill="#544b45" stroke="#2a2420" stroke-width=".9" stroke-linejoin="round" />
 	</g>
 	<!-- the purple fan plant: a burst of spines with bright tips -->
 	<g id="{P}anemone">
