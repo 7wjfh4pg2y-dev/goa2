@@ -272,3 +272,18 @@ describe('zones: lanes, off-lanes and a map\'s own zones', () => {
 		expect(d.zone[h]).toMatch(/Jungle$/)
 	})
 })
+
+describe('ground under obstacles', () => {
+	it("Forgotten Island's boulders keep the stone tile (no ground written)", () => {
+		const d = fromMap(fi as unknown as GameMap)
+		const rock = Object.keys(d.feat).find((h) => d.feat[h]?.kind === 'obstacle')!
+		expect((d.feat[rock] as { bare?: boolean }).bare).toBe(true)
+		expect(toMap(d).ground?.[rock]).toBeUndefined()
+	})
+	it('an obstacle placed in the editor sits on its ground, and an empty hex takes its neighbours\' ground', () => {
+		const d = fromMap(fi as unknown as GameMap)
+		const beach = Object.keys(d.ground).find((h) => d.ground[h] === 'beach' && !d.feat[h])!
+		paint(d, [beach], { layer: 'obstacle' })
+		expect(toMap(d).ground?.[beach]).toBe('beach')
+	})
+})

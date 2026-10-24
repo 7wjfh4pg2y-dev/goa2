@@ -57,11 +57,11 @@
 	})();
 	$: ids = hexIds(doc);
 	// one path per ground
-	$: groundPaths = GROUNDS.map((g) => ({ key: g.key, color: g.color, d: ids.filter((h) => doc.ground[h] === g.key && doc.feat[h]?.kind !== 'obstacle').map((h) => poly(hexCenter(h, S), S)).join('') }));
+	$: groundPaths = GROUNDS.map((g) => ({ key: g.key, color: g.color, d: ids.filter((h) => doc.ground[h] === g.key && !isBare(h)).map((h) => poly(hexCenter(h, S), S)).join('') }));
 	$: zoneDefs = zonesOf(doc);
 	$: zonePaths = zoneDefs.map((z) => ({ key: z.key, color: z.color, d: ids.filter((h) => doc.zone[h] === z.key).map((h) => poly(hexCenter(h, S), S)).join('') }));
 	$: zoneLines = showZones ? borderPath(ids, (h) => (doc.ground[h] ? doc.zone[h] ?? '' : undefined), S) : '';
-	$: seams = borderPath(ids, (h) => (doc.ground[h] ? (doc.feat[h]?.kind === 'obstacle' ? '#' : doc.ground[h]) : undefined), S);
+	$: seams = borderPath(ids, (h) => (doc.ground[h] ? (isBare(h) ? '#' : doc.ground[h]) : undefined), S);
 	// a dark rim round every hex, under the ground: what shows past the outer hexes is the coast
 	$: coast = ids.map((h) => poly(hexCenter(h, S), S)).join('');
 	$: labels = showZones
@@ -71,9 +71,11 @@
 			return { key: `${z.key}${i}`, text: placeName(z.key), x: c.x, y: c.y, color: z.color };
 		}))
 		: [];
+	// an obstacle stands on its ground; only one from a map that names none (Forgotten Island) keeps the stone tile
+	const isBare = (h: string) => { const f = doc.feat[h]; return f?.kind === 'obstacle' && !!f.bare; };
 	$: obstacles = ids.filter((h) => doc.feat[h]?.kind === 'obstacle').map((h) => {
 		const f = doc.feat[h] as { scatter?: string };
-		return { id: h, c: hexCenter(h, S), dot: f.scatter ? SCATTER_BY_KEY[f.scatter]?.dot : null };
+		return { id: h, c: hexCenter(h, S), bare: !!(f as { bare?: boolean }).bare, dot: f.scatter ? SCATTER_BY_KEY[f.scatter]?.dot : null };
 	});
 	$: minions = ids.flatMap((h) => { const f = doc.feat[h]; return f?.kind === 'minion' ? [{ id: h, c: hexCenter(h, S), team: f.team, role: f.role, dir: f.dir }] : []; });
 	$: heroes = ids.flatMap((h) => { const f = doc.feat[h]; return f?.kind === 'hero' ? [{ id: h, c: hexCenter(h, S), team: f.team }] : []; });
@@ -202,7 +204,7 @@
 	<g class="land" opacity={trace && traceSrc && traceOn ? 0.82 : 1}>
 		<path d={coast} class="coast" />
 		{#each groundPaths as g (g.key)}{#if g.d}<path d={g.d} fill={g.color} />{/if}{/each}
-		{#if obstacles.length}<path d={obstacles.map((o) => poly(o.c, S)).join('')} fill="#2b2f37" />{/if}
+		{#if obstacles.length}<path d={obstacles.filter((o) => o.bare).map((o) => poly(o.c, S)).join('')} fill="#2b2f37" />{/if}
 		<path d={seams} class="seam" stroke-width={S * 0.05} />
 	</g>
 	{#if showZones}

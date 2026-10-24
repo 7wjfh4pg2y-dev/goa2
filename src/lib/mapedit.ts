@@ -13,7 +13,7 @@ export type Ground = 'forest' | 'beach' | 'middle' | 'stone' | 'marsh' | 'ash' |
 export type Feature =
 	| { kind: 'minion'; team: Team; role: Role; dir: number }
 	| { kind: 'hero'; team: Team }
-	| { kind: 'obstacle'; scatter?: string }
+	| { kind: 'obstacle'; scatter?: string; bare?: boolean } // bare = a map that names no ground under it (Forgotten Island): the plain stone tile
 export type SymMode = 'none' | 'rotate' | 'mirrorV' | 'mirrorH'
 
 export interface Doc {
@@ -180,7 +180,7 @@ export function fromMap(m: GameMap): Doc {
 			const x = m.meta?.[id], role = x?.m === 'ranged' || x?.m === 'heavy' ? x.m : 'melee'
 			d.feat[id] = { kind: 'minion', team: t === 'spawnOrange' ? 'orange' : 'blue', role, dir: ((x?.dir ?? 0) % 6 + 6) % 6 }
 		} else if (t === 'baseOrangeSpawn' || t === 'baseBlueSpawn') d.feat[id] = { kind: 'hero', team: t === 'baseOrangeSpawn' ? 'orange' : 'blue' }
-		else if (t === 'terrain') d.feat[id] = m.scatter?.[id] ? { kind: 'obstacle', scatter: m.scatter[id] } : { kind: 'obstacle' }
+		else if (t === 'terrain') d.feat[id] = { kind: 'obstacle', ...(m.scatter?.[id] ? { scatter: m.scatter[id] } : {}), ...(isGround(m.ground?.[id]) ? {} : { bare: true }) }
 	}
 	let mc = 0, mr = 0
 	for (const id in cells) { const [c, r] = parse(id); mc = Math.max(mc, c + 1); mr = Math.max(mr, r + 1) }
@@ -222,7 +222,7 @@ export function toMap(d: Doc): GameMap {
 		const f = d.feat[id], g = d.ground[id]
 		zones[id] = d.zone[id] ?? 'Center'
 		if (!f) { cells[id] = g; continue }
-		ground[id] = g
+		if (!(f.kind === 'obstacle' && f.bare)) ground[id] = g
 		if (f.kind === 'minion') {
 			cells[id] = f.team === 'orange' ? 'spawnOrange' : 'spawnBlue'
 			meta[id] = { m: f.role, dir: f.dir, ...(zones[id] === START_ZONE ? { start: true } : {}) }
@@ -261,6 +261,14 @@ function guessZone(d: Doc, id: string): string {
 	const g = d.ground[id]
 	return g === 'baseOrange' ? 'Orange Base' : g === 'baseBlue' ? 'Blue Base' : 'Center'
 }
+/** what an empty hex most likely lies on: its neighbours' commonest ground (else open ground) */
+function groundGuess(d: Doc, id: string): Ground {
+	const n: Record<string, number> = {}
+	for (const h of neighbours(id)) { const g = d.ground[h]; if (g && d.feat[h]?.kind !== 'obstacle') n[g] = (n[g] ?? 0) + 1 }
+	let best: Ground = 'middle', bc = 0
+	for (const g in n) if (n[g] > bc && g !== 'baseOrange' && g !== 'baseBlue') { bc = n[g]; best = g as Ground }
+	return best
+}
 const ensure = (d: Doc, id: string, g: Ground = 'middle') => {
 	if (!d.ground[id]) { d.ground[id] = g; d.zone[id] = guessZone(d, id) }
 }
@@ -276,7 +284,7 @@ export function paintHex(d: Doc, id: string, p: Paint): void {
 			return
 		}
 		case 'zone': if (d.ground[id]) d.zone[id] = p.zone; return
-		case 'obstacle': ensure(d, id); d.feat[id] = p.scatter ? { kind: 'obstacle', scatter: p.scatter } : { kind: 'obstacle' }; return
+		case 'obstacle': ensure(d, id, groundGuess(d, id)); d.feat[id] = p.scatter ? { kind: 'obstacle', scatter: p.scatter } : { kind: 'obstacle' }; return
 		case 'minion': ensure(d, id); d.feat[id] = { kind: 'minion', team: p.team, role: p.role, dir: ((p.dir % 6) + 6) % 6 }; return
 		case 'hero': ensure(d, id, p.team === 'orange' ? 'baseOrange' : 'baseBlue'); d.feat[id] = { kind: 'hero', team: p.team }; return
 		case 'clear': delete d.feat[id]; return
