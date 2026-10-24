@@ -39,7 +39,7 @@ export const GROUNDS: Array<{ key: Ground; label: string; color: string }> = [
 	{ key: 'middle', label: 'Open ground', color: '#a08a63' },
 	{ key: 'stone', label: 'Flagstones', color: '#7b818c' },
 	{ key: 'marsh', label: 'Marsh', color: '#3a5a3a' },
-	{ key: 'ash', label: 'Magma waste', color: '#7a2a16' },
+	{ key: 'ash', label: 'Magma waste', color: '#3a1d17' },
 	{ key: 'snow', label: 'Snow', color: '#dbe8f4' },
 	// the Titan side's run snow → tundra → steppe → open ground, the Atlantean side's magma waste (`ash`) → rocky → scrub → open ground,
 	// and the two side forests (2026-10-24)

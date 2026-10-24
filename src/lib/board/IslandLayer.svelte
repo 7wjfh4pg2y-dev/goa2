@@ -55,7 +55,7 @@
 		// the map editor's extra grounds (2026-10-23)
 		stone: { t: [214, 9, 50], g: [216, 12, 32] }, // old flagstones
 		marsh: { t: [118, 24, 31], g: [150, 30, 18] }, // dark wet ground
-		ash: { t: [8, 44, 23], g: [4, 62, 11] }, // a magma wasteland: dark red basalt (2026-10-24; was grey ash)
+		ash: { t: [8, 20, 15], g: [4, 30, 7] }, // a magma wasteland: near-black basalt, the red is in its glowing cracks (2026-10-24; was grey ash — a red tile read as the Atlantean base)
 		snow: { t: [206, 34, 88], g: [210, 30, 66] }, // packed snow
 		// 2026-10-24: the Titan side runs snow → tundra → steppe → open ground, the Atlantean side ash → rocky → scrub
 		tundra: { t: [178, 11, 63], g: [186, 13, 43] }, // cold grey-green moss
@@ -114,14 +114,17 @@
 	const RAISED: Record<string, { r: number; lift: number; side: string; square?: boolean }> = {
 		pillar: { r: 11, lift: 15, side: '#5d626d' },
 		runestone: { r: 9.5, lift: 21, side: '#566070' },
+		atlpillar: { r: 10, lift: 20, side: '#8a4a1c' },
 		cube: { r: 11, lift: 11, side: '#1f6f73', square: true },
 		orb: { r: 4.6, lift: 17, side: '#3c8a3c' }
 	};
+	// boulder variants: drawn as the plain boulder with a coat of their own
+	const ROCKS = new Set(['mossy', 'snowrock', 'magmarock']);
 	$: features = (() => {
 		const out: Record<string, { ref: string; style?: string }> = {};
 		for (const id of ids) {
 			const kind = cells[id] === 'terrain' ? SCATTER_BY_KEY[scatter[id]] : undefined;
-			if (kind && kind.ref !== 'mossy') out[id] = { ref: kind.ref, style: kind.style };
+			if (kind && !ROCKS.has(kind.ref)) out[id] = { ref: kind.ref, style: kind.style };
 		}
 		return out;
 	})();
@@ -136,6 +139,9 @@
 			body: blob(c, r, t.id, 100), top: blob(c, r * 0.7, t.id, 100), glint: blob(c, r * 0.4, t.id, 100),
 			pebble: hexHash(t.id, 9) > 0.45 ? blob({ x: t.c.x + Math.cos(pa) * size * 0.62, y: t.c.y + Math.sin(pa) * size * 0.62 }, size * 0.2, t.id, 200, 7) : '',
 			moss: scatter[t.id] === 'mossy' ? blob({ x: c.x + (hexHash(t.id, 11) - 0.5) * r * 0.5, y: c.y + (hexHash(t.id, 12) - 0.5) * r * 0.5 }, r * 0.42, t.id, 300, 7) : '',
+			kind: scatter[t.id] === 'snowrock' ? 'snow' : scatter[t.id] === 'magmarock' ? 'magma' : '',
+			cap: scatter[t.id] === 'snowrock' ? blob({ x: c.x + (hexHash(t.id, 15) - 0.5) * r * 0.3, y: c.y + (hexHash(t.id, 16) - 0.5) * r * 0.3 }, r * 0.55, t.id, 400, 8) : '',
+			cx: c.x, cy: c.y, r,
 			bloom: scatter[t.id] === 'mossy' && hexHash(t.id, 10) > 0.5 ? { x: c.x + (hexHash(t.id, 13) - 0.5) * r * 0.7, y: c.y + (hexHash(t.id, 14) - 0.5) * r * 0.7 } : null
 		};
 	});
@@ -236,7 +242,7 @@
 				for (let i = 0; i < n; i++) put(low, 3 + i, h(80 + i) < 0.6 ? 'tuft' : 'fern', at(t.c, a0 + i * 170, size * (0.55 + 0.1 * h(76 + i))), 0.85);
 			} else if (t.z === 'ash') {
 				// a magma wasteland: a hot glow under the crust, glowing veins, embers, now and then a lava pool
-				patch('h0', at(t.c, h(60) * 360, size * 0.3 * h(61)), 0.3 + 0.16 * h(62), 0.2 + 0.12 * h(63), h(64) * 180, 'rgba(255,96,24,.2)');
+				patch('h0', at(t.c, h(60) * 360, size * 0.3 * h(61)), 0.3 + 0.16 * h(62), 0.2 + 0.12 * h(63), h(64) * 180, 'rgba(255,50,20,.12)');
 				if (!t.spawn) {
 					if (h(40) < 0.75) put(low, 0, 'vein', at(t.c, h(41) * 360, size * (0.15 + 0.25 * h(42))), 1 + 0.2 * h(43));
 					if (h(44) < 0.45) put(low, 1, 'ember', at(t.c, h(45) * 360, size * (0.35 + 0.2 * h(46))), 0.85);
@@ -325,6 +331,12 @@
 	// where a drawing goes; an upright one keeps its head up-screen however the board is turned (so `rot` and `down` are passed in to be tracked)
 	const tf = (d: Deco, rot = 0, down = { x: 0, y: 1 }) =>
 		d.upright ? `translate(${(d.x + down.x * d.k * 14).toFixed(1)} ${(d.y + down.y * d.k * 14).toFixed(1)}) rotate(${-rot}) scale(${d.k.toFixed(3)})` : `translate(${d.x.toFixed(1)} ${d.y.toFixed(1)}) rotate(${d.r}) scale(${d.k.toFixed(3)})`;
+	// boulder colours: body, its edge, the lit top, its edge, the glint
+	const ROCK_COL: Record<string, string[]> = {
+		plain: ['#434853', '#22262e', '#6a707c', '#7d8490', '#8b919c'],
+		snow: ['#5b6a7a', '#2c3745', '#8ea2b6', '#a9bccd', '#d8e8f5'],
+		magma: ['#1f1715', '#0b0706', '#3a2a25', '#4a352d', '#5a4036']
+	};
 	const PENTA = 'M0 -29L17 23.5L-27.6 -9L27.6 -9L-17 23.5Z'; // a five-point star drawn in one line
 </script>
 
@@ -638,6 +650,13 @@
 		<path d="M-2 -6V5M-2 -6L3 -2L-2 1M2 5L-2 1" fill="none" stroke="#7df3ff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
 		<path d="M-2 -6V5M-2 -6L3 -2L-2 1M2 5L-2 1" fill="none" stroke="#e4fdff" stroke-width=".5" stroke-linecap="round" stroke-linejoin="round" />
 	</g>
+	<!-- the Atlanteans' pillar (the Titans have the rune stone): a copper column, a brass gear crown, a glowing core -->
+	<g id="{P}atlpillar-top">
+		<circle r="10.5" fill="url(#{P}brass)" stroke="#4a2608" stroke-width="1.3" />
+		{#each [0, 45, 90, 135, 180, 225, 270, 315] as a}<rect transform="rotate({a})" x="-2" y="-12.6" width="4" height="4" rx=".8" fill="#e08c35" stroke="#5a2f0b" stroke-width=".8" />{/each}
+		<circle r="6.2" fill="url(#{P}slate)" stroke="#4a2608" stroke-width="1" />
+		<circle r="3.4" fill="#ff9a3a" /><circle r="1.6" fill="#ffe2a8" />
+	</g>
 	<g id="{P}cube-top">
 		<rect x="-11" y="-11" width="22" height="22" rx="2.2" fill="#3fb8b0" stroke="#0f4a4d" stroke-width="1.4" />
 		<rect x="-7" y="-7" width="14" height="14" rx="1.4" fill="none" stroke="#a6fff5" stroke-opacity=".8" stroke-width="1.3" />
@@ -654,6 +673,7 @@
 		<circle r="7" fill="#2f6f30" />
 	</g>
 	<g id="{P}pillar-foot"><circle r="13.5" fill="#4a4f59" /><path d="M13 9L21 12L18 18L11 15Z" fill="#6f7580" stroke="#3c4049" stroke-width="1" stroke-linejoin="round" /></g>
+	<g id="{P}atlpillar-foot"><path d="M0 -14L12 -7V7L0 14L-12 7V-7Z" fill="#5a3a24" stroke="#2e1c10" stroke-width="1" /><circle r="3" cx="8" cy="0" fill="#c4612c" /><circle r="3" cx="-8" cy="0" fill="#c4612c" /></g>
 	<g id="{P}runestone-foot"><ellipse rx="13" ry="11" fill="#3f5a34" /></g>
 	<g id="{P}cube-foot"><rect x="-13" y="-13" width="26" height="26" rx="3" fill="#35542a" /></g>
 
@@ -725,9 +745,12 @@
 	{#each rocks as r (r.id)}
 		<path d={r.body} transform="translate({(down.x * size * 0.17).toFixed(1)} {(down.y * size * 0.17).toFixed(1)})" fill="#0a0f18" fill-opacity=".4" />
 		{#if r.pebble}<path d={r.pebble} fill="#4a4e58" stroke="#262a33" stroke-width={size * 0.035} stroke-linejoin="round" />{/if}
-		<path d={r.body} fill="#434853" stroke="#22262e" stroke-width={size * 0.06} stroke-linejoin="round" />
-		<path d={r.top} transform="translate({(-down.x * size * 0.13).toFixed(1)} {(-down.y * size * 0.13).toFixed(1)})" fill="#6a707c" stroke="#7d8490" stroke-width={size * 0.05} stroke-linejoin="round" />
-		<path d={r.glint} transform="translate({(-down.x * size * 0.22).toFixed(1)} {(-down.y * size * 0.22).toFixed(1)})" fill="#8b919c" fill-opacity=".75" />
+		{@const rc = ROCK_COL[r.kind || 'plain']}
+		<path d={r.body} fill={rc[0]} stroke={rc[1]} stroke-width={size * 0.06} stroke-linejoin="round" />
+		<path d={r.top} transform="translate({(-down.x * size * 0.13).toFixed(1)} {(-down.y * size * 0.13).toFixed(1)})" fill={rc[2]} stroke={rc[3]} stroke-width={size * 0.05} stroke-linejoin="round" />
+		<path d={r.glint} transform="translate({(-down.x * size * 0.22).toFixed(1)} {(-down.y * size * 0.22).toFixed(1)})" fill={rc[4]} fill-opacity=".75" />
+		{#if r.cap}<path d={r.cap} transform="translate({(-down.x * size * 0.2).toFixed(1)} {(-down.y * size * 0.2).toFixed(1)})" fill="#f4fbff" stroke="#bcdcf2" stroke-width={size * 0.03} stroke-linejoin="round" />{/if}
+		{#if r.kind === 'magma'}<use href="#{P}vein" transform="translate({(r.cx - down.x * size * 0.15).toFixed(1)} {(r.cy - down.y * size * 0.15).toFixed(1)}) rotate({Math.round(hexHash(r.id, 17) * 360)}) scale({(r.r / 34).toFixed(3)})" />{/if}
 		{#if r.moss}<path d={r.moss} transform="translate({(-down.x * size * 0.15).toFixed(1)} {(-down.y * size * 0.15).toFixed(1)})" fill="#5f9440" fill-opacity=".9" stroke="#3b6a2a" stroke-width={size * 0.02} stroke-linejoin="round" />{/if}
 		{#if r.bloom}
 			<circle cx={r.bloom.x - down.x * size * 0.15} cy={r.bloom.y - down.y * size * 0.15} r={size * 0.045} fill="#e23b4e" /><circle cx={r.bloom.x - down.x * size * 0.15 + size * 0.09} cy={r.bloom.y - down.y * size * 0.15 + size * 0.05} r={size * 0.035} fill="#ff7a6a" />

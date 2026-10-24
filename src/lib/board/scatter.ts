@@ -4,7 +4,7 @@
 export type ScatterKind = {
 	key: string
 	label: string
-	/** the drawing in IslandLayer's <defs>; 'mossy' is the boulder with moss on it */
+	/** the drawing in IslandLayer's <defs>; 'mossy' / 'snowrock' / 'magmarock' are the boulder with a coat of moss / snow / glowing cracks */
 	ref: string
 	/** CSS variables for the drawing (crystal colours) */
 	style?: string
@@ -18,6 +18,8 @@ const crystal = (name: string, c1: string, c2: string, c3: string, cg: string): 
 
 export const SCATTER: ScatterKind[] = [
 	{ key: 'mossy', label: 'Mossy rock', ref: 'mossy', dot: '#5f9440' },
+	{ key: 'snowrock', label: 'Snowy rock', ref: 'snowrock', dot: '#e4f1fb' },
+	{ key: 'magmarock', label: 'Magma rock', ref: 'magmarock', dot: '#ff4a12' },
 	crystal('Purple', '#ead4ff', '#a86bea', '#5a2a9c', '#c08bff'),
 	crystal('Red', '#ffd0cc', '#ef4b4b', '#8f1717', '#ff7a6a'),
 	crystal('Yellow', '#fff5bb', '#f5c62a', '#96700c', '#ffe066'),
@@ -29,6 +31,7 @@ export const SCATTER: ScatterKind[] = [
 	{ key: 'orb', label: 'Orb on a stalk', ref: 'orb', dot: '#5ff09a' },
 	{ key: 'pillar', label: 'Broken pillar', ref: 'pillar', dot: '#aab0bb' },
 	{ key: 'runestone', label: 'Rune stone', ref: 'runestone', dot: '#7df3ff' },
+	{ key: 'atlpillar', label: 'Atlantean pillar', ref: 'atlpillar', dot: '#e08c35' },
 	{ key: 'cube', label: 'Carved cube', ref: 'cube', dot: '#3fb8b0' },
 	{ key: 'lava', label: 'Cooling lava', ref: 'lava', dot: '#ff5a1f' },
 	{ key: 'floe', label: 'Ice floe', ref: 'floe', dot: '#cfeaff' }
