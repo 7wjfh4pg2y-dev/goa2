@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { hasPower, emActing, warpSlots, crackNow, lineHexes, RE_REWIND, RE_WARP, RE_TEMPORAL, heroPidOf, bodiesOf, isDouble, crowdOn, crowdBonus, crowdField, type TurnCtx } from '$lib/heropower';
-	import { afterUpdate, onDestroy } from 'svelte';
+	import { afterUpdate, onDestroy, onMount } from 'svelte';
 	import { readable, type Readable } from 'svelte/store';
 	import BoardCanvas from '$lib/BoardCanvas.svelte';
 	import CardLayer from '$lib/CardLayer.svelte';
@@ -217,6 +217,26 @@
 	$: phone2 = mobile && ($boardPrefs.hud === '2.0' || land);
 	// a phone on its side: the side columns can be shelved (CardLayer drives these from boardPrefs shelfL / shelfR)
 	let lShut = false, rShut = false;
+	// a phone on its side: which long edge holds the notch / camera (the device turned anticlockwise puts its top on the
+	// LEFT). The browser reports the same safe-area inset on both sides, so only the notch side keeps the full inset; the
+	// other side and the corners (the top bar, the action pill) only clear the rounded corner. Unknown = both full.
+	let notch: 'l' | 'r' | null = null;
+	function readNotch() {
+		if (typeof window === 'undefined') return;
+		const wo = (window as unknown as { orientation?: number }).orientation;
+		let a = typeof wo === 'number' ? wo : screen.orientation?.angle;
+		if (a == null) { notch = null; return; }
+		a = ((a % 360) + 360) % 360;
+		notch = a === 90 ? 'l' : a === 270 ? 'r' : null;
+	}
+	onMount(() => {
+		readNotch();
+		const on = () => setTimeout(readNotch, 60);
+		window.addEventListener('orientationchange', on);
+		screen.orientation?.addEventListener?.('change', on);
+		window.addEventListener('resize', on);
+		return () => { window.removeEventListener('orientationchange', on); screen.orientation?.removeEventListener?.('change', on); window.removeEventListener('resize', on); };
+	});
 	let lobbyOpen = false;
 	$: zoneNow = battleZone($ms);
 	// how many minions each team's wave started with in the battle zone (its spawn points there)
@@ -1300,7 +1320,7 @@
 
 <svelte:window on:keydown={(e) => { if (e.key !== 'Escape') return; if (wheelOpen) wheelOpen = false; else if (lobbyOpen) lobbyOpen = false; else if (confirmLeave) confirmLeave = false; else if (ringAsk) ringDone(); else { pendingSpawn = null; pendingToken = null; pendingDouble = null; pingArmed = false; if (clearing) cancelClear(); } }} bind:innerWidth={winW} bind:innerHeight={winH} />
 
-<div class="gamewrap" bind:clientWidth={wrapW} bind:clientHeight={wrapH} class:sea={boardLook === 'island'} class:mob={mobile} class:p2={phone2} class:land class:lshut={lShut} class:rshut={rShut} class:h2={hud2} class:dashfull={!mobile && !hud2 && lay.underHud} style={mobile ? '' : layoutVars(lay) + (hud2 ? `; --dh:${88 * lay.s}px` : '')}>
+<div class="gamewrap" bind:clientWidth={wrapW} bind:clientHeight={wrapH} class:sea={boardLook === 'island'} class:mob={mobile} class:p2={phone2} class:land class:notchl={notch === 'l'} class:notchr={notch === 'r'} class:lshut={lShut} class:rshut={rShut} class:h2={hud2} class:dashfull={!mobile && !hud2 && lay.underHud} style={mobile ? '' : layoutVars(lay) + (hud2 ? `; --dh:${88 * lay.s}px` : '')}>
 	{#if $ms.wonBy}
 		<button class="placehint won" on:click={() => (victoryClosed = false)} title="Show the victory screen again">🏆 {teamName($ms.wonBy.team)} win — {$ms.wonBy.reason}</button>
 	{:else if clearing}
@@ -2312,7 +2332,8 @@
 	.boardarea.mob.p2 { top: 124px; bottom: calc(100px + env(safe-area-inset-bottom, 0px)); }
 	/* a phone on its side: Others (left column) | the board | You (right column); see CardLayer's `.land` */
 	/* full width (the side columns pad themselves past the notch); a column shelved = 0 wide */
-	.gamewrap.land { left: 0; right: 0; --lwo: calc(clamp(150px, 21vw, 184px) + env(safe-area-inset-left, 0px)); --rwo: calc(clamp(178px, 24vw, 220px) + env(safe-area-inset-right, 0px)); --lw: var(--lwo); --rw: var(--rwo); }
+	.gamewrap.land { left: 0; right: 0; --sl: env(safe-area-inset-left, 0px); --sr: env(safe-area-inset-right, 0px); --cl: calc(env(safe-area-inset-left, 0px) * 0.3); --cr: calc(env(safe-area-inset-right, 0px) * 0.3); --lwo: calc(clamp(150px, 21vw, 184px) + var(--sl)); --rwo: calc(clamp(178px, 24vw, 220px) + var(--sr)); --lw: var(--lwo); --rw: var(--rwo); }
+	.gamewrap.land.notchl { --sr: var(--cr); } .gamewrap.land.notchr { --sl: var(--cl); }
 	.gamewrap.land.lshut { --lw: 0px; } .gamewrap.land.rshut { --rw: 0px; }
 	.lpills { position: absolute; inset: 0; pointer-events: none; z-index: 9; overflow: hidden; --line: rgba(201, 162, 90, 0.45); --brass: #c9a25a; --brass-hi: #ecd08e; }
 	.lpills .pp { height: 30px; padding: 0 11px; font-size: 13px; }

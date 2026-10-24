@@ -252,10 +252,10 @@
 	/* ── a phone on its side: the right-hand column (width = GameView's --rw), under the top bar ── */
 	.pdash.land { left: auto; right: 0; top: 54px; bottom: 0; width: var(--rwo, 200px); height: auto; padding: 0; border: 0; background: none; pointer-events: none; }
 	.land .lpanel { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 6px; justify-content: space-between; pointer-events: auto; touch-action: pan-y;
-		padding: 7px calc(7px + env(safe-area-inset-right, 0px)) calc(58px + env(safe-area-inset-bottom, 0px)) 7px; border-left: 2px solid var(--tc);
+		padding: 7px calc(7px + var(--sr, env(safe-area-inset-right, 0px))) calc(58px + env(safe-area-inset-bottom, 0px)) 7px; border-left: 2px solid var(--tc);
 		background: linear-gradient(270deg, var(--tg), transparent 70%), linear-gradient(180deg, rgba(16, 44, 72, 0.98), rgba(6, 21, 38, 0.99)); transition: transform 0.25s ease; }
 	.pdash.land.shut .lpanel { transform: translateX(100%); pointer-events: none; }
-	.land .lact { position: absolute; left: 7px; right: calc(7px + env(safe-area-inset-right, 0px)); bottom: calc(7px + env(safe-area-inset-bottom, 0px)); pointer-events: auto; }
+	.land .lact { position: absolute; left: 7px; right: calc(7px + var(--cr, env(safe-area-inset-right, 0px))); bottom: calc(7px + env(safe-area-inset-bottom, 0px)); pointer-events: auto; }
 	/* shelved: the pill shrinks to a thumb-sized button in the corner */
 	.pdash.land.shut .lact { left: auto; width: 150px; }
 	.land .lid { display: flex; align-items: center; justify-content: space-between; gap: 6px; }

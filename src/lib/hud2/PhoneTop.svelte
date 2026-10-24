@@ -93,7 +93,7 @@
 	/* a reversed turn: the faces keep their places (highest initiative left), the tracker runs from the right */
 	.ord.rv { flex-direction: row-reverse; }
 	.ptop { position: absolute; top: 0; left: 0; right: 0; z-index: 14; color: #f5f1e8; pointer-events: none; }
-	.bar { height: 44px; display: flex; align-items: center; gap: 4px; padding: 0 max(6px, env(safe-area-inset-right, 0px)) 0 max(6px, env(safe-area-inset-left, 0px)); box-sizing: border-box; pointer-events: auto;
+	.bar { height: 44px; display: flex; align-items: center; gap: 4px; padding: 0 max(6px, var(--cr, env(safe-area-inset-right, 0px))) 0 max(6px, var(--cl, env(safe-area-inset-left, 0px))); box-sizing: border-box; pointer-events: auto;
 		background: linear-gradient(180deg, rgba(16, 44, 72, 0.98), rgba(6, 21, 38, 0.98)); border-bottom: 1px solid rgba(216, 179, 106, 0.4); }
 	button { font: inherit; color: inherit; padding: 0; cursor: pointer; }
 	.ib { position: relative; flex: none; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(216, 179, 106, 0.4); }

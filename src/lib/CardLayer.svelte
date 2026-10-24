@@ -2981,7 +2981,7 @@
 	/* ── a phone on its side (GameView `land`): Others | Board | You. The top bar stays (44 + the beam); the other players
 	   stack in the LEFT column (enemies, then your team), your dash is the RIGHT column, the hand rises from the board's foot.
 	   The column widths are GameView's --lw / --rw. */
-	.mstrip.land { top: 54px; bottom: 0; left: 0; right: auto; width: var(--lwo); height: auto; transition: transform .25s ease; touch-action: pan-y; padding-left: calc(5px + env(safe-area-inset-left, 0px)) !important; flex-direction: column; gap: 5px; padding: 6px 5px calc(6px + env(safe-area-inset-bottom, 0px));
+	.mstrip.land { top: 54px; bottom: 0; left: 0; right: auto; width: var(--lwo); height: auto; transition: transform .25s ease; touch-action: pan-y; padding-left: calc(5px + var(--sl, env(safe-area-inset-left, 0px))) !important; flex-direction: column; gap: 5px; padding: 6px 5px calc(6px + env(safe-area-inset-bottom, 0px));
 		overflow-x: hidden; overflow-y: auto; border-bottom: 0; border-right: 1px solid rgba(216, 179, 106, 0.35); box-sizing: border-box; }
 	.mstrip.land .mpc { width: auto; flex: none; grid-template-columns: 32px minmax(0, 1fr) 34px; }
 	.mstrip.land .mcard { grid-column: 3; width: 34px; }
@@ -3005,8 +3005,8 @@
 	.sgrip { position: absolute; z-index: 13; top: 50%; width: 22px; height: 66px; margin-top: -33px; padding: 0; display: grid; place-items: center; cursor: pointer; touch-action: none;
 		color: #f4dfa8; background: linear-gradient(180deg, rgba(16, 44, 72, 0.97), rgba(6, 21, 38, 0.97)); border: 1px solid rgba(216, 179, 106, 0.45); transition: left .25s ease, right .25s ease; }
 	.sgrip svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
-	.sgrip.l { left: max(var(--lw), env(safe-area-inset-left, 0px)); border-left: 0; border-radius: 0 12px 12px 0; }
-	.sgrip.r { top: 40%; right: max(var(--rw), env(safe-area-inset-right, 0px)); border-right: 0; border-radius: 12px 0 0 12px; }
+	.sgrip.l { left: max(var(--lw), var(--sl, 0px)); border-left: 0; border-radius: 0 12px 12px 0; }
+	.sgrip.r { top: 40%; right: max(var(--rw), var(--sr, 0px)); border-right: 0; border-radius: 12px 0 0 12px; }
 	.bstack.p2 { bottom: calc(108px + env(safe-area-inset-bottom, 0px)); }
 	.mpc { flex: none; width: 170px; height: 62px; display: grid; grid-template-columns: 30px 1fr 32px 40px; grid-template-rows: 32px 1fr; column-gap: 4px; row-gap: 2px;
 		padding: 3px 5px 3px 7px; border-radius: 10px; cursor: pointer; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.1); box-shadow: inset 3px 0 0 var(--tc); }
