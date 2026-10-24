@@ -28,7 +28,7 @@
 	import PushSplash from '$lib/PushSplash.svelte';
 	import VictorySplash from '$lib/VictorySplash.svelte';
 	import ControlWheel, { type WheelItem } from '$lib/ControlWheel.svelte';
-	import { boardPrefs } from '$lib/boardPrefs';
+	import { boardPrefs, type BoardPrefs, type HeroFx } from '$lib/boardPrefs';
 	import type { Order } from '$lib/hud2/HudDash.svelte';
 	import { privRadius } from '$lib/privateRadius';
 	import HudTop from '$lib/hud2/HudTop.svelte';
@@ -211,10 +211,10 @@
 	// off by default) — switching one changes nobody else's screen
 	$: boardLook = $boardPrefs.look;
 	// the 2.0 HUD (each player's own choice; phones keep their own layout)
-	$: hud2 = !mobile && $boardPrefs.hud === '2.0';
+	$: hud2 = !mobile;
 	// the 2.0 phone (segment 9): PhoneTop + beam, the restyled strip, PhoneDash, PhoneBoard, ☰ = the lobby with the log
 	// a phone on its side (2026-10-23): always the 2.0 phone pieces, laid out as Others | Board | You (see `.land`)
-	$: phone2 = mobile && ($boardPrefs.hud === '2.0' || land);
+	$: phone2 = mobile;
 	// a phone on its side: the side columns can be shelved (CardLayer drives these from boardPrefs shelfL / shelfR)
 	let lShut = false, rShut = false;
 	// a phone on its side: which long edge holds the notch / camera (the device turned anticlockwise puts its top on the
@@ -342,6 +342,8 @@
 		cue: '<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z" />',
 		beam: '<path d="M2 14h7M15 14h7" /><circle cx="12" cy="14" r="2.6" /><path d="M12 8.5v-3M8.6 9.8 7 8M15.4 9.8 17 8" />',
 		hud: '<rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 9h18M8 9v11M16 9v11" />',
+		heroes: '<path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.5l-5.3 2.9 1.2-6-4.5-4.1 6-.7z" />',
+		back: '<path d="M15 6l-6 6 6 6" />',
 		lock: '<rect x="5" y="10.5" width="14" height="10" rx="2" /><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" />',
 		hudAll: '<rect x="3" y="4" width="18" height="16" rx="2" /><path d="M7 9h10M7 13h10M7 17h6" />',
 		hudTop: '<rect x="3" y="4" width="18" height="6" rx="1.5" /><path d="M3 14h18M3 18h18" stroke-opacity=".35" />',
@@ -374,6 +376,40 @@
 	void minionSprites;
 	const ROLE_NAME: Record<string, string> = { melee: 'Melee', ranged: 'Ranged', heavy: 'Heavy' };
 	const TEAM_LBL: Record<Team, string> = { orange: '#ffb27a', blue: '#9cc8ff' };
+	// the wheel's Heroes bubble: each 4★ hero in this game with effects; a tap shows that hero's switches
+	const HERO_FX_SW: Record<string, [HeroFx, string, string][]> = {
+		ignatia: [['igEq', 'Balance', "Ignatia's 'Controlled Chaos' toast"], ['igSwirl', 'Swirl', 'The tomoe swirling round her token as Equilibrium starts'], ['igChaos', 'Chaos', "Chaos Incarnate's coin flip"]],
+		snorri: [['snInscribe', 'Runes', "Snorri's 'inscribes the runes' banner"], ['runeFlare', 'Ignite', 'A rune flaring as it becomes active']],
+		takahide: [['tkSwap', 'Swap', "Takahide's gold swap toast"], ['tkWave', 'Wave', 'The gold wave off his token on a swap'], ['tkWar', 'War', 'Ready for War']],
+		emmitt: [['emToast', 'Reverse', "Emmitt's 'next turn runs backwards' toast"], ['emClock', 'Clock', "The reversed turn's hourglass"]],
+		nebkher: [['laugh', 'Laugh', "NebKher's laugh bursting from his token"]],
+		razzle: [['rzTickets', 'Tickets', "Crowd Control's tickets landing on her doubles"], ['rzApplause', 'Applause', 'The APPLAUSE sign when she survives an attack with her silver'], ['rzPoof', 'Poof', 'A comic smoke cloud as her doubles appear and vanish'], ['rzComic', 'Comics', "Razzle's comic bursts (POW!, BAM!…)"], ['rzShuffle', 'Shuffle', "Razzle's tokens shuffling when one of her is attacked"]],
+		gydion: [['spells', 'Spells', "Gydion's spell toast"], ['essence', 'Essence', "Prepare Spells' essence wisps"]]
+	};
+	let heroFx: string | null = null;
+	$: boardPrefs.useGame(`${room}-${$ms.gameId ?? 0}`);
+	function heroWheelOf(p: BoardPrefs, cards: Record<string, { hero?: string }> | undefined, me: string, pick: string | null): WheelItem[] {
+		const mine = cards?.[me]?.hero;
+		const present = Object.keys(HERO_FX_SW).filter((h) => Object.values(cards ?? {}).some((c) => c.hero === h));
+		const sw = (h: string): [HeroFx, string, string][] => [
+			...(h === mine && hasPower(h) ? [['dash', 'Dashboard', "Your hero button's effects"] as [HeroFx, string, string]] : []),
+			...HERO_FX_SW[h],
+			...(h === 'razzle' && mine === 'razzle' ? [['sparkle', 'Sparkles', 'The sparkles round your button (ultimate)'] as [HeroFx, string, string]] : [])
+		];
+		if (pick && present.includes(pick)) {
+			const list = sw(pick);
+			const allOn = list.every(([k]) => p[k]);
+			return [
+				{ id: 'hx-back', label: 'Back', icon: ICON.back, title: 'Back to the heroes', act: () => (heroFx = null) },
+				{ id: 'hx-all', label: allOn ? 'All off' : 'All on', icon: ICON.fx, on: allOn, title: `Every ${heroById(pick)?.name ?? pick} effect ${allOn ? 'off' : 'on'}`,
+					act: () => boardPrefs.set(Object.fromEntries(list.map(([k]) => [k, !allOn]))) },
+				...list.map(([k, label, what]) => ({ id: `hx-${k}`, label, icon: ICON.cue, on: p[k], title: `${what}: ${p[k] ? 'on' : 'off'}`, act: () => boardPrefs.set({ [k]: !p[k] }) }))
+			];
+		}
+		return present.map((h) => ({ id: `hx-${h}`, label: heroById(h)?.name ?? h, raw: true, on: sw(h).some(([k]) => p[k]),
+			icon: `<image href="${heroLogo(h)}" x="1" y="1" width="22" height="22" />`, title: `${heroById(h)?.name ?? h}'s effects`, act: () => (heroFx = h) }));
+	}
+	$: heroWheel = heroWheelOf($boardPrefs, $ms.cards, clientId, heroFx);
 	const wheelHub: WheelItem = { id: 'recenter', label: 'Recenter', icon: ICON.recenter, act: () => board?.reset() };
 	$: onIsland = boardLook === 'island';
 	$: wheelRing = [
@@ -385,28 +421,10 @@
 				title: onIsland ? `Moving sea: ${$boardPrefs.sea ? 'on' : 'off'}` : 'The sea is drawn on the island only', act: () => boardPrefs.set({ sea: !$boardPrefs.sea }) },
 			{ id: 'wisps', label: 'Wisps', icon: ICON.wisps, on: $boardPrefs.wisps, title: `The spirit swirl on spaces to act on: ${$boardPrefs.wisps ? 'on' : 'off'}`, act: () => boardPrefs.set({ wisps: !$boardPrefs.wisps }) },
 			{ id: 'cue', label: 'Cue', icon: ICON.cue, on: $boardPrefs.turnCue, title: `The YOUR TURN cue when your card acts: ${$boardPrefs.turnCue ? 'on' : 'off'}`, act: () => boardPrefs.set({ turnCue: !$boardPrefs.turnCue }) },
-			// NebKher's laugh bursting out of his token (only while a NebKher plays)
-			// Razzle's ultimate: the sparkles round her own dash button (only to her)
-			...(Object.values($ms.cards ?? {}).some((c) => c.hero === 'razzle') ? [{ id: 'rzTickets', label: 'Tickets', icon: ICON.cue, on: $boardPrefs.rzTickets, title: `Crowd Control's tickets landing on her doubles: ${$boardPrefs.rzTickets ? 'on' : 'off'}`, act: () => boardPrefs.set({ rzTickets: !$boardPrefs.rzTickets }) }, { id: 'rzApplause', label: 'Applause', icon: ICON.cue, on: $boardPrefs.rzApplause, title: `The APPLAUSE sign when she survives an attack with her silver: ${$boardPrefs.rzApplause ? 'on' : 'off'}`, act: () => boardPrefs.set({ rzApplause: !$boardPrefs.rzApplause }) }, { id: 'rzPoof', label: 'Poof', icon: ICON.cue, on: $boardPrefs.rzPoof, title: `A comic smoke cloud as her doubles appear and vanish: ${$boardPrefs.rzPoof ? 'on' : 'off'}`, act: () => boardPrefs.set({ rzPoof: !$boardPrefs.rzPoof }) }, { id: 'rzComic', label: 'Comics', icon: ICON.cue, on: $boardPrefs.rzComic, title: `Razzle's comic bursts (POW!, BAM!…): ${$boardPrefs.rzComic ? 'on' : 'off'}`, act: () => boardPrefs.set({ rzComic: !$boardPrefs.rzComic }) }, { id: 'rzShuffle', label: 'Shuffle', icon: ICON.cue, on: $boardPrefs.rzShuffle, title: `Razzle's tokens shuffling when one of her is attacked: ${$boardPrefs.rzShuffle ? 'on' : 'off'}`, act: () => boardPrefs.set({ rzShuffle: !$boardPrefs.rzShuffle }) }] : []),
-			...($ms.cards?.[clientId]?.hero === 'razzle' ? [{ id: 'sparkle', label: 'Sparkles', icon: ICON.cue, on: $boardPrefs.sparkle, title: `The sparkles round your button (ultimate): ${$boardPrefs.sparkle ? 'on' : 'off'}`, act: () => boardPrefs.set({ sparkle: !$boardPrefs.sparkle }) }] : []),
-			// Gydion's cast toast (only while a Gydion plays)
-			...(Object.values($ms.cards ?? {}).some((c) => c.hero === 'gydion') ? [{ id: 'spells', label: 'Spells', icon: ICON.cue, on: $boardPrefs.spells, title: `Gydion's spell toast: ${$boardPrefs.spells ? 'on' : 'off'}`, act: () => boardPrefs.set({ spells: !$boardPrefs.spells }) },
-				{ id: 'essence', label: 'Essence', icon: ICON.cue, on: $boardPrefs.essence, title: `Prepare Spells' essence wisps: ${$boardPrefs.essence ? 'on' : 'off'}`, act: () => boardPrefs.set({ essence: !$boardPrefs.essence }) }] : []),
-			...(Object.values($ms.cards ?? {}).some((c) => c.hero === 'snorri') ? [{ id: 'snInscribe', label: 'Runes', icon: ICON.cue, on: $boardPrefs.snInscribe, title: `Snorri's 'inscribes the runes' banner: ${$boardPrefs.snInscribe ? 'on' : 'off'}`, act: () => boardPrefs.set({ snInscribe: !$boardPrefs.snInscribe }) },
-				{ id: 'runeFlare', label: 'Ignite', icon: ICON.cue, on: $boardPrefs.runeFlare, title: `A rune flaring as it becomes active: ${$boardPrefs.runeFlare ? 'on' : 'off'}`, act: () => boardPrefs.set({ runeFlare: !$boardPrefs.runeFlare }) }] : []),
-			...(Object.values($ms.cards ?? {}).some((c) => c.hero === 'ignatia') ? [{ id: 'igEq', label: 'Balance', icon: ICON.cue, on: $boardPrefs.igEq, title: `Ignatia's 'Controlled Chaos' toast: ${$boardPrefs.igEq ? 'on' : 'off'}`, act: () => boardPrefs.set({ igEq: !$boardPrefs.igEq }) },
-				{ id: 'igSwirl', label: 'Swirl', icon: ICON.cue, on: $boardPrefs.igSwirl, title: `The tomoe swirling round her token as Equilibrium starts: ${$boardPrefs.igSwirl ? 'on' : 'off'}`, act: () => boardPrefs.set({ igSwirl: !$boardPrefs.igSwirl }) },
-				{ id: 'igChaos', label: 'Chaos', icon: ICON.cue, on: $boardPrefs.igChaos, title: `Chaos Incarnate's coin flip: ${$boardPrefs.igChaos ? 'on' : 'off'}`, act: () => boardPrefs.set({ igChaos: !$boardPrefs.igChaos }) }] : []),
-			...(Object.values($ms.cards ?? {}).some((c) => c.hero === 'takahide') ? [{ id: 'tkSwap', label: 'Swap', icon: ICON.cue, on: $boardPrefs.tkSwap, title: `Takahide's gold swap toast: ${$boardPrefs.tkSwap ? 'on' : 'off'}`, act: () => boardPrefs.set({ tkSwap: !$boardPrefs.tkSwap }) },
-				{ id: 'tkWave', label: 'Wave', icon: ICON.cue, on: $boardPrefs.tkWave, title: `The gold wave off his token on a swap: ${$boardPrefs.tkWave ? 'on' : 'off'}`, act: () => boardPrefs.set({ tkWave: !$boardPrefs.tkWave }) },
-				{ id: 'tkWar', label: 'War', icon: ICON.cue, on: $boardPrefs.tkWar, title: `Ready for War: ${$boardPrefs.tkWar ? 'on' : 'off'}`, act: () => boardPrefs.set({ tkWar: !$boardPrefs.tkWar }) }] : []),
-			...(Object.values($ms.cards ?? {}).some((c) => c.hero === 'emmitt') ? [{ id: 'emToast', label: 'Reverse', icon: ICON.cue, on: $boardPrefs.emToast, title: `Emmitt's 'next turn runs backwards' toast: ${$boardPrefs.emToast ? 'on' : 'off'}`, act: () => boardPrefs.set({ emToast: !$boardPrefs.emToast }) },
-				{ id: 'emClock', label: 'Clock', icon: ICON.cue, on: $boardPrefs.emClock, title: `The reversed turn's hourglass: ${$boardPrefs.emClock ? 'on' : 'off'}`, act: () => boardPrefs.set({ emClock: !$boardPrefs.emClock }) }] : []),
-			...(Object.values($ms.cards ?? {}).some((c) => c.hero === 'nebkher') ? [{ id: 'laugh', label: 'Laugh', icon: ICON.laugh, on: $boardPrefs.laugh, title: `NebKher's laugh bursting from his token: ${$boardPrefs.laugh ? 'on' : 'off'}`, act: () => boardPrefs.set({ laugh: !$boardPrefs.laugh }) }] : []),
-			// a 4★ hero's dash button effects (Ignatia's flames, …): one switch for all of them
-			...((hud2 || phone2) && hasPower($ms.cards?.[clientId]?.hero) ? [{ id: 'dash', label: 'Dashboard', icon: ICON.dash, on: $boardPrefs.dash, title: `Your hero button's effects: ${$boardPrefs.dash ? 'on' : 'off'}`, act: () => boardPrefs.set({ dash: !$boardPrefs.dash }) }] : []),
 			...(hud2 || phone2 ? [{ id: 'beam', label: 'Beam', icon: ICON.beam, on: $boardPrefs.beam, title: `The beam's spark and pulses: ${$boardPrefs.beam ? 'on' : 'off'}`, act: () => boardPrefs.set({ beam: !$boardPrefs.beam }) }] : [])
 		] },
+		// the 4★ heroes in this game with effects of their own: a hero → its switches (on for every new game)
+		...(heroWheel.length ? [{ id: 'heroes', label: 'Heroes', icon: ICON.heroes, title: 'Hero effects — only on your screen, this game only', act: () => {}, sub: heroWheel }] : []),
 		{ id: 'zoom', label: 'Zoom', icon: ICON.zoom, title: 'Zoom in / out', act: () => {}, sub: [
 			{ id: 'zout', label: 'Out', icon: ICON.zout, act: () => board?.zoomBtn(1 / 1.2) },
 			{ id: 'zin', label: 'In', icon: ICON.zin, act: () => board?.zoomBtn(1.2) },
@@ -429,10 +447,9 @@
 		] }] : []),
 		{ id: 'views', label: 'Views', icon: ICON.views, title: 'Saved views', act: () => {} },
 		// which version of things you see: the map's look and (desktop) the HUD — only on your screen
-		{ id: 'version', label: 'Version', icon: ICON.version, title: 'Map and HUD — only on your screen', act: () => {}, sub: [
+		{ id: 'version', label: 'Version', icon: ICON.version, title: 'Map look — only on your screen', act: () => {}, sub: [
 			{ id: 'look', label: onIsland ? 'Island' : 'Classic', icon: onIsland ? ICON.island : ICON.classic, on: onIsland,
-				title: `Map: ${onIsland ? 'the island' : 'classic tiles'} (only on your screen)`, act: () => boardPrefs.set({ look: onIsland ? 'classic' : 'island' }) },
-			{ id: 'hudv', label: hud2 || phone2 ? 'HUD 2.0' : 'HUD 1.0', icon: ICON.hud, on: hud2 || phone2, title: `HUD: ${hud2 || phone2 ? '2.0' : 'classic'} (only on your screen)`, act: () => boardPrefs.set({ hud: hud2 || phone2 ? 'classic' : '2.0' }) }
+				title: `Map: ${onIsland ? 'the island' : 'classic tiles'} (only on your screen)`, act: () => boardPrefs.set({ look: onIsland ? 'classic' : 'island' }) }
 		] },
 		{ id: 'spawn', label: 'Spawn', icon: ICON.spawn, disabled: !iAmHost, title: iAmHost ? 'Spawn a minion — then tap a hex' : 'Spawn a minion (the host)', act: () => {},
 			sub: (['orange', 'blue'] as Team[]).flatMap((t) => MINION_ROLES.map((r) => ({ id: `sp-${t}-${r}`, label: ROLE_NAME[r] ?? r, labelColor: TEAM_LBL[t], raw: true, icon: minionIcon(t, r),
@@ -1318,7 +1335,7 @@
 	</div>
 {/snippet}
 
-<svelte:window on:keydown={(e) => { if (e.key !== 'Escape') return; if (wheelOpen) wheelOpen = false; else if (lobbyOpen) lobbyOpen = false; else if (confirmLeave) confirmLeave = false; else if (ringAsk) ringDone(); else { pendingSpawn = null; pendingToken = null; pendingDouble = null; pingArmed = false; if (clearing) cancelClear(); } }} bind:innerWidth={winW} bind:innerHeight={winH} />
+<svelte:window on:keydown={(e) => { if (e.key !== 'Escape') return; if (wheelOpen) { wheelOpen = false; heroFx = null; } else if (lobbyOpen) lobbyOpen = false; else if (confirmLeave) confirmLeave = false; else if (ringAsk) ringDone(); else { pendingSpawn = null; pendingToken = null; pendingDouble = null; pingArmed = false; if (clearing) cancelClear(); } }} bind:innerWidth={winW} bind:innerHeight={winH} />
 
 <div class="gamewrap" bind:clientWidth={wrapW} bind:clientHeight={wrapH} class:sea={boardLook === 'island'} class:mob={mobile} class:p2={phone2} class:land class:notchl={notch === 'l'} class:notchr={notch === 'r'} class:lshut={lShut} class:rshut={rShut} class:h2={hud2} class:dashfull={!mobile && !hud2 && lay.underHud} style={mobile ? '' : layoutVars(lay) + (hud2 ? `; --dh:${88 * lay.s}px` : '')}>
 	{#if $ms.wonBy}
@@ -1417,7 +1434,7 @@
 	{#if $ms.wonBy && !victoryClosed && !victoryHold}
 		<VictorySplash team={$ms.wonBy.team} reason={$ms.wonBy.reason} myTeam={mySeat >= 0 && mySeat < $ms.seats ? myTeam : null} {mobile} onClose={() => (victoryClosed = true)} round={$ms.round} stats={gameStats} />
 	{/if}
-	<ControlWheel open={wheelOpen} ring={wheelRing} hub={wheelHub} {mobile} {views} {viewLabel} onGo={goView} onSave={saveView} onClose={() => (wheelOpen = false)} />
+	<ControlWheel open={wheelOpen} ring={wheelRing} hub={wheelHub} {mobile} {views} {viewLabel} onGo={goView} onSave={saveView} onClose={() => { wheelOpen = false; heroFx = null; }} />
 	{#if lifeOut && lifeDismissed !== lifeOut}
 			{@const win = lifeOut === 'orange' ? 'blue' : 'orange'}
 			<!-- a team's Life ran out: the last token breaks, and the host decides whether the game ends here -->
