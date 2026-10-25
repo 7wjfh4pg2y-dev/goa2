@@ -46,7 +46,8 @@
 		type Team,
 		type DraftSystem,
 		nameKey,
-		cachedRoom
+		cachedRoom,
+		mapMaxSeats
 	} from '$lib/match';
 	import { HEROES, HEROES_ALPHA, draftable, FOUR_STAR_LIVE } from '$lib/heroes';
 	import { initCards } from '$lib/cards/cardstate';
@@ -119,7 +120,9 @@
 		const i = Math.max(0, maps.findIndex((m) => m.id === mapId));
 		mapId = maps[(i + d + maps.length) % maps.length].id;
 	}
-	$: mapIndex = Math.max(0, maps.findIndex((m) => m.id === mapId));
+	// the player counts this map has hero spawn points for (never fewer than 4 seats); a bigger pick drops to the most it takes
+	$: maxSeats = Math.max(4, mapMaxSeats(chosenMap?.data));
+	$: if (playerCount > maxSeats) playerCount = [4, 6, 8, 10].filter((n) => n <= maxSeats).pop() ?? 4;
 	let session: MatchSession | null = null;
 	let players: Readable<Player[]> = writable([]);
 	let state: Readable<MatchState> = writable(initialMatchState());
@@ -1010,7 +1013,7 @@
 										<span class="t-label">Players (seats)</span>
 										<div class="seg seg--fill">
 											{#each [4, 6, 8, 10] as n (n)}
-												<button class="seg-opt has-sub" class:is-on={playerCount === n} class:is-soon={n > 6} class:locked={n > 6} disabled={n > 6} title={n > 6 ? 'Coming soon' : ''} on:click={() => (playerCount = n)}>{n}{#if n > 6}<span class="soon">soon</span>{:else}<span class="sub">{n / 2} v {n / 2}</span>{/if}</button>
+												<button class="seg-opt has-sub" class:is-on={playerCount === n} class:is-soon={n > 6} class:locked={n > 6 || n > maxSeats} disabled={n > 6 || n > maxSeats} title={n > 6 ? 'Coming soon' : n > maxSeats ? `This map has hero spawn points for ${maxSeats / 2} v ${maxSeats / 2}` : ''} on:click={() => (playerCount = n)}>{n}{#if n > 6}<span class="soon">soon</span>{:else}<span class="sub">{n / 2} v {n / 2}</span>{/if}</button>
 											{/each}
 										</div>
 									</div>
@@ -1025,14 +1028,13 @@
 												<button class="mapnav prev" on:click={() => cycleMap(-1)} disabled={maps.length < 2} aria-label="Previous map"><Icon name="back" /></button>
 												<button class="mapnav next" on:click={() => cycleMap(1)} disabled={maps.length < 2} aria-label="Next map"><Icon name="go" /></button>
 											</div>
-											<div class="mapcap"><span><b>{chosenMap?.label ?? 'No map'}</b>{#if maps.length > 1} · {mapIndex + 1} / {maps.length}{/if}</span></div>
+											<div class="mapcap"><span><b>{chosenMap?.label ?? 'No map'}</b></span></div>
 										</div>
 										<div class="mapmeta">
 											<div class="maprow">
 											<div class="t-h3 mapname">{chosenMap?.label ?? 'No map'}</div>
 											<span class="mapstep">
 												<button class="pbtn" on:click={() => cycleMap(-1)} disabled={maps.length < 2} aria-label="Previous map"><Icon name="back" /></button>
-												{#if maps.length > 1}<span class="t-small">{mapIndex + 1} / {maps.length}</span>{/if}
 												<button class="pbtn" on:click={() => cycleMap(1)} disabled={maps.length < 2} aria-label="Next map"><Icon name="go" /></button>
 											</span>
 											</div>

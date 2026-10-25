@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { applyCardReq, battlePatch, placeMinions, spendTokens, extraSpawns, heroSpawns, type MatchState, type Piece } from './match'
+import { applyCardReq, battlePatch, placeMinions, spendTokens, extraSpawns, heroSpawns, mapMaxSeats, type MatchState, type Piece } from './match'
 import { LANE, battleResult, canBattleRemove, heavyImmune, inZone, pushLane, spawnWave, zoneMinions, returnHexes, returnPatch, settleStrays } from './battle'
 import { zoneTable, hexCube, cubeDist } from './zones'
 import map from './maps/forgotten_island.json'
@@ -238,6 +238,10 @@ describe('the minion lane', () => {
 		expect(extraSpawns(M, 'orange')).toEqual(['4_2', '6_2'])
 		expect(extraSpawns(M, 'blue')).toEqual(['12_16', '14_16'])
 		expect(heroSpawns({ map: M, seats: 6 }, 'orange')).toHaveLength(3)
+		expect(mapMaxSeats(M)).toBe(6) // three hero spawn points a side = up to 3 v 3
+		const two = { ...M, cells: { ...M.cells } }
+		for (const h of heroSpawns({ map: M, seats: 6 }, 'blue').slice(2)) two.cells[h] = 'baseBlue'
+		expect(mapMaxSeats(two)).toBe(4) // the side with fewer spawn points decides
 		expect(heroSpawns({ map: M, seats: 8 }, 'orange')).toHaveLength(5)
 	})
 

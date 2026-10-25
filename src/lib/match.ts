@@ -651,6 +651,12 @@ function hexXY(id: string): { x: number; y: number } {
  * Uses an explicitly-labelled spawn cell if the map has one, otherwise the base
  * hex nearest the base zone's centre.
  */
+/** The most seats a map can host: two teams of as many heroes as the team with fewer hero spawn points has (a map
+ *  without any counts as one each). Create game locks the bigger player counts by this. */
+export function mapMaxSeats(map: GameMap | null | undefined): number {
+	const n = Math.min(throneHexes(map ?? null, 'orange').length, throneHexes(map ?? null, 'blue').length)
+	return 2 * Math.max(1, n)
+}
 export function throneHexes(map: GameMap | null, team: Team): string[] {
 	const cells = map?.cells ?? {}
 	const label = team === 'orange' ? 'baseOrangeSpawn' : 'baseBlueSpawn'
