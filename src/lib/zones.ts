@@ -9,9 +9,9 @@ const ODDR = [
 ] as const;
 // grounds: the first six are the originals; stone / marsh / ash / snow came with the new map editor (2026-10-23), the
 // rest on 2026-10-24
-export const ZONE_TYPES = ['forest', 'beach', 'middle', 'terrain', 'baseOrange', 'baseBlue', 'stone', 'marsh', 'ash', 'snow', 'tundra', 'steppe', 'rocky', 'scrub', 'frostwood', 'burntwood'];
+export const ZONE_TYPES = ['forest', 'beach', 'middle', 'terrain', 'baseOrange', 'baseBlue', 'stone', 'marsh', 'ash', 'snow', 'tundra', 'steppe', 'rocky', 'scrub', 'frostwood', 'burntwood', 'basalt', 'ashwood'];
 /** grounds that are woods (a jungle when the map names no zones) */
-export const FOREST_TYPES = ['forest', 'marsh', 'frostwood', 'burntwood'];
+export const FOREST_TYPES = ['forest', 'marsh', 'frostwood', 'burntwood', 'ashwood'];
 
 // odd-r offset → cube, for hex distance
 function cube(id: string): [number, number, number] {

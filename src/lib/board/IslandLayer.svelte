@@ -44,7 +44,7 @@
 	const roleOf = (m?: string): MinionRole => (m === 'ranged' || m === 'heavy' ? m : 'melee');
 
 	// ── palette: [hue, saturation, lightness] of the tile and of the darker seam under it
-	type Z = 'beach' | 'middle' | 'forest' | 'terrain' | 'baseOrange' | 'baseBlue' | 'stone' | 'marsh' | 'ash' | 'snow' | 'tundra' | 'steppe' | 'rocky' | 'scrub' | 'frostwood' | 'burntwood';
+	type Z = 'beach' | 'middle' | 'forest' | 'terrain' | 'baseOrange' | 'baseBlue' | 'stone' | 'marsh' | 'ash' | 'snow' | 'tundra' | 'steppe' | 'rocky' | 'scrub' | 'frostwood' | 'burntwood' | 'basalt' | 'ashwood';
 	const PAL: Record<Z, { t: [number, number, number]; g: [number, number, number] }> = {
 		beach: { t: [43, 64, 73], g: [38, 46, 55] },
 		middle: { t: [34, 42, 55], g: [30, 40, 38] },
@@ -63,7 +63,9 @@
 		rocky: { t: [18, 34, 38], g: [14, 36, 22] }, // rust-red broken ground (not the grey of the rocks on it)
 		scrub: { t: [35, 34, 47], g: [30, 34, 30] }, // dry brush land
 		frostwood: { t: [192, 24, 44], g: [202, 32, 27] }, // a frozen forest
-		burntwood: { t: [22, 15, 22], g: [14, 18, 12] } // a burnt forest
+		burntwood: { t: [22, 15, 22], g: [14, 18, 12] }, // a burnt forest
+		basalt: { t: [215, 16, 24], g: [220, 20, 12] }, // cold basalt floor (2026-10-25)
+		ashwood: { t: [32, 8, 50], g: [28, 10, 32] } // a ghost-ash forest: pale ash, charred stumps
 	};
 	const ZS = Object.keys(PAL) as Z[];
 	const VARIANTS = [-2.6, 0, 2.6]; // three slightly different lightnesses, so no two neighbours match exactly
@@ -127,7 +129,7 @@
 		orb: { r: 4.6, lift: 17, side: '#3c8a3c' }
 	};
 	// boulder variants: drawn as the plain boulder with a coat of their own
-	const ROCKS = new Set(['mossy', 'snowrock', 'magmarock']);
+	const ROCKS = new Set(['mossy', 'snowrock', 'magmarock', 'hotrock']);
 	$: features = (() => {
 		const out: Record<string, { ref: string; style?: string }> = {};
 		for (const id of ids) {
@@ -147,7 +149,7 @@
 			body: blob(c, r, t.id, 100), top: blob(c, r * 0.7, t.id, 100), glint: blob(c, r * 0.4, t.id, 100),
 			pebble: hexHash(t.id, 9) > 0.45 ? blob({ x: t.c.x + Math.cos(pa) * size * 0.62, y: t.c.y + Math.sin(pa) * size * 0.62 }, size * 0.2, t.id, 200, 7) : '',
 			moss: scatter[t.id] === 'mossy' ? blob({ x: c.x + (hexHash(t.id, 11) - 0.5) * r * 0.5, y: c.y + (hexHash(t.id, 12) - 0.5) * r * 0.5 }, r * 0.42, t.id, 300, 7) : '',
-			kind: scatter[t.id] === 'snowrock' ? 'snow' : scatter[t.id] === 'magmarock' ? 'magma' : '',
+			kind: scatter[t.id] === 'snowrock' ? 'snow' : scatter[t.id] === 'magmarock' ? 'magma' : scatter[t.id] === 'hotrock' ? 'hot' : '',
 			cap: scatter[t.id] === 'snowrock' ? blob({ x: c.x + (hexHash(t.id, 15) - 0.5) * r * 0.3, y: c.y + (hexHash(t.id, 16) - 0.5) * r * 0.3 }, r * 0.55, t.id, 400, 8) : '',
 			cx: c.x, cy: c.y, r,
 			bloom: scatter[t.id] === 'mossy' && hexHash(t.id, 10) > 0.5 ? { x: c.x + (hexHash(t.id, 13) - 0.5) * r * 0.7, y: c.y + (hexHash(t.id, 14) - 0.5) * r * 0.7 } : null
@@ -248,7 +250,7 @@
 				if (!t.spawn && h(30) < 0.5) put(low, 0, 'ripple', at(t.c, h(31) * 360, size * 0.25 * h(32)), 0.9);
 				const n = t.spawn ? 1 : 2, a0 = h(71) * 360;
 				for (let i = 0; i < n; i++) put(low, 3 + i, h(80 + i) < 0.6 ? 'tuft' : 'fern', at(t.c, a0 + i * 170, size * (0.55 + 0.1 * h(76 + i))), 0.85);
-			} else if (t.z === 'ash') {
+			} else if (t.z === 'ash' || t.z === 'basalt') {
 				// a magma wasteland: near-black basalt, a faint hot glow, embers and pebbles
 				patch('h0', at(t.c, h(60) * 360, size * 0.3 * h(61)), 0.3 + 0.16 * h(62), 0.2 + 0.12 * h(63), h(64) * 180, 'rgba(255,50,20,.12)');
 				if (!t.spawn) {
@@ -305,7 +307,7 @@
 					else if (w < 0.88) put(tall, i, 'shard', p, sc * 0.75, { shade: true });
 					else put(low, i, 'snow', p, sc * 0.9);
 				}
-			} else if (t.z === 'burntwood') {
+			} else if (t.z === 'burntwood' || t.z === 'ashwood') {
 				// a burnt forest: ash on the floor, dead trees and stumps round the rim, an ember still glowing
 				for (let i = 0; i < 2; i++) patch(`b${i}`, at(t.c, h(60 + i) * 360, size * 0.4 * h(62 + i)), 0.26 + 0.18 * h(64 + i), 0.16 + 0.12 * h(66 + i), h(68 + i) * 180, i ? 'rgba(120,110,100,.22)' : 'rgba(0,0,0,.3)');
 				const n = t.spawn ? 2 : 3, a0 = h(71) * 360;
@@ -342,7 +344,8 @@
 	const ROCK_COL: Record<string, string[]> = {
 		plain: ['#434853', '#22262e', '#6a707c', '#7d8490', '#8b919c'],
 		snow: ['#5b6a7a', '#2c3745', '#8ea2b6', '#a9bccd', '#d8e8f5'],
-		magma: ['#1f1715', '#0b0706', '#3a2a25', '#4a352d', '#5a4036']
+		magma: ['#1f1715', '#0b0706', '#3a2a25', '#4a352d', '#5a4036'],
+		hot: ['#5c1e10', '#200804', '#8c3418', '#ab4620', '#ffb060'] // red-hot rock
 	};
 	const PENTA = 'M0 -29L17 23.5L-27.6 -9L27.6 -9L-17 23.5Z'; // a five-point star drawn in one line
 </script>
@@ -767,7 +770,7 @@
 		<path d={r.top} transform="translate({(-down.x * size * 0.13).toFixed(1)} {(-down.y * size * 0.13).toFixed(1)})" fill={rc[2]} stroke={rc[3]} stroke-width={size * 0.05} stroke-linejoin="round" />
 		<path d={r.glint} transform="translate({(-down.x * size * 0.22).toFixed(1)} {(-down.y * size * 0.22).toFixed(1)})" fill={rc[4]} fill-opacity=".75" />
 		{#if r.cap}<path d={r.cap} transform="translate({(-down.x * size * 0.2).toFixed(1)} {(-down.y * size * 0.2).toFixed(1)})" fill="#f4fbff" stroke="#bcdcf2" stroke-width={size * 0.03} stroke-linejoin="round" />{/if}
-		{#if r.kind === 'magma'}<use href="#{P}vein" transform="translate({(r.cx - down.x * size * 0.15).toFixed(1)} {(r.cy - down.y * size * 0.15).toFixed(1)}) rotate({Math.round(hexHash(r.id, 17) * 360)}) scale({(r.r / 34).toFixed(3)})" />{/if}
+		{#if r.kind === 'magma' || r.kind === 'hot'}<use href="#{P}vein" transform="translate({(r.cx - down.x * size * 0.15).toFixed(1)} {(r.cy - down.y * size * 0.15).toFixed(1)}) rotate({Math.round(hexHash(r.id, 17) * 360)}) scale({(r.r / 34).toFixed(3)})" />{/if}
 		{#if r.moss}<path d={r.moss} transform="translate({(-down.x * size * 0.15).toFixed(1)} {(-down.y * size * 0.15).toFixed(1)})" fill="#5f9440" fill-opacity=".9" stroke="#3b6a2a" stroke-width={size * 0.02} stroke-linejoin="round" />{/if}
 		{#if r.bloom}
 			<circle cx={r.bloom.x - down.x * size * 0.15} cy={r.bloom.y - down.y * size * 0.15} r={size * 0.045} fill="#e23b4e" /><circle cx={r.bloom.x - down.x * size * 0.15 + size * 0.09} cy={r.bloom.y - down.y * size * 0.15 + size * 0.05} r={size * 0.035} fill="#ff7a6a" />

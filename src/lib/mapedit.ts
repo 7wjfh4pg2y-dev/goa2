@@ -10,7 +10,7 @@ import { SCATTER_TWIN } from './board/scatter'
 
 export type Team = 'orange' | 'blue'
 export type Role = 'melee' | 'ranged' | 'heavy'
-export type Ground = 'forest' | 'beach' | 'middle' | 'stone' | 'marsh' | 'ash' | 'snow' | 'tundra' | 'steppe' | 'rocky' | 'scrub' | 'frostwood' | 'burntwood' | 'baseOrange' | 'baseBlue'
+export type Ground = 'forest' | 'beach' | 'middle' | 'stone' | 'marsh' | 'ash' | 'snow' | 'tundra' | 'steppe' | 'rocky' | 'scrub' | 'frostwood' | 'burntwood' | 'basalt' | 'ashwood' | 'baseOrange' | 'baseBlue'
 export type Feature =
 	| { kind: 'minion'; team: Team; role: Role; dir: number }
 	| { kind: 'hero'; team: Team }
@@ -50,6 +50,9 @@ export const GROUNDS: Array<{ key: Ground; label: string; color: string }> = [
 	{ key: 'scrub', label: 'Scrubland', color: '#a2804f' },
 	{ key: 'frostwood', label: 'Frost forest', color: '#5f8f9a' },
 	{ key: 'burntwood', label: 'Burnt forest', color: '#4b3a2c' },
+	// cooler / paler cousins of the magma side, so the floor, the forest and the magma rocks can be told apart (2026-10-25)
+	{ key: 'basalt', label: 'Basalt floor', color: '#323a48' },
+	{ key: 'ashwood', label: 'Ghost-ash forest', color: '#8a847c' },
 	{ key: 'baseOrange', label: 'Atlantean base', color: '#c4612c' },
 	{ key: 'baseBlue', label: 'Titan base', color: '#7fb6e6' }
 ]
@@ -439,8 +442,8 @@ export function symmetryReport(d: Doc): SymDiff[] {
 		seen.add(id)
 		if (!t || !d.ground[t]) { out.push({ hex: id, twin: t, what: 'missing' }); continue }
 		seen.add(t)
-		if (d.ground[t] !== swapGround(d.ground[id])) out.push({ hex: id, twin: t, what: 'ground' })
-		else if (d.zone[t] !== swapZone(d.zone[id])) out.push({ hex: id, twin: t, what: 'zone' })
+		// the ground itself is free (2026-10-25, the user: colour and type are the author's call); the shape, the zones and the features must match
+		if (d.zone[t] !== swapZone(d.zone[id])) out.push({ hex: id, twin: t, what: 'zone' })
 		else if (!same(d.feat[t], swapFeature(d.feat[id], d.sym.mode))) out.push({ hex: id, twin: t, what: 'feature' })
 	}
 	return out

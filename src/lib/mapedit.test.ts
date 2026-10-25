@@ -4,7 +4,7 @@ import type { GameMap } from './maps'
 import { zoneTable } from './zones'
 import { hexCenter } from './board/hexgeo'
 import {
-	fromMap, toMap, blankDoc, paint, paintHex, brush, floodFill, twinOf, symmetryReport, symmetryScore, mirrorHalf,
+	fromMap, toMap, blankDoc, paint, paintHex, brush, floodFill, twinOf, symmetryReport, symmetryScore, mirrorHalf, sideOf,
 	autoCentre, snapCentre, hexAtPoint, hexAtCentre, validate, autoZones, faceEnemy, growGrid, fitGrid, calibrate, toBoard,
 	toImage, legacyTrace, twinDir, startingWave, symCentre, setSymMode, addZone, setZoneKind, removeZone, zonesOf, zoneDef, type Doc
 } from './mapedit'
@@ -111,8 +111,8 @@ describe('symmetry', () => {
 	})
 	it('copying one half makes a lopsided map symmetric', () => {
 		const d = fromMap(FI)
-		paintHex(d, '3_1', { layer: 'ground', ground: 'snow' }) // spoil the Atlantean base
-		paintHex(d, '12_20', { layer: 'erase' })
+		const gone = Object.keys(d.ground).find((x) => sideOf(d, x) === -1)!
+		paintHex(d, gone, { layer: 'erase' }) // a hole on the Titan side
 		expect(symmetryReport(d).length).toBeGreaterThan(0)
 		mirrorHalf(d, 'orange')
 		expect(symmetryReport(d)).toEqual([])
@@ -269,6 +269,13 @@ describe('zones: lanes, off-lanes and a map\'s own zones', () => {
 		const h = Object.keys(d.ground).find((x) => d.ground[x] === 'middle' && !d.feat[x] && twinOf(d, x) && twinOf(d, x) !== x)!
 		paint(d, [h], { layer: 'obstacle', scatter: 'atlpillar' } as any, true)
 		expect(d.feat[twinOf(d, h)!]).toMatchObject({ kind: 'obstacle', scatter: 'titanpillar' })
+	})
+	it('the ground under twin hexes is free — only shape, zones and features count', () => {
+		const d = fromMap(FI)
+		const h = Object.keys(d.ground).find((x) => d.ground[x] === 'middle' && !d.feat[x] && twinOf(d, x) && twinOf(d, x) !== x)!
+		paintHex(d, h, { layer: 'ground', ground: 'basalt' })
+		paintHex(d, twinOf(d, h)!, { layer: 'ground', ground: 'ashwood' })
+		expect(symmetryReport(d)).toEqual([])
 	})
 	it('different scatter on twin obstacles is still symmetric', () => {
 		const d = fromMap(FI)

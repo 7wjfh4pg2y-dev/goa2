@@ -20,6 +20,7 @@ export const SCATTER: ScatterKind[] = [
 	{ key: 'mossy', label: 'Mossy rock', ref: 'mossy', dot: '#5f9440' },
 	{ key: 'snowrock', label: 'Snowy rock', ref: 'snowrock', dot: '#e4f1fb' },
 	{ key: 'magmarock', label: 'Magma rock', ref: 'magmarock', dot: '#ff4a12' },
+	{ key: 'hotrock', label: 'Red-hot rock', ref: 'hotrock', dot: '#c4502a' },
 	crystal('Purple', '#ead4ff', '#a86bea', '#5a2a9c', '#c08bff'),
 	crystal('Red', '#ffd0cc', '#ef4b4b', '#8f1717', '#ff7a6a'),
 	crystal('Yellow', '#fff5bb', '#f5c62a', '#96700c', '#ffe066'),

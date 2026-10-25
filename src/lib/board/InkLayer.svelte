@@ -37,7 +37,7 @@
 	const WASH: Record<string, [number, number, number]> = {
 		baseOrange: [24, 70, 48], baseBlue: [200, 55, 78], forest: [118, 38, 38], middle: [62, 30, 60], beach: [44, 70, 68], terrain: [30, 10, 56],
 		stone: [214, 9, 62], marsh: [140, 25, 40], ash: [10, 15, 30], snow: [205, 40, 88], tundra: [178, 15, 62], steppe: [70, 25, 60],
-		rocky: [18, 35, 50], scrub: [35, 35, 58], frostwood: [195, 30, 55], burntwood: [20, 15, 35]
+		rocky: [18, 35, 50], scrub: [35, 35, 58], frostwood: [195, 30, 55], burntwood: [20, 15, 35], basalt: [215, 15, 34], ashwood: [30, 6, 64]
 	};
 	const hsla = (w: [number, number, number], a: number) => `hsl(${w[0]} ${w[1]}% ${w[2]}% / ${a})`;
 	const groundOf = (id: string): string => {
