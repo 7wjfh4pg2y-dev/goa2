@@ -14,7 +14,8 @@
 	import { hexCenter, type Pt } from '$lib/board/hexgeo';
 	import { throneHex } from '$lib/match';
 	import { placeName } from '$lib/teams';
-	import type { GameMap } from '$lib/maps';
+	import { setPublished, type GameMap } from '$lib/maps';
+	import { loadPublished, publishMap, unpublishMap, publishedId, MAPS_SQL, type PublishedMap } from '$lib/mapstore';
 	import fiPainting from '$lib/images/board/forgotten_island.webp';
 	import {
 		GROUNDS, GROUND_BY, zonesOf, zoneDef, addZone, setZoneKind, removeZone, swapZone, ZONE_BY, blankDoc, fromMap, toMap, paint, brush, floodFill, pick, hexAtPoint, inGrid, twinOf,
@@ -365,6 +366,35 @@
 		} catch { pasteErr = 'That isn\'t a map (a GoA2 map JSON has "cells").'; }
 	}
 	function importFile(f: File) { const r = new FileReader(); r.onload = () => importText(String(r.result)); r.readAsText(f); }
+	// publishing: the map goes to Supabase goa2_maps and shows in every host's Create game
+	let pub: PublishedMap[] = [], pubStatus: 'loading' | 'ready' | 'missing' | 'error' = 'loading', pubBusy = false, sqlCopied = false;
+	async function refreshPub() {
+		const r = await loadPublished();
+		pubStatus = r.status; pub = r.maps;
+		if (r.status === 'ready') setPublished(r.maps);
+	}
+	$: pubName = doc.name.trim() || 'Untitled map';
+	$: isPub = pub.some((m) => m.id === publishedId(pubName));
+	$: pubBlock = errors ? 'Fix the errors in Check first' : builtinNames.some((b) => b.trim().toLowerCase() === pubName.toLowerCase()) ? 'Rename it first — that is a built-in map' : '';
+	async function doPublish() {
+		if (pubBlock) { mapNote = pubBlock + '.'; panel = 'check'; setTimeout(() => (mapNote = ''), 3500); return; }
+		pubBusy = true;
+		doc.name = pubName;
+		const err = await publishMap(pubName, toMap(doc));
+		pubBusy = false;
+		if (err) { mapNote = err; if (/isn't set up/.test(err)) { pubStatus = 'missing'; mapsOpen = true; } }
+		else { saveNamed(); await refreshPub(); mapNote = `Published "${pubName}" — every host can pick it in Create game now.`; }
+		setTimeout(() => (mapNote = ''), 4000);
+	}
+	async function doUnpublish(m: PublishedMap) {
+		const err = await unpublishMap(m);
+		mapNote = err || `"${m.name}" is no longer published (games already running keep it).`;
+		setTimeout(() => (mapNote = ''), 3500);
+		await refreshPub();
+	}
+	async function copySql() {
+		try { await navigator.clipboard.writeText(MAPS_SQL); sqlCopied = true; setTimeout(() => (sqlCopied = false), 1500); } catch { /* select it by hand */ }
+	}
 	let copied = false;
 	async function copyJson() {
 		const t = JSON.stringify(toMap(doc));
@@ -420,6 +450,7 @@
 		try { const s = store.get(SAVED); if (s) saved = JSON.parse(s); } catch { /* ignore */ }
 		try { const w = store.get(WORK); if (w) { const m = JSON.parse(w) as GameMap; if (m?.cells && Object.keys(m.cells).length) { doc = fromMap(m); autoZ = false; } } } catch { /* ignore */ }
 		loadTrace();
+		refreshPub();
 		committed = freeze();
 		loaded = true;
 		tick().then(() => canvas?.fit());
@@ -457,6 +488,7 @@
 		</div>
 		<button class="b2" on:click={() => (mapsOpen = true)}>Maps</button>
 		<button class="go" on:click={saveNamed} title="Save under this name (Ctrl+S)">Save</button>
+		<button class="go pub" disabled={pubBusy} class:warn={confirmKey === 'pub'} title={pubBlock || 'Put this map in every host\'s Create game'} on:click={() => (isPub ? sure('pub', doPublish) : doPublish())}>{pubBusy ? 'Publishing…' : confirmKey === 'pub' ? 'Replace?' : isPub ? 'Update' : 'Publish'}</button>
 	</header>
 	<div class="note" class:show={!!mapNote}>{mapNote}</div>
 
@@ -736,6 +768,25 @@
 						{:else}
 							<p class="hint">None yet — Save keeps the map under its name.</p>
 						{/each}
+						<span class="cap">Published · every host</span>
+						{#if pubStatus === 'missing'}
+							<p class="hint">Publishing needs a table in Supabase. Run this once in the dashboard's SQL editor:</p>
+							<textarea class="sql" readonly rows="4" value={MAPS_SQL} on:focus={(e) => e.currentTarget.select()}></textarea>
+							<button class="b2 wide" on:click={copySql}>{sqlCopied ? 'Copied' : 'Copy SQL'}</button>
+						{:else if pubStatus === 'loading'}
+							<p class="hint">Loading…</p>
+						{:else if pubStatus === 'error'}
+							<p class="hint bad">Couldn't reach the published maps.</p>
+						{:else}
+							{#each pub as m (m.id)}
+								<div class="mrow two">
+									<button class="lk" on:click={() => open(m.data, m.name)}><b>{m.name}</b><small>{Object.keys(m.data.cells ?? {}).length} hexes · opens a copy</small></button>
+									<button class="x" class:warn={confirmKey === `u:${m.id}`} title="Unpublish" on:click={() => sure(`u:${m.id}`, () => doUnpublish(m))}>{confirmKey === `u:${m.id}` ? 'Unpublish?' : '✕'}</button>
+								</div>
+							{:else}
+								<p class="hint">None yet — Publish puts the open map in every host's Create game.</p>
+							{/each}
+						{/if}
 						<p class="hint">Opening a map replaces the working one — Undo brings it back.</p>
 					</section>
 					<section>
@@ -750,7 +801,7 @@
 							<button class="b2" on:click={copyJson}>{copied ? 'Copied' : 'Copy JSON'}</button>
 							<button class="b2" on:click={download}>Download .json</button>
 						</div>
-						<p class="hint">To ship a map with the game for everyone, send Claude the JSON.</p>
+						<p class="hint">Publish (top bar) shares the map with every host — no JSON needed.</p>
 					</section>
 				</div>
 			</div>
@@ -831,6 +882,9 @@
 	.newz[open] summary { margin-bottom: 2px; }
 	.nzn { width: 100%; box-sizing: border-box; padding: 6px 8px; border-radius: 7px; border: 1px solid var(--hair); background: rgba(0, 0, 0, 0.25); color: var(--ink); font: inherit; font-size: 12.5px; }
 	.go.wide { width: 100%; }
+	.go.pub { background: rgba(216, 179, 106, 0.14); color: var(--brass-hi); border: 1px solid var(--line); }
+	.go.pub.warn { border-color: #ff6b6f; color: #ffb0a0; }
+	textarea.sql { font-size: 11px; line-height: 1.35; resize: none; }
 	.go:disabled { opacity: 0.45; }
 	.hint.slot { min-height: 1.2em; margin: 0; color: #ffb0a0; }
 	.dot { width: 13px; height: 13px; border-radius: 3px; flex: none; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35); display: inline-block; }

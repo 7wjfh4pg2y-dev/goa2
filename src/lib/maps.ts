@@ -37,6 +37,17 @@ export interface MapChoice {
 
 const EDITOR_KEY = 'goa2-map-work-v1' // the live working map
 const SAVED_KEY = 'goa2-maps-v1' // named maps saved in the editor
+const PUB_KEY = 'goa2-maps-pub' // the last list of published maps seen (mapstore.ts), so Create game has them at once
+
+// published maps (Supabase goa2_maps): everyone's, after the bundled ones
+let published: { id: string; name: string; data: GameMap }[] = (() => {
+	try { const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(PUB_KEY) : null; return raw ? JSON.parse(raw) : [] } catch { return [] }
+})()
+/** the published maps just loaded from the table (kept in this browser for the next visit) */
+export function setPublished(list: { id: string; name: string; data: GameMap }[]) {
+	published = list.map((m) => ({ id: m.id, name: m.name, data: m.data }))
+	try { localStorage.setItem(PUB_KEY, JSON.stringify(published)) } catch { /* storage full */ }
+}
 
 // eager-import every bundled map JSON
 const bundled = import.meta.glob('./maps/*.json', { eager: true }) as Record<
@@ -95,6 +106,9 @@ export function availableMaps(): MapChoice[] {
 		add(id, label, data)
 		if (nonEmpty(data)) official.set(keyOf(label), board(data))
 	}
+
+	// published maps — every host sees these (a local copy of the same name stays in the editor: publish it again)
+	for (const m of published) if (nonEmpty(m.data)) add(m.id, m.name, m.data)
 
 	// live working map (autosaved in this browser)
 	try {

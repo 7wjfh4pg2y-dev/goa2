@@ -16,7 +16,8 @@
 	import coinBlue from '$lib/images/tiebreaker_blue.png';
 	import { reveal } from '$lib/transitions';
 	import { role, tryAdmin, enterAsPlayer, signOut, leaveRole, gmActive } from '$lib/role';
-	import { availableMaps, type MapChoice, type GameMap } from '$lib/maps';
+	import { availableMaps, setPublished, type MapChoice, type GameMap } from '$lib/maps';
+	import { loadPublished } from '$lib/mapstore';
 	import { announceRoom, browseRooms, type RoomInfo } from '$lib/lobby';
 	import { claimIdentity, tabClientId, writeTicket, clearTicket, type ResumeTicket } from '$lib/identity';
 	import { colorMoves } from '$lib/seatcolor';
@@ -196,6 +197,13 @@
 	onMount(() => {
 		sweepJournals();
 		ensureLoaded(); // the maps: the backdrop shows the island from the first screen on
+		// maps published from the editor (every host's); the list keeps whichever map was picked
+		loadPublished().then((r) => {
+			if (r.status !== 'ready') return;
+			setPublished(r.maps);
+			const keep = mapId; maps = availableMaps();
+			mapId = maps.some((m) => m.id === keep) ? keep : maps[0]?.id ?? '';
+		});
 		// shareable link ?room=CODE → jump straight to Join, prefilled
 		const q = new URLSearchParams(location.search).get('room');
 		// coming BACK from a GM / learn page: reopen the screen we left (kept in this history entry, or ?at=)
