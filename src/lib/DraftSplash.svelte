@@ -52,8 +52,11 @@
 		const cols = ph ? 6 : 9, rows: string[][] = [];
 		for (let i = 0; i < mixed.length; ) { const n = rows.length % 2 ? cols - 1 : cols; rows.push(mixed.slice(i, i + n)); i += n; }
 		const pitchY = HH * 0.75 + HG;
+		// every tile sits on the row's own lattice (a short last row is centred as near as the lattice allows — centring it
+		// exactly put its hexes straight under the row above when its count was odd / even the wrong way)
 		return rows.flatMap((row, r) => row.map((id, c) => {
-			const x = (c - (row.length - 1) / 2) * (HW + HG), y = (r - (rows.length - 1) / 2) * pitchY;
+			const slots = r % 2 ? cols - 1 : cols, at = c + Math.floor((slots - row.length) / 2);
+			const x = (at - (slots - 1) / 2) * (HW + HG), y = (r - (rows.length - 1) / 2) * pitchY;
 			return { id, x, y, d: Math.hypot(x, y) / (HW + HG) };
 		}));
 	})();
@@ -73,13 +76,13 @@
 			byTeam[t].forEach((id, j) => out.push({
 				id, team: t, k: j * 2 + (side < 0 ? 0 : 1),
 				x: ph ? (j - (byTeam[t].length - 1) / 2) * (CW + CG) : side * (MID + CW / 2 + j * (CW + CG)),
-				y: ph ? side * (CH / 2 + 62) : 0
+				y: ph ? side * (CH / 2 + 92) : 0
 			}));
 		teamN = { orange: byTeam.orange.length, blue: byTeam.blue.length };
 		return out;
 	})();
 	const deck = { x: 0, y: 0 };
-	const deckW = ph ? 84 : 96;
+	const deckW = ph ? 110 : 112;
 	const teamW = (t: Team) => teamN[t] * (CW + CG) - CG;
 
 	// ── Single Draft: the fan ──
@@ -126,8 +129,8 @@
 		<span class="ttl">{DRAFT_TITLES[system]}</span>
 		<span class="rule"></span>
 		<span class="line">
-			{#if line === 'pool'}Every hero in the pool <i>·</i> everyone picks at once
-			{:else if line === 'swap'}One hero dealt to each <i>·</i> teammates may trade
+			{#if line === 'pool'}<span class="nb">Every hero in the pool</span> <i>·</i> <span class="nb">everyone picks at once</span>
+			{:else if line === 'swap'}<span class="nb">One hero dealt to each</span> <i>·</i> <span class="nb">teammates may trade</span>
 			{:else if line === 'mine'}{watcher ? 'Three heroes for each player' : 'Dealt to you alone'} <i>·</i> <b class="t-{other}">the {teamName(other)}</b> pick first
 			{:else}Each team bans one hero <i>·</i> <b class="t-{other}">the {teamName(other)}</b> ban first <i>·</i> then the picks{/if}
 		</span>
@@ -159,7 +162,7 @@
 		{:else if system === 'all-random'}
 			<div class="stage">
 				{@render heading('swap')}
-				<div class="table" style="height:calc(var(--u) * {ph ? CH * 2 + 240 : CH + 90})">
+				<div class="table" style="height:calc(var(--u) * {ph ? CH * 2 + 300 : CH + 90})">
 					<div class="deck" style="--x:{deck.x}; --y:{deck.y}; width:calc(var(--u) * {deckW})">
 						<span class="dk">
 							{#each Array(8) as _, k (k)}
@@ -180,7 +183,7 @@
 						</div>
 					{/each}
 					{#each [left, right] as t (t)}
-						<span class="tname t-{t}" style="--tx:{ph ? 0 : (t === left ? -1 : 1) * (MID + teamW(t) / 2)}; --ty:{ph ? (t === left ? -1 : 1) * (CH + 104) : CH / 2 + 34}">{teamName(t)}</span>
+						<span class="tname t-{t}" style="--tx:{ph ? 0 : (t === left ? -1 : 1) * (MID + teamW(t) / 2)}; --ty:{ph ? (t === left ? -1 : 1) * (CH + 134) : CH / 2 + 34}">{teamName(t)}</span>
 					{/each}
 				</div>
 			</div>
@@ -240,7 +243,7 @@
 	.ds.ph { --u: clamp(.3px, min(calc(100vw / 760), calc(100dvh / 1120)), 1px); }
 	.ds.out { opacity: 0; }
 	.ds:not(.go) .stage, .ds:not(.go) .edge { visibility: hidden; }
-	.veil { position: absolute; inset: 0; background: radial-gradient(120% 90% at 50% 46%, rgba(6, 20, 36, .96), rgba(2, 7, 14, .99)); }
+	.veil { position: absolute; inset: 0; background: radial-gradient(120% 90% at 50% 46%, #061424, #02070e); } /* opaque: the draft screen behind used to show through */
 	.go .veil { animation: fadein .35s ease both; }
 	.edge { position: absolute; top: 0; bottom: 0; width: 34%; opacity: 0; }
 	.el { left: 0; background: linear-gradient(90deg, color-mix(in srgb, var(--l) 30%, transparent), transparent); }
@@ -264,7 +267,8 @@
 	.ph .ttl { font-size: calc(var(--u) * 82); }
 	.rule { width: calc(var(--u) * 420); height: calc(var(--u) * 2); background: linear-gradient(90deg, transparent, var(--brass) 20%, var(--brass-hi) 50%, var(--brass) 80%, transparent); transform: scaleX(0); }
 	.line { font-size: calc(var(--u) * 22); letter-spacing: .04em; color: #cfd8e3; opacity: 0; white-space: nowrap; }
-	.ph .line { font-size: calc(var(--u) * 28); white-space: normal; max-width: min(92vw, calc(var(--u) * 700)); line-height: 1.35; }
+	.ph .line { font-size: calc(var(--u) * 28); white-space: normal; text-wrap: balance; max-width: min(92vw, calc(var(--u) * 700)); line-height: 1.35; }
+	.line .nb { white-space: nowrap; }
 	.line i { font-style: normal; color: var(--brass); padding: 0 .3em; }
 	.line b { font-weight: normal; color: var(--th); }
 	.go .kick { animation: rise .6s cubic-bezier(.2, .9, .2, 1) var(--hd, .25s) both; }
