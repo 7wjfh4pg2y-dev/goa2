@@ -264,6 +264,12 @@ describe('zones: lanes, off-lanes and a map\'s own zones', () => {
 		expect(d.ground[twinOf(d, h)!]).toBe('rocky')
 		expect(symmetryReport(d).filter((x) => x.hex === h)).toEqual([])
 	})
+	it('mirrored painting puts the other team\'s pillar on the twin', () => {
+		const d = fromMap(FI)
+		const h = Object.keys(d.ground).find((x) => d.ground[x] === 'middle' && !d.feat[x] && twinOf(d, x) && twinOf(d, x) !== x)!
+		paint(d, [h], { layer: 'obstacle', scatter: 'atlpillar' } as any, true)
+		expect(d.feat[twinOf(d, h)!]).toMatchObject({ kind: 'obstacle', scatter: 'titanpillar' })
+	})
 	it('different scatter on twin obstacles is still symmetric', () => {
 		const d = fromMap(FI)
 		const h = Object.keys(d.feat).find((x) => d.feat[x]?.kind === 'obstacle' && twinOf(d, x) && twinOf(d, x) !== x)!

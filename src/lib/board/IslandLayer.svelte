@@ -122,6 +122,7 @@
 		pillar: { r: 11, lift: 15, side: '#5d626d' },
 		runestone: { r: 9.5, lift: 21, side: '#566070' },
 		atlpillar: { r: 10, lift: 20, side: '#8a4a1c' },
+		titanpillar: { r: 10, lift: 20, side: '#5b8fb8' },
 		cube: { r: 11, lift: 11, side: '#1f6f73', square: true },
 		orb: { r: 4.6, lift: 17, side: '#3c8a3c' }
 	};
@@ -663,6 +664,15 @@
 		<circle r="6.2" fill="url(#{P}slate)" stroke="#4a2608" stroke-width="1" />
 		<circle r="3.4" fill="#ff9a3a" /><circle r="1.6" fill="#ffe2a8" />
 	</g>
+	<!-- the Titans' pillar, its twin: a column of glacier ice, a crown of ice spikes, the coin's star glowing in it -->
+	<g id="{P}titanpillar-top">
+		{#each [0, 60, 120, 180, 240, 300] as a}<path transform="rotate({a + 30})" d="M-2.6 -9.4L0 -15.4L2.6 -9.4Z" fill="#e8f7ff" stroke="#2c5f8c" stroke-width=".8" stroke-linejoin="round" />{/each}
+		<path d="M0 -11L9.5 -5.5V5.5L0 11L-9.5 5.5V-5.5Z" fill="#bfe6ff" stroke="#24507a" stroke-width="1.3" stroke-linejoin="round" />
+		<path d="M0 -11L9.5 -5.5L0 0ZM-9.5 5.5L0 11L0 0Z" fill="#f2fbff" fill-opacity=".75" />
+		<circle r="6" fill="#163a66" stroke="#24507a" stroke-width="1" />
+		<path d={PENTA} transform="scale(.17)" fill="none" stroke="#7fd0ff" stroke-width="9" stroke-linejoin="round" />
+		<path d={PENTA} transform="scale(.17)" fill="none" stroke="#e8f8ff" stroke-width="3.5" stroke-linejoin="round" />
+	</g>
 	<g id="{P}cube-top">
 		<rect x="-11" y="-11" width="22" height="22" rx="2.2" fill="#3fb8b0" stroke="#0f4a4d" stroke-width="1.4" />
 		<rect x="-7" y="-7" width="14" height="14" rx="1.4" fill="none" stroke="#a6fff5" stroke-opacity=".8" stroke-width="1.3" />
@@ -680,6 +690,7 @@
 	</g>
 	<g id="{P}pillar-foot"><circle r="13.5" fill="#4a4f59" /><path d="M13 9L21 12L18 18L11 15Z" fill="#6f7580" stroke="#3c4049" stroke-width="1" stroke-linejoin="round" /></g>
 	<g id="{P}atlpillar-foot"><path d="M0 -14L12 -7V7L0 14L-12 7V-7Z" fill="#5a3a24" stroke="#2e1c10" stroke-width="1" /><circle r="3" cx="8" cy="0" fill="#c4612c" /><circle r="3" cx="-8" cy="0" fill="#c4612c" /></g>
+	<g id="{P}titanpillar-foot"><path d="M0 -14L12 -7V7L0 14L-12 7V-7Z" fill="#dcefff" stroke="#6f9fc7" stroke-width="1" /><path d="M8 -2L14 -5L12 2Z M-9 3L-15 1L-11 -4Z" fill="#a9d8f5" stroke="#5a8db8" stroke-width=".7" stroke-linejoin="round" /></g>
 	<g id="{P}runestone-foot"><ellipse rx="13" ry="11" fill="#3f5a34" /></g>
 	<g id="{P}cube-foot"><rect x="-13" y="-13" width="26" height="26" rx="3" fill="#35542a" /></g>
 

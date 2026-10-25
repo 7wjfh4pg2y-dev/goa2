@@ -6,6 +6,7 @@ import type { GameMap } from './maps'
 import { placeName } from './teams'
 import { hexCenter, SQRT3, type Pt } from './board/hexgeo'
 import { zoneTable, zoneType, hexCube, cubeDist, FOREST_TYPES } from './zones'
+import { SCATTER_TWIN } from './board/scatter'
 
 export type Team = 'orange' | 'blue'
 export type Role = 'melee' | 'ranged' | 'heavy'
@@ -361,6 +362,7 @@ export function swapPaint(p: Paint, mode: SymMode): Paint {
 		case 'zone': return { layer: 'zone', zone: swapZone(p.zone) }
 		case 'minion': return { ...p, team: otherTeam(p.team), dir: twinDir(p.dir, mode) }
 		case 'hero': return { ...p, team: otherTeam(p.team) }
+		case 'obstacle': return p.scatter && SCATTER_TWIN[p.scatter] ? { ...p, scatter: SCATTER_TWIN[p.scatter] } : p
 		default: return p
 	}
 }
@@ -368,6 +370,7 @@ export function swapFeature(f: Feature | undefined, mode: SymMode): Feature | un
 	if (!f) return f
 	if (f.kind === 'minion') return { ...f, team: otherTeam(f.team), dir: twinDir(f.dir, mode) }
 	if (f.kind === 'hero') return { ...f, team: otherTeam(f.team) }
+	if (f.kind === 'obstacle' && f.scatter && SCATTER_TWIN[f.scatter]) return { ...f, scatter: SCATTER_TWIN[f.scatter] }
 	return { ...f }
 }
 

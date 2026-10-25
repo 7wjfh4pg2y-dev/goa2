@@ -32,8 +32,12 @@ export const SCATTER: ScatterKind[] = [
 	{ key: 'pillar', label: 'Broken pillar', ref: 'pillar', dot: '#aab0bb' },
 	{ key: 'runestone', label: 'Rune stone', ref: 'runestone', dot: '#7df3ff' },
 	{ key: 'atlpillar', label: 'Atlantean pillar', ref: 'atlpillar', dot: '#e08c35' },
+	{ key: 'titanpillar', label: 'Titan pillar', ref: 'titanpillar', dot: '#8fd3ff' },
 	{ key: 'cube', label: 'Carved cube', ref: 'cube', dot: '#3fb8b0' },
 	{ key: 'lava', label: 'Cooling lava', ref: 'lava', dot: '#ff5a1f' },
 	{ key: 'floe', label: 'Ice floe', ref: 'floe', dot: '#cfeaff' }
 ]
 export const SCATTER_BY_KEY: Record<string, ScatterKind> = Object.fromEntries(SCATTER.map((s) => [s.key, s]))
+
+/** a scatter kind's opposite number on the other side of a mirrored map (the rest stay as they are) */
+export const SCATTER_TWIN: Record<string, string> = { atlpillar: 'titanpillar', titanpillar: 'atlpillar', snowrock: 'magmarock', magmarock: 'snowrock' }
