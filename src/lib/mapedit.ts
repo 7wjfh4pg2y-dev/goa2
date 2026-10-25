@@ -427,7 +427,9 @@ export interface SymDiff { hex: string; twin: string | null; what: 'missing' | '
 export function symmetryReport(d: Doc): SymDiff[] {
 	if (d.sym.mode === 'none') return []
 	const c = symCentre(d), out: SymDiff[] = [], seen = new Set<string>()
-	const same = (a?: Feature, b?: Feature) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
+	// an obstacle is an obstacle: which scatter stands there (or whether it sits on bare stone) is the author's choice per side
+	const norm = (f?: Feature) => (f?.kind === 'obstacle' ? { kind: 'obstacle' } : f ?? null)
+	const same = (a?: Feature, b?: Feature) => JSON.stringify(norm(a)) === JSON.stringify(norm(b))
 	for (const id of hexIds(d).sort()) {
 		if (seen.has(id)) continue
 		const t = twinOf(d, id, c)
@@ -625,7 +627,6 @@ export function validate(d: Doc, opts: { builtinNames?: string[] } = {}): Issue[
 		if (!base.length) out.push({ level: 'error', text: `No ${A(t)} base.` })
 		const heroes = ids.filter((h) => { const f = d.feat[h]; return f?.kind === 'hero' && f.team === t })
 		if (!heroes.length) out.push({ level: 'error', text: `No ${A(t)} hero spawn points.` })
-		else if (heroes.length < 3) out.push({ level: 'warn', text: `Only ${heroes.length} ${A(t)} hero spawn point${heroes.length === 1 ? '' : 's'} — heroes share them in bigger games.`, hexes: heroes })
 		const away = heroes.filter((h) => d.zone[h] !== (t === 'orange' ? 'Orange Base' : 'Blue Base'))
 		if (away.length) out.push({ level: 'warn', text: `${away.length} ${A(t)} hero spawn point${away.length === 1 ? ' is' : 's are'} outside the ${A(t)} base zone.`, hexes: away })
 	}

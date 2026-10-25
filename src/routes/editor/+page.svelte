@@ -375,9 +375,9 @@
 	}
 	$: pubName = doc.name.trim() || 'Untitled map';
 	$: isPub = pub.some((m) => m.id === publishedId(pubName));
-	$: pubBlock = errors ? 'Fix the errors in Check first' : builtinNames.some((b) => b.trim().toLowerCase() === pubName.toLowerCase()) ? 'Rename it first — that is a built-in map' : '';
+	$: pubBlock = errors ? `Check first: ${issues.find((i) => i.level === 'error')?.text ?? 'fix the errors'}` : builtinNames.some((b) => b.trim().toLowerCase() === pubName.toLowerCase()) ? 'Rename it first — that is a built-in map' : '';
 	async function doPublish() {
-		if (pubBlock) { mapNote = pubBlock + '.'; panel = 'check'; setTimeout(() => (mapNote = ''), 3500); return; }
+		if (pubBlock) { mapNote = pubBlock; panel = 'check'; setTimeout(() => (mapNote = ''), 5000); return; }
 		pubBusy = true;
 		doc.name = pubName;
 		const err = await publishMap(pubName, toMap(doc));

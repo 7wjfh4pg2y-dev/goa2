@@ -264,6 +264,13 @@ describe('zones: lanes, off-lanes and a map\'s own zones', () => {
 		expect(d.ground[twinOf(d, h)!]).toBe('rocky')
 		expect(symmetryReport(d).filter((x) => x.hex === h)).toEqual([])
 	})
+	it('different scatter on twin obstacles is still symmetric', () => {
+		const d = fromMap(FI)
+		const h = Object.keys(d.feat).find((x) => d.feat[x]?.kind === 'obstacle' && twinOf(d, x) && twinOf(d, x) !== x)!
+		d.feat[h] = { kind: 'obstacle', scatter: 'snowrock' }
+		d.feat[twinOf(d, h)!] = { kind: 'obstacle', scatter: 'magmarock' }
+		expect(symmetryReport(d)).toEqual([])
+	})
 	it('the new woods are jungles when zones follow the ground', () => {
 		const d = fromMap(FI)
 		const h = Object.keys(d.ground).find((x) => d.ground[x] === 'forest' && !d.feat[x])!
