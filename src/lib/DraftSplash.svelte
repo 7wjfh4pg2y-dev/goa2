@@ -3,7 +3,7 @@
 	// The hero-draft splash: ONE ceremony per draft system, made from the game's own art (2026-10-22, second
 	// round — the first three looks were generic emblems + chips):
 	//   All Pick     = THE MUSTER  — every hero's symbol drops onto a honeycomb of board hexes, rippling out from the middle
-	//   All Random   = THE DEAL    — a deck with the GoA crest on its backs is riffled; each card dealt to a seat lands
+	//   All Random   = THE DEAL    — a deck with the GoA crest on its backs is riffled; each card dealt to a dseat lands
 	//                                as that hero's real card back, then they turn up
 	//   Single Draft = THREE FATES — three cards rise into your hand and turn over: your three heroes, yours alone
 	//   Pick & Ban   = THE BAN     — a frieze of hero paintings; one per team steps forward, a ban sign stamps it grey,
@@ -29,7 +29,7 @@
 	export let pool: string[] = [];
 	/** Single Draft: the viewer's three dealt heroes (fewer = a watcher: the cards stay face down) */
 	export let offer: string[] = [];
-	/** All Random: the heroes dealt to each team, in seat order; empty = made up (demo) */
+	/** All Random: the heroes dealt to each team, in dseat order; empty = made up (demo) */
 	export let dealt: Partial<Record<Team, string[]>> = {};
 	export let onDone: (() => void) | null = null;
 
@@ -127,7 +127,7 @@
 	<div class="head">
 		<span class="kick">Hero draft</span>
 		<span class="ttl">{DRAFT_TITLES[system]}</span>
-		<span class="rule"></span>
+		<span class="drule"></span>
 		<span class="line">
 			{#if line === 'pool'}<span class="nb">Every hero in the pool</span> <i>·</i> <span class="nb">everyone picks at once</span>
 			{:else if line === 'swap'}<span class="nb">One hero dealt to each</span> <i>·</i> <span class="nb">teammates may trade</span>
@@ -171,12 +171,12 @@
 						</span>
 					</div>
 					{#each deals as s (s.k)}
-						<div class="seat t-{s.team}" style="--x:{s.x}; --y:{s.y}; --k:{s.k}; --dx:{deck.x - s.x}; --dy:{deck.y - s.y}; --sp:{s.team === left ? -1 : 1}; width:calc(var(--u) * {CW})">
+						<div class="dseat t-{s.team}" style="--x:{s.x}; --y:{s.y}; --k:{s.k}; --dx:{deck.x - s.x}; --dy:{deck.y - s.y}; --sp:{s.team === left ? -1 : 1}; width:calc(var(--u) * {CW})">
 							<span class="flip">
 								<span class="back"><CardBack hero={s.id} /></span>
 								<span class="front">
 									<img src={heroSplash(s.id)} alt="" style="object-position:{face(s.id)}" />
-									<span class="plate">{nm(s.id)}</span>
+									<span class="plate" class:long={nm(s.id).length > 9}>{nm(s.id)}</span>
 									<span class="glint"></span>
 								</span>
 							</span>
@@ -265,7 +265,7 @@
 		background: linear-gradient(180deg, #fff8e4 0%, #f4dfa8 45%, #b88a3e 100%); -webkit-background-clip: text; background-clip: text; color: transparent;
 		filter: drop-shadow(0 calc(var(--u) * 4) calc(var(--u) * 10) rgba(0, 0, 0, .75)); }
 	.ph .ttl { font-size: calc(var(--u) * 82); }
-	.rule { width: calc(var(--u) * 420); height: calc(var(--u) * 2); background: linear-gradient(90deg, transparent, var(--brass) 20%, var(--brass-hi) 50%, var(--brass) 80%, transparent); transform: scaleX(0); }
+	.drule { width: calc(var(--u) * 420); height: calc(var(--u) * 2); background: linear-gradient(90deg, transparent, var(--brass) 20%, var(--brass-hi) 50%, var(--brass) 80%, transparent); transform: scaleX(0); }
 	.line { font-size: calc(var(--u) * 22); letter-spacing: .04em; color: #cfd8e3; opacity: 0; white-space: nowrap; }
 	.ph .line { font-size: calc(var(--u) * 28); white-space: normal; text-wrap: balance; max-width: min(92vw, calc(var(--u) * 700)); line-height: 1.35; }
 	.line .nb { white-space: nowrap; }
@@ -273,7 +273,7 @@
 	.line b { font-weight: normal; color: var(--th); }
 	.go .kick { animation: rise .6s cubic-bezier(.2, .9, .2, 1) var(--hd, .25s) both; }
 	.go .ttl { animation: titlein .75s cubic-bezier(.16, 1, .3, 1) calc(var(--hd, .25s) + .08s) both; }
-	.go .rule { animation: draw .8s cubic-bezier(.6, 0, .2, 1) calc(var(--hd, .25s) + .35s) both; }
+	.go .drule { animation: draw .8s cubic-bezier(.6, 0, .2, 1) calc(var(--hd, .25s) + .35s) both; }
 	.go .line { animation: rise .6s cubic-bezier(.2, .9, .2, 1) var(--ld, 1.2s) both; }
 	@keyframes rise { from { opacity: 0; transform: translateY(calc(var(--u) * 12)); } to { opacity: 1; transform: none; } }
 	@keyframes titlein { from { opacity: 0; transform: scale(1.18); } to { opacity: 1; transform: none; } }
@@ -334,18 +334,20 @@
 		100% { transform: translateY(calc(var(--u) * var(--k) * -1.6)); } }
 	/* the deck's backs: the WHOLE gear-and-ice crest, centred inside the card's cream (its ice used to run off the edge) */
 	.rf .crest { position: absolute; width: 80%; max-width: none; height: auto; left: 50%; top: 50%; transform: translate(-50%, -50%); filter: drop-shadow(0 calc(var(--u) * 2) calc(var(--u) * 4) rgba(0, 0, 0, .55)); }
-	.seat { position: absolute; left: 0; top: 50%; transform: translate(-50%, -50%) translate(calc(var(--u) * var(--x)), calc(var(--u) * var(--y))); }
-	.seat .flip { opacity: 0; }
-	.go .seat .flip { animation: deal .6s cubic-bezier(.2, .8, .25, 1) calc(1.7s + var(--k) * .17s) both; }
+	.dseat { position: absolute; left: 0; top: 50%; transform: translate(-50%, -50%) translate(calc(var(--u) * var(--x)), calc(var(--u) * var(--y))); }
+	.dseat .flip { opacity: 0; }
+	.go .dseat .flip { animation: deal .6s cubic-bezier(.2, .8, .25, 1) calc(1.7s + var(--k) * .17s) both; }
 	@keyframes deal {
 		0% { opacity: 0; transform: translate(calc(var(--u) * var(--dx)), calc(var(--u) * var(--dy))) rotate(calc(var(--sp) * -200deg)) scale(.7); }
 		12% { opacity: 1; }
 		100% { opacity: 1; transform: none; } }
-	.go .seat .back { animation: flipout .14s ease-in calc(3.25s + var(--k) * .12s) forwards; }
-	.go .seat .front { animation: flipin .3s ease-out calc(3.39s + var(--k) * .12s) forwards; }
-	.go .seat .glint { animation: glint .7s ease-out calc(3.6s + var(--k) * .12s) both; }
-	.seat .plate { font-size: calc(var(--u) * 16); letter-spacing: .02em; padding-left: calc(var(--u) * 4); padding-right: calc(var(--u) * 4); white-space: nowrap; }
-	.ph .seat .plate { font-size: calc(var(--u) * 21); }
+	.go .dseat .back { animation: flipout .14s ease-in calc(3.25s + var(--k) * .12s) forwards; }
+	.go .dseat .front { animation: flipin .3s ease-out calc(3.39s + var(--k) * .12s) forwards; }
+	.go .dseat .glint { animation: glint .7s ease-out calc(3.6s + var(--k) * .12s) both; }
+	.dseat .plate { font-size: calc(var(--u) * 16); letter-spacing: .02em; padding-left: calc(var(--u) * 4); padding-right: calc(var(--u) * 4); white-space: nowrap; }
+	.ph .dseat .plate { font-size: calc(var(--u) * 21); }
+	.dseat .plate.long { font-size: calc(var(--u) * 13); }
+	.ph .dseat .plate.long { font-size: calc(var(--u) * 17); }
 	.tname { position: absolute; left: 0; top: 50%; white-space: nowrap; font-size: calc(var(--u) * 20); letter-spacing: .3em; text-transform: uppercase; color: var(--th); opacity: 0;
 		transform: translate(-50%, -50%) translate(calc(var(--u) * var(--tx)), calc(var(--u) * var(--ty))); }
 	.ph .tname { font-size: calc(var(--u) * 26); }
