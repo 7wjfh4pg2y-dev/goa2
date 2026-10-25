@@ -6,7 +6,8 @@
 <script lang="ts">
 	// The INK & WASH retheme (rethemes.ts): the map as a page of an old atlas — paper instead of the sea, ripple
 	// lines inked round the coast, a watercolour wash per ground that bleeds past its hex, pen work on the ground
-	// (riveted plates, glacier cracks, fern ticks, stippled sand, dry tufts), the coast inked twice with a wobble, the
+	// (cogs, steam and springs in the Atlantean base, snowflakes, frost curls and twinkles on the Titans' ice, fern
+	// ticks, stippled sand, dry tufts), the coast inked twice with a wobble, the
 	// zones' borders dotted, the rocks as inked boulders, the hero spawn points as the tie-breaker coin's faces in ink
 	// and watercolour (the Atlanteans' gear, the Titans' star) and the minion spawn points as hexes hatched in the team's
 	// colour with the minion models' emblem (minionArt.ts) washed over them. Static, no pointer events, placed by hash:
@@ -103,18 +104,67 @@
 	$: grid = hexes.map((h) => `M${hexPoints(h.c, S).replace(/ /g, 'L')}Z`).join('');
 
 	// ── pen work on plain ground, one path per kind
+	// doodles for the bases (path data, board units)
+	const cog = (cx: number, cy: number, R: number, turn: number) => {
+		let d = '';
+		const n = 8, ri = R * 0.72;
+		for (let i = 0; i < n; i++) {
+			const a = ((i / n) * 360 + turn) * (Math.PI / 180), w = Math.PI / n;
+			const pts = [[a - w * 0.62, ri], [a - w * 0.38, R], [a + w * 0.38, R], [a + w * 0.62, ri]];
+			for (const [b, rr] of pts) d += `${d ? 'L' : 'M'}${f(cx + Math.cos(b) * rr)} ${f(cy + Math.sin(b) * rr)}`;
+		}
+		const h = R * 0.3;
+		return d + `ZM${f(cx - h)} ${f(cy)}a${f(h)} ${f(h)} 0 1 0 ${f(2 * h)} 0a${f(h)} ${f(h)} 0 1 0 ${f(-2 * h)} 0`;
+	};
+	// a puff of steam: three bumps on a cloud
+	const puff = (cx: number, cy: number, R: number) =>
+		`M${f(cx - R)} ${f(cy + R * 0.3)}a${f(R * 0.45)} ${f(R * 0.45)} 0 0 1 ${f(R * 0.5)} ${f(-R * 0.7)}a${f(R * 0.55)} ${f(R * 0.55)} 0 0 1 ${f(R)} ${f(-R * 0.1)}a${f(R * 0.45)} ${f(R * 0.45)} 0 0 1 ${f(R * 0.5)} ${f(R * 0.8)}Z`;
+	// a coiled spring: a zigzag that loops
+	const spring = (cx: number, cy: number, R: number) => {
+		let d = `M${f(cx - R)} ${f(cy)}`;
+		for (let i = 0; i < 4; i++) d += `a${f(R * 0.28)} ${f(R * 0.6)} 0 1 1 ${f(R * 0.5)} 0`;
+		return d;
+	};
+	// a snowflake: three strokes through the middle, a little V on every arm
+	const flake = (cx: number, cy: number, R: number, turn: number) => {
+		let d = '';
+		for (let i = 0; i < 6; i++) {
+			const a = ((i * 60 + turn) * Math.PI) / 180, ex = cx + Math.cos(a) * R, ey = cy + Math.sin(a) * R;
+			d += `M${f(cx)} ${f(cy)}L${f(ex)} ${f(ey)}`;
+			const mx = cx + Math.cos(a) * R * 0.6, my = cy + Math.sin(a) * R * 0.6;
+			for (const s2 of [-1, 1]) { const b = a + s2 * 0.75; d += `M${f(mx)} ${f(my)}L${f(mx + Math.cos(b) * R * 0.32)} ${f(my + Math.sin(b) * R * 0.32)}`; }
+		}
+		return d;
+	};
+	// a frost curl: a little spiral
+	const curl = (cx: number, cy: number, R: number, flip: boolean) => {
+		const s2 = flip ? 1 : 0;
+		return `M${f(cx + R)} ${f(cy)}a${f(R)} ${f(R)} 0 0 ${s2} ${f(-2 * R)} 0a${f(R * 0.7)} ${f(R * 0.7)} 0 0 ${s2} ${f(R * 1.4)} 0a${f(R * 0.4)} ${f(R * 0.4)} 0 0 ${s2} ${f(-R * 0.8)} 0`;
+	};
+	// a twinkle: a four-point sparkle
+	const twinkle = (cx: number, cy: number, R: number) => `M${f(cx)} ${f(cy - R)}L${f(cx)} ${f(cy + R)}M${f(cx - R)} ${f(cy)}L${f(cx + R)} ${f(cy)}M${f(cx - R * 0.45)} ${f(cy - R * 0.45)}L${f(cx + R * 0.45)} ${f(cy + R * 0.45)}M${f(cx + R * 0.45)} ${f(cy - R * 0.45)}L${f(cx - R * 0.45)} ${f(cy + R * 0.45)}`;
 	$: pen = (() => {
-		let plates = '', rivets = '', cracks = '', ferns = '', stipple = '', tufts = '';
+		let cogs = '', steam = '', flakes = '', curls = '', ferns = '', stipple = '', tufts = '';
 		for (const h of hexes) {
 			if (h.kind !== 'ground') continue;
 			const r = (n: number) => hexHash(h.id, 600 + n), { x, y } = h.c;
+			// the bases are drawn for fun: little doodles round the rim of each hex, never in the middle where a piece stands
+			const spot = (n: number, d = 0.5) => { const a = r(n) * Math.PI * 2; return { x: x + Math.cos(a) * d * S, y: y + Math.sin(a) * d * S, a }; };
 			if (h.g === 'baseOrange') {
-				plates += `M${hexPoints(h.c, 0.72 * S).replace(/ /g, 'L')}Z`;
-				for (let i = 0; i < 6; i++) { const p = hexCorner(h.c, 0.72 * S, i); rivets += `M${f(p.x - 0.035 * S)} ${f(p.y)}a${f(0.035 * S)} ${f(0.035 * S)} 0 1 0 ${f(0.07 * S)} 0a${f(0.035 * S)} ${f(0.035 * S)} 0 1 0 ${f(-0.07 * S)} 0`; }
+				// the Atlanteans' workshop: a cog, and now and then a puff of steam or a coiled spring
+				const c = spot(0);
+				cogs += cog(c.x, c.y, S * (0.16 + 0.05 * r(1)), r(2) * 30);
+				const o = spot(0, 0.5), q = { x: x - (o.x - x), y: y - (o.y - y) }; // across the hex from the cog
+				if (r(3) < 0.5) steam += puff(q.x, q.y, S * 0.14);
+				else if (r(3) < 0.8) steam += spring(q.x, q.y, S * 0.13);
 			} else if (h.g === 'baseBlue' || h.g === 'snow') {
-				let px = x + (r(0) - 0.5) * 1.1 * S, py = y - 0.7 * S;
-				cracks += `M${f(px)} ${f(py)}`;
-				for (let i = 0; i < 4; i++) { px += (r(1 + i) - 0.5) * 0.5 * S; py += 0.35 * S; cracks += `L${f(px)} ${f(py)}`; }
+				// the Titans' ice: a snowflake, a frost curl, a couple of twinkles
+				const c = spot(0);
+				flakes += flake(c.x, c.y, S * (0.15 + 0.05 * r(1)), r(2) * 60);
+				const o = { x: x - (c.x - x), y: y - (c.y - y) };
+				if (r(3) < 0.55) curls += curl(o.x, o.y, S * 0.12, r(4) < 0.5);
+				else flakes += twinkle(o.x, o.y, S * 0.085);
+				if (r(5) < 0.5) { const t = spot(6, 0.62); flakes += twinkle(t.x, t.y, S * 0.055); }
 			} else if (h.g === 'forest' || h.g === 'frostwood' || h.g === 'marsh') {
 				for (let i = 0; i < 3; i++) {
 					const fx = x + (r(10 + i) - 0.5) * 1.2 * S, fy = y + (r(20 + i) - 0.5) * 1.2 * S, u = S;
@@ -129,7 +179,7 @@
 				}
 			}
 		}
-		return { plates, rivets, cracks, ferns, stipple, tufts };
+		return { cogs, steam, flakes, curls, ferns, stipple, tufts };
 	})();
 
 	$: borders = borderPath(ids, (id) => (cells[id] ? zones[id] ?? '' : undefined), S);
@@ -222,9 +272,13 @@
 
 	<!-- pen work -->
 	<g fill="none" stroke="rgba(59,38,20,.45)" stroke-width={S * 0.03} stroke-linecap="round" stroke-linejoin="round">
-		<path d={pen.plates} /><path d={pen.cracks} /><path d={pen.ferns} /><path d={pen.tufts} />
+		<path d={pen.ferns} /><path d={pen.tufts} />
 	</g>
-	<path d={pen.rivets} fill="rgba(59,38,20,.55)" />
+	<!-- the bases' doodles: copper ink in the Atlanteans' workshop, blue ink on the Titans' ice -->
+	<path d={pen.cogs} fill="rgba(236,190,140,.45)" fill-rule="evenodd" stroke="rgba(110,48,12,.7)" stroke-width={S * 0.026} stroke-linejoin="round" />
+	<path d={pen.steam} fill="rgba(255,248,236,.5)" stroke="rgba(110,48,12,.6)" stroke-width={S * 0.024} stroke-linecap="round" stroke-linejoin="round" />
+	<path d={pen.flakes} fill="none" stroke="rgba(28,72,128,.62)" stroke-width={S * 0.024} stroke-linecap="round" />
+	<path d={pen.curls} fill="none" stroke="rgba(28,72,128,.55)" stroke-width={S * 0.024} stroke-linecap="round" />
 	<path d={pen.stipple} fill="none" stroke="rgba(59,38,20,.35)" stroke-width={S * 0.045} stroke-linecap="round" />
 
 	<!-- minion spawn points -->
