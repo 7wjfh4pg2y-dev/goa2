@@ -8,6 +8,9 @@
 	import PieceDefs from '$lib/board/PieceDefs.svelte';
 	import HeroToken from '$lib/board/HeroToken.svelte';
 	import KitToken from '$lib/board/KitToken.svelte';
+	import InkDefs from '$lib/board/InkDefs.svelte';
+	import InkHero from '$lib/board/InkHero.svelte';
+	import InkKit from '$lib/board/InkKit.svelte';
 	import { tokenImg } from '$lib/board/tokenArt';
 	import { outlineLoops, loopsPath } from '$lib/board/hexgeo';
 	import { zoneTable } from '$lib/zones';
@@ -92,8 +95,9 @@
 	const minionSprites = import.meta.glob('./images/minions/*.png', { eager: true, import: 'default' }) as Record<string, string>;
 	// a minion piece = the drawn token from MinionDefs (`#mn-token-<team>-<role>`, radius 100)
 	// `part`: 'top' = face + emblem (its rim turns in the `.rims` layer), 'rim' = that rim, 'token' = the whole piece, still
-	const minionRef = (team: string, role?: string, part: 'top' | 'rim' | 'token' = 'top') =>
-		`#mn-${part}-${team === 'blue' ? 'blue' : 'orange'}-${role === 'ranged' || role === 'heavy' ? role : 'melee'}`;
+	// (the Ink & wash retheme has its own ink stamps: `#ik-mn-…` from InkDefs)
+	const minionRef = (team: string, role?: string, part: 'top' | 'rim' | 'token' = 'top', ink = false) =>
+		`#${ink ? 'ik-mn' : 'mn'}-${part}-${team === 'blue' ? 'blue' : 'orange'}-${role === 'ranged' || role === 'heavy' ? role : 'melee'}`;
 
 	$: cells = map.cells ?? {};
 	$: meta = map.meta ?? {};
@@ -717,10 +721,11 @@
 {#snippet pieceBody(p: Piece, c: { x: number; y: number }, sel: boolean, cid: string)}
 		{#if p.letter || p.mine === 'down' || p.token}
 			<!-- a hero's own piece: a hex token, or a round marker (board/KitToken) -->
-			<KitToken x={c.x} y={c.y} {size} token={p.token} color={p.color} team={p.team} {sel} mine={p.mine} peek={p.peek} letter={p.letter} label={p.label} sym={p.sym} rot={rotEff} uid={cid} />
+			{#if ink}<InkKit x={c.x} y={c.y} {size} token={p.token} color={p.color} team={p.team} {sel} mine={p.mine} peek={p.peek} letter={p.letter} label={p.label} sym={p.sym} rot={rotEff} uid={cid} />
+			{:else}<KitToken x={c.x} y={c.y} {size} token={p.token} color={p.color} team={p.team} {sel} mine={p.mine} peek={p.peek} letter={p.letter} label={p.label} sym={p.sym} rot={rotEff} uid={cid} />{/if}
 		{:else if p.role}
 			<!-- the face and emblem; the rim with its turning pips is in the `.rims` layer underneath (the ghost carries its own) -->
-			<use href={minionRef(p.team, p.role, cid === 'ghost' ? 'token' : 'top')} pointer-events="none"
+			<use href={minionRef(p.team, p.role, cid === 'ghost' ? 'token' : 'top', ink)} pointer-events="none"
 				transform="{minionRot(p, c.x, c.y, rotEff, teamSpawnDir) ?? ''} translate({c.x} {c.y}) scale({(size * 0.72) / 100})" />
 			<!-- the click target, and the ring when it is picked up -->
 			<circle cx={c.x} cy={c.y} r={size * 0.7} fill="transparent" stroke={sel ? '#fde047' : 'none'} stroke-width={size * 0.1} />
@@ -732,7 +737,8 @@
 				</g>
 			{/if}
 		{:else}
-			<HeroToken x={c.x} y={c.y} r={size * 0.78} hero={p.hero} face={p.face} team={p.team} color={p.color} uid={cid} sym={p.sym} label={p.label} />
+			{#if ink}<InkHero x={c.x} y={c.y} r={size * 0.78} hero={p.hero} face={p.face} team={p.team} color={p.color} uid={cid} sym={p.sym} label={p.label} />
+			{:else}<HeroToken x={c.x} y={c.y} r={size * 0.78} hero={p.hero} face={p.face} team={p.team} color={p.color} uid={cid} sym={p.sym} label={p.label} />{/if}
 			{#if p.guard}
 				<!-- Gydion's Shield / Invulnerability: the Abjuration hand on a green disc, up and right (the icon is white) -->
 				<g transform="translate({c.x + size * 0.56} {c.y - size * 0.56})" pointer-events="none" style="filter:drop-shadow(0 1px 2px rgba(0,0,0,.75))">
@@ -794,7 +800,7 @@
 				<span class="rim" class:lifted={carryId === p.id && !!hoverHex} class:faded={p.faded}
 					style="left:{((base.x + off.x) * fit.s + fit.ox - d / 2).toFixed(2)}px; top:{((base.y + off.y) * fit.s + fit.oy - d / 2).toFixed(2)}px; width:{d.toFixed(2)}px; height:{d.toFixed(2)}px">
 					{#if look === 'island'}<i class="sh" style="translate:{rimShade.x.toFixed(1)}% {rimShade.y.toFixed(1)}%"></i>{/if}
-					<span class="turn" class:ccw={p.team === 'blue'}><svg viewBox="-100 -100 200 200"><use href={minionRef(p.team, p.role, 'rim')} /></svg></span>
+					<span class="turn" class:ccw={p.team === 'blue'}><svg viewBox="-100 -100 200 200"><use href={minionRef(p.team, p.role, 'rim', ink)} /></svg></span>
 				</span>
 			{/each}
 		</div>
@@ -816,7 +822,7 @@
 		<defs>
 			<!-- only a board that can show pieces needs their drawings (the pre-game pictures don't): two copies of
 			     the same ids on one page make the browser re-resolve every <use> whenever a board mounts or goes -->
-			{#if interactive || pieces.length}<PieceDefs />{/if}
+			{#if interactive || pieces.length}<PieceDefs />{#if ink}<InkDefs />{/if}{/if}
 		</defs>
 		<g bind:this={viewG} transform={viewTf}>
 			{#if !isle}

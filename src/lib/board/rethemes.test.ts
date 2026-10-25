@@ -21,3 +21,18 @@ describe('map rethemes', () => {
 		expect(readPrefs(JSON.stringify({ themes: 'x' })).themes).toEqual({})
 	})
 })
+
+import { inkFace, inkToken } from './inkArt'
+import { HEROES } from '../heroes'
+import { HERO_KIT } from '../tokens'
+
+describe('ink & wash art (tools/ink_art.mjs)', () => {
+	it('every hero has an ink portrait, Razzle her three doubles', () => {
+		for (const h of HEROES) expect(inkFace(h.id), h.id).toBeTruthy()
+		for (const n of [1, 2, 3]) expect(inkFace('razzle', n)).toBeTruthy()
+	})
+	it("every hero's own piece has ink art (companions use the crests)", () => {
+		for (const kit of Object.values(HERO_KIT)) for (const t of kit) if (t !== 'companion') expect(inkToken(t), t).toBeTruthy()
+		for (const r of ['axe', 'bird', 'anvil', 'horn']) expect(inkToken(`rune_${r}_marker`)).toBeTruthy()
+	})
+})
