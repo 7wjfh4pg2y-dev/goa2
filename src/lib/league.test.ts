@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 vi.mock('./supabase', () => ({ supabase: {} }))
-import { buildLeague, titlesOf, gameOfRow, pathOfSteps, playerKey, nemesisOf, victimOf, bestMateOf, rivalOf, START_RATING, type GameRowIn } from './league'
+import { buildLeague, titlesOf, gameOfRow, pathOfSteps, playerKey, nemesisOf, victimOf, bestMateOf, rivalOf, START_RATING, eloDelta, kFor, K, K_NEW, PROVISIONAL, type GameRowIn } from './league'
 import { sampleRows } from './league.sample'
 import type { BuildStep, GameEvent } from './recorder'
 
@@ -40,9 +40,33 @@ describe('the league', () => {
 		expect(z.byType.life).toEqual({ games: 1, wins: 0 })
 		expect(z.ratingHist[0]).toBe(START_RATING)
 		expect(z.ratingHist).toHaveLength(4)
-		// a team Elo: what one side gains the other loses
+		// individual Elo, everyone on the same K: close to zero-sum (each player is rated against the enemy average)
 		const total = L.players.reduce((s, p) => s + p.rating, 0)
-		expect(Math.abs(total - 4 * START_RATING)).toBeLessThanOrEqual(4)
+		expect(Math.abs(total - 4 * START_RATING)).toBeLessThanOrEqual(12)
+	})
+
+	it('individual Elo with a provisional K', () => {
+		// equal ratings: half of K either way
+		expect(eloDelta(1200, 1200, true, 20)).toBe(16)
+		expect(eloDelta(1200, 1200, false, 20)).toBe(-16)
+		// new players swing harder for their first PROVISIONAL games
+		expect(kFor(0)).toBe(K_NEW)
+		expect(kFor(PROVISIONAL - 1)).toBe(K_NEW)
+		expect(kFor(PROVISIONAL)).toBe(K)
+		expect(eloDelta(1200, 1200, true, 0)).toBe(24)
+		// the same win is worth more to a lower-rated player than to a higher-rated teammate
+		expect(eloDelta(1150, 1200, true, 20)).toBeGreaterThan(eloDelta(1250, 1200, true, 20))
+		// an upset pays more than an expected result
+		expect(eloDelta(1100, 1300, true, 20)).toBeGreaterThan(eloDelta(1300, 1100, true, 20))
+	})
+
+	it('teammates in one game can move by different amounts', () => {
+		const L = buildLeague(sampleRows(30))
+		const mixed = L.games.some((g) => {
+			const ds = L.players.flatMap((p) => p.history.filter((m) => m.id === g.id && m.won).map((m) => m.delta))
+			return new Set(ds).size > 1
+		})
+		expect(mixed).toBe(true)
 	})
 
 	it('kills, deaths, assists, nemesis, favourite victim, team-mates', () => {

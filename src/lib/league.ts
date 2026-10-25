@@ -11,8 +11,9 @@
 //  · coins earned / level — the final card state (every game)
 //  · level-up paths — games recorded with build steps (in pick order); older games give the final build
 //    only (`ordered: false`), in tier order
-//  · rating — a team Elo: everyone starts at 1200, each game moves the winners up and the losers down by
-//    how surprising the result was (the teams' average ratings), K = 32
+//  · rating — an individual Elo: everyone starts at 1200; each player is rated against the ENEMY team's average
+//    (ratings before the game), so a lower-rated player gains more from the same win. Provisional K: 48 for a
+//    player's first PROVISIONAL (10) games, then 32
 import type { Team } from './match'
 import type { BuildStep, GameEvent, Journal } from './recorder'
 import { statsFromJournal, levelsPaid } from './gamestats'
@@ -449,7 +450,12 @@ export type Award = { id: string; title: string; blurb: string; scope: 'game' | 
 export type League = { games: LeagueGame[]; players: PlayerAgg[]; heroes: HeroAgg[]; awards: Award[]; withEvents: number; withClashes: number }
 
 export const START_RATING = 1200
-const K = 32
+/** Elo K: bigger swings while a player is new (their first PROVISIONAL games), so they find their level faster */
+export const K = 32, K_NEW = 48, PROVISIONAL = 10
+export const kFor = (gamesBefore: number) => (gamesBefore < PROVISIONAL ? K_NEW : K)
+/** one player's rating change: their own rating against the enemy team's average */
+export const eloDelta = (own: number, foes: number, won: boolean, gamesBefore: number) =>
+	Math.round(kFor(gamesBefore) * ((won ? 1 : 0) - 1 / (1 + 10 ** ((foes - own) / 400))))
 const ZERO_EX: Record<keyof Extras, number> = { firstBlood: 0, wipe: 0, shutdowns: 0, paybacks: 0, multis: 0, aces: 0, heavies: 0, bounty: 0, giants: 0, defends: 0, defDied: 0, noDefDied: 0, beatDefended: 0, relentless: 0, savior: 0, punisher: 0, coup: 0, denied: 0, breakwater: 0, lastStand: 0, riptide: 0, dawn: 0, risingTide: 0 }
 const heroTraits = (id: string) => (HEROES.find((h) => h.id === id)?.traits ?? []) as Trait[]
 
@@ -488,14 +494,14 @@ export function leagueOf(list: LeagueGame[]): League {
 		m.set(k, t)
 	}
 	for (const g of games) {
-		// rating: the teams' averages before the game
+		// rating: everyone's rating and games BEFORE this game (so the order players are listed in can't matter)
 		const avg = (t: Team) => { const ps = g.players.filter((x) => x.team === t).map((x) => get(x).rating); return ps.reduce((a, b) => a + b, 0) / Math.max(1, ps.length) }
-		const ra = avg('orange'), rb = avg('blue')
-		const expOrange = 1 / (1 + 10 ** ((rb - ra) / 400))
+		const foeAvg: Record<Team, number> = { orange: avg('blue'), blue: avg('orange') }
+		const before = new Map(g.players.map((x) => [x.key, { r: get(x).rating, n: get(x).games }]))
 		for (const gp of g.players) {
 			const p = get(gp)
-			const exp = gp.team === 'orange' ? expOrange : 1 - expOrange
-			const delta = Math.round(K * ((gp.won ? 1 : 0) - exp))
+			const b = before.get(gp.key)!
+			const delta = eloDelta(b.r, foeAvg[gp.team], gp.won, b.n)
 			p.rating += delta
 			p.ratingHist.push(p.rating)
 			p.games++
