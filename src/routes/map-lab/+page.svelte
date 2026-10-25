@@ -1,7 +1,7 @@
 <script lang="ts">
 	// Map lab: the board on its own, to judge a new look before it goes into the game.
 	// No game, no network — sample pieces only. Options can be preset in the address:
-	// ?look=classic|island &team=orange|blue &pieces=0 &zone=Center &fx=0 &map=__editor
+	// ?look=classic|island &theme=ink &team=orange|blue &pieces=0 &zone=Center &fx=0 &map=__editor
 	import { onMount } from 'svelte';
 	import BoardCanvas from '$lib/BoardCanvas.svelte';
 	import { availableMaps, editorMap, type GameMap, type MapChoice } from '$lib/maps';
@@ -9,11 +9,13 @@
 	import { throneHex } from '$lib/match';
 	import { heroLogo, heroById } from '$lib/heroes';
 	import { placeName } from '$lib/teams';
+	import { rethemesFor, themeFor, mapKey } from '$lib/board/rethemes';
 
 	let board: BoardCanvas;
 	let maps: MapChoice[] = [];
 	let mapId = '';
 	let look: 'classic' | 'island' = 'island';
+	let theme: string | null = null; // a retheme of the map (rethemes.ts), if it has one
 	let team: 'orange' | 'blue' = 'blue';
 	let showPieces = true;
 	let zone: string = 'Center';
@@ -56,6 +58,7 @@
 		mapId = maps[0]?.id ?? '';
 		const q = new URLSearchParams(location.search);
 		if (q.get('look') === 'classic') look = 'classic';
+		if (q.get('theme')) theme = q.get('theme');
 		if (q.get('team') === 'orange') team = 'orange';
 		if (q.get('pieces') === '0') showPieces = false;
 		if (q.get('still') === '1') still = true;
@@ -70,14 +73,15 @@
 
 <div class="lab">
 	{#if ready}
-		<BoardCanvas bind:this={board} {map} {look} rotation={team === 'orange' ? 180 : 0} pieces={showPieces ? pieces : []} {thrones}
-			glowZone={zone || null} seaStill={still} {effects} onMovePiece={move} />
+		<BoardCanvas bind:this={board} {map} {look} theme={themeFor(map?.name, theme ? { [mapKey(map?.name)]: theme } : {})} rotation={team === 'orange' ? 180 : 0} pieces={showPieces ? pieces : []} {thrones}
+			glowZone={zone || null} activeZone={zone || null} seaStill={still} {effects} onMovePiece={move} />
 	{/if}
 	<div class="bar">
 		<b>Map lab</b>
 		<span class="seg">
-			<button class:on={look === 'island'} on:click={() => (look = 'island')}>Island</button>
-			<button class:on={look === 'classic'} on:click={() => (look = 'classic')}>Classic</button>
+			<button class:on={look === 'island' && !theme} on:click={() => { look = 'island'; theme = null; }}>Island</button>
+			<button class:on={look === 'classic' && !theme} on:click={() => { look = 'classic'; theme = null; }}>Classic</button>
+			{#each rethemesFor(map?.name) as t}<button class:on={theme === t.id} on:click={() => (theme = t.id)}>{t.label}</button>{/each}
 		</span>
 		<span class="seg">
 			<button class:on={team === 'blue'} on:click={() => (team = 'blue')}>View as Titans</button>

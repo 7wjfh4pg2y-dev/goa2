@@ -29,6 +29,7 @@
 	import VictorySplash from '$lib/VictorySplash.svelte';
 	import ControlWheel, { type WheelItem } from '$lib/ControlWheel.svelte';
 	import { boardPrefs, type BoardPrefs, type HeroFx } from '$lib/boardPrefs';
+	import { rethemesFor, themeFor, mapKey } from '$lib/board/rethemes';
 	import type { Order } from '$lib/hud2/HudDash.svelte';
 	import { privRadius } from '$lib/privateRadius';
 	import HudTop from '$lib/hud2/HudTop.svelte';
@@ -210,6 +211,10 @@
 	// the board's look and its effects are each player's OWN choice (boardPrefs: this browser only, all effects
 	// off by default) — switching one changes nobody else's screen
 	$: boardLook = $boardPrefs.look;
+	// a retheme of THIS map the player picked (board/rethemes.ts; Version bubble) — it replaces the look
+	$: mapThemes = rethemesFor($ms.map?.name);
+	$: boardTheme = themeFor($ms.map?.name, $boardPrefs.themes);
+	const pickTheme = (id: string | null) => boardPrefs.set({ themes: { ...$boardPrefs.themes, [mapKey($ms.map?.name)]: id ?? '' } });
 	// the 2.0 HUD (each player's own choice; phones keep their own layout)
 	$: hud2 = !mobile;
 	// the 2.0 phone (segment 9): PhoneTop + beam, the restyled strip, PhoneDash, PhoneBoard, ☰ = the lobby with the log
@@ -317,7 +322,7 @@
 		return { ...side, half: colH / 2 + PILL_GAP };
 	}
 	const touchOnly = typeof matchMedia !== 'undefined' && matchMedia('(hover: none)').matches;
-	$: glowZone = boardLook === 'island' && $boardPrefs.zone && !$ms.wonBy ? battleZone($ms) : null;
+	$: glowZone = (boardLook === 'island' || !!boardTheme) && $boardPrefs.zone && !$ms.wonBy ? battleZone($ms) : null;
 
 	// ── the control centre: one button → a wheel over the board (view controls inside, the board's switches outside)
 	let wheelOpen = false;
@@ -331,6 +336,7 @@
 		zout: '<circle cx="10.5" cy="10.5" r="6.5" /><path d="M15.5 15.5L21 21M7.5 10.5h6" />',
 		views: '<path d="M3 8.5a2 2 0 0 1 2-2h2.2l1.4-2h6.8l1.4 2H19a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><circle cx="12" cy="13" r="3.6" />',
 		island: '<path d="M12 2.5l8.2 4.75v9.5L12 21.5l-8.2-4.75v-9.5z" /><path d="M7 14c1.5-2 3-2.6 5-1.2s3.4.8 5-1.3" />',
+		ink: '<path d="M18.5 3.5l2 2-9.8 9.8-3 1 1-3z" /><path d="M14.5 7.5l2 2" /><path d="M4 20c2.5-1.6 5-1.6 7.5 0s5 1.6 8.5-.4" />',
 		classic: '<path d="M12 2.5l8.2 4.75v9.5L12 21.5l-8.2-4.75v-9.5z" /><path d="M12 2.5v19M3.8 7.25l16.4 9.5M20.2 7.25l-16.4 9.5" />',
 		zone: '<path d="M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9z" stroke-dasharray="3 2.4" /><circle cx="12" cy="12" r="2.4" />',
 		rims: '<circle cx="12" cy="12" r="8" /><path d="M12 4v2M20 12h-2M12 20v-2M4 12h2M17.7 6.3l-1.4 1.4M17.7 17.7l-1.4-1.4M6.3 17.7l1.4-1.4M6.3 6.3l1.4 1.4" />',
@@ -411,12 +417,13 @@
 	}
 	$: heroWheel = heroWheelOf($boardPrefs, $ms.cards, clientId, heroFx);
 	const wheelHub: WheelItem = { id: 'recenter', label: 'Recenter', icon: ICON.recenter, act: () => board?.reset() };
-	$: onIsland = boardLook === 'island';
+	$: onIsland = boardLook === 'island' && !boardTheme;
+	$: drawnLand = boardLook === 'island' || !!boardTheme; // the zone outline is drawn on the island and on a retheme
 	$: wheelRing = [
 		{ id: 'fx', label: 'Effects', icon: ICON.fx, title: 'Effects — only on your screen', act: () => {}, sub: [
 			{ id: 'rims', label: 'Rims', icon: ICON.rims, on: $boardPrefs.rims, title: `The minions' turning rims: ${$boardPrefs.rims ? 'on' : 'off'}`, act: () => boardPrefs.set({ rims: !$boardPrefs.rims }) },
-			{ id: 'zone', label: 'Zone', icon: ICON.zone, on: onIsland && $boardPrefs.zone, disabled: !onIsland,
-				title: onIsland ? `Battle zone outline: ${$boardPrefs.zone ? 'on' : 'off'}` : 'The battle zone outline is drawn on the island only', act: () => boardPrefs.set({ zone: !$boardPrefs.zone }) },
+			{ id: 'zone', label: 'Zone', icon: ICON.zone, on: drawnLand && $boardPrefs.zone, disabled: !drawnLand,
+				title: drawnLand ? `Battle zone outline: ${$boardPrefs.zone ? 'on' : 'off'}` : 'The battle zone outline is drawn on the island only', act: () => boardPrefs.set({ zone: !$boardPrefs.zone }) },
 			{ id: 'sea', label: 'Waves', icon: ICON.waves, on: onIsland && $boardPrefs.sea, disabled: !onIsland,
 				title: onIsland ? `Moving sea: ${$boardPrefs.sea ? 'on' : 'off'}` : 'The sea is drawn on the island only', act: () => boardPrefs.set({ sea: !$boardPrefs.sea }) },
 			{ id: 'wisps', label: 'Wisps', icon: ICON.wisps, on: $boardPrefs.wisps, title: `The spirit swirl on spaces to act on: ${$boardPrefs.wisps ? 'on' : 'off'}`, act: () => boardPrefs.set({ wisps: !$boardPrefs.wisps }) },
@@ -448,8 +455,13 @@
 		{ id: 'views', label: 'Views', icon: ICON.views, title: 'Saved views', act: () => {} },
 		// which version of things you see: the map's look and (desktop) the HUD — only on your screen
 		{ id: 'version', label: 'Version', icon: ICON.version, title: 'Map look — only on your screen', act: () => {}, sub: [
-			{ id: 'look', label: onIsland ? 'Island' : 'Classic', icon: onIsland ? ICON.island : ICON.classic, on: onIsland,
-				title: `Map: ${onIsland ? 'the island' : 'classic tiles'} (only on your screen)`, act: () => boardPrefs.set({ look: onIsland ? 'classic' : 'island' }) }
+			{ id: 'look', label: boardLook === 'island' ? 'Island' : 'Classic', icon: boardLook === 'island' ? ICON.island : ICON.classic, on: onIsland,
+				title: `Map: ${boardLook === 'island' ? 'the island' : 'classic tiles'} (only on your screen)`,
+				// with a retheme on, the first tap goes back to the plain look; then it switches Island / Classic
+				act: () => (boardTheme ? pickTheme(null) : boardPrefs.set({ look: boardLook === 'island' ? 'classic' : 'island' })) },
+			// this map's own rethemes (any future ones land here too)
+			...mapThemes.map((t) => ({ id: `theme-${t.id}`, label: t.label, icon: ICON.ink, on: boardTheme === t.id,
+				title: `${t.title} — ${boardTheme === t.id ? 'on' : 'off'} (only on your screen)`, act: () => pickTheme(boardTheme === t.id ? null : t.id) }))
 		] },
 		{ id: 'spawn', label: 'Spawn', icon: ICON.spawn, disabled: !iAmHost, title: iAmHost ? 'Spawn a minion — then tap a hex' : 'Spawn a minion (the host)', act: () => {},
 			sub: (['orange', 'blue'] as Team[]).flatMap((t) => MINION_ROLES.map((r) => ({ id: `sp-${t}-${r}`, label: ROLE_NAME[r] ?? r, labelColor: TEAM_LBL[t], raw: true, icon: minionIcon(t, r),
@@ -1337,7 +1349,7 @@
 
 <svelte:window on:keydown={(e) => { if (e.key !== 'Escape') return; if (wheelOpen) { wheelOpen = false; heroFx = null; } else if (lobbyOpen) lobbyOpen = false; else if (confirmLeave) confirmLeave = false; else if (ringAsk) ringDone(); else { pendingSpawn = null; pendingToken = null; pendingDouble = null; pingArmed = false; if (clearing) cancelClear(); } }} bind:innerWidth={winW} bind:innerHeight={winH} />
 
-<div class="gamewrap" bind:clientWidth={wrapW} bind:clientHeight={wrapH} class:sea={boardLook === 'island'} class:mob={mobile} class:p2={phone2} class:land class:notchl={notch === 'l'} class:notchr={notch === 'r'} class:lshut={lShut} class:rshut={rShut} class:h2={hud2} class:dashfull={!mobile && !hud2 && lay.underHud} style={mobile ? '' : layoutVars(lay) + (hud2 ? `; --dh:${88 * lay.s}px` : '')}>
+<div class="gamewrap" bind:clientWidth={wrapW} bind:clientHeight={wrapH} class:sea={boardLook === 'island' && !boardTheme} class:paper={!!boardTheme} class:mob={mobile} class:p2={phone2} class:land class:notchl={notch === 'l'} class:notchr={notch === 'r'} class:lshut={lShut} class:rshut={rShut} class:h2={hud2} class:dashfull={!mobile && !hud2 && lay.underHud} style={mobile ? '' : layoutVars(lay) + (hud2 ? `; --dh:${88 * lay.s}px` : '')}>
 	{#if $ms.wonBy}
 		<button class="placehint won" on:click={() => (victoryClosed = false)} title="Show the victory screen again">🏆 {teamName($ms.wonBy.team)} win — {$ms.wonBy.reason}</button>
 	{:else if clearing}
@@ -1480,7 +1492,7 @@
 	<div class="ocean"></div>
 	<!-- on a phone the board sits between the top bar + player strip and the dash -->
 	<div class="boardarea" class:mob={mobile} class:p2={phone2} class:land>
-	<BoardCanvas bind:this={board} map={$ms.map ?? {}} inset={boardInset} look={boardLook} {glowZone} activeZone={$ms.wonBy ? null : battleZone($ms)} effects={!deckCovered} sea={$boardPrefs.sea} rims={$boardPrefs.rims} rotation={orientation} interactive={true} {placing} {placeGhost} holdColor={myHoldColor} onCancelPlace={cancelPlace} {areas} marks={boardMarks} badges={defBadges} zoomLock={mobile && $boardPrefs.zoomLock} wisps={$boardPrefs.wisps} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} pings={boardPings} onPing={doPing} {pingArmed} />
+	<BoardCanvas bind:this={board} map={$ms.map ?? {}} inset={boardInset} look={boardLook} theme={boardTheme} {glowZone} activeZone={$ms.wonBy ? null : battleZone($ms)} effects={!deckCovered} sea={$boardPrefs.sea} rims={$boardPrefs.rims} rotation={orientation} interactive={true} {placing} {placeGhost} holdColor={myHoldColor} onCancelPlace={cancelPlace} {areas} marks={boardMarks} badges={defBadges} zoomLock={mobile && $boardPrefs.zoomLock} wisps={$boardPrefs.wisps} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} pings={boardPings} onPing={doPing} {pingArmed} />
 	</div>
 
 	<CardLayer bind:this={cardLayer} bind:lShut bind:rShut bind:turnCtx bind:crackPreview bind:gyRaise areaW={gvw} areaH={gvh} {mobile} {hud2} {phone2} {land} ringAsk={ringAsk ?? swapAsk ?? autoAsk} onResults={() => (victoryClosed = false)} compact={$boardPrefs.compact} cTop={$boardPrefs.cTop} cOrder={$boardPrefs.cOrder} cLog={$boardPrefs.cLog} bind:topW {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} bind:covered={deckCovered} bind:phoneStatus onRespawn={placeMyHero} onEnter={placeMyHero} onArmToken={armToken} onArmDouble={armDouble} placingDouble={pendingDouble} holdingToken={!!pendingToken} {pingArmed} onPing={pingButton} bind:previewId />
@@ -1981,6 +1993,7 @@
 <style>
 	/* clip (not just hidden): a tucked hand extends past the bottom edge, and
 	   overflow:hidden would still let focus/scrollIntoView scroll the whole view */
+	.gamewrap.paper { background: #cdb68f; } /* a retheme on paper (ink & wash) */
 	.gamewrap.sea { background: #0b4f80; } /* island look: deep water behind everything (the phone bars sit outside the board) */
 	.managepanel .act:disabled { cursor: default; opacity: .75; }
 	.managepanel .act:disabled:not(.primary) { opacity: .4; }

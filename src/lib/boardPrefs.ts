@@ -11,8 +11,8 @@ import { writable } from 'svelte/store'
 // corner, as tall as the dash
 // wisps: the spirit swirl on hexes to act on (spawn points, minions to remove, …); off = a still glowing hex
 // dash: the 4★ heroes' own dash buttons' effects (Ignatia's flames, …) — one switch for all of them
-export type BoardPrefs = { dash: boolean; rims: boolean; zone: boolean; sea: boolean; look: 'island' | 'classic'; compact: boolean; cTop: boolean; cOrder: boolean; cLog: boolean; beam: boolean; wisps: boolean; zoomLock: boolean; turnCue: boolean; laugh: boolean; sparkle: boolean; spells: boolean; essence: boolean; emToast: boolean; emClock: boolean; snInscribe: boolean; runeFlare: boolean; igEq: boolean; igSwirl: boolean; igChaos: boolean; tkSwap: boolean; tkWave: boolean; tkWar: boolean; rzShuffle: boolean; rzComic: boolean; rzPoof: boolean; rzApplause: boolean; rzTickets: boolean; shelfL: boolean; shelfR: boolean }
-export const DEFAULT_PREFS: BoardPrefs = { dash: true, rims: true, zone: true, sea: true, look: 'island', compact: false, cTop: false, cOrder: false, cLog: false, beam: true, wisps: true, zoomLock: false, turnCue: true, laugh: true, sparkle: true, spells: true, essence: true, emToast: true, emClock: true, snInscribe: true, runeFlare: true, igEq: true, igSwirl: true, igChaos: true, tkSwap: true, tkWave: true, tkWar: true, rzShuffle: true, rzComic: true, rzPoof: true, rzApplause: true, rzTickets: true, shelfL: true, shelfR: true }
+export type BoardPrefs = { dash: boolean; rims: boolean; zone: boolean; sea: boolean; look: 'island' | 'classic'; compact: boolean; cTop: boolean; cOrder: boolean; cLog: boolean; beam: boolean; wisps: boolean; zoomLock: boolean; turnCue: boolean; laugh: boolean; sparkle: boolean; spells: boolean; essence: boolean; emToast: boolean; emClock: boolean; snInscribe: boolean; runeFlare: boolean; igEq: boolean; igSwirl: boolean; igChaos: boolean; tkSwap: boolean; tkWave: boolean; tkWar: boolean; rzShuffle: boolean; rzComic: boolean; rzPoof: boolean; rzApplause: boolean; rzTickets: boolean; shelfL: boolean; shelfR: boolean; themes: Record<string, string> }
+export const DEFAULT_PREFS: BoardPrefs = { dash: true, rims: true, zone: true, sea: true, look: 'island', compact: false, cTop: false, cOrder: false, cLog: false, beam: true, wisps: true, zoomLock: false, turnCue: true, laugh: true, sparkle: true, spells: true, essence: true, emToast: true, emClock: true, snInscribe: true, runeFlare: true, igEq: true, igSwirl: true, igChaos: true, tkSwap: true, tkWave: true, tkWar: true, rzShuffle: true, rzComic: true, rzPoof: true, rzApplause: true, rzTickets: true, shelfL: true, shelfR: true, themes: {} }
 const VERSION = 2
 const KEY = 'goa2-board-prefs'
 const GAME_KEY = 'goa2-hero-fx'
@@ -26,6 +26,12 @@ export type HeroFx = (typeof HERO_FX)[number]
 const HERO_ON = Object.fromEntries(HERO_FX.map((k) => [k, true])) as Record<HeroFx, boolean>
 const heroPart = (p: Partial<BoardPrefs>) => Object.fromEntries(HERO_FX.filter((k) => k in p).map((k) => [k, p[k]])) as Partial<Record<HeroFx, boolean>>
 const withoutHero = (p: BoardPrefs) => Object.fromEntries(Object.entries(p).filter(([k]) => !(HERO_FX as readonly string[]).includes(k)))
+
+// a map's retheme as picked on this browser: { 'forgotten island': 'ink' } (rethemes.ts keys / ids)
+const cleanThemes = (t: unknown): Record<string, string> => {
+	if (!t || typeof t !== 'object') return {}
+	return Object.fromEntries(Object.entries(t as Record<string, unknown>).filter(([, v]) => typeof v === 'string' && v)) as Record<string, string>
+}
 
 export function readPrefs(raw: string | null): BoardPrefs {
 	try {
@@ -46,6 +52,7 @@ export function readPrefs(raw: string | null): BoardPrefs {
 			beam: fx.beam !== false,
 			wisps: fx.wisps !== false,
 			turnCue: fx.turnCue !== false, // the YOUR TURN cue (YourTurn.svelte)
+			themes: cleanThemes(p.themes), // map key → the retheme picked for that map (board/rethemes.ts)
 			...HERO_ON // the 4★ heroes' effects are never kept between games (see useGame)
 		}
 	} catch {

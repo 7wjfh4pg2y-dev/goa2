@@ -3,6 +3,7 @@
 	import Ocean from '$lib/board/Ocean.svelte';
 	import { paintSea, seaPatterns } from '$lib/board/seaPaint';
 	import IslandLayer from '$lib/board/IslandLayer.svelte';
+	import InkLayer from '$lib/board/InkLayer.svelte';
 	import SpawnMark from '$lib/board/SpawnMark.svelte';
 	import PieceDefs from '$lib/board/PieceDefs.svelte';
 	import HeroToken from '$lib/board/HeroToken.svelte';
@@ -59,6 +60,8 @@
 	export let thrones: Array<{ hex: string; team: string }> = [];
 	// 'classic' = the flat tiles; 'island' = the island drawn from the map data, in a moving sea
 	export let look: 'classic' | 'island' = 'classic';
+	/** a retheme of this map (board/rethemes.ts) picked by this player — it replaces the look ('ink' = InkLayer on paper) */
+	export let theme: string | null = null;
 	// island look: the zone (zones.ts name, e.g. 'Center') to light up as the battle zone
 	export let glowZone: string | null = null;
 	/** the current battle zone: its minion spawn points get their corner brackets (null = none) */
@@ -265,10 +268,12 @@
 	})();
 	$: viewTf = viewM ? `matrix(${viewM.a},${viewM.b},${viewM.c},${viewM.d},${viewM.e},${viewM.f})` : '';
 	// island look: the coastline (shared by the sea and the land) and every hex's zone name
-	$: coast = look === 'island' ? loopsPath(outlineLoops(Object.keys(cells), size), 0.9) : '';
-	$: zoneNames = look === 'island' || activeZone ? zoneTable(map as Parameters<typeof zoneTable>[0]) : {};
+	$: ink = theme === 'ink';
+	$: isle = look === 'island' || ink; // a drawn land layer (the island, or a retheme) instead of the classic tiles
+	$: coast = isle ? loopsPath(outlineLoops(Object.keys(cells), size), 0.9) : '';
+	$: zoneNames = isle || activeZone ? zoneTable(map as Parameters<typeof zoneTable>[0]) : {};
 	// the battle zone's outline hugs the ground you can stand on (rocks belong to the zone but aren't lit)
-	$: zoneGlow = look === 'island' && glowZone ? loopsPath(outlineLoops(Object.keys(cells).filter((id) => zoneNames[id] === glowZone && cells[id] !== 'terrain'), size), 0.45) : '';
+	$: zoneGlow = isle && glowZone ? loopsPath(outlineLoops(Object.keys(cells).filter((id) => zoneNames[id] === glowZone && cells[id] !== 'terrain'), size), 0.45) : '';
 	// The island is thousands of shapes, so it lives in its OWN svg and the view is applied to
 	// that element as a CSS transform: panning / zooming slides one finished layer about on the
 	// GPU instead of re-processing every shape (measured: 4–5× slower the other way). The same
@@ -297,7 +302,7 @@
 	let moving = false;
 	let movingT: ReturnType<typeof setTimeout> | null = null;
 	function viewMoved() { moving = true; if (movingT) clearTimeout(movingT); movingT = setTimeout(() => (moving = false), 240); }
-	$: if (viewM && look === 'island') viewMoved();
+	$: if (viewM && isle) viewMoved();
 
 	let svgEl: SVGSVGElement;
 	let landEl: SVGSVGElement | null = null;
@@ -751,17 +756,25 @@
 	bind:clientWidth={wrapW}
 	bind:clientHeight={wrapH}
 	class:calm={!effects}
+	class:ink
 	class:rimstill={!rims}
 	class:holding={!!ghostPiece}
 	class:pinging={pingArmed}
 	role="img"
 	aria-label={map.name ? `Game board: ${map.name}` : 'Game board'}
 >
-	{#if look === 'island' && viewM}
+	{#if ink && viewM}
+		<!-- a retheme: the page and the land in one static svg (no sea canvas) -->
+		<svg class="land" class:moving viewBox={vb} preserveAspectRatio="xMidYMid meet" style:transform={landTf} aria-hidden="true">
+			<InkLayer {cells} {meta} {size} rot={rotEff} zones={zoneNames} {activeZone} thrones={throneAt} {coast} ground={map.ground ?? {}} />
+		</svg>
+	{:else if look === 'island' && viewM}
 		<Ocean {bounds} view={viewM} {coast} {size} still={seaStill || !effects || !sea} />
 		<svg class="land" class:moving viewBox={vb} preserveAspectRatio="xMidYMid meet" style:transform={landTf} aria-hidden="true" bind:this={landEl}>
 			<IslandLayer {cells} {meta} {size} rot={rotEff} zones={zoneNames} {activeZone} thrones={throneAt} {coast} scatter={map.scatter ?? {}} ground={map.ground ?? {}} />
 		</svg>
+	{/if}
+	{#if isle && viewM}
 		<!-- the battle zone's outline is its own svg so that its pulse is an opacity animation on a whole element
 		     (GPU work); pulsing a path inside the land svg re-styled and repainted that layer every frame -->
 		{#if zoneGlow}
@@ -806,7 +819,7 @@
 			{#if interactive || pieces.length}<PieceDefs />{/if}
 		</defs>
 		<g bind:this={viewG} transform={viewTf}>
-			{#if look !== 'island'}
+			{#if !isle}
 			{#each hexes as h (h.id)}
 				{#if isSpawn(h.t)}
 					<!-- an empty minion spawn point: its zone's ground with a mark on it (never a minion picture — new players took those for minions) -->
@@ -963,6 +976,7 @@
 	.pname { position: absolute; transform: translate(-50%, calc(-100% - 4px)); pointer-events: none; white-space: nowrap; z-index: 3;
 		padding: 2px 9px; border-radius: 999px; font-size: .78rem; background: rgba(9, 13, 22, .88); border: 1px solid rgba(255, 255, 255, .16); box-shadow: 0 4px 12px rgba(0,0,0,.45); text-transform: capitalize; }
 	.board-wrap { position: absolute; inset: 0; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
+	.board-wrap.ink { background: #cdb68f; } /* the paper's darkened edge, past the sheet the ink layer draws */
 	.board-wrap :global(image) { -webkit-user-drag: none; user-select: none; }
 	.board-wrap.interactive { cursor: grab; }
 	.board-wrap.interactive:active { cursor: grabbing; }
