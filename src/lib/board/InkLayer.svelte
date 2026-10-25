@@ -8,9 +8,9 @@
 	// lines inked round the coast, a watercolour wash per ground that bleeds past its hex, pen work on the ground
 	// (riveted plates, glacier cracks, fern ticks, stippled sand, dry tufts), the coast inked twice with a wobble, the
 	// zones' borders dotted, the rocks as inked boulders, the hero spawn points as the tie-breaker coin's faces in ink
-	// and watercolour (the Atlanteans' gear, the Titans' star) and the minion spawn points as the emblems from the
-	// minion models (minionArt.ts) washed and inked. Static, no pointer events, placed by hash: every player sees the
-	// same page. Drawn from the map data, like IslandLayer.
+	// and watercolour (the Atlanteans' gear, the Titans' star) and the minion spawn points as hexes hatched in the team's
+	// colour with the minion models' emblem (minionArt.ts) washed over them. Static, no pointer events, placed by hash:
+	// every player sees the same page. Drawn from the map data, like IslandLayer.
 	import { hexCenter, hexCorner, hexPoints, hexHash, hexNeighbour, borderPath, intHash, type Pt } from './hexgeo';
 	import { zoneType } from '../zones';
 	import { MINION_ART, type MinionRole, type MinionTeam } from './minionArt';
@@ -162,9 +162,9 @@
 	const STONE_CRACKS = 'M-60 -22L-44 -14L-40 4M48 -40L38 -24L44 -10M-30 52L-16 44L-4 56M56 24L42 30';
 	const coinTf = (c: Pt, rot = 0) => `translate(${f(c.x)} ${f(c.y)}) rotate(${-rot}) scale(${(S * 0.0074).toFixed(4)})`;
 
-	// ── minion spawn points: the emblem from the models, washed in the team's colour and inked, facing its way
+	// ── minion spawn points: a mark ON the map, never shaped like a piece (2026-10-25, the user's pick D): the hex hatched
+	// in the team's colour and the model's emblem (minionArt) washed over it in the team colour, facing its way
 	const WASHC = { orange: 'rgba(239,125,34,', blue: 'rgba(47,127,230,' };
-	const INKC = { orange: '#8a3f12', blue: '#1f4a86' };
 	$: spawns = hexes.filter((h) => h.spawn).map((h) => {
 		const s = h.spawn!, a = MINION_ART[s.team][s.role], k = (S * 0.5) / a.r;
 		let brackets = '';
@@ -176,10 +176,11 @@
 		}
 		return {
 			id: h.id, team: s.team, c: h.c, art: a, k, brackets,
-			bleed: { x: h.c.x + (hexHash(h.id, 801) - 0.5) * 0.2 * S, y: h.c.y + (hexHash(h.id, 802) - 0.5) * 0.2 * S },
 			tf: `translate(${f(h.c.x)} ${f(h.c.y)}) rotate(${s.dir * 60 - 30}) scale(${k.toFixed(4)}) translate(${-a.cx} ${-a.cy})`
 		};
 	});
+	// diagonal hatching over a hex (clipped to it where it's drawn)
+	const hatchAt = (c: Pt) => { let d = ''; for (let i = -10; i <= 10; i++) { const x = c.x + i * S * 0.12; d += `M${f(x - S)} ${f(c.y + S)}L${f(x + S)} ${f(c.y - S)}`; } return d; };
 	$: coins = hexes.filter((h) => h.kind === 'hero' && h.coin);
 </script>
 
@@ -228,9 +229,10 @@
 
 	<!-- minion spawn points -->
 	{#each spawns as s (s.id)}
-		<polygon points={hexPoints(s.bleed, S * 0.9)} fill="{WASHC[s.team]}.1)" />
-		<polygon points={hexPoints(s.c, S * 0.84)} fill="{WASHC[s.team]}.2)" />
-		<path d={s.art.d} transform={s.tf} fill="{WASHC[s.team]}.5)" stroke={INKC[s.team]} stroke-opacity=".9" stroke-width={(S * 0.026 / s.k).toFixed(2)} fill-rule="evenodd" stroke-linejoin="round" />
+		<!-- the hex hatched in the team's colour, the emblem washed over it -->
+		<clipPath id="{P}sp{s.id}"><polygon points={hexPoints(s.c, S * 0.86)} /></clipPath>
+		<g clip-path="url(#{P}sp{s.id})"><path d={hatchAt(s.c)} stroke="{WASHC[s.team]}.55)" stroke-width={S * 0.032} /></g>
+		<path d={s.art.d} transform={s.tf} fill="{WASHC[s.team]}.72)" fill-rule="evenodd" />
 		{#if s.brackets}<path d={s.brackets} fill="none" stroke={SEP} stroke-width={S * 0.06} stroke-linecap="round" stroke-linejoin="round" />{/if}
 	{/each}
 
