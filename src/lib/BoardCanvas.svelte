@@ -4,6 +4,7 @@
 	import { paintSea, seaPatterns } from '$lib/board/seaPaint';
 	import IslandLayer from '$lib/board/IslandLayer.svelte';
 	import InkLayer from '$lib/board/InkLayer.svelte';
+	import DoodleLayer from '$lib/board/DoodleLayer.svelte';
 	import SpawnMark from '$lib/board/SpawnMark.svelte';
 	import PieceDefs from '$lib/board/PieceDefs.svelte';
 	import HeroToken from '$lib/board/HeroToken.svelte';
@@ -273,7 +274,8 @@
 	$: viewTf = viewM ? `matrix(${viewM.a},${viewM.b},${viewM.c},${viewM.d},${viewM.e},${viewM.f})` : '';
 	// island look: the coastline (shared by the sea and the land) and every hex's zone name
 	$: ink = theme === 'ink';
-	$: isle = look === 'island' || ink; // a drawn land layer (the island, or a retheme) instead of the classic tiles
+	$: doodle = theme === 'doodle';
+	$: isle = look === 'island' || ink || doodle; // a drawn land layer (the island, or a retheme) instead of the classic tiles
 	$: coast = isle ? loopsPath(outlineLoops(Object.keys(cells), size), 0.9) : '';
 	$: zoneNames = isle || activeZone ? zoneTable(map as Parameters<typeof zoneTable>[0]) : {};
 	// the battle zone's outline hugs the ground you can stand on (rocks belong to the zone but aren't lit)
@@ -763,6 +765,7 @@
 	bind:clientHeight={wrapH}
 	class:calm={!effects}
 	class:ink
+	class:doodle
 	class:rimstill={!rims}
 	class:holding={!!ghostPiece}
 	class:pinging={pingArmed}
@@ -773,6 +776,11 @@
 		<!-- a retheme: the page and the land in one static svg (no sea canvas) -->
 		<svg class="land" class:moving viewBox={vb} preserveAspectRatio="xMidYMid meet" style:transform={landTf} aria-hidden="true">
 			<InkLayer {cells} {meta} {size} rot={rotEff} zones={zoneNames} {activeZone} thrones={throneAt} {coast} ground={map.ground ?? {}} />
+		</svg>
+	{:else if doodle && viewM}
+		<!-- the doodle retheme: its own flat sea and the tiles, one static svg (no sea canvas) -->
+		<svg class="land" class:moving viewBox={vb} preserveAspectRatio="xMidYMid meet" style:transform={landTf} aria-hidden="true">
+			<DoodleLayer {cells} {meta} {size} rot={rotEff} zones={zoneNames} {activeZone} thrones={throneAt} ground={map.ground ?? {}} />
 		</svg>
 	{:else if look === 'island' && viewM}
 		<Ocean {bounds} view={viewM} {coast} {size} still={seaStill || !effects || !sea} />
@@ -982,6 +990,7 @@
 	.pname { position: absolute; transform: translate(-50%, calc(-100% - 4px)); pointer-events: none; white-space: nowrap; z-index: 3;
 		padding: 2px 9px; border-radius: 999px; font-size: .78rem; background: rgba(9, 13, 22, .88); border: 1px solid rgba(255, 255, 255, .16); box-shadow: 0 4px 12px rgba(0,0,0,.45); text-transform: capitalize; }
 	.board-wrap { position: absolute; inset: 0; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
+	.board-wrap.doodle { background: #6f9ab3; } /* the doodle retheme's flat sea, past what its layer draws */
 	.board-wrap.ink { background: #cdb68f; } /* the paper's darkened edge, past the sheet the ink layer draws */
 	.board-wrap :global(image) { -webkit-user-drag: none; user-select: none; }
 	.board-wrap.interactive { cursor: grab; }

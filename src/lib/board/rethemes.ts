@@ -2,11 +2,14 @@
 // bubble; boardPrefs.themes, this browser only). A retheme belongs to ONE map — keyed by the map's name, so a renamed
 // copy from the editor is a new map without it. To add one: a drawing layer in BoardCanvas + an entry here.
 
-export type ThemeId = 'ink'
+export type ThemeId = 'ink' | 'doodle'
 export type Retheme = { id: ThemeId; label: string; title: string }
 
 export const RETHEMES: Record<string, Retheme[]> = {
-	'forgotten island': [{ id: 'ink', label: 'Ink', title: 'Ink & wash: an old atlas page, watercolour and pen' }]
+	'forgotten island': [
+		{ id: 'ink', label: 'Ink', title: 'Ink & wash: an old atlas page, watercolour and pen' },
+		{ id: 'doodle', label: 'Doodle', title: 'Doodle tiles: flat hexes in thick black frames, cartoon trees and rocks' }
+	]
 }
 
 export const mapKey = (name: string | undefined | null): string => (name ?? '').trim().toLowerCase()

@@ -336,6 +336,7 @@
 		zout: '<circle cx="10.5" cy="10.5" r="6.5" /><path d="M15.5 15.5L21 21M7.5 10.5h6" />',
 		views: '<path d="M3 8.5a2 2 0 0 1 2-2h2.2l1.4-2h6.8l1.4 2H19a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><circle cx="12" cy="13" r="3.6" />',
 		island: '<path d="M12 2.5l8.2 4.75v9.5L12 21.5l-8.2-4.75v-9.5z" /><path d="M7 14c1.5-2 3-2.6 5-1.2s3.4.8 5-1.3" />',
+		doodle: '<path d="M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9z" /><path d="M9 15.5l2-5 1.4 2.4 1.2-1.4 1.9 4" />',
 		ink: '<path d="M18.5 3.5l2 2-9.8 9.8-3 1 1-3z" /><path d="M14.5 7.5l2 2" /><path d="M4 20c2.5-1.6 5-1.6 7.5 0s5 1.6 8.5-.4" />',
 		classic: '<path d="M12 2.5l8.2 4.75v9.5L12 21.5l-8.2-4.75v-9.5z" /><path d="M12 2.5v19M3.8 7.25l16.4 9.5M20.2 7.25l-16.4 9.5" />',
 		zone: '<path d="M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9z" stroke-dasharray="3 2.4" /><circle cx="12" cy="12" r="2.4" />',
@@ -460,7 +461,7 @@
 				// with a retheme on, the first tap goes back to the plain look; then it switches Island / Classic
 				act: () => (boardTheme ? pickTheme(null) : boardPrefs.set({ look: boardLook === 'island' ? 'classic' : 'island' })) },
 			// this map's own rethemes (any future ones land here too)
-			...mapThemes.map((t) => ({ id: `theme-${t.id}`, label: t.label, icon: ICON.ink, on: boardTheme === t.id,
+			...mapThemes.map((t) => ({ id: `theme-${t.id}`, label: t.label, icon: t.id === 'doodle' ? ICON.doodle : ICON.ink, on: boardTheme === t.id,
 				title: `${t.title} — ${boardTheme === t.id ? 'on' : 'off'} (only on your screen)`, act: () => pickTheme(boardTheme === t.id ? null : t.id) }))
 		] },
 		{ id: 'spawn', label: 'Spawn', icon: ICON.spawn, disabled: !iAmHost, title: iAmHost ? 'Spawn a minion — then tap a hex' : 'Spawn a minion (the host)', act: () => {},
@@ -1349,7 +1350,7 @@
 
 <svelte:window on:keydown={(e) => { if (e.key !== 'Escape') return; if (wheelOpen) { wheelOpen = false; heroFx = null; } else if (lobbyOpen) lobbyOpen = false; else if (confirmLeave) confirmLeave = false; else if (ringAsk) ringDone(); else { pendingSpawn = null; pendingToken = null; pendingDouble = null; pingArmed = false; if (clearing) cancelClear(); } }} bind:innerWidth={winW} bind:innerHeight={winH} />
 
-<div class="gamewrap" bind:clientWidth={wrapW} bind:clientHeight={wrapH} class:sea={boardLook === 'island' && !boardTheme} class:paper={!!boardTheme} class:mob={mobile} class:p2={phone2} class:land class:notchl={notch === 'l'} class:notchr={notch === 'r'} class:lshut={lShut} class:rshut={rShut} class:h2={hud2} class:dashfull={!mobile && !hud2 && lay.underHud} style={mobile ? '' : layoutVars(lay) + (hud2 ? `; --dh:${88 * lay.s}px` : '')}>
+<div class="gamewrap" bind:clientWidth={wrapW} bind:clientHeight={wrapH} class:sea={boardLook === 'island' && !boardTheme} class:paper={boardTheme === 'ink'} class:dsea={boardTheme === 'doodle'} class:mob={mobile} class:p2={phone2} class:land class:notchl={notch === 'l'} class:notchr={notch === 'r'} class:lshut={lShut} class:rshut={rShut} class:h2={hud2} class:dashfull={!mobile && !hud2 && lay.underHud} style={mobile ? '' : layoutVars(lay) + (hud2 ? `; --dh:${88 * lay.s}px` : '')}>
 	{#if $ms.wonBy}
 		<button class="placehint won" on:click={() => (victoryClosed = false)} title="Show the victory screen again">🏆 {teamName($ms.wonBy.team)} win — {$ms.wonBy.reason}</button>
 	{:else if clearing}
@@ -1993,6 +1994,7 @@
 <style>
 	/* clip (not just hidden): a tucked hand extends past the bottom edge, and
 	   overflow:hidden would still let focus/scrollIntoView scroll the whole view */
+	.gamewrap.dsea { background: #6f9ab3; } /* the doodle retheme's flat sea */
 	.gamewrap.paper { background: #cdb68f; } /* a retheme on paper (ink & wash) */
 	.gamewrap.sea { background: #0b4f80; } /* island look: deep water behind everything (the phone bars sit outside the board) */
 	.managepanel .act:disabled { cursor: default; opacity: .75; }

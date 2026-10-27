@@ -1,17 +1,19 @@
 import { describe, it, expect } from 'vitest'
 import { rethemesFor, themeFor, mapKey } from './rethemes'
 import { readPrefs } from '../boardPrefs'
+import { doodleDefs, DOODLE_PARTS } from './doodleArt'
 
 describe('map rethemes', () => {
 	it('belong to one map, by name (a renamed copy is a new map)', () => {
-		expect(rethemesFor('Forgotten Island').map((t) => t.id)).toEqual(['ink'])
-		expect(rethemesFor(' forgotten island ').length).toBe(1)
+		expect(rethemesFor('Forgotten Island').map((t) => t.id)).toEqual(['ink', 'doodle'])
+		expect(rethemesFor(' forgotten island ').length).toBe(2)
 		expect(rethemesFor('Frostfire Isle')).toEqual([])
 		expect(rethemesFor(undefined)).toEqual([])
 	})
 	it("the player's pick applies only to a map that has that retheme", () => {
 		const picks = { [mapKey('Forgotten Island')]: 'ink' }
 		expect(themeFor('Forgotten Island', picks)).toBe('ink')
+		expect(themeFor('Forgotten Island', { 'forgotten island': 'doodle' })).toBe('doodle')
 		expect(themeFor('Forgotten Island', {})).toBeNull()
 		expect(themeFor('Forgotten Island', { 'forgotten island': '' })).toBeNull()
 		expect(themeFor('My Map', { 'my map': 'ink' })).toBeNull()
@@ -34,5 +36,14 @@ describe('ink & wash art (tools/ink_art.mjs)', () => {
 	it("every hero's own piece has ink art (companions use the crests)", () => {
 		for (const kit of Object.values(HERO_KIT)) for (const t of kit) if (t !== 'companion') expect(inkToken(t), t).toBeTruthy()
 		for (const r of ['axe', 'bird', 'anvil', 'horn']) expect(inkToken(`rune_${r}_marker`)).toBeTruthy()
+	})
+})
+
+describe('doodle drawings (DoodleLayer)', () => {
+	it('every part the layer uses is drawn, every link points inside the same prefix', () => {
+		const svg = doodleDefs('x-')
+		for (const p of DOODLE_PARTS) expect(svg, p).toContain(`id="x-${p}"`)
+		for (const m of svg.matchAll(/href="#([^"]+)"/g)) expect(svg).toContain(`id="${m[1]}"`)
+		expect(svg).not.toMatch(/id="(?!x-)/)
 	})
 })
