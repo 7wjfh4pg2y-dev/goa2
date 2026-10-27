@@ -105,8 +105,9 @@
 	}
 
 	// Each token toggles independently: click a token to flip it full ↔ spent.
+	// Life tokens and the tie-breaker: the HOST only (2026-10-27, the user — players kept flipping them by accident)
 	function toggleLife(team: Team, i: number) {
-		if (watcher) return;
+		if (!iAmHost) return;
 		const arr = [...($ms.lifeTok?.[team] ?? [])];
 		arr[i] = !arr[i];
 		const count = arr.filter(Boolean).length;
@@ -1230,7 +1231,7 @@
 	function advanceTurn() { session.cardAction({ kind: 'advance', pid: clientId }); }
 	let tieFlip = false;
 	function flipTie() {
-		if (watcher) return;
+		if (!iAmHost) return;
 		const next: Team = $ms.tieBreaker === 'orange' ? 'blue' : 'orange';
 		session.act(`Tie-breaker → ${teamName(next)}`, { tieBreaker: next });
 	}
