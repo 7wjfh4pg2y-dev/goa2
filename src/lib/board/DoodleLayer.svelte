@@ -124,7 +124,9 @@
 		const a = (Math.PI / 180) * (60 * i - 90), b = a + Math.PI / 6;
 		return [{ x: c.x + S * 0.78 * Math.cos(a), y: c.y + S * 0.78 * Math.sin(a), r: 3.2 }, { x: c.x + S * 0.69 * Math.cos(b), y: c.y + S * 0.69 * Math.sin(b), r: 2.6 }];
 	});
-	const up = (x: number, y: number, s: number) => `translate(${f(x)} ${f(y)}) rotate(${-rot}) scale(${(s * k).toFixed(3)})`;
+	// `r` and `kk` come in as arguments: a `$:`-less template only re-runs for values it names itself, so reading `rot`
+	// in here left every drawing at the first turn (upside down for the Atlanteans, whose board turns after mount)
+	const up = (x: number, y: number, s: number, r: number, kk: number) => `translate(${f(x)} ${f(y)}) rotate(${-r}) scale(${(s * kk).toFixed(3)})`;
 </script>
 
 <defs>
@@ -134,7 +136,7 @@
 </defs>
 <g class="doodle" pointer-events="none">
 	<rect x={f(seaBox.x)} y={f(seaBox.y)} width={f(seaBox.w)} height={f(seaBox.h)} fill={SEA} />
-	{#each waves as w, i (i)}<use href="#{P}wave" transform={up(w.x, w.y, 1)} />{/each}
+	{#each waves as w, i (i)}<use href="#{P}wave" transform={up(w.x, w.y, 1, rot, k)} />{/each}
 	<!-- the black frames: every tile at full size underneath, the colour tiles inset on top -->
 	<g fill="#111">{#each tiles as t (t.id)}<polygon points={hexPoints(t.c, S)} />{/each}</g>
 	{#each tiles as t (t.id)}<polygon points={hexPoints(t.c, S * 0.9)} fill={t.fill} style="filter:brightness({t.shade.toFixed(2)})" />{/each}
@@ -151,10 +153,10 @@
 		{#if t.spawn}
 			<polygon points={hexPoints(t.c, S * 0.76)} fill="url(#{P}hatch-{t.spawn.team})" opacity={t.spawn.live || !activeZone ? 0.78 : 0.5} />
 			<polygon points={hexPoints(t.c, S * 0.76)} fill="none" stroke={t.spawn.team === 'o' ? '#ef7d22' : '#2f7fe6'} stroke-width={3 * k} stroke-dasharray="{9 * k} {6 * k}" stroke-linecap="round" />
-			<text transform={up(t.c.x, t.c.y, 1)} y="13" class="sl" fill={t.spawn.team === 'o' ? '#ffb36b' : '#8fc4ff'}>{t.spawn.letter}</text>
+			<text transform={up(t.c.x, t.c.y, 1, rot, k)} y="13" class="sl" fill={t.spawn.team === 'o' ? '#ffb36b' : '#8fc4ff'}>{t.spawn.letter}</text>
 		{/if}
 	{/each}
-	{#each tiles as t (t.id)}{#each t.uses as u, i (i)}<use href="#{P}{u.part}" transform={up(u.x, u.y, u.s)} />{/each}{/each}
+	{#each tiles as t (t.id)}{#each t.uses as u, i (i)}<use href="#{P}{u.part}" transform={up(u.x, u.y, u.s, rot, k)} />{/each}{/each}
 </g>
 
 <style>
