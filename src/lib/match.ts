@@ -2450,11 +2450,14 @@ export function minionDefense(s: MatchState, target: string): { mods: { id: stri
 		if (p.team !== hero.team) { if (close || (p.role === 'ranged' && dist <= 2)) mods.push({ id: p.id, d: -1 }) }
 		else if (close) mods.push({ id: p.id, d: 1 })
 	}
-	// NebKher's Illusionary Force / Army: while he attacks, his Illusions next to the target count as his melee minions
-	// (only on his own actions — when he is attacked they give him nothing)
+	// NebKher's Illusionary Force / Army: while he performs actions his Illusions count as his melee minions — attacking
+	// (each next to the target −1) AND defending, since defending is a defence action (each next to him +1)
+	const illusions = (owner: string, d: number) => {
+		for (const p of Object.values(s.pieces ?? {})) if (p.kind === 'token' && p.token === 'token_illusion' && p.owner === owner && cubeDist(hexCube(p.hex), at) === 1) mods.push({ id: p.id, d })
+	}
 	const by = s.attacks?.[target]?.by
-	if (by && s.cards?.[by]?.hero === NEB && illusionForce(s, by))
-		for (const p of Object.values(s.pieces ?? {})) if (p.kind === 'token' && p.token === 'token_illusion' && p.owner === by && cubeDist(hexCube(p.hex), at) === 1) mods.push({ id: p.id, d: -1 })
+	if (by && s.cards?.[by]?.hero === NEB && illusionForce(s, by)) illusions(by, -1)
+	if (s.cards?.[target]?.hero === NEB && illusionForce(s, target)) illusions(target, 1)
 	return { mods, total: mods.reduce((n, m) => n + m.d, 0) }
 }
 

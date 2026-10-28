@@ -554,7 +554,7 @@ describe('NebKher: Diabolical Laughter, What the Hell Are You?, card swaps, a na
 		expect(line).toContain('0_5'); expect(line).toContain('9_5'); expect(line.every((h) => h.endsWith('_5'))).toBe(true)
 		expect(crackNow({ ...x, turn: 4 } as MatchState, tc({ ...x, turn: 4 } as MatchState))).toBe(null)
 	})
-	it('Illusionary Force: his Illusions next to the hero he attacks lower its defence; not when he is attacked', () => {
+	it('Illusionary Force: his Illusions next to the hero he attacks lower its defence, and next to him raise his own', () => {
 		const ill = { id: 'i1', hex: '6_5', team: 'orange', kind: 'token', token: 'token_illusion', owner: 'N' }
 		const fx = { id: 'e1', pid: 'N', hero: 'nebkher', idx: forceC, name: 'Illusionary Force', dur: 'round', round: 1, turn: 3, endRound: 1, endTurn: 4 }
 		const base = ng(laughC, false, {}) as MatchState
@@ -562,9 +562,13 @@ describe('NebKher: Diabolical Laughter, What the Hell Are You?, card swaps, a na
 		expect(minionDefense(s, 'B').mods).toContainEqual({ id: 'i1', d: -1 })
 		// the effect off: nothing
 		expect(minionDefense({ ...s, effects: [] } as MatchState, 'B').mods.find((m) => m.id === 'i1')).toBeUndefined()
-		// B attacks N: his Illusions give him nothing
+		// B attacks N: defending is an action too, so his Illusion next to him counts as a friendly melee minion (+1)
 		const back = { ...s, pieces: { ...s.pieces, i1: { ...ill, hex: '5_4' } }, attacks: { N: { by: 'B', defending: false, at: 0 } } } as unknown as MatchState
-		expect(minionDefense(back, 'N').mods.find((m) => m.id === 'i1')).toBeUndefined()
+		expect(minionDefense(back, 'N').mods).toContainEqual({ id: 'i1', d: 1 })
+		// …only while the effect is on, and only his own Illusions
+		expect(minionDefense({ ...back, effects: [] } as MatchState, 'N').mods.find((m) => m.id === 'i1')).toBeUndefined()
+		const theirs = { ...back, pieces: { ...back.pieces, i1: { ...ill, hex: '5_4', owner: 'B' } } } as unknown as MatchState
+		expect(minionDefense(theirs, 'N').mods.find((m) => m.id === 'i1')).toBeUndefined()
 	})
 })
 
