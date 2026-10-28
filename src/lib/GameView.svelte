@@ -105,7 +105,7 @@
 	}
 
 	// Each token toggles independently: click a token to flip it full ↔ spent.
-	// Life tokens and the tie-breaker: the HOST only (2026-10-27, the user — players kept flipping them by accident)
+	// Life tokens, wave tokens and the tie-breaker: the HOST only (2026-10-27, the user — players kept flipping them by accident)
 	function toggleLife(team: Team, i: number) {
 		if (!iAmHost) return;
 		const arr = [...($ms.lifeTok?.[team] ?? [])];
@@ -115,7 +115,7 @@
 			{ lifeTok: { ...$ms.lifeTok, [team]: arr }, life: { ...$ms.life, [team]: count } });
 	}
 	function toggleWave(i: number) {
-		if (watcher) return;
+		if (!iAmHost) return;
 		const arr = [...($ms.waveTok ?? [])];
 		arr[i] = !arr[i];
 		const count = arr.filter(Boolean).length;
