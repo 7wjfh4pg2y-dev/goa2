@@ -13,8 +13,8 @@
 	import {
 		heroById, heroSplash, heroLogo, splashFace, traitIcon, TRAIT_LABELS, type Trait
 	} from '$lib/heroes';
-	import coinOrange from '$lib/images/tiebreaker_orange.png';
-	import coinBlue from '$lib/images/tiebreaker_blue.png';
+	import coinOrange from '$lib/images/hud/tiebreaker_orange.webp';
+	import coinBlue from '$lib/images/hud/tiebreaker_blue.webp';
 
 	export let orange: string[];
 	export let blue: string[];

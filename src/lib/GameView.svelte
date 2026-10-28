@@ -85,9 +85,9 @@
 	$: lifeMax = $ms.lifeMax || ($ms.lifeTok?.orange?.length ?? 8);
 
 	// real game art for the HUD (life-counter medallions + tie-breaker token)
-	const art = import.meta.glob('./cards/images/{life_counter,tiebreaker}_*.png', { eager: true, import: 'default' }) as Record<string, string>;
-	const lifeArt = (t: Team, side: 'front' | 'back') => art[`./cards/images/life_counter_${t}_${side}.png`];
-	const tieArt = (t: Team) => art[`./cards/images/tiebreaker_${t}.png`];
+	const art = import.meta.glob('./images/hud/*.webp', { eager: true, import: 'default' }) as Record<string, string>;
+	const lifeArt = (t: Team, side: 'front' | 'back') => art[`./images/hud/life_${t}_${side}.webp`];
+	const tieArt = (t: Team) => art[`./images/hud/tiebreaker_${t}.webp`];
 	const atkIcon = (import.meta.glob('./cards/images/attack.png', { eager: true, import: 'default' }) as Record<string, string>)['./cards/images/attack.png'];
 	// waves = the shared minion waves; no dedicated counter art in the lib, so we
 	// use the minion sprite as the wave token.

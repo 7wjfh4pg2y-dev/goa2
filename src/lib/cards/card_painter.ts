@@ -861,7 +861,7 @@ let descriptionFontSizeAdjustment = 0
 // Frame parts load once, up front. Token / rune / marker / tie-breaker / life art
 // only ever appears as ::emoji:: inside card text, so those load on demand
 // (`loadImages`) — the first card no longer waits for ~40 unrelated images.
-const EMOJI_ONLY = /^(token_|rune_|marker_|tiebreaker_|life_counters)/
+const EMOJI_ONLY = /^(token_|rune_|marker_|tiebreaker_|life_counter|error$|logo$|goa-logo$)/
 const baseLoads = new Map<string, Promise<unknown>>()
 function loadBase(imageName: string): Promise<unknown> {
   let p = baseLoads.get(imageName)
@@ -871,12 +871,32 @@ function loadBase(imageName: string): Promise<unknown> {
     const image = new Image()
     image.src = path
     images.set(imageName, image)
-    // resolve on error too, so one missing image can't stall every card forever
-    p = new Promise(resolve => { image.onload = resolve; image.onerror = resolve })
+    // resolve on error too, so one missing image can't stall every card forever — and forget the failed
+    // download, so the next card that needs it fetches it again (a dropped request on a phone's mobile data
+    // used to leave a broken frame part that blanked EVERY card for the rest of the session)
+    p = new Promise(resolve => { image.onload = resolve; image.onerror = () => { baseLoads.delete(imageName); resolve(undefined) } })
     baseLoads.set(imageName, p)
   }
   return p
 }
+
+// Parts a paint wanted but didn't have yet: the painter skips them and records them here; render.ts loads just
+// those and paints again. So the first card waits only for its own ~20 frame parts, not all 130 (8 MB).
+const missing = new Set<string>()
+const loaded = (img: unknown) => img instanceof HTMLImageElement ? img.complete && img.naturalWidth > 0 : !!img
+/** The frame parts the last paint skipped (cleared on read). */
+export function takeMissing(): string[] {
+  const out = [...missing]
+  missing.clear()
+  return out
+}
+function part(name: string): CanvasImageSource | null {
+  const img = images.get(name)
+  if (loaded(img)) return img as CanvasImageSource
+  if (baseImageModules[`./images/${name}.png`] != null || img) { missing.add(name); void loadBase(name) }
+  return null
+}
+
 let preloaded: Promise<unknown> | null = null
 /** Load the frame parts once (every caller shares the same promise). */
 export function preloadImages() {
@@ -903,11 +923,13 @@ function clear(canvas: HTMLCanvasElement, context: CanvasRenderingContext2D): vo
 }
 
 function addImage(context: CanvasRenderingContext2D, name: string, x: number, y: number): void {
-  context.drawImage(<CanvasImageSource>images.get(name), x, y)
+  const img = part(name)
+  if (img) context.drawImage(img, x, y)
 }
 
 function addEmoji(context: CanvasRenderingContext2D, name: string, x: number, y: number): void {
-  context.drawImage(<CanvasImageSource>images.get(name), x, y, 64 * (<HTMLImageElement>images.get(name)).width / (<HTMLImageElement>images.get(name)).height, 64)
+  const img = part(name) as HTMLImageElement | null
+  if (img) context.drawImage(img, x, y, 64 * img.width / img.height, 64)
 }
 
 function addCustomEmoji(context: CanvasRenderingContext2D, customEmoji: Array<[string, HTMLImageElement]>, name: string, x: number, y: number): void {

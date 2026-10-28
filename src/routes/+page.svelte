@@ -12,8 +12,8 @@
 	import { base } from '$app/paths';
 	import { writable, get, type Readable } from 'svelte/store';
 	import logoImage from '$lib/images/goa-logo.webp';
-	import coinOrange from '$lib/images/tiebreaker_orange.png';
-	import coinBlue from '$lib/images/tiebreaker_blue.png';
+	import coinOrange from '$lib/images/hud/tiebreaker_orange.webp';
+	import coinBlue from '$lib/images/hud/tiebreaker_blue.webp';
 	import { reveal } from '$lib/transitions';
 	import { role, tryAdmin, enterAsPlayer, signOut, leaveRole, gmActive } from '$lib/role';
 	import { availableMaps, setPublished, type MapChoice, type GameMap } from '$lib/maps';

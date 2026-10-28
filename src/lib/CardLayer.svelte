@@ -124,6 +124,9 @@
 	];
 	const ui = import.meta.glob('./cards/images/*.png', { eager: true, import: 'default' }) as Record<string, string>;
 	const icon = (n: string) => ui[`./cards/images/${n}.png`];
+	// the tie-breaker coin as a small webp (the 330 px png is ~190 KB; the HUD shows it at a few dozen px)
+	const hudArt = import.meta.glob('./images/hud/tiebreaker_*.webp', { eager: true, import: 'default' }) as Record<string, string>;
+	const coinArt = (t: string) => hudArt[`./images/hud/tiebreaker_${t}.webp`];
 	const GLOW: Record<string, string> = { GOLD: '#e8b64a', SILVER: '#c6d0db', RED: '#e0524a', GREEN: '#41ae59', BLUE: '#3f7fe0', PURPLE: '#a56ee6' };
 	// the detailed stat art (phone layout) — keyed like STAT_DEFS
 	const statArt = import.meta.glob('./images/stats/*.png', { eager: true, import: 'default' }) as Record<string, string>;
@@ -1127,7 +1130,7 @@
 		.map((pid) => ({ p: $players.find((q: Player) => q.id === pid), pid, cs: viewCards[pid] ?? cards[pid], ini: initOf(cards[pid], true, pid) ?? 0 }))
 		.filter((x) => !!x.cs)
 		.map((x, k, all): OrderEntry => ({ pid: x.pid, hero: x.cs.hero, heroName: heroName(x.cs.hero), player: x.p?.name ?? '', team: (teamOfPid(x.pid) ?? 'orange'), idx: cards[x.pid].pending!, ini: x.ini,
-			tied: k > 0 && flipAfter.has(all[k - 1].pid), tieImg: k > 0 ? icon(`tiebreaker_${teamOfPid(all[k - 1].pid) ?? 'orange'}`) : undefined, portrait: portraitCss(x.cs.hero), color: colorHex(x.p?.color ?? '') }));
+			tied: k > 0 && flipAfter.has(all[k - 1].pid), tieImg: k > 0 ? coinArt(teamOfPid(all[k - 1].pid) ?? 'orange') : undefined, portrait: portraitCss(x.cs.hero), color: colorHex(x.p?.color ?? '') }));
 	const teamOfPid = (pid: string) => { const p = $players.find((q: Player) => q.id === pid); return p ? pTeam(p) : ($ms.pieces?.[pid]?.team as 'orange' | 'blue' | undefined) ?? null; };
 	// the planning dots in each player's colour: the enemy on the left, your team on the right (you last)
 	$: h2dots = [...seatedWithCards.filter((p) => pTeam(p) !== viewTeam), ...seatedWithCards.filter((p) => pTeam(p) === viewTeam && p.id !== clientId), ...seatedWithCards.filter((p) => p.id === clientId)]
@@ -1331,7 +1334,7 @@
 <!-- a 4★ hero's own button, at the size its dash gives it -->
 {#snippet powerBtn(size: number)}
 	{#if myPower === 'ignatia'}
-		<IgnatiaCoin {size} phone={mobile} face={$ms.tieBreaker} split={igSplit} ult={!!mine?.ultimate} ready={igReady} used={igUsed} flames={dashFx} art={(t) => icon(`tiebreaker_${t}`)} onPress={armIgnatiaFlip} />
+		<IgnatiaCoin {size} phone={mobile} face={$ms.tieBreaker} split={igSplit} ult={!!mine?.ultimate} ready={igReady} used={igUsed} flames={dashFx} art={(t) => coinArt(t)} onPress={armIgnatiaFlip} />
 	{:else if myPower === 'takahide' && mine}
 		<TakaGold {size} cs={mine} kind={tkKind} bind:open={tkOpen} {turnIdx} fx={dashFx} phone={mobile} onPick={tkPick} />
 	{:else if myPower === 'emmitt'}
@@ -1581,7 +1584,7 @@
 	{#if hud2 && !mobile}
 		<div class="h2helm">
 			<div class="h2order" style="top:{orderTop}px">
-				<HudOrder planning={!revealed || levelPhase} title={levelPhase ? 'Levelling' : 'Planning'} doneWord={levelPhase ? 'done' : 'ready'} countdown={countdownActive ? countdownLabel : ''} dots={h2dots} order={h2order} bonus={itemBonus} tieArt={icon(`tiebreaker_${$ms.tieBreaker}`)}
+				<HudOrder planning={!revealed || levelPhase} title={levelPhase ? 'Levelling' : 'Planning'} doneWord={levelPhase ? 'done' : 'ready'} countdown={countdownActive ? countdownLabel : ''} dots={h2dots} order={h2order} bonus={itemBonus} tieArt={coinArt($ms.tieBreaker)}
 					compact={cOrder} runeAt={runeNow} reversed={turnReversed} me={clientId} small={h2order.length > 4} acting={em2Pick && revealed ? -1 : actAt} canPoint={iAmHost} onPoint={pickOrder} onNudge={armNudge} onRead={(pid, hid, idx) => (examine = { hid, idx, pid })} />
 			</div>
 			{#if platesTop}

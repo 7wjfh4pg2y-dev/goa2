@@ -100,10 +100,21 @@
 	const minionRef = (team: string, role?: string, part: 'top' | 'rim' | 'token' = 'top', ink = false) =>
 		`#${ink ? 'ik-mn' : 'mn'}-${part}-${team === 'blue' ? 'blue' : 'orange'}-${role === 'ranged' || role === 'heavy' ? role : 'melee'}`;
 
-	$: cells = map.cells ?? {};
-	$: meta = map.meta ?? {};
-	$: size = map.grid?.size ?? 60;
-	$: throneAt = Object.fromEntries(thrones.map((t) => [t.hex, t.team]));
+	// Every game update hands us the map again (a new object off the wire, or the same one re-passed) and the legacy
+	// `$:` rules treat any object as changed — the whole island (coast, tiles, scenery: thousands of shapes) used to be
+	// worked out again on EVERY update, ~20 ms a time on a desktop, far more on a phone. So the map only counts as new
+	// when its CONTENT changed; everything drawn from it reads `mapG`. (`seen` is a plain object: not tracked.)
+	const NONE: Record<string, string> = {};
+	const seen = { m: null as unknown, sig: '', th: '' };
+	let mapG = map;
+	$: if (map !== seen.m) { seen.m = map; const sig = JSON.stringify(map); if (sig !== seen.sig) { seen.sig = sig; mapG = map; } }
+	$: cells = mapG.cells ?? {};
+	$: meta = mapG.meta ?? {};
+	$: size = mapG.grid?.size ?? 60;
+	$: mapScatter = mapG.scatter ?? NONE;
+	$: mapGround = mapG.ground ?? NONE;
+	let throneAt: Record<string, string> = {};
+	$: { const k = thrones.map((t) => t.hex + t.team).join(); if (k !== seen.th) { seen.th = k; throneAt = Object.fromEntries(thrones.map((t) => [t.hex, t.team])); } }
 	const throneTile = (team: string) => tileSprites[`./images/tiles/${team === 'orange' ? 'baseOrangeSpawn' : 'baseBlueSpawn'}.png`];
 
 	// each team's minion facing = the direction its spawn hexes point on the map
@@ -277,7 +288,7 @@
 	$: doodle = theme === 'doodle';
 	$: isle = look === 'island' || ink || doodle; // a drawn land layer (the island, or a retheme) instead of the classic tiles
 	$: coast = isle ? loopsPath(outlineLoops(Object.keys(cells), size), 0.9) : '';
-	$: zoneNames = isle || activeZone ? zoneTable(map as Parameters<typeof zoneTable>[0]) : {};
+	$: zoneNames = isle || activeZone ? zoneTable(mapG as Parameters<typeof zoneTable>[0]) : NONE;
 	// the battle zone's outline hugs the ground you can stand on (rocks belong to the zone but aren't lit)
 	$: zoneGlow = isle && glowZone ? loopsPath(outlineLoops(Object.keys(cells).filter((id) => zoneNames[id] === glowZone && cells[id] !== 'terrain'), size), 0.45) : '';
 	// The island is thousands of shapes, so it lives in its OWN svg and the view is applied to
@@ -775,17 +786,17 @@
 	{#if ink && viewM}
 		<!-- a retheme: the page and the land in one static svg (no sea canvas) -->
 		<svg class="land" class:moving viewBox={vb} preserveAspectRatio="xMidYMid meet" style:transform={landTf} aria-hidden="true">
-			<InkLayer {cells} {meta} {size} rot={rotEff} zones={zoneNames} {activeZone} thrones={throneAt} {coast} ground={map.ground ?? {}} />
+			<InkLayer {cells} {meta} {size} rot={rotEff} zones={zoneNames} {activeZone} thrones={throneAt} {coast} ground={mapGround} />
 		</svg>
 	{:else if doodle && viewM}
 		<!-- the doodle retheme: its own flat sea and the tiles, one static svg (no sea canvas) -->
 		<svg class="land" class:moving viewBox={vb} preserveAspectRatio="xMidYMid meet" style:transform={landTf} aria-hidden="true">
-			<DoodleLayer {cells} {meta} {size} rot={rotEff} zones={zoneNames} {activeZone} thrones={throneAt} ground={map.ground ?? {}} />
+			<DoodleLayer {cells} {meta} {size} rot={rotEff} zones={zoneNames} {activeZone} thrones={throneAt} ground={mapGround} />
 		</svg>
 	{:else if look === 'island' && viewM}
 		<Ocean {bounds} view={viewM} {coast} {size} still={seaStill || !effects || !sea} />
 		<svg class="land" class:moving viewBox={vb} preserveAspectRatio="xMidYMid meet" style:transform={landTf} aria-hidden="true" bind:this={landEl}>
-			<IslandLayer {cells} {meta} {size} rot={rotEff} zones={zoneNames} {activeZone} thrones={throneAt} {coast} scatter={map.scatter ?? {}} ground={map.ground ?? {}} />
+			<IslandLayer {cells} {meta} {size} rot={rotEff} zones={zoneNames} {activeZone} thrones={throneAt} {coast} scatter={mapScatter} ground={mapGround} />
 		</svg>
 	{/if}
 	{#if isle && viewM}

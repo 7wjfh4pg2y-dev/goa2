@@ -12,8 +12,8 @@
 	// "View the board") takes over from the card after a few seconds, or straight away from "Battle report".
 	import type { Team } from '$lib/match';
 	import { teamName } from '$lib/teams';
-	import tieOrange from '$lib/images/tiebreaker_orange.png';
-	import tieBlue from '$lib/images/tiebreaker_blue.png';
+	import tieOrange from '$lib/images/hud/tiebreaker_orange.webp';
+	import tieBlue from '$lib/images/hud/tiebreaker_blue.webp';
 	import { onDestroy, onMount } from 'svelte';
 	import GameStats, { type GameStatsData } from '$lib/GameStats.svelte';
 
@@ -32,8 +32,8 @@
 	onDestroy(() => { if (timer) clearTimeout(timer); });
 
 	const EMBLEM: Record<Team, string> = { orange: tieOrange, blue: tieBlue };
-	const lifeImgs = import.meta.glob('./cards/images/life_counter_*.png', { eager: true, import: 'default' }) as Record<string, string>;
-	const heart = (t: Team, side: 'front' | 'back') => lifeImgs[`./cards/images/life_counter_${t}_${side}.png`] ?? '';
+	const lifeImgs = import.meta.glob('./images/hud/life_*.webp', { eager: true, import: 'default' }) as Record<string, string>;
+	const heart = (t: Team, side: 'front' | 'back') => lifeImgs[`./images/hud/life_${t}_${side}.webp`] ?? '';
 	const C: Record<Team, string> = { orange: '#ef7d22', blue: '#2f7fe6' };
 	const L: Record<Team, string> = { orange: '#ffb27a', blue: '#8cc0ff' };
 	$: loser = (team === 'orange' ? 'blue' : 'orange') as Team;

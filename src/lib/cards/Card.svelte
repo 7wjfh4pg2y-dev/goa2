@@ -34,7 +34,9 @@
 			// the paint failed (on a phone usually out of canvas memory): try again a little later, with a pause
 			// (`loading` stays on this key, so the reactive line above doesn't retry it at once in a tight loop)
 			if (retryT) clearTimeout(retryT);
-			if (tries++ < 6) retryT = setTimeout(() => { if (card && key === k && !destroyed) load(k, h, c, x, n); }, 800 * tries);
+			// keep trying while the card is on screen (it used to give up after 6 tries — a slow line left it blank for good)
+			tries++
+			retryT = setTimeout(() => { if (card && key === k && !destroyed) load(k, h, c, x, n); }, Math.min(800 * tries, 6000));
 		}
 	}
 	// the tab came back from the background: the master may have been painted again, the canvas cleared

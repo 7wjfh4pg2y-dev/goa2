@@ -30,8 +30,8 @@
 	export let face: RevealFace = 'brass';
 	export let onClose: () => void = () => {};
 
-	const coinArt = import.meta.glob('./cards/images/tiebreaker_*.png', { eager: true, import: 'default' }) as Record<string, string>;
-	const coin = (t: 'orange' | 'blue') => coinArt[`./cards/images/tiebreaker_${t}.png`];
+	const coinArt = import.meta.glob('./images/hud/tiebreaker_*.webp', { eager: true, import: 'default' }) as Record<string, string>;
+	const coin = (t: 'orange' | 'blue') => coinArt[`./images/hud/tiebreaker_${t}.webp`];
 	const ROMAN = ['I', 'II', 'III', 'IV'];
 	const AR = 1664 / 1192;
 	const TINT = { orange: '#ef7d22', blue: '#2f7fe6' };

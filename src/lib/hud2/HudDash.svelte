@@ -128,6 +128,8 @@
 	// line against the circle (each box's corners must sit inside it, a little in from the rim) and shrink both together
 	// until they do — no message ever peeks out of the ring (the user, 2026-10-19: "All done · Next round?")
 	function ringFit(node: HTMLElement, _dep: unknown) {
+		// the label is an array made afresh on every render: only measure again when its words change (each run forces a layout)
+		let last = JSON.stringify(_dep);
 		const run = () => {
 			// the word(s) and the small line shrink separately: a long card name never makes the main word tiny
 			const k = { fk: 1, fs: 1 };
@@ -154,7 +156,7 @@
 		document.fonts?.ready.then(run).catch(() => {});
 		// the reveal curtain hides the HUD (content-visibility) — a label set meanwhile measured nothing, so fit again after
 		window.addEventListener('goa2-revealed', run);
-		return { update: () => run(), destroy: () => window.removeEventListener('goa2-revealed', run) };
+		return { update: (d: unknown) => { const k = JSON.stringify(d); if (k !== last) { last = k; run(); } }, destroy: () => window.removeEventListener('goa2-revealed', run) };
 	}
 	$: labelFs = packed.fs;
 	// the kept-up banner row: as many a line as fit at a readable width (220+), centred, wrapping upward

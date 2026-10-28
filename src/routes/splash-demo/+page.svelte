@@ -80,8 +80,8 @@
 	// a hero falls (sample heroes / players)
 	const names: Record<string, string> = { a: 'Zara', b: 'Priya', c: 'Mo', d: 'Sam' }; // a, c orange · b, d blue
 	const cards = { a: { hero: 'arien' }, b: { hero: 'brogan' }, c: { hero: 'xargatha' }, d: { hero: 'trinkets' } } as unknown as Record<string, PlayerCardState>;
-	const art = import.meta.glob('/src/lib/cards/images/life_counter_*.png', { eager: true, import: 'default' }) as Record<string, string>;
-	const lifeArt = (t: Team, side: 'front' | 'back') => art[`/src/lib/cards/images/life_counter_${t}_${side}.png`] ?? '';
+	const art = import.meta.glob('/src/lib/images/hud/life_*.webp', { eager: true, import: 'default' }) as Record<string, string>;
+	const lifeArt = (t: Team, side: 'front' | 'back') => art[`/src/lib/images/hud/life_${t}_${side}.webp`] ?? '';
 	let kill: DefeatNews | null = null;
 	function defeat(victim: string, by: string, team: Team, coins: number, assists: string[], lives: number) {
 		kill = { id: id('d'), victim, by, coins, assist: lives, assists, lives, team, at: Date.now() };

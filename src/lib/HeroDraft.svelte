@@ -16,8 +16,8 @@
 		draftAdvance, draftSetPick, draftSwap, draftSeal, draftTimeUp, colorHex, DRAFT_LABELS, DRAFT_TURN_MS, DRAFT_STEP_MS, DRAFT_OT_MS,
 		type MatchState, type Player, type MatchSession, type Team, type DraftAction
 	} from '$lib/match';
-	import coinOrange from '$lib/images/tiebreaker_orange.png';
-	import coinBlue from '$lib/images/tiebreaker_blue.png';
+	import coinOrange from '$lib/images/hud/tiebreaker_orange.webp';
+	import coinBlue from '$lib/images/hud/tiebreaker_blue.webp';
 
 	export let session: MatchSession;
 	export let state: Readable<MatchState>;

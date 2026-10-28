@@ -30,8 +30,8 @@
 	import PlayerIcon from '$lib/PlayerIcon.svelte';
 	import { HEROES } from '$lib/heroes';
 	import { teamName, teamAdj } from '$lib/teams';
-	import coinOrange from '$lib/images/tiebreaker_orange.png';
-	import coinBlue from '$lib/images/tiebreaker_blue.png';
+	import coinOrange from '$lib/images/hud/tiebreaker_orange.webp';
+	import coinBlue from '$lib/images/hud/tiebreaker_blue.webp';
 
 	export let data: GameStatsData;
 	export let myTeam: Team | null = null;

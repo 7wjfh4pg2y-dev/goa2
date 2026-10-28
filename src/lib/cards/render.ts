@@ -8,7 +8,7 @@
 // the master into its own small canvas at the size it's shown (a ~1 ms drawImage).
 // A small LRU bounds memory; `prewarm` paints a whole deck up front (used on the
 // matchup splash, like a loading screen).
-import { images, importCardImage, loadImages, preloadImages, updateCanvas } from './card_painter'
+import { images, importCardImage, loadImages, preloadImages, takeMissing, updateCanvas } from './card_painter'
 import { Color, Item, Modifier, Type, ValueSign } from './states'
 import { backgroundSlug, heroStat, type HeroCardJson } from './deck'
 
@@ -17,10 +17,9 @@ export const CARD_H = 1664
 
 const cardArt = import.meta.glob('./images/cards/*/*.webp', { eager: true, import: 'default' }) as Record<string, string>
 
-// the frame parts + fonts load once for the whole app
+// the fonts load once for the whole app; frame parts load as cards need them (a paint names the ones it lacked)
 let base: Promise<unknown> | null = null
-const ready = () =>
-	(base ??= Promise.all([preloadImages(), document.fonts.load('16px "Modesto Poster"'), document.fonts.ready]))
+const ready = () => (base ??= Promise.all([document.fonts.load('16px "Modesto Poster"'), document.fonts.ready]))
 
 const loadImg = (src: string) =>
 	new Promise<HTMLImageElement | null>((res) => {
@@ -76,27 +75,34 @@ async function paint(heroId: string, card: HeroCardJson, extraSlotIndex: number 
 	cv.height = CARD_H
 	const ctx = cv.getContext('2d')
 	if (!ctx) throw new Error('no 2d context')
-	updateCanvas(
-		cv, ctx, [], bg,
-		(card.color as Color) ?? Color.GOLD,
-		card.handicapped ?? false, card.extra ?? false,
-		card.name ?? '', card.description ?? '',
-		'i'.repeat(card.level ?? 1),
-		(card.item as Item) ?? Item.ATTACK,
-		card.initiative ?? 0,
-		(card.primaryAction as Type) ?? Type.ATTACK,
-		card.primaryValue ?? 0,
-		(card.primaryValueSign as ValueSign) ?? ValueSign.NONE,
-		(card.modifier as Modifier) ?? Modifier.NONE,
-		card.modifierValue ?? 0,
-		(card.modifierValueSign as ValueSign) ?? ValueSign.NONE,
-		card.secondaryMovement ?? 0,
-		card.secondaryDefense ?? 0,
-		card.secondaryAttack ?? null,
-		0, 0, 0, 0, 0, 0,
-		showNumbers,
-		heroStat(heroId, 0), heroStat(heroId, 1), heroStat(heroId, 2), heroStat(heroId, 3)
-	)
+	// paint, and if any frame part wasn't downloaded yet, fetch just those and paint again
+	for (let pass = 0; ; pass++) {
+		updateCanvas(
+			cv, ctx, [], bg,
+			(card.color as Color) ?? Color.GOLD,
+			card.handicapped ?? false, card.extra ?? false,
+			card.name ?? '', card.description ?? '',
+			'i'.repeat(card.level ?? 1),
+			(card.item as Item) ?? Item.ATTACK,
+			card.initiative ?? 0,
+			(card.primaryAction as Type) ?? Type.ATTACK,
+			card.primaryValue ?? 0,
+			(card.primaryValueSign as ValueSign) ?? ValueSign.NONE,
+			(card.modifier as Modifier) ?? Modifier.NONE,
+			card.modifierValue ?? 0,
+			(card.modifierValueSign as ValueSign) ?? ValueSign.NONE,
+			card.secondaryMovement ?? 0,
+			card.secondaryDefense ?? 0,
+			card.secondaryAttack ?? null,
+			0, 0, 0, 0, 0, 0,
+			showNumbers,
+			heroStat(heroId, 0), heroStat(heroId, 1), heroStat(heroId, 2), heroStat(heroId, 3)
+		)
+		const need = takeMissing()
+		if (!need.length) break
+		if (pass >= 3) { release(bg); release(cv); throw new Error('card parts missing: ' + need.join(', ')) }
+		await loadImages(need)
+	}
 	release(bg) // the cropped art's scratch canvas
 	// a context the browser took away (Android Chrome does this to background tabs) draws nothing: don't
 	// keep a blank face — fail, and the <Card> tries again a moment later
@@ -177,6 +183,7 @@ if (typeof document !== 'undefined') {
 export function preloadArt(heroIds: string[]) {
 	if (typeof document === 'undefined') return
 	void ready()
+	void preloadImages() // the frame parts too, in the background (hero select / the matchup), so the game's first cards don't wait
 	for (const h of heroIds) for (const k in cardArt) if (k.startsWith(`./images/cards/${h}/`)) { const i = new Image(); i.src = cardArt[k] }
 }
 

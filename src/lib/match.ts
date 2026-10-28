@@ -1338,7 +1338,10 @@ export function joinMatch(
 			incoming.rev > local.rev ||
 			(incoming.rev === local.rev && incoming.updatedAt > local.updatedAt)
 		) {
-			const next = olderHost ? { ...incoming, host: local.host, hostEpoch: local.hostEpoch, creator: local.creator ?? incoming.creator } : incoming
+			let next = olderHost ? { ...incoming, host: local.host, hostEpoch: local.hostEpoch, creator: local.creator ?? incoming.creator } : incoming
+			// every snapshot carries the whole map: keep OUR copy when it didn't change, so everything cached per map
+			// (zone tables, the drawn island) stays cached instead of being worked out again on every update
+			if (next.map && local.map && next.map !== local.map && JSON.stringify(next.map) === JSON.stringify(local.map)) next = { ...next, map: local.map }
 			recordHistory(local, next)
 			state.set(next)
 		} else if (newerHost) {
