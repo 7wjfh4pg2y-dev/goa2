@@ -608,6 +608,7 @@ export interface MatchState {
 	// host options for the board (lobby + in-game Game Lobby); unset = the defaults
 	boardLook?: BoardLook // the map's visuals: the island in its sea (default) or the flat classic tiles
 	zoneGlow?: boolean // the gold outline round the battle zone (default on; island look only)
+	touchDrag?: boolean // the host lets touch screens drag pieces straight off the board (default off: on a phone a drag pans, pieces move only by Move → tap a hex)
 	boardFx?: boolean // moving effects — the sea, the minions' turning rims, the battle zone's pulse (default on)
 	rev: number // monotonic version for last-write-wins
 	updatedBy: string

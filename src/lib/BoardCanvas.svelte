@@ -29,6 +29,8 @@
 		zones?: Record<string, string>;
 	} = {};
 	export let interactive = true;
+	/** may a finger drag a piece off its hex? false = touch drags pan the board; pieces move by carry() (Move) + a tap. Mouse drags always work. */
+	export let touchDrag = true;
 	export let rotation = 0; // base orientation in degrees (e.g. 180 so your base sits at the bottom)
 
 	export let pieces: Array<{ id: string; hex: string; team: string; role?: string; label?: string; color?: string; token?: string; sym?: string; hero?: string; face?: number; letter?: string;
@@ -587,7 +589,9 @@
 			if (Math.hypot(e.clientX - downC.x, e.clientY - downC.y) < DRAG_THRESHOLD) return;
 			moved = true;
 			clearLongPress();
-			if (pressId && onMovePiece && !isLocked(pressId)) { dragId = pressId; panning = false; } // grab the token
+			// grab the token — a finger only when the host allows it (touchDrag): on phones a drag that starts on a piece
+			// pans the board instead, so panning never moves a piece by accident (Move → tap a hex still works)
+			if (pressId && onMovePiece && !isLocked(pressId) && (touchDrag || e.pointerType === 'mouse')) { dragId = pressId; panning = false; }
 		}
 		if (dragId) {
 			const pt = toChild(e.clientX, e.clientY);

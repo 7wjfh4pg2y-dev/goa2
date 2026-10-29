@@ -282,6 +282,7 @@
 	// --- lobby derived ---
 	$: me = session ? $players.find((p) => p.id === session!.clientId) : undefined;
 	$: iAmHost = session ? $state.host === session.clientId : false;
+	function toggleTouchDrag() { if (iAmHost && session) session.act($state.touchDrag ? 'locked piece dragging on touch screens' : 'let touch screens drag pieces', { touchDrag: !$state.touchDrag }); }
 	// the host's board options, as the lobby shows them
 	// the release plays on the classic board, still, for now (the island in the game and its
 	// host switches come with the board step) — so the lobby shows exactly that board
@@ -1113,6 +1114,8 @@
 						{@render teamPanel('orange', orangeSeats, orangeCount)}
 						<div class="boardframe lboard" bind:clientWidth={lw} bind:clientHeight={lh}>
 							<canvas class="pic" bind:this={lobbyPic} aria-hidden="true"></canvas>
+							<!-- touch screens: may a finger drag pieces? (off = Move, then tap a hex; a drag pans) — the host's switch, everyone sees it -->
+							<button class="tdrag" class:on={!!$state.touchDrag} disabled={!iAmHost} on:click={toggleTouchDrag} title={iAmHost ? 'Let phone and tablet players drag pieces on the board. Off: they pick a piece, tap Move, then tap a hex — a drag always pans.' : 'The host decides whether touch screens can drag pieces'}><Icon name="lock" /> Touch drag {$state.touchDrag ? 'on' : 'off'}</button>
 							<div class="cap"><span><b>{lobbyMapName}</b> · {lobbyLength.replace(' game', '')} <span class="deskonly">game</span> · {lobbyWaves} waves · {lobbyLife} Life <span class="deskonly">per team</span></span></div>
 						</div>
 						{@render teamPanel('blue', blueSeats, blueCount)}
@@ -1335,6 +1338,10 @@
 	.seat-top :global(.tag) { flex: none; }
 	.tseats .crown :global(.ico), .tseats .badge :global(.ico) { width: 1em; height: 1em; stroke-width: 3; }
 	.lboard { min-width: 0; }
+	.lboard .tdrag { position: absolute; top: 8px; right: 8px; z-index: 2; display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px; border-radius: 999px; font: inherit; font-size: 12px; color: var(--ink-2, #c9d3dd); background: rgba(6, 18, 32, 0.82); border: 1px solid rgba(216, 179, 106, 0.45); cursor: pointer; }
+	.lboard .tdrag.on { color: #2a1c06; background: linear-gradient(180deg, #f6e2ad, #d8b36a); border-color: #f9ebc6; }
+	.lboard .tdrag:disabled { cursor: default; opacity: 0.85; }
+	.lboard .tdrag :global(svg) { width: 13px; height: 13px; }
 	.lbody .setup { display: grid; grid-template-columns: minmax(0, 1fr); gap: 26px; padding: 16px 24px 18px; }
 	.scol { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 	.lblrow { display: flex; align-items: center; gap: 12px; min-width: 0; min-height: 24px; }

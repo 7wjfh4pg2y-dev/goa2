@@ -35,6 +35,8 @@
 	/** the host: hand the host role to someone here (tap, then tap again) */
 	export let hostId = '';
 	export let onHost: ((id: string) => void) | null = null;
+	export let touchDrag = false; // may touch screens drag pieces (the host's switch)
+	export let onTouchDrag: ((on: boolean) => void) | null = null;
 	let hostArm = '', hostT: ReturnType<typeof setTimeout> | null = null;
 	function hostTap(id: string) {
 		if (hostArm !== id) { hostArm = id; if (hostT) clearTimeout(hostT); hostT = setTimeout(() => (hostArm = ''), 3000); return; }
@@ -104,6 +106,7 @@
 				<div class="gll">{#each [...log].reverse().slice(0, 40) as e (e.id)}<p><b>{e.by}</b> {e.text}</p>{:else}<p class="none">No moves yet</p>{/each}</div>
 			</div>
 		{/if}
+		<div class="gopt"><small>Touch screens</small><span class="gopth">{touchDrag ? 'Drag pieces straight away' : 'Move, then tap a hex — a drag pans the board'}</span>{#if host && onTouchDrag}<button class="gok" class:on={touchDrag} on:click={() => onTouchDrag?.(!touchDrag)} title="Let phone and tablet players drag pieces (off: they pick a piece, tap Move, then tap a hex)">{touchDrag ? 'Dragging on' : 'Dragging off'}</button>{/if}</div>
 		<div class="gfoot">
 			<button class="gleave" class:half={host} on:click={onLeave}>Leave</button>
 			{#if host}<button class="gend" class:arm={endArm} on:click={endTap}>{endArm ? 'Tap again to end' : 'End game'}</button>{/if}
@@ -147,6 +150,9 @@
 	.gok.on, .gok.give { color: #2a1c06; border-color: #f9ebc6; background: linear-gradient(180deg, #f6e2ad, #d8b36a); }
 	.greq { font-size: 11px; color: #8a9fb3; }
 	.gspec { display: flex; flex-direction: column; gap: 8px; }
+	.gopt { display: flex; align-items: center; gap: 10px; min-width: 0; padding-top: 10px; border-top: 1px solid var(--line); }
+	.gopt small { flex: none; }
+	.gopth { flex: 1; min-width: 0; font-size: 12px; opacity: 0.75; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 	/* phone: the whole screen */
 	.scrim.phone { place-items: stretch; }
 	.phone .glob { zoom: 1; width: auto; max-height: none; height: 100dvh; border-radius: 0; padding: 0 14px calc(14px + env(safe-area-inset-bottom)); box-sizing: border-box; }
