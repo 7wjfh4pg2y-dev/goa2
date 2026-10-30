@@ -1,5 +1,8 @@
 <script lang="ts" context="module">
 	let seq = 0;
+	// the painted medals (images/medals/<award id>.webp, moments 'm-<id>', tier trophies 'tier-<metal>')
+	const urls = import.meta.glob('../images/medals/*.webp', { eager: true, import: 'default' }) as Record<string, string>;
+	const ART: Record<string, string> = Object.fromEntries(Object.entries(urls).map(([k, v]) => [k.slice(k.lastIndexOf('/') + 1, -5), v]));
 </script>
 
 <script lang="ts">
@@ -11,6 +14,8 @@
 	export let glyph: GlyphName = 'trophy';
 	export let locked = false;
 	export let size = 72;
+	/** the award's id: its painted medal from images/medals (else its tier's trophy); null = the drawn medal */
+	export let art: string | null = null;
 	const id = `md${++seq}`;
 	const M = {
 		gold: { a: '#fff1c8', b: '#d8b36a', c: '#7f5a1f', r1: '#9b2226', r2: '#6b1418', ink: '#f4dfa8' },
@@ -20,7 +25,16 @@
 		iron: { a: '#8a95a3', b: '#566271', c: '#2a3440', r1: '#2b3542', r2: '#1b232d', ink: '#7c8796' }
 	};
 	$: m = M[locked ? 'iron' : metal];
+	// unclaimed = the award's own art in grey with a padlock (identity kept); 'tier-locked' only if it has none
+	$: src = art == null ? null : ART[art] ?? ART[`tier-${metal}`] ?? null;
 </script>
+
+{#if src}
+<span class="medal art" class:locked style="--s:{size}px">
+	<img {src} alt="" loading="lazy" decoding="async" draggable="false" />
+	{#if locked}<span class="lk"><Glyph name="lock" size={Math.round(size * 0.26)} /></span>{/if}
+</span>
+{:else}
 
 <span class="medal" class:locked style="--s:{size}px;--ink:{m.ink}">
 	<svg viewBox="0 0 80 96" aria-hidden="true">
@@ -39,10 +53,15 @@
 	</svg>
 	<span class="ic"><Glyph name={locked ? 'lock' : glyph} size={Math.round(size * 0.36)} /></span>
 </span>
+{/if}
 
 <style>
 	.medal { position: relative; flex: none; display: inline-block; width: var(--s); height: calc(var(--s) * 1.2); }
 	.medal svg { position: absolute; inset: 0; width: 100%; height: 100%; filter: drop-shadow(0 5px 8px rgba(0, 0, 0, 0.55)); }
 	.ic { position: absolute; left: 0; right: 0; top: 0; height: var(--s); display: grid; place-items: center; color: var(--ink); }
 	.locked .ic { opacity: 0.8; }
+	.art img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 5px 8px rgba(0, 0, 0, 0.55)); user-select: none; }
+	.art.locked img { filter: grayscale(1) brightness(0.58) contrast(0.9); }
+	.lk { position: absolute; left: 50%; top: calc(var(--s) * 0.5); transform: translate(-50%, -50%); display: grid; place-items: center; width: calc(var(--s) * 0.44); height: calc(var(--s) * 0.44);
+		border-radius: 50%; background: rgba(8, 14, 24, 0.82); box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18); color: #c3ccd6; }
 </style>

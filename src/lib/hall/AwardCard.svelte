@@ -26,7 +26,7 @@
 <article class="ac m-{metal}" class:open class:mine>
 	<span class="glow" aria-hidden="true"></span>
 	<div class="top">
-		<Medal {metal} {glyph} locked={open} size={64} />
+		<Medal {metal} {glyph} locked={open} size={72} art={a.id} />
 		<div class="tx">
 			<span class="kind">{kind}</span>
 			<h3>{a.title}</h3>

@@ -72,7 +72,7 @@
 <div class="hall">
 	<section class="banner">
 		<span class="rays" aria-hidden="true"></span>
-		<div class="bmed"><Medal metal="gold" glyph="trophy" size={92} /></div>
+		<div class="bmed"><Medal metal="gold" glyph="trophy" size={92} art="tier-gold" /></div>
 		<div class="btx">
 			<span class="eyebrow">Hall of Records</span>
 			<h2>The Trophy Hall</h2>
