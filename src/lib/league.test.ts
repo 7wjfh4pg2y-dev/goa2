@@ -335,4 +335,29 @@ describe('match moments: the rest', () => {
 		const y = extrasOf([mn('A', 2, 1), rm('A', 'blue'), rm('A', 'blue'), mn('M', 2, 1), rm('M', 'orange'), rm('M', 'blue'), rm('M', 'blue')], false, { ...team })
 		expect([y.A.sweep, y.M.sweep]).toEqual([1, 1]) // M's own minion doesn't count, the other three do
 	})
+	it('Blood in the Water, Bounty Claimed, Apex Predator', async () => {
+		const { extrasOf } = await import('./league')
+		// B falls to A three times (the third = blood, the 2nd = apex, then a fresh pair count); C's spree ended by M
+		const x = extrasOf([h('A', 'B', 1, 1), h('A', 'B', 2, 1), h('A', 'B', 3, 1), h('C', 'M', 3, 2), h('C', 'A', 3, 3), h('C', 'M', 4, 1), h('M', 'C', 4, 2)], false, { ...team })
+		expect([x.A.blood, x.A.apex, x.C.apex]).toEqual([1, 1, 1]) // A then fell, so A's pair count was gone anyway
+		expect(x.M.shutdowns).toBe(1) // C was on 3
+		const y = extrasOf([h('A', 'B', 1, 1), h('B', 'A', 1, 2), h('A', 'B', 2, 1)], false, { ...team })
+		expect(y.A.apex).toBe(0) // fell in between
+	})
+	it('Riposte and Chain Reaction', async () => {
+		const { extrasOf } = await import('./league')
+		const x = extrasOf([cl('A', 'B', 1, 1), h('A', 'B', 2, 1), cl('M', 'C', 2, 2, 'none', 'force'), h('A', 'C', 2, 3), h('M', 'B', 3, 1)], true, { ...team })
+		expect([x.A.riposte, x.M.riposte]).toEqual([1, 0])
+		expect([x.A.chain, x.M.chain]).toEqual([1, 1]) // C: M forced a discard, A took her down
+		expect(extrasOf([h('A', 'B', 1, 1)], false, { ...team }).A.chain).toBeNull()
+	})
+	it('Treasure Hunter: 5+ coins more than every other hero in a round', async () => {
+		const { extrasOf } = await import('./league')
+		const snap = (round: number, c: Record<string, [number, number]>) => ({ round, cards: Object.fromEntries(Object.entries(c).map(([k, [lv, coins]]) => [k, { lv, coins }])) })
+		const snaps = [snap(1, { A: [1, 7], M: [1, 2], B: [1, 1], C: [1, 0] }), snap(2, { A: [3, 0], M: [1, 4], B: [1, 3], C: [1, 2] }), { round: 3, cards: { A: { level: 3, coins: 1 }, M: { level: 1, coins: 4 }, B: { level: 1, coins: 3 }, C: { level: 1, coins: 9 } } }]
+		const x = extrasOf([], false, { ...team }, { snaps })
+		// round 1: A +7 vs +2 · round 2: A spent 3 levels' worth (1 + 2) = +3 net -> no · round 3: C +7 vs ≤ +1
+		expect([x.A.treasure, x.C.treasure, x.M.treasure]).toEqual([1, 1, 0])
+		expect(extrasOf([], false, { ...team }).A.treasure).toBeNull()
+	})
 })

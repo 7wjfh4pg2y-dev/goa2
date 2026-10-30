@@ -110,7 +110,6 @@
 		if (m.won && m.d === 0) b.push('Flawless');
 		if (m.brink) b.push('Comeback');
 		if (x?.multis) b.push('Double kill');
-		if (x?.shutdowns) b.push('Shutdown');
 		for (const mo of momentsOf(x)) b.push(mo.n > 1 ? `${mo.title} ×${mo.n}` : mo.title);
 		if (m.ultRound != null) b.push(`Ultimate R${m.ultRound}`);
 		return b;

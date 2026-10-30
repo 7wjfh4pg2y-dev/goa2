@@ -20,7 +20,7 @@
 		dominating: 'laurel', cursed: 'mask', 'first-blood': 'drop', godlike: 'star', rampages: 'fire', relentless: 'target', pacifist: 'dove',
 		speedrun: 'hourglass', marathon: 'hourglass', hoard: 'coins', 'old-money': 'coins', commitment: 'swap', 'one-trick': 'target',
 		ace: 'trophy', shutdown: 'lock', payback: 'swap', 'two-birds': 'kill', 'giant-slayer': 'target', 'bounty-hunter': 'coins',
-		'heavy-lifter': 'minion', brink: 'life', 'throne-breaker': 'throne', ascended: 'gear', ultimate: 'bolt', fed: 'death', carry: 'trophy',
+		'heavy-lifter': 'minion', brink: 'life', 'throne-breaker': 'throne', ascended: 'gear', ultimate: 'bolt', fed: 'death', carry: 'trophy', 'sharks-prey': 'drop', duelist: 'swap', 'perfect-storm': 'bolt', 'coin-collector': 'coins', nemesis: 'target',
 		'guardian-angel': 'shield', 'avenging-angel': 'kill', closer: 'death', denied: 'shield', unbroken: 'shield', clutch: 'life', undertow: 'minion', 'early-bird': 'drop', 'spring-tide': 'minion'
 	};
 	type Grp = 'game' | 'career' | 'extra';
