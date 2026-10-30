@@ -84,7 +84,7 @@ export type Extras = {
 	shutdowns: number // defeated a hero on a streak of 3+ defeats without falling
 	paybacks: number // defeated the hero who last defeated them
 	multis: number // turns with 2+ defeats
-	aces: number // times their team had every enemy hero down at once
+	aces: number // rounds in which their team defeated every enemy hero
 	heavies: number // heavy minions defeated
 	bounty: number // coins from hero defeats + assists
 	giants: number | null // defeated a hero 2+ levels above them
@@ -94,15 +94,17 @@ export type Extras = {
 	beatDefended: number | null // defeated a hero who had defended
 	relentless: number | null // defeats of a hero they had already attacked that round
 	// ── match moments (see MOMENTS) ──
-	savior: number | null // defeated an enemy who had attacked a teammate this turn or the turn before
-	punisher: number // defeated the hero who defeated a teammate, in the same turn or the next
+	savior: number | null // defeated an enemy who had attacked a teammate this turn or the turn before, same round, that teammate still standing
+	punisher: number // defeated the hero who defeated a teammate, in the same turn or the next, same round
 	coup: number // the defeat that took the enemy team's last Life (a Life win)
 	denied: number | null // rounds survived after defending 2+ attacks / forced discards from ONE enemy hero
 	breakwater: number | null // rounds survived after defending attacks / forced discards from 2+ different enemy heroes
-	lastStand: number | null // attacks defended while their team was on its last Life
-	riptide: number // turns with 3+ minions defeated
-	dawn: number // hero defeats in round 1
-	risingTide: number // 1 = their team defeated more minions in round 1 than it has heroes
+	lastStand: number | null // rounds survived after defending an attack while their team was on its last Life
+	sweep: number // turns with 3+ enemy minions defeated or removed
+	opening: number // hero defeats in round 1
+	fastStart: number // 1 = their team defeated more minions in round 1 than it has heroes
+	spree: number // 3 hero defeats in a row without falling (one per life)
+	pacifist: number | null // 1 = the whole game without attacking an enemy hero
 }
 /** what extrasOf needs to know about the game beyond its events */
 export type GameFacts = { lifeMax?: number; winner?: Team | null; type?: WinType }
@@ -189,7 +191,7 @@ export function extrasOf(evIn: unknown, clashes: boolean, team: Record<string, T
 	const out: Record<string, Extras> = {}
 	for (const id of ids) out[id] = { firstBlood: 0, wipe: 0, shutdowns: 0, paybacks: 0, multis: 0, aces: 0, heavies: 0, bounty: 0,
 		giants: levels ? 0 : null, defends: clashes ? 0 : null, defDied: clashes ? 0 : null, noDefDied: clashes ? 0 : null, beatDefended: clashes ? 0 : null, relentless: clashes ? 0 : null,
-		savior: clashes ? 0 : null, punisher: 0, coup: 0, denied: clashes ? 0 : null, breakwater: clashes ? 0 : null, lastStand: clashes && facts.lifeMax ? 0 : null, riptide: 0, dawn: 0, risingTide: 0 }
+		savior: clashes ? 0 : null, punisher: 0, coup: 0, denied: clashes ? 0 : null, breakwater: clashes ? 0 : null, lastStand: clashes && facts.lifeMax ? 0 : null, sweep: 0, opening: 0, fastStart: 0, spree: 0, pacifist: clashes ? 0 : null }
 	if (H[0]) out[H[0].e.by].firstBlood = 1
 	const streak: Record<string, number> = {}, lastKiller: Record<string, string> = {}, turnKills: Record<string, number> = {}
 	for (const { e, i } of H) {
@@ -215,8 +217,18 @@ export function extrasOf(evIn: unknown, clashes: boolean, team: Record<string, T
 	}
 	for (const e of ev) {
 		if (e.k === 'minion' && e.role === 'heavy' && out[e.by]) out[e.by].heavies++
-		if (e.k === 'ace') for (const id of ids) if (team[id] === e.team) out[id].aces++
 	}
+	// Ace: a round in which the team defeated every enemy hero (each member gets it)
+	for (const T of ['orange', 'blue'] as Team[]) {
+		const own = ids.filter((id) => team[id] === T), foes = ids.filter((id) => team[id] !== T)
+		if (!own.length || !foes.length) continue
+		for (const r of new Set(H.map((h) => h.e.r))) {
+			const down = new Set(H.filter((h) => h.e.r === r && team[h.e.by] === T).map((h) => h.e.v))
+			if (foes.every((f) => down.has(f))) for (const id of own) out[id].aces++
+		}
+	}
+	// Pacifist: the whole game without attacking an enemy hero (an attack called off still counts as one; so does any defeat)
+	if (clashes) for (const id of ids) if (!C.some((c) => c.e.by === id && c.e.kind === 'attack') && !H.some((h) => h.e.by === id)) out[id].pacifist = 1
 	if (clashes) for (const { e } of C) {
 		if (e.out === 'defended' && e.kind === 'attack' && out[e.v]) out[e.v].defends!++
 		if (e.out === 'died' && e.disc && e.kind === 'attack') { if (out[e.v]) out[e.v].defDied!++; if (out[e.by]) out[e.by].beatDefended!++ }
@@ -232,15 +244,21 @@ const tix = (e: { r: number; t: number }) => (e.r - 1) * 4 + (e.t - 1)
 function moments(ev: GameEvent[], H: { e: Extract<GameEvent, { k: 'hero' }>; i: number }[], C: { e: Extract<GameEvent, { k: 'clash' }>; i: number }[],
 	clashes: boolean, team: Record<string, Team>, out: Record<string, Extras>, facts: GameFacts) {
 	const mates = (a: string, b: string) => a !== b && team[a] != null && team[a] === team[b]
+	const run: Record<string, number> = {} // hero defeats since they last fell (Killing Spree)
 	for (const { e, i } of H) {
+		run[e.v] = 0
 		const x = out[e.by]
 		if (!x) continue
 		const k = tix(e)
-		// Savior: the hero fell after attacking a teammate of the killer this turn or the turn before
-		if (clashes && C.some((c) => c.i < i && c.e.kind === 'attack' && c.e.out !== 'cancel' && c.e.by === e.v && mates(c.e.v, e.by) && k - tix(c.e) <= 1)) x.savior!++
-		// Punisher: the hero had defeated a teammate of the killer in the same turn or the one before
-		if (H.some((h) => h.i < i && h.e.by === e.v && mates(h.e.v, e.by) && k - tix(h.e) <= 1)) x.punisher++
-		if (e.r === 1) x.dawn++
+		// Savior: the hero fell after attacking a teammate of the killer this turn or the turn before, in this round —
+		// and that teammate was still standing (not defeated between the attack and this kill)
+		if (clashes && C.some((c) => c.i < i && c.e.kind === 'attack' && c.e.out !== 'cancel' && c.e.out !== 'died' && c.e.by === e.v && mates(c.e.v, e.by) && c.e.r === e.r && k - tix(c.e) <= 1
+			&& !H.some((h) => h.e.v === c.e.v && h.i > c.i && h.i < i))) x.savior!++
+		// Punisher: the hero had defeated a teammate of the killer in the same turn or the one before, in this round
+		if (H.some((h) => h.i < i && h.e.by === e.v && mates(h.e.v, e.by) && h.e.r === e.r && k - tix(h.e) <= 1)) x.punisher++
+		if (e.r === 1) x.opening++
+		// Killing Spree: the 3rd defeat in a row without falling (a fall starts the count again)
+		if ((run[e.by] = (run[e.by] ?? 0) + 1) === 3) x.spree++
 	}
 	// Coup de Grâce: a Life win — the last defeat of a loser's hero by the winners
 	if (facts.type === 'life' && facts.winner) {
@@ -259,25 +277,29 @@ function moments(ev: GameEvent[], H: { e: Extract<GameEvent, { k: 'hero' }>; i: 
 			out[v].denied! += Object.values(n).filter((c) => c >= 2).length
 			if (Object.keys(n).length >= 2) out[v].breakwater!++
 		}
-		// Last Stand: an attack defended while their team's Life was down to its last
+		// Last Stand: an attack defended while their team's Life was down to its last, and still standing at the
+		// round's end — once a round
 		if (facts.lifeMax) {
 			const life: Record<string, number> = { orange: facts.lifeMax, blue: facts.lifeMax }
+			const stood = new Set<string>()
 			for (const e of ev) {
 				if (e.k === 'hero' && team[e.v]) life[team[e.v]] -= e.l ?? 0
-				if (e.k === 'clash' && e.kind === 'attack' && e.out === 'defended' && out[e.v] && life[team[e.v]] <= 1) out[e.v].lastStand!++
+				if (e.k === 'clash' && e.kind === 'attack' && e.out === 'defended' && out[e.v] && life[team[e.v]] <= 1) stood.add(`${e.v}|${e.r}`)
 			}
+			for (const k of stood) if (!fell.has(k)) out[k.split('|')[0]].lastStand!++
 		}
 	}
-	// Riptide: 3+ minions in one turn · Rising Tide: a team out-killing its own size in minions in round 1
+	// Clean Sweep: 3+ enemy minions defeated or removed in one turn · Fast Start: a team out-killing its own size in minions in round 1
 	const turnMin: Record<string, number> = {}, early: Record<string, number> = {}
-	for (const e of ev) if (e.k === 'minion' && out[e.by]) {
+	for (const e of ev) if ((e.k === 'minion' || e.k === 'mrem') && out[e.by]) {
+		if (e.k === 'mrem' && e.team === team[e.by]) continue // taking off your own minion is no feat
 		const k = `${e.by}|${e.r}|${e.t}`
-		if ((turnMin[k] = (turnMin[k] ?? 0) + 1) === 3) out[e.by].riptide++
-		if (e.r === 1) early[team[e.by]] = (early[team[e.by]] ?? 0) + 1
+		if ((turnMin[k] = (turnMin[k] ?? 0) + 1) === 3) out[e.by].sweep++
+		if (e.k === 'minion' && e.r === 1) early[team[e.by]] = (early[team[e.by]] ?? 0) + 1
 	}
 	for (const t of ['orange', 'blue'] as Team[]) {
 		const ids = Object.keys(team).filter((id) => team[id] === t)
-		if (ids.length && (early[t] ?? 0) > ids.length) for (const id of ids) if (out[id]) out[id].risingTide = 1
+		if (ids.length && (early[t] ?? 0) > ids.length) for (const id of ids) if (out[id]) out[id].fastStart = 1
 	}
 }
 
@@ -431,7 +453,6 @@ export type PlayerAgg = {
 	clashGames: number
 	/** won without falling / without a hero defeat (games with events) · won from the brink · fastest ultimate (round) */
 	flawless: number
-	pacifist: number
 	brinks: number
 	fastUlt: number | null
 }
@@ -456,7 +477,7 @@ export const kFor = (gamesBefore: number) => (gamesBefore < PROVISIONAL ? K_NEW 
 /** one player's rating change: their own rating against the enemy team's average */
 export const eloDelta = (own: number, foes: number, won: boolean, gamesBefore: number) =>
 	Math.round(kFor(gamesBefore) * ((won ? 1 : 0) - 1 / (1 + 10 ** ((foes - own) / 400))))
-const ZERO_EX: Record<keyof Extras, number> = { firstBlood: 0, wipe: 0, shutdowns: 0, paybacks: 0, multis: 0, aces: 0, heavies: 0, bounty: 0, giants: 0, defends: 0, defDied: 0, noDefDied: 0, beatDefended: 0, relentless: 0, savior: 0, punisher: 0, coup: 0, denied: 0, breakwater: 0, lastStand: 0, riptide: 0, dawn: 0, risingTide: 0 }
+const ZERO_EX: Record<keyof Extras, number> = { firstBlood: 0, wipe: 0, shutdowns: 0, paybacks: 0, multis: 0, aces: 0, heavies: 0, bounty: 0, giants: 0, defends: 0, defDied: 0, noDefDied: 0, beatDefended: 0, relentless: 0, savior: 0, punisher: 0, coup: 0, denied: 0, breakwater: 0, lastStand: 0, sweep: 0, opening: 0, fastStart: 0, spree: 0, pacifist: 0 }
 const heroTraits = (id: string) => (HEROES.find((h) => h.id === id)?.traits ?? []) as Trait[]
 
 export function buildLeague(rows: GameRowIn[], extra: LeagueGame[] = []): League {
@@ -476,7 +497,7 @@ export function leagueOf(list: LeagueGame[]): League {
 				byType: { throne: { games: 0, wins: 0 }, final: { games: 0, wins: 0 }, life: { games: 0, wins: 0 }, other: { games: 0, wins: 0 } },
 				kills: 0, deaths: 0, assists: 0, kdaGames: 0, teamKills: 0, minions: 0, coins: 0, coinGames: 0, levels: 0, levelGames: 0, heroes: {}, roles: {},
 				mates: [], foes: [], paths: [], history: [], firstAt: 0, lastAt: 0, peak: START_RATING, minutes: 0, rounds: 0, ults: 0, maxLevel: 0, mRoles: { melee: 0, ranged: 0, heavy: 0 },
-					ex: { ...ZERO_EX }, xGames: 0, clashGames: 0, flawless: 0, pacifist: 0, brinks: 0, fastUlt: null, _mates: new Map(), _foes: new Map(), _paths: new Map() }
+					ex: { ...ZERO_EX }, xGames: 0, clashGames: 0, flawless: 0, brinks: 0, fastUlt: null, _mates: new Map(), _foes: new Map(), _paths: new Map() }
 			P.set(gp.key, p)
 		}
 		p.name = gp.name // the latest spelling
@@ -529,7 +550,6 @@ export function leagueOf(list: LeagueGame[]): League {
 				for (const k of Object.keys(ZERO_EX) as (keyof Extras)[]) p.ex[k] += gp.x[k] ?? 0
 			}
 			if (gp.won && gp.deaths === 0) p.flawless++
-			if (gp.won && gp.kills === 0) p.pacifist++
 			if (gp.brink) p.brinks++
 			if (gp.ultRound != null) p.fastUlt = p.fastUlt == null ? gp.ultRound : Math.min(p.fastUlt, gp.ultRound)
 			for (const o of g.players) {
@@ -623,17 +643,21 @@ export const worstMateOf = (p: PlayerAgg): Mate | null => {
 // ── match moments: awards given in a game each time something special happens (a player can earn one several
 // times in a game); the career awards count them up ──
 export const MOMENTS: { id: string; title: string; blurb: string; of: (x: Extras) => number }[] = [
-	{ id: 'eye', title: 'Eye for an Eye', blurb: 'Exacted revenge: defeated the hero who last defeated them', of: (x) => x.paybacks },
-	{ id: 'savior', title: 'Savior', blurb: 'Defeated an enemy hero who attacked a teammate this turn or the turn before', of: (x) => x.savior ?? 0 },
-	{ id: 'punisher', title: 'Punisher', blurb: 'Defeated the hero who defeated a teammate, in the same turn or the next', of: (x) => x.punisher },
-	{ id: 'coup', title: 'Coup de Grâce', blurb: "Defeated the hero who took the enemy team's last Life", of: (x) => x.coup },
-	{ id: 'denied', title: 'Denied', blurb: 'Defended 2+ attacks or forced discards from the same enemy hero in a round, and survived it', of: (x) => x.denied ?? 0 },
-	{ id: 'breakwater', title: 'Breakwater', blurb: 'Defended attacks or forced discards from 2+ different enemy heroes in a round, and survived it', of: (x) => x.breakwater ?? 0 },
-	{ id: 'last-stand', title: 'Last Stand', blurb: 'Defended an attack while their team was on its last Life', of: (x) => x.lastStand ?? 0 },
-	{ id: 'ace', title: 'Ace', blurb: 'Their team had every enemy hero down at once', of: (x) => x.aces },
-	{ id: 'riptide', title: 'Riptide', blurb: 'Defeated 3+ minions in one turn', of: (x) => x.riptide },
-	{ id: 'dawn', title: 'Dawn Strike', blurb: 'Defeated a hero in the first round', of: (x) => x.dawn },
-	{ id: 'rising-tide', title: 'Rising Tide', blurb: 'Their team defeated more minions in the first round than it has heroes (3 in a 2v2, 4 in a 3v3…)', of: (x) => x.risingTide }
+	{ id: 'eye', title: 'Eye for an Eye', blurb: 'Exacted revenge! Took down the hero who last took them down', of: (x) => x.paybacks },
+	{ id: 'spree', title: 'Killing Spree', blurb: 'Three hero takedowns in a row without falling', of: (x) => x.spree },
+	{ id: 'rampage', title: 'Rampage!', blurb: 'Took down every enemy hero at least once in the game', of: (x) => x.wipe },
+	{ id: 'relentless', title: 'Relentless', blurb: 'Came back for a hero who survived their attack, and finished the job that round', of: (x) => x.relentless ?? 0 },
+	{ id: 'savior', title: 'Savior', blurb: 'Took down an enemy who had just attacked a teammate, while that teammate still stood', of: (x) => x.savior ?? 0 },
+	{ id: 'punisher', title: 'Punisher', blurb: 'Avenged a fallen teammate straight away', of: (x) => x.punisher },
+	{ id: 'coup', title: 'Coup de Grâce', blurb: 'Took the last Life of the enemy team', of: (x) => x.coup },
+	{ id: 'denied', title: 'Denied', blurb: 'Fended off the same enemy twice in a round, and lived', of: (x) => x.denied ?? 0 },
+	{ id: 'breakwater', title: 'Breakwater', blurb: 'Fended off two different enemies in a round, and lived', of: (x) => x.breakwater ?? 0 },
+	{ id: 'last-stand', title: 'Last Stand', blurb: "Fended off an attack on their team's last Life, and was still standing when the round ended", of: (x) => x.lastStand ?? 0 },
+	{ id: 'ace', title: 'Ace', blurb: 'Their team took down every enemy hero in a single round', of: (x) => x.aces },
+	{ id: 'clean-sweep', title: 'Clean Sweep', blurb: 'Cleared three or more enemy minions in one turn', of: (x) => x.sweep },
+	{ id: 'opening-strike', title: 'Opening Strike', blurb: 'Took down a hero in the very first round', of: (x) => x.opening },
+	{ id: 'fast-start', title: 'Fast Start', blurb: 'Their team took more minions in the first round than it has heroes', of: (x) => x.fastStart },
+	{ id: 'pacifist', title: 'Pacifist', blurb: 'Played the whole game without attacking an enemy hero', of: (x) => x.pacifist ?? 0 }
 ]
 /** the moments one player earned in one game, each with how many times */
 export const momentsOf = (x?: Extras | null) => (x ? MOMENTS.map((m) => ({ ...m, n: m.of(x) })).filter((m) => m.n > 0) : [])
@@ -671,56 +695,55 @@ export function awardsOf(games: LeagueGame[], players: PlayerAgg[]): Award[] {
 	const kills = (gp: GamePlayer) => gp.kills
 
 	// the killers, by size of game
-	game('double-killer', 'Double-Killer', 'Most hero kills in a 2v2 game', kills, (n) => plural(n, 'kill'), { only: (g) => g.side === 2 })
-	game('triple-killer', 'Triple-Killer', 'Most hero kills in a 3v3 game', kills, (n) => plural(n, 'kill'), { only: (g) => g.side === 3 })
-	game('ultra-killer', 'Ultra-Killer', 'Most hero kills in a 4v4 game', kills, (n) => plural(n, 'kill'), { only: (g) => g.side === 4, hidden: true })
-	game('mega-killer', 'Mega-Killer', 'Most hero kills in a 5v5 game', kills, (n) => plural(n, 'kill'), { only: (g) => g.side === 5, hidden: true })
+	game('double-killer', 'Double-Killer', 'Most heroes taken down in one 2v2 game', kills, (n) => plural(n, 'kill'), { only: (g) => g.side === 2 })
+	game('triple-killer', 'Triple-Killer', 'Most heroes taken down in one 3v3 game', kills, (n) => plural(n, 'kill'), { only: (g) => g.side === 3 })
+	game('ultra-killer', 'Ultra-Killer', 'Most heroes taken down in one 4v4 game', kills, (n) => plural(n, 'kill'), { only: (g) => g.side === 4, hidden: true })
+	game('mega-killer', 'Mega-Killer', 'Most heroes taken down in one 5v5 game', kills, (n) => plural(n, 'kill'), { only: (g) => g.side === 5, hidden: true })
 	// careers
-	career('bloodthirsty', 'The Executioner', 'Most hero kills', (p) => (p.kdaGames ? p.kills : null), (n) => plural(n, 'kill'))
-	career('respawn', 'Death Magnet', 'Most defeats', (p) => (p.kdaGames ? p.deaths : null), (n) => plural(n, 'defeat'))
-	career('enabler', 'Ultimate Wingman', 'Most assists', (p) => (p.kdaGames ? p.assists : null), (n) => plural(n, 'assist'))
-	career('last-hit', 'Minion Reaper', 'Most minion kills', (p) => (p.kdaGames ? p.minions : null), (n) => plural(n, 'minion'))
+	career('bloodthirsty', 'The Executioner', 'Most heroes taken down, all time', (p) => (p.kdaGames ? p.kills : null), (n) => plural(n, 'kill'))
+	career('respawn', 'Death Magnet', 'Fell the most times, all time', (p) => (p.kdaGames ? p.deaths : null), (n) => plural(n, 'defeat'))
+	career('enabler', 'Ultimate Wingman', 'Helped take down the most heroes, all time', (p) => (p.kdaGames ? p.assists : null), (n) => plural(n, 'assist'))
+	career('last-hit', 'Minion Reaper', 'Most minions taken out, all time', (p) => (p.kdaGames ? p.minions : null), (n) => plural(n, 'minion'))
 	// single games
-	game('killing-spree', 'Killing Spree', 'Most hero kills in a game', kills, (n) => plural(n, 'kill'))
-	game('indomitable', 'Iron Wall', 'Most attacks defended in a game', (gp) => gp.x?.defends ?? null, (n) => plural(n, 'defence'))
-	game('wingman', 'Playmaker', 'Most assists in a game', (gp) => gp.assists, (n) => plural(n, 'assist'))
-	game('wicked-sick', 'Wicked Sick', 'Most minion kills in a game', (gp) => gp.minions, (n) => plural(n, 'minion'))
+	game('iron-wall', 'Iron Wall', 'Fended off the most attacks in one game', (gp) => gp.x?.defends ?? null, (n) => plural(n, 'defence'))
+	game('wingman', 'Playmaker', 'Helped take down the most heroes in one game', (gp) => gp.assists, (n) => plural(n, 'assist'))
+	game('wicked-sick', 'Wicked Sick', 'Most minions taken out in one game', (gp) => gp.minions, (n) => plural(n, 'minion'))
 	// defences
-	career('unstoppable', 'Unstoppable!', 'Most kills on heroes who defended the attack', ex('beatDefended', true), (n) => plural(n, 'kill'))
-	career('untouchable', 'Indomitable!', 'Most attacks defended', ex('defends', true), (n) => plural(n, 'defence'))
-	career('death-wish', 'Honorable End', 'Most deaths without defending', ex('noDefDied', true), (n) => plural(n, 'death'))
-	career('swinging', 'Defiant End', 'Most defences that still resulted in defeat', ex('defDied', true), (n) => plural(n, 'defence'))
+	career('unstoppable', 'Unstoppable!', 'Took down the most heroes who had blocked with a card', ex('beatDefended', true), (n) => plural(n, 'kill'))
+	career('indomitable', 'Indomitable!', 'Fended off the most attacks, all time', ex('defends', true), (n) => plural(n, 'defence'))
+	career('death-wish', 'Honorable End', 'Fell the most times without playing a card to defend', ex('noDefDied', true), (n) => plural(n, 'defeat'))
+	career('swinging', 'Defiant End', 'Fell the most times after playing a card to defend', ex('defDied', true), (n) => plural(n, 'defeat'))
 	// streaks and feats
-	career('dominating', 'Dominating!', 'Longest win streak', (p) => p.bestStreak, (n) => `${n} in a row`, { min: 2 })
-	career('cursed', 'Cursed!', 'Longest loss streak', (p) => -p.worstStreak, (n) => `${n} in a row`, { min: 2 })
-	career('first-blood', 'First Blood!', 'Most first kills', ex('firstBlood'), (n) => plural(n, 'first blood'))
-	career('godlike', 'Godlike!', 'Most games won without being defeated', (p) => (p.kdaGames ? p.flawless : null), (n) => plural(n, 'flawless win'))
-	career('rampage', 'Rampage!', 'Most games defeating every enemy hero', ex('wipe'), (n) => plural(n, 'rampage'))
-	career('relentless', 'Relentless!', 'Most kills on a hero already attacked that round', ex('relentless', true), (n) => plural(n, 'kill'))
-	career('pacifist', 'Pacifist', 'Most games won without a hero kill', (p) => (p.kdaGames ? p.pacifist : null), (n) => plural(n, 'peaceful win'))
+	career('dominating', 'Dominating!', 'Longest run of wins in a row', (p) => p.bestStreak, (n) => `${n} in a row`, { min: 2 })
+	career('cursed', 'Cursed!', 'Longest run of losses in a row', (p) => -p.worstStreak, (n) => `${n} in a row`, { min: 2 })
+	career('first-blood', 'First Blood!', 'Made the first takedown of the game the most times', ex('firstBlood'), (n) => plural(n, 'first blood'))
+	career('godlike', 'Godlike!', 'Won the most games without falling once', (p) => (p.kdaGames ? p.flawless : null), (n) => plural(n, 'flawless win'))
+	career('rampages', 'Berserker', 'Most Rampage! awards', ex('wipe'), (n) => plural(n, 'rampage'))
+	career('relentless', 'Bloodhound', 'Most Relentless awards', ex('relentless', true), (n) => `${n} Relentless`)
+	career('pacifist', 'Peacekeeper', 'Most Pacifist awards', ex('pacifist', true), (n) => plural(n, 'peaceful game'))
 	// whole games
 	// the quickest / longest game: both teams, the winners first
 	const sides = (g: LeagueGame) => [...g.players].sort((a, b) => Number(b.won) - Number(a.won)).map((p) => ({ key: p.key, name: p.name, team: p.team, won: p.won, hero: p.hero }))
 	const timed = games.filter((g) => g.rounds > 0)
 	const fast = [...timed].sort((a, b) => a.rounds - b.rounds || a.minutes - b.minutes)[0]
-	out.push({ id: 'speedrun', title: 'Blitz', blurb: 'The quickest game', scope: 'game', holders: fast ? sides(fast) : [], value: fast ? `${plural(fast.rounds, 'round')} · ${hm(fast.minutes)}` : '', at: fast?.at })
+	out.push({ id: 'speedrun', title: 'Blitz', blurb: 'The quickest game on record', scope: 'game', holders: fast ? sides(fast) : [], value: fast ? `${plural(fast.rounds, 'round')} · ${hm(fast.minutes)}` : '', at: fast?.at })
 	const long = [...timed].sort((a, b) => b.rounds - a.rounds || b.minutes - a.minutes)[0]
-	out.push({ id: 'marathon', title: 'Long War', blurb: 'The longest game', scope: 'game', holders: long ? sides(long) : [], value: long ? `${plural(long.rounds, 'round')} · ${hm(long.minutes)}` : '', at: long?.at })
+	out.push({ id: 'marathon', title: 'Long War', blurb: 'The longest game on record', scope: 'game', holders: long ? sides(long) : [], value: long ? `${plural(long.rounds, 'round')} · ${hm(long.minutes)}` : '', at: long?.at })
 	// the ultimate: few ever get there
-	career('ultimate', 'Transcendent', 'Most Ultimates achieved', (p) => p.ults, (n) => plural(n, 'ultimate'))
+	career('ultimate', 'Transcendent', 'Reached their Ultimate the most times', (p) => p.ults, (n) => plural(n, 'ultimate'))
 	// gold
-	game('hoard', 'Gold Goblin', 'Most gold earned in a game', (gp) => gp.coins, (n) => plural(n, 'coin'))
-	career('old-money', 'Gold Standard', 'Most gold earned', (p) => (p.coinGames ? p.coins : null), (n) => plural(n, 'coin'))
+	game('hoard', 'Gold Goblin', 'Most gold earned in one game', (gp) => gp.coins, (n) => plural(n, 'coin'))
+	career('old-money', 'Gold Standard', 'Most gold earned, all time', (p) => (p.coinGames ? p.coins : null), (n) => plural(n, 'coin'))
 	// heroes
-	career('commitment', 'Hero Hopper', 'Most different heroes played', (p) => Object.keys(p.heroes).length, (n) => plural(n, 'hero').replace('heros', 'heroes'), { min: 2 })
-	career('one-trick', 'One-Trick Pony', 'Most games with a single hero', (p) => Math.max(0, ...Object.values(p.heroes).map((h) => h.games)), (n, p) => {
+	career('commitment', 'Hero Hopper', 'Played the most different heroes', (p) => Object.keys(p.heroes).length, (n) => plural(n, 'hero').replace('heros', 'heroes'), { min: 2 })
+	career('one-trick', 'One-Trick Pony', 'Played one hero the most times', (p) => Math.max(0, ...Object.values(p.heroes).map((h) => h.games)), (n, p) => {
 		const h = Object.entries(p.heroes).sort((a, b) => b[1].games - a[1].games)[0]
 		return `${heroName(h[0])} × ${n}`
 	}, { min: 2 })
 
 	// ── MOBA extras ──
 	const X = { extra: true }
-	career('ace', 'Ace of Aces', 'Most Ace awards', ex('aces', true), (n) => plural(n, 'Ace'), X)
+	career('ace', 'Ace of Aces', 'Most Ace awards', ex('aces'), (n) => plural(n, 'Ace'), X)
 	// careers counting the match moments
 	career('guardian-angel', 'Guardian Angel', 'Most Savior awards', ex('savior', true), (n) => `${n} Savior`, X)
 	career('avenging-angel', 'Avenging Angel', 'Most Punisher awards', ex('punisher'), (n) => `${n} Punisher`, X)
@@ -728,20 +751,20 @@ export function awardsOf(games: LeagueGame[], players: PlayerAgg[]): Award[] {
 	career('denied', 'Untouchable', 'Most Denied awards', ex('denied', true), (n) => `${n} Denied`, X)
 	career('unbroken', 'The Unbroken', 'Most Breakwater awards', ex('breakwater', true), (n) => `${n} Breakwater`, X)
 	career('clutch', 'Clutch', 'Most Last Stand awards', ex('lastStand', true), (n) => `${n} Last Stand`, X)
-	career('undertow', 'Undertow', 'Most Riptide awards', ex('riptide'), (n) => `${n} Riptide`, X)
-	career('early-bird', 'Early Bird', 'Most Dawn Strike awards', ex('dawn'), (n) => `${n} Dawn Strike`, X)
-	career('spring-tide', 'Spring Tide', 'Most Rising Tide awards', ex('risingTide'), (n) => `${n} Rising Tide`, X)
-	career('shutdown', 'Shutdown', 'Most kills on a hero on a 3-kill streak', ex('shutdowns'), (n) => plural(n, 'shutdown'), X)
+	career('undertow', 'Undertow', 'Most Clean Sweep awards', ex('sweep'), (n) => `${n} Clean Sweep`, X)
+	career('early-bird', 'Early Bird', 'Most Opening Strike awards', ex('opening'), (n) => `${n} Opening Strike`, X)
+	career('spring-tide', 'Spring Tide', 'Most Fast Start awards', ex('fastStart'), (n) => `${n} Fast Start`, X)
+	career('shutdown', 'Shutdown', 'Ended the most enemy streaks of 3 takedowns', ex('shutdowns'), (n) => plural(n, 'shutdown'), X)
 	career('payback', 'Payback!', 'Most Eye for an Eye awards', ex('paybacks'), (n) => `${n} Eye for an Eye`, X)
-	career('two-birds', 'Two Birds, One Turn', 'Most turns with two or more kills', ex('multis'), (n) => plural(n, 'double'), X)
-	career('giant-slayer', 'Giant Slayer', 'Most kills on heroes 2+ levels above them', (p) => (p.xGames && p.ex.giants ? p.ex.giants : null), (n) => plural(n, 'giant'), X)
-	career('bounty-hunter', 'Bounty Hunter', 'Most gold from hero kills and assists', ex('bounty'), (n) => plural(n, 'coin'), X)
-	career('heavy-lifter', 'Heavy Lifter', 'Most heavy minions defeated', ex('heavies'), (n) => plural(n, 'heavy'), X)
-	career('brink', 'Back from the Brink', 'Most wins after the battle zone reached their own beach, or with one Life left', (p) => p.brinks, (n) => plural(n, 'comeback'), X)
-	career('throne-breaker', 'Throne Breaker', 'Most wins by pushing into the enemy throne', (p) => p.byType.throne.wins, (n) => plural(n, 'throne'), X)
-	career('ascended', 'Ascended', 'The earliest ultimate (round)', (p) => p.fastUlt, (n) => `round ${n}`, { ...X, low: true })
-	game('fed', 'Fed the Enemy', 'Most deaths in one game', (gp) => gp.deaths, (n) => plural(n, 'death'), X)
-	career('carry', 'The Carry', 'Biggest share of their team’s kills (3+ games)', (p) => (p.kdaGames >= 3 && p.teamKills ? Math.round((100 * p.kills) / p.teamKills) : null), (n) => `${n}% of the kills`, X)
+	career('two-birds', 'Two Birds, One Turn', 'Took down two heroes in one turn the most times', ex('multis'), (n) => plural(n, 'double'), X)
+	career('giant-slayer', 'Giant Slayer', 'Took down the most heroes 2+ levels above them', (p) => (p.xGames && p.ex.giants ? p.ex.giants : null), (n) => plural(n, 'giant'), X)
+	career('bounty-hunter', 'Bounty Hunter', 'Most gold from taking down heroes', ex('bounty'), (n) => plural(n, 'coin'), X)
+	career('heavy-lifter', 'Heavy Lifter', 'Most heavy minions taken out', ex('heavies'), (n) => plural(n, 'heavy'), X)
+	career('brink', 'Back from the Brink', 'Most wins from the edge of defeat (the fight on their own beach, or one Life left)', (p) => p.brinks, (n) => plural(n, 'comeback'), X)
+	career('throne-breaker', 'Throne Breaker', 'Most wins by storming the enemy throne', (p) => p.byType.throne.wins, (n) => plural(n, 'throne'), X)
+	career('ascended', 'Ascended', 'Reached their Ultimate the earliest', (p) => p.fastUlt, (n) => `round ${n}`, { ...X, low: true })
+	game('fed', 'Fed the Enemy', 'Fell the most times in one game', (gp) => gp.deaths, (n) => plural(n, 'defeat'), X)
+	career('carry', 'The Carry', "Biggest share of their team's takedowns (3+ games)", (p) => (p.kdaGames >= 3 && p.teamKills ? Math.round((100 * p.kills) / p.teamKills) : null), (n) => `${n}% of the kills`, X)
 	return out
 }
 /** player key → the awards they hold now (titles on their card) */

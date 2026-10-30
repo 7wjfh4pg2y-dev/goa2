@@ -179,30 +179,31 @@ describe('the awards and the extras', () => {
 		])])
 		const x = (k: string) => L.players.find((p) => p.key === k)!
 		expect(x('zara').ex).toMatchObject({ firstBlood: 1, wipe: 1, multis: 1, relentless: 2, beatDefended: 1, paybacks: 1, aces: 1 }) // round 1: both later kills on Priya came after an earlier attack on her
-		expect(x('mo').ex.aces).toBe(1) // the whole team gets the ace
+		expect(x('mo').ex.aces).toBe(1) // both Titans fell to the Atlanteans in round 1: the whole team gets the ace
 		expect(x('priya').ex).toMatchObject({ shutdowns: 1, defends: 1, defDied: 1 })
 		expect(x('sam').ex.noDefDied).toBe(1)
 		const A = Object.fromEntries(L.awards.map((a) => [a.id, a]))
 		const who = (id: string) => A[id].holders.map((h) => h.name)
 		expect(who('first-blood')).toEqual(['Zara'])
-		expect(who('rampage')).toEqual(['Zara'])
-		expect(who('untouchable')).toEqual(['Priya'])
+		expect(who('rampages')).toEqual(['Zara'])
+		expect(who('indomitable')).toEqual(['Priya'])
 		expect(who('death-wish')).toEqual(['Sam'])
 		expect(who('swinging')).toEqual(['Priya'])
 		expect(who('unstoppable')).toEqual(['Zara'])
 		expect(who('shutdown')).toEqual(['Priya'])
 		expect(who('ace').sort()).toEqual(['Mo', 'Zara'])
-		expect(who('killing-spree')).toEqual(['Zara'])
-		expect(A['killing-spree'].value).toBe('4 kills')
+		expect(A['killing-spree']).toBeUndefined() // a moment now
+		expect(x('zara').ex.spree).toBe(1) // 3 in a row (the 4th, after she fell, starts a new count)
 		expect(A['triple-killer'].holders).toEqual([]) // no 3 v 3 yet: up for grabs
 		expect(A['ultra-killer'].hidden).toBe(true)
 	})
 	it('a game without clashes says nothing about defences; ties share an award', () => {
 		const L = buildLeague([row('g1', 1, ['Zara', 'Mo', 'Priya', 'Sam'], 'orange', [{ by: 'a', v: 'c' }, { by: 'c', v: 'a' }])])
 		const A = Object.fromEntries(L.awards.map((a) => [a.id, a]))
-		expect(A.untouchable.holders).toEqual([])
+		expect(A.indomitable.holders).toEqual([])
+		expect(A.pacifist.holders).toEqual([]) // needs clashes
 		expect(L.players.find((p) => p.key === 'zara')!.clashGames).toBe(0)
-		expect(A['killing-spree'].holders.map((h) => h.name).sort()).toEqual(['Priya', 'Zara'])
+		expect(A['double-killer'].holders.map((h) => h.name).sort()).toEqual(['Priya', 'Zara'])
 	})
 })
 
@@ -277,14 +278,37 @@ describe('match moments: the rest', () => {
 	const h = (by: string, v: string, r: number, t: number, l = 1) => ({ k: 'hero', by, v, r, t, a: [], c: 1, ac: 0, l })
 	const cl = (by: string, v: string, r: number, t: number, out = 'defended', kind = 'attack') => ({ k: 'clash', by, v, r, t, out, kind, disc: true })
 	const mn = (by: string, r: number, t: number) => ({ k: 'minion', by, r, t, role: 'melee' })
-	it('Savior, Punisher, Dawn Strike', async () => {
+	it('Savior, Punisher, Opening Strike', async () => {
 		const { extrasOf } = await import('./league')
-		// B attacks M (turn 1), A defeats B (turn 2) = Savior; B defeats M (r2 t4), A defeats B (r3 t1) = Punisher
-		const x = extrasOf([cl('B', 'M', 1, 1), h('A', 'B', 1, 2), h('B', 'M', 2, 4), h('A', 'B', 3, 1)], true, { ...team })
-		expect([x.A.savior, x.A.punisher, x.A.dawn]).toEqual([1, 1, 1])
+		// B attacks M (turn 1), A defeats B (turn 2) = Savior; B defeats M (r2 t3), A defeats B (r2 t4) = Punisher
+		const x = extrasOf([cl('B', 'M', 1, 1), h('A', 'B', 1, 2), h('B', 'M', 2, 3), h('A', 'B', 2, 4)], true, { ...team })
+		expect([x.A.savior, x.A.punisher, x.A.opening]).toEqual([1, 1, 1])
 		// too late: two turns after
 		const y = extrasOf([h('B', 'M', 2, 1), h('A', 'B', 2, 3)], true, { ...team })
 		expect(y.A.punisher).toBe(0)
+		// never across rounds: turn 4, then the next round's turn 1
+		const z = extrasOf([cl('B', 'M', 1, 4), h('B', 'M', 1, 4), h('A', 'B', 2, 1)], true, { ...team })
+		expect([z.A.savior, z.A.punisher]).toEqual([0, 0])
+		const z2 = extrasOf([cl('B', 'M', 1, 4), h('A', 'B', 2, 1)], true, { ...team })
+		expect(z2.A.savior).toBe(0)
+		// the teammate fell (to anyone) before the kill: no Savior; fell after it: still a Savior
+		expect(extrasOf([cl('B', 'M', 1, 1), h('C', 'M', 1, 1), h('A', 'B', 1, 2)], true, { ...team }).A.savior).toBe(0)
+		expect(extrasOf([cl('B', 'M', 1, 1), h('A', 'B', 1, 2), h('C', 'M', 1, 3)], true, { ...team }).A.savior).toBe(1)
+	})
+	it('Killing Spree: one per life, at the 3rd in a row', async () => {
+		const { extrasOf } = await import('./league')
+		const x = extrasOf([h('A', 'B', 1, 1), h('A', 'C', 1, 2), h('B', 'A', 1, 3), h('A', 'B', 2, 1), h('A', 'C', 2, 2), h('A', 'B', 3, 1), h('A', 'C', 3, 2), h('A', 'B', 4, 1), h('A', 'C', 4, 2)], false, { ...team })
+		expect(x.A.spree).toBe(1) // 2, fell, then 6 in a row = one spree (the next needs a fall first)
+		const y = extrasOf([h('A', 'B', 1, 1), h('A', 'C', 1, 2), h('A', 'B', 2, 1), h('C', 'A', 2, 2), h('A', 'B', 3, 1), h('A', 'C', 3, 2), h('A', 'B', 4, 1)], false, { ...team })
+		expect(y.A.spree).toBe(2)
+	})
+	it('Ace: every enemy hero defeated in one round; Pacifist: no attack all game', async () => {
+		const { extrasOf } = await import('./league')
+		const x = extrasOf([h('A', 'B', 1, 1), h('M', 'C', 1, 4), h('A', 'B', 2, 1), h('A', 'C', 3, 1)], true, { ...team })
+		expect([x.A.aces, x.M.aces, x.B.aces]).toEqual([1, 1, 0])
+		const y = extrasOf([cl('A', 'B', 1, 1), cl('C', 'M', 1, 2, 'cancel'), cl('B', 'C', 1, 3, 'none', 'force')], true, { ...team })
+		expect([y.A.pacifist, y.C.pacifist, y.M.pacifist, y.B.pacifist]).toEqual([0, 0, 1, 1])
+		expect(extrasOf([], false, { ...team }).A.pacifist).toBeNull()
 	})
 	it('Coup de Grâce: the last defeat in a Life win', async () => {
 		const { extrasOf } = await import('./league')
@@ -298,12 +322,17 @@ describe('match moments: the rest', () => {
 		expect([x.A.denied, x.A.breakwater]).toEqual([1, 1])
 		const y = extrasOf([cl('B', 'A', 1, 1), cl('B', 'A', 1, 2), h('C', 'A', 1, 4)], true, { ...team })
 		expect([y.A.denied, y.A.breakwater]).toEqual([0, 0])
-		const z = extrasOf([h('B', 'M', 1, 1, 5), cl('C', 'A', 1, 2)], true, { ...team }, { lifeMax: 6 })
-		expect(z.A.lastStand).toBe(1)
+		const z = extrasOf([h('B', 'M', 1, 1, 5), cl('C', 'A', 1, 2), cl('B', 'A', 1, 3)], true, { ...team }, { lifeMax: 6 })
+		expect(z.A.lastStand).toBe(1) // two defences, one round = one
+		const z2 = extrasOf([h('B', 'M', 1, 1, 5), cl('C', 'A', 1, 2), h('B', 'A', 1, 4, 0)], true, { ...team }, { lifeMax: 6 })
+		expect(z2.A.lastStand).toBe(0) // fell before the round ended
 	})
-	it('Riptide and Rising Tide', async () => {
+	it('Clean Sweep (removals count) and Fast Start', async () => {
 		const { extrasOf } = await import('./league')
 		const x = extrasOf([mn('A', 1, 1), mn('A', 1, 1), mn('A', 1, 1), mn('M', 1, 2)], false, { ...team })
-		expect([x.A.riptide, x.M.riptide, x.A.risingTide, x.M.risingTide, x.B.risingTide]).toEqual([1, 0, 1, 1, 0])
+		expect([x.A.sweep, x.M.sweep, x.A.fastStart, x.M.fastStart, x.B.fastStart]).toEqual([1, 0, 1, 1, 0])
+		const rm = (by: string, team: string) => ({ k: 'mrem', by, r: 2, t: 1, role: 'melee', team })
+		const y = extrasOf([mn('A', 2, 1), rm('A', 'blue'), rm('A', 'blue'), mn('M', 2, 1), rm('M', 'orange'), rm('M', 'blue'), rm('M', 'blue')], false, { ...team })
+		expect([y.A.sweep, y.M.sweep]).toEqual([1, 1]) // M's own minion doesn't count, the other three do
 	})
 })

@@ -85,7 +85,7 @@
 		worstMateOf(p) && { k: 'Jinx', x: worstMateOf(p)!, line: `${wl(worstMateOf(p)!)} together`, good: false }
 	].filter(Boolean) as { k: string; x: { key: string; name: string }; line: string; good: boolean | null }[];
 	$: feats = [
-		{ k: 'First bloods', v: p.xGames ? p.ex.firstBlood : null }, { k: 'Rampages', v: p.xGames ? p.ex.wipe : null }, { k: 'Aces', v: p.clashGames ? p.ex.aces : null },
+		{ k: 'First bloods', v: p.xGames ? p.ex.firstBlood : null }, { k: 'Rampages', v: p.xGames ? p.ex.wipe : null }, { k: 'Aces', v: p.xGames ? p.ex.aces : null },
 		{ k: 'Shutdowns', v: p.xGames ? p.ex.shutdowns : null }, { k: 'Eye for an Eye', v: p.xGames ? p.ex.paybacks : null }, { k: 'Double kills', v: p.xGames ? p.ex.multis : null },
 		{ k: 'Heavies', v: p.xGames ? p.ex.heavies : null }, { k: 'Flawless wins', v: p.kdaGames ? p.flawless : null }, { k: 'Comebacks', v: p.brinks },
 		{ k: 'Defended', v: p.clashGames ? p.ex.defends : null }, { k: 'Ultimates', v: p.ults }, { k: 'Best level', v: p.maxLevel || null }
@@ -107,10 +107,8 @@
 	function badges(m: MatchLine) {
 		const x = m.x, b: string[] = [];
 		if (x?.firstBlood) b.push('First blood');
-		if (x?.wipe) b.push('Rampage');
 		if (m.won && m.d === 0) b.push('Flawless');
 		if (m.brink) b.push('Comeback');
-		if (x?.aces) b.push('Ace');
 		if (x?.multis) b.push('Double kill');
 		if (x?.shutdowns) b.push('Shutdown');
 		for (const mo of momentsOf(x)) b.push(mo.n > 1 ? `${mo.title} ×${mo.n}` : mo.title);

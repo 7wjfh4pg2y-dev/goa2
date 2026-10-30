@@ -146,7 +146,8 @@ describe('battle report — from the journal of a real game', () => {
 		expect(sum('kills')).toBe(sum('deaths'))
 		// the upload row carries the events too, next to everything it had before
 		const data = gameRow(t.j).data
-		expect(data.ev).toHaveLength(7)
+		expect(data.ev).toHaveLength(8)
+		expect((data.ev ?? []).filter((e: { k: string }) => e.k === 'mrem')).toMatchObject([{ id: 'o1', by: 'd', team: 'orange' }]) // the card-effect removal, credited, not a defeat
 		expect(Object.keys(data)).toEqual(expect.arrayContaining(['players', 'draft', 'turns', 'log', 'final']))
 	})
 

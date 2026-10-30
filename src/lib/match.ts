@@ -313,7 +313,9 @@ function applyCardReqBase(s: MatchState, req: Exclude<CardReq, PowerReq>): Parti
 			return { cards: addCoinsTo(s.cards ?? {}, req.pid, minionCoins(m.role)), saving: { piece: m, by: req.pid, saver: saver.pid, card: saver.card, kind: saver.kind, at: Date.now() } }
 		}
 		const off = minionOff(s, req.pid, req.piece, req.kind === 'defeatMinion')
-		return off.pieces ? { ...off, ...battleSettle({ ...s, cards: off.cards ?? s.cards }, off.pieces, req.piece) } : off
+		if (!off.pieces) return off
+		const news = req.kind === 'removeMinion' ? { lastRemoval: { id: `rm_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`, by: req.pid, piece: req.piece } } : {}
+		return { ...off, ...battleSettle({ ...s, cards: off.cards ?? s.cards }, off.pieces, req.piece), ...news }
 	}
 	if (req.kind === 'defeatHero') return defeatHero(s, req.pid, req.target, req.keepCard)
 	if (req.kind === 'removeHero') return removeHero(s, req.pid)
@@ -559,6 +561,8 @@ export interface MatchState {
 	lastDefeat?: DefeatNews | null
 	/** how the latest attack / forced discard ended (the recorder reads it — the Hall of Records' defences) */
 	lastClash?: ClashNews | null
+	/** the latest minion a card effect removed (`removeMinion`): who, which piece — the recorder credits it */
+	lastRemoval?: { id: string; by: string; piece: string } | null
 	/** game start: heroes not yet placed — each player puts theirs on a base spawn point */
 	toSpawn?: Record<string, Piece>
 	// synced 3-2-1 pre-reveal countdown: epoch ms when cards flip face-up. Set by

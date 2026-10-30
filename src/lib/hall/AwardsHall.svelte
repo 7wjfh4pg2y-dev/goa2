@@ -15,9 +15,9 @@
 	const ICON: Record<string, GlyphName> = {
 		'double-killer': 'kill', 'triple-killer': 'kill', 'ultra-killer': 'kill', 'mega-killer': 'kill',
 		bloodthirsty: 'drop', respawn: 'death', enabler: 'assist', 'last-hit': 'minion',
-		'killing-spree': 'fire', indomitable: 'shield', wingman: 'assist', 'wicked-sick': 'minion',
-		unstoppable: 'bolt', untouchable: 'shield', 'death-wish': 'death', swinging: 'kill',
-		dominating: 'laurel', cursed: 'mask', 'first-blood': 'drop', godlike: 'star', rampage: 'fire', relentless: 'target', pacifist: 'dove',
+		'iron-wall': 'shield', wingman: 'assist', 'wicked-sick': 'minion',
+		unstoppable: 'bolt', indomitable: 'shield', 'death-wish': 'death', swinging: 'kill',
+		dominating: 'laurel', cursed: 'mask', 'first-blood': 'drop', godlike: 'star', rampages: 'fire', relentless: 'target', pacifist: 'dove',
 		speedrun: 'hourglass', marathon: 'hourglass', hoard: 'coins', 'old-money': 'coins', commitment: 'swap', 'one-trick': 'target',
 		ace: 'trophy', shutdown: 'lock', payback: 'swap', 'two-birds': 'kill', 'giant-slayer': 'target', 'bounty-hunter': 'coins',
 		'heavy-lifter': 'minion', brink: 'life', 'throne-breaker': 'throne', ascended: 'gear', ultimate: 'bolt', fed: 'death', carry: 'trophy',

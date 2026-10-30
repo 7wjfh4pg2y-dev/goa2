@@ -38,6 +38,8 @@ type Snap = {
 export type GameEvent = SegIdx & (
 	| { k: 'hero'; id: string; r: number; t: number; by: string; v: string; a: string[]; c: number; ac: number; l: number; team: Team | null; kl?: number }
 	| { k: 'minion'; id: string; r: number; t: number; by: string; role: string; team: Team }
+	/** a minion taken off by a card effect (`removeMinion`, no coins; match.ts `lastRemoval`) — not a defeat */
+	| { k: 'mrem'; id: string; r: number; t: number; by: string; role: string; team: Team }
 	/** how an attack / forced discard ended (match.ts ClashNews; journals with `evv` ≥ 2) */
 	| { k: 'clash'; id: string; r: number; t: number; kind: 'attack' | 'force'; by: string; v: string; out: 'defended' | 'died' | 'none' | 'cancel'; disc: boolean }
 	/** an ACE: every hero of the other team down at the same time (`team` = the team that did it) */
@@ -92,7 +94,7 @@ export interface Journal {
 	builds?: Record<string, BuildStep[]>
 	/** what the event tracker saw last: the latest hero-defeat id, the minions on the board (id → "team|role"),
 	 *  the latest clash id and which teams were all down */
-	mark?: { d: string | null; m: Record<string, string>; c?: string | null; a?: Partial<Record<Team, boolean>>
+	mark?: { d: string | null; m: Record<string, string>; c?: string | null; rm?: string | null; a?: Partial<Record<Team, boolean>>
 		/** evv ≥ 3: discard pile sizes, the open attacks / forced discards, the effects seen */
 		ds?: Record<string, number>; ao?: string[]; fo?: string[]; fx?: string[] } | null
 	/** event version: 2 = clashes and aces are recorded too (a game without it says nothing about defences);
@@ -168,7 +170,7 @@ function track(out: Journal, j: Journal, s: MatchState): boolean {
 	// the first look: a baseline only (a defeat left over in the room's state is not this game's)
 	const lc = s.lastClash ?? null
 	if (!mark) {
-		out.mark = { d: ld?.id ?? null, m: now, c: lc?.id ?? null, a: {} }
+		out.mark = { d: ld?.id ?? null, m: now, c: lc?.id ?? null, rm: s.lastRemoval?.id ?? null, a: {} }
 		if ((j.evv ?? 0) >= 3) out.mark = { ...out.mark, ds: Object.fromEntries(Object.entries(s.cards ?? {}).map(([pid, c]) => [pid, (c.discard ?? []).length])),
 			ao: Object.keys(s.attacks ?? {}), fo: Object.keys(s.forced ?? {}), fx: (s.effects ?? []).map((f) => f.id) }
 		return true
@@ -194,12 +196,20 @@ function track(out: Journal, j: Journal, s: MatchState): boolean {
 		}
 	}
 	// an undone minion defeat: the very same piece stands on the board again
-	if (ev.some((e) => e.k === 'minion' && here(e) && e.id in now)) ev = ev.filter((e) => !(e.k === 'minion' && here(e) && e.id in now))
+	const mk = (e: GameEvent) => (e.k === 'minion' || e.k === 'mrem') && here(e) && e.id in now
+	if (ev.some(mk)) ev = ev.filter((e) => !mk(e))
 	// minions that left the board with this change, and who was paid for them (2 coins, a heavy 4)
 	const pool = Object.keys(mark.m).filter((id) => !(id in now)).map((id) => {
 		const [team, role] = mark.m[id].split('|')
 		return { id, team: team as Team, role }
 	})
+	// a minion a card effect removed (no coins): who did it comes with the news
+	const lr = s.lastRemoval ?? null
+	const markR = mark.rm === undefined ? (lr?.id ?? null) : mark.rm // an older mark: start from here
+	if (lr && lr.id !== markR) {
+		const i = pool.findIndex((m) => m.id === lr.piece)
+		if (i >= 0) { const m = pool.splice(i, 1)[0]; ev = [...ev, { k: 'mrem', id: m.id, r: s.round, t: s.turn, by: lr.by, role: m.role, team: m.team, ...segI }] }
+	}
 	if (pool.length && j.cur) {
 		for (const [pid, c] of Object.entries(s.cards ?? {})) {
 			const was = j.cur.cards[pid]?.coins
@@ -261,10 +271,10 @@ function track(out: Journal, j: Journal, s: MatchState): boolean {
 		extraMoved = JSON.stringify(extra) !== JSON.stringify({ ds: mark.ds, ao: mark.ao, fo: mark.fo, fx: mark.fx })
 	}
 	const acesMoved = (['orange', 'blue'] as Team[]).some((T) => !!aces[T] !== !!mark.a?.[T])
-	const moved = (ld?.id ?? null) !== mark.d || !sameKeys(mark.m, now) || markC !== mark.c || acesMoved || extraMoved
+	const moved = (ld?.id ?? null) !== mark.d || (lr?.id ?? null) !== mark.rm || !sameKeys(mark.m, now) || markC !== mark.c || acesMoved || extraMoved
 	if (ev === j.ev && !moved) return false
 	out.ev = ev
-	if (moved) out.mark = { d: ld?.id ?? null, m: now, c: markC, a: aces, ...extra }
+	if (moved) out.mark = { d: ld?.id ?? null, m: now, c: markC, rm: lr?.id ?? null, a: aces, ...extra }
 	return true
 }
 
