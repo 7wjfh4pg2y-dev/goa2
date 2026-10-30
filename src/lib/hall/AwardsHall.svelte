@@ -1,7 +1,7 @@
 <script lang="ts">
 	// The Awards tab as a trophy hall: a banner (claimed / up for grabs / decorated), the MOST DECORATED podium (tap a
 	// player to see only their awards), a filter row, then the awards under ribbon headers — silver = a single game,
-	// gold = career, violet = the extras — claimed first, the open ones dashed at the end.
+	// gold = career, violet = the extras, bronze = the match moments (everyone who has earned one) — claimed first, the open ones dashed at the end.
 	import type { League, Award } from '$lib/league';
 	import { portraitCss } from '$lib/heroes';
 	import { colorHex } from '$lib/match';
@@ -23,28 +23,37 @@
 		'heavy-lifter': 'minion', brink: 'life', 'throne-breaker': 'throne', ascended: 'gear', ultimate: 'bolt', fed: 'death', carry: 'trophy', 'sharks-prey': 'drop', duelist: 'swap', 'perfect-storm': 'bolt', 'coin-collector': 'coins', nemesis: 'target',
 		'guardian-angel': 'shield', 'avenging-angel': 'kill', closer: 'death', denied: 'shield', unbroken: 'shield', clutch: 'life', undertow: 'minion', 'early-bird': 'drop', 'spring-tide': 'minion'
 	};
-	type Grp = 'game' | 'career' | 'extra';
-	const grpOf = (a: Award): Grp => (a.extra ? 'extra' : a.scope);
+	// the match moments' own medals (ids 'm-<moment>')
+	const MICON: Record<string, GlyphName> = {
+		eye: 'swap', spree: 'fire', rampage: 'fire', relentless: 'target', savior: 'shield', punisher: 'kill', coup: 'death', denied: 'shield', breakwater: 'shield',
+		'last-stand': 'life', ace: 'trophy', 'clean-sweep': 'minion', 'opening-strike': 'drop', 'fast-start': 'minion', blood: 'drop', 'bounty-claimed': 'coins',
+		riposte: 'swap', chain: 'bolt', treasure: 'coins', apex: 'target', pacifist: 'dove'
+	};
+	const iconOf = (a: Award): GlyphName => (a.moment ? MICON[a.id.slice(2)] : ICON[a.id]) ?? 'trophy';
+	type Grp = 'moment' | 'game' | 'career' | 'extra';
+	const grpOf = (a: Award): Grp => (a.moment ? 'moment' : a.extra ? 'extra' : a.scope);
 	const GROUPS: { k: Grp; label: string; metal: string }[] = [
 		{ k: 'game', label: 'Single game', metal: 'silver' },
 		{ k: 'career', label: 'Career', metal: 'gold' },
-		{ k: 'extra', label: 'Extras', metal: 'violet' }
+		{ k: 'extra', label: 'Extras', metal: 'violet' },
+		{ k: 'moment', label: 'Moments', metal: 'bronze' }
 	];
 
 	let show: 'all' | Grp | 'open' = 'all';
 	let holder: string | null = null;
 
-	$: list = league.awards.filter((a) => !a.hidden);
+	$: list = league.awards; // every award, the 4v4 / 5v5 ones too (up for grabs until those games happen)
 	$: claimed = list.filter((a) => a.holders.length);
 	// who: their name, colour and main hero (most games)
 	$: whoMap = new Map(league.players.map((p) => [p.key, { name: p.name, color: p.color ? colorHex(p.color) : '', hero: Object.entries(p.heroes).sort((a, b) => b[1].games - a[1].games)[0]?.[0] ?? '' }]));
 	const who = (k: string) => whoMap.get(k) ?? null;
 	// the medal count of each player, by metal
 	$: tally = (() => {
-		const m = new Map<string, { key: string; total: number; game: number; career: number; extra: number }>();
+		const m = new Map<string, { key: string; total: number; game: number; career: number; extra: number; moment: number }>();
 		for (const a of claimed) for (const h of a.holders) {
-			const t = m.get(h.key) ?? { key: h.key, total: 0, game: 0, career: 0, extra: 0 };
-			t.total++; t[grpOf(a)]++;
+			const t = m.get(h.key) ?? { key: h.key, total: 0, game: 0, career: 0, extra: 0, moment: 0 };
+			if (!a.moment) t.total++; // the podium ranks by records held; moments show in their own pip
+			t[grpOf(a)]++;
 			m.set(h.key, t);
 		}
 		const rating = new Map(league.players.map((p) => [p.key, p.rating]));
@@ -87,7 +96,7 @@
 							<span class="who">
 								<span class="pface" style="{w?.hero ? portraitCss(w.hero) : ''};--pc:{w?.color || 'var(--brass)'}"></span>
 								<b>{w?.name}</b>
-								<span class="pips"><i class="g">{s.t.career}</i><i class="s">{s.t.game}</i><i class="v">{s.t.extra}</i></span>
+								<span class="pips"><i class="g">{s.t.career}</i><i class="s">{s.t.game}</i><i class="v">{s.t.extra}</i><i class="b">{s.t.moment}</i></span>
 							</span>
 							<span class="block"><em>{s.place}</em><small>{s.t.total} award{s.t.total === 1 ? '' : 's'}</small></span>
 						</button>
@@ -107,7 +116,7 @@
 
 	<div class="filters">
 		<div class="seg" role="group" aria-label="Show">
-			{#each [['all', 'All'], ['game', 'Single game'], ['career', 'Career'], ['extra', 'Extras'], ['open', 'Up for grabs']] as [k, l] (k)}
+			{#each [['all', 'All'], ['game', 'Single game'], ['career', 'Career'], ['extra', 'Extras'], ['moment', 'Moments'], ['open', 'Up for grabs']] as [k, l] (k)}
 				<button class:on={show === k} on:click={() => (show = k as typeof show)}>{l}</button>
 			{/each}
 		</div>
@@ -118,7 +127,7 @@
 		<section class="sec">
 			<h3 class="ribbon m-{sec.metal}"><span>{sec.label}</span><small>{sec.all.filter((a) => a.holders.length).length} / {sec.all.length} claimed</small></h3>
 			<div class="grid">
-				{#each sec.items as a (a.id)}<AwardCard {a} glyph={ICON[a.id] ?? 'trophy'} {who} {onOpen} mine={!!holder && a.holders.some((h) => h.key === holder)} />{/each}
+				{#each sec.items as a (a.id)}<AwardCard {a} glyph={iconOf(a)} {who} {onOpen} mine={!!holder && a.holders.some((h) => h.key === holder)} />{/each}
 			</div>
 		</section>
 	{:else}
@@ -150,6 +159,7 @@
 	.ribbon.m-gold { --ra: #f4dfa8; --rb: #c9a24a; }
 	.ribbon.m-silver { --ra: #f1f5f9; --rb: #9aa7b5; }
 	.ribbon.m-violet { --ra: #e3d0ff; --rb: #9b6be6; }
+	.ribbon.m-bronze { --ra: #ffd6b0; --rb: #c27a44; }
 	.sec { display: flex; flex-direction: column; gap: 14px; }
 	.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
 	/* the podium */
@@ -166,6 +176,7 @@
 	.pips .g { background: linear-gradient(180deg, #f4dfa8, #c9a24a); }
 	.pips .s { background: linear-gradient(180deg, #f1f5f9, #9aa7b5); }
 	.pips .v { background: linear-gradient(180deg, #e3d0ff, #9b6be6); }
+	.pips .b { background: linear-gradient(180deg, #ffd6b0, #c27a44); }
 	.block { width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border-radius: 10px 10px 0 0; border: 1px solid rgba(255, 255, 255, 0.1); border-bottom: 0; }
 	.block em { font-style: normal; font-size: 34px; line-height: 1; color: #1b1204; }
 	.block small { font-size: 11.5px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(27, 18, 4, 0.75); }

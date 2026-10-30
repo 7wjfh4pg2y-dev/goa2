@@ -7,7 +7,7 @@
 	// violet = the extras (the ultimate's purple) — on two ribbon tails, with the award's icon in the middle. Locked
 	// (nobody holds it yet) = dull iron and a padlock.
 	import Glyph, { type GlyphName } from './Glyph.svelte';
-	export let metal: 'gold' | 'silver' | 'violet' = 'gold';
+	export let metal: 'gold' | 'silver' | 'violet' | 'bronze' = 'gold';
 	export let glyph: GlyphName = 'trophy';
 	export let locked = false;
 	export let size = 72;
@@ -15,6 +15,7 @@
 	const M = {
 		gold: { a: '#fff1c8', b: '#d8b36a', c: '#7f5a1f', r1: '#9b2226', r2: '#6b1418', ink: '#f4dfa8' },
 		silver: { a: '#ffffff', b: '#c3ccd6', c: '#5d6a78', r1: '#1f6f6a', r2: '#124743', ink: '#e8eef4' },
+		bronze: { a: '#ffe0c2', b: '#d08a52', c: '#6e3a17', r1: '#1d4f7a', r2: '#123552', ink: '#ffd6b0' },
 		violet: { a: '#efe2ff', b: '#b383f5', c: '#4c2590', r1: '#3b1f6b', r2: '#26134a', ink: '#e3d0ff' },
 		iron: { a: '#8a95a3', b: '#566271', c: '#2a3440', r1: '#2b3542', r2: '#1b232d', ink: '#7c8796' }
 	};

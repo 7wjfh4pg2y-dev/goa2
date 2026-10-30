@@ -361,3 +361,15 @@ describe('match moments: the rest', () => {
 		expect(extrasOf([], false, { ...team }).A.treasure).toBeNull()
 	})
 })
+
+describe('moment awards in the hall', () => {
+	it('every moment is an award; holders = everyone who earned it, most first', () => {
+		const L = buildLeague([row('g1', 1, ['Zara', 'Mo', 'Priya', 'Sam'], 'orange', [{ by: 'a', v: 'c', r: 1, t: 1 }, { by: 'a', v: 'c', r: 1, t: 2 }, { by: 'b', v: 'd', r: 1, t: 2 }])])
+		const ms = L.awards.filter((a) => a.moment)
+		expect(ms.length).toBeGreaterThanOrEqual(21)
+		const op = L.awards.find((a) => a.id === 'm-opening-strike')!
+		expect(op.holders.map((h) => [h.name, h.n])).toEqual([['Zara', 2], ['Mo', 1]])
+		expect(op.value).toBe('3 times')
+		expect(Object.values(titlesOf(L)).flat().some((t) => t.title === 'Opening Strike')).toBe(false)
+	})
+})

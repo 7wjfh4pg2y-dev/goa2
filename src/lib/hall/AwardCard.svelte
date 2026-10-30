@@ -13,8 +13,8 @@
 	export let onOpen: (key: string) => void = () => {};
 	export let mine = false; // held by the player picked in the filter
 
-	$: metal = (a.extra ? 'violet' : a.scope === 'career' ? 'gold' : 'silver') as 'gold' | 'silver' | 'violet';
-	$: kind = a.extra ? 'Extra' : a.scope === 'career' ? 'Career' : 'Single game';
+	$: metal = (a.moment ? 'bronze' : a.extra ? 'violet' : a.scope === 'career' ? 'gold' : 'silver') as 'gold' | 'silver' | 'violet' | 'bronze';
+	$: kind = a.moment ? 'Moment' : a.extra ? 'Extra' : a.scope === 'career' ? 'Career' : 'Single game';
 	$: open = !a.holders.length;
 	// a whole game (Blitz / Long War): its two teams side by side, the winners first
 	$: teams = a.holders.some((h) => h.team) ? (['orange', 'blue'] as const).map((t) => ({ t, won: a.holders.some((h) => h.team === t && h.won), hs: a.holders.filter((h) => h.team === t) })).filter((x) => x.hs.length).sort((x, y) => Number(y.won) - Number(x.won)) : null;
@@ -59,7 +59,7 @@
 				{#each a.holders as h (h.key)}
 					{@const w = who(h.key)}
 					<button class="h" on:click={() => onOpen(h.key)} style="--pc:{w?.color ?? 'var(--brass)'}" title="Open {h.name}">
-						{#if w?.hero}<span class="face" style={portraitCss(w.hero)}></span>{/if}<span class="nm">{h.name}</span>
+						{#if w?.hero}<span class="face" style={portraitCss(w.hero)}></span>{/if}<span class="nm">{h.name}</span>{#if h.n}<small class="hn">×{h.n}</small>{/if}
 					</button>
 				{/each}
 			</div>
@@ -75,6 +75,8 @@
 	.ac:hover { transform: translateY(-3px); border-color: var(--mt); }
 	.m-silver { --mt: #c3ccd6; --mtl: rgba(195, 204, 214, 0.13); }
 	.m-violet { --mt: #b383f5; --mtl: rgba(179, 131, 245, 0.16); }
+	.m-bronze { --mt: #d9905a; --mtl: rgba(217, 144, 90, 0.15); }
+	.hn { font-size: 12px; color: var(--mt); }
 	.ac::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: linear-gradient(90deg, transparent, var(--mt), transparent); }
 	.glow { position: absolute; left: -40px; top: -50px; width: 220px; height: 200px; background: radial-gradient(closest-side, var(--mtl), transparent); pointer-events: none; }
 	.mine { border-color: var(--mt); box-shadow: 0 0 0 1px var(--mt), 0 10px 24px rgba(0, 0, 0, 0.45); }

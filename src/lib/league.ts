@@ -513,7 +513,9 @@ export type HeroAgg = { hero: string; games: number; wins: number; players: Reco
 /** An award: who holds it now (everyone tied at the top), with what. `scope` game = the best single game,
  *  career = the most over every game. `hidden` = not shown yet (the 4 v 4 / 5 v 5 ones). `extra` = one of the
  *  MOBA extras, beyond the user's list. No holders = still up for grabs. */
-export type Award = { id: string; title: string; blurb: string; scope: 'game' | 'career'; holders: { key: string; name: string; team?: Team; won?: boolean; hero?: string }[]; value: string; at?: number; hidden?: boolean; extra?: boolean }
+export type Award = { id: string; title: string; blurb: string; scope: 'game' | 'career'; holders: { key: string; name: string; team?: Team; won?: boolean; hero?: string; n?: number }[]; value: string; at?: number; hidden?: boolean; extra?: boolean
+	/** a match moment: everyone who has earned it (most first, `n` = how many times), `value` = times earned in all */
+	moment?: boolean }
 export type League = { games: LeagueGame[]; players: PlayerAgg[]; heroes: HeroAgg[]; awards: Award[]; withEvents: number; withClashes: number }
 
 export const START_RATING = 1200
@@ -821,13 +823,28 @@ export function awardsOf(games: LeagueGame[], players: PlayerAgg[]): Award[] {
 	career('throne-breaker', 'Throne Breaker', 'Most wins by storming the enemy throne', (p) => p.byType.throne.wins, (n) => plural(n, 'throne'), X)
 	career('ascended', 'Ascended', 'Reached their Ultimate the earliest', (p) => p.fastUlt, (n) => `round ${n}`, { ...X, low: true })
 	game('fed', 'Fed the Enemy', 'Fell the most times in one game', (gp) => gp.deaths, (n) => plural(n, 'defeat'), X)
+	// the match moments themselves: everyone who has earned one, most first
+	for (const mo of MOMENTS) {
+		const got = new Map<string, { key: string; name: string; n: number; at: number }>()
+		for (const g of games) for (const gp of g.players) {
+			const n = gp.x ? mo.of(gp.x) : 0
+			if (!n) continue
+			const h = got.get(gp.key) ?? { key: gp.key, name: gp.name, n: 0, at: 0 }
+			h.n += n; h.name = gp.name; h.at = Math.max(h.at, g.at)
+			got.set(gp.key, h)
+		}
+		const hs = [...got.values()].sort((a, b) => b.n - a.n || a.name.localeCompare(b.name))
+		const total = hs.reduce((t, h) => t + h.n, 0)
+		out.push({ id: `m-${mo.id}`, title: mo.title, blurb: mo.blurb, scope: 'game', moment: true, holders: hs.map(({ key, name, n }) => ({ key, name, n })),
+			value: total ? `${total} ${total === 1 ? 'time' : 'times'}` : '', at: hs.length ? Math.max(...hs.map((h) => h.at)) : undefined })
+	}
 	career('carry', 'The Carry', "Biggest share of their team's takedowns (3+ games)", (p) => (p.kdaGames >= 3 && p.teamKills ? Math.round((100 * p.kills) / p.teamKills) : null), (n) => `${n}% of the kills`, X)
 	return out
 }
 /** player key → the awards they hold now (titles on their card) */
 export function titlesOf(L: League): Record<string, { title: string; blurb: string }[]> {
 	const out: Record<string, { title: string; blurb: string }[]> = {}
-	for (const a of L.awards) if (!a.hidden) for (const h of a.holders) (out[h.key] ??= []).push({ title: a.title, blurb: a.blurb })
+	for (const a of L.awards) if (!a.hidden && !a.moment) for (const h of a.holders) (out[h.key] ??= []).push({ title: a.title, blurb: a.blurb })
 	return out
 }
 

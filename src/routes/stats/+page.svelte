@@ -372,7 +372,7 @@
 						</div>
 						<div class="sub sp2">Records held</div>
 						<div class="recs">
-							{#each league.awards.filter((a) => !a.hidden && !a.extra && a.holders.length).slice(0, 6) as a (a.id)}
+							{#each league.awards.filter((a) => !a.hidden && !a.extra && !a.moment && a.holders.length).slice(0, 6) as a (a.id)}
 								<button class="rec" on:click={() => go('awards')}><span>{a.title}</span><b>{a.holders.map((h) => h.name).join(', ')}</b><small>{a.value}</small></button>
 							{/each}
 						</div>
