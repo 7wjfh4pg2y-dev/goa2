@@ -26,3 +26,9 @@ body { font-family: 'Modesto Poster', serif; font-synthesis: none; }
 	src: url('./lib/fonts/bangers.woff2') format('woff2');
 	font-display: block;
 }
+
+/* your hand's cards can be dragged into your own order (hud2/handSort.ts): a finger must be able to hold and slide
+   them without the browser panning or opening its long-press menu; the held card rides above the others */
+[data-h] { touch-action: none; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+[data-h].hsort { z-index: 50 !important; cursor: grabbing; filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.55)); transition: none !important; }
+.hsorting [data-h]:not(.hsort) { transition: transform 0.15s ease, translate 0.15s ease; }

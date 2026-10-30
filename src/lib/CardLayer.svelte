@@ -63,6 +63,8 @@
 	import { segOf } from '$lib/recorder';
 	import { boardPrefs } from '$lib/boardPrefs';
 	import { shelf as shelfDrag } from '$lib/hud2/shelf';
+	import { handSort } from '$lib/hud2/handSort';
+	import { arrangeHand, moveCard } from '$lib/handOrder';
 
 	export let session: MatchSession;
 	export let ms: Readable<MatchState>;
@@ -714,7 +716,18 @@
 	// your hand, always in colour order: Silver, Gold, Red, Blue, Green (then the rest)
 	const COLOR_ORDER: Record<string, number> = { SILVER: 0, GOLD: 1, RED: 2, BLUE: 3, GREEN: 4 };
 	const colorRank = (hero: string, idx: number) => COLOR_ORDER[heroCards(hero)[idx]?.color] ?? 9;
-	$: handOrdered = mine ? [...mine.hand].sort((a, b) => colorRank(mine!.hero, a) - colorRank(mine!.hero, b) || a - b) : [];
+	$: handDefault = mine ? [...mine.hand].sort((a, b) => colorRank(mine!.hero, a) - colorRank(mine!.hero, b) || a - b) : [];
+	// …unless you dragged the cards into your own order (handOrder.ts): private, this tab only, per game and hero
+	$: handKey = mine ? `goa2-hand:${$ms.gameId ?? ''}:${mine.hero}` : '';
+	let handCustom: number[] | null = null, handKeyLoaded = '';
+	$: if (handKey !== handKeyLoaded) { handKeyLoaded = handKey; handCustom = loadHandOrder(handKey); }
+	function loadHandOrder(k: string): number[] | null { try { const v = k && sessionStorage.getItem(k); return v ? JSON.parse(v) : null; } catch { return null; } }
+	$: handOrdered = arrangeHand(handDefault, handCustom);
+	function reorderHand(card: number, onto: number) {
+		handCustom = moveCard(handOrdered, card, onto);
+		try { if (handKey) sessionStorage.setItem(handKey, JSON.stringify(handCustom)); } catch { /* private window */ }
+	}
+	$: handSortOpts = { onMove: reorderHand };
 
 	// initiative of the card a player has in play this turn = the card's printed
 	// initiative + their initiative upgrades (NOT the hero's base stat).
@@ -2042,18 +2055,18 @@
 		<!-- ───────── phone: hand tips above a compact dash ───────── -->
 		{#if bannerHand}
 			<!-- hand as banners (the ultimate lives in the dash); hidden = tucked to the right edge, markers showing -->
-			<div class="bstack" class:p2={phone2} class:land>
+			<div class="bstack" class:p2={phone2} class:land use:handSort={handSortOpts}>
 				{#each handOrdered as idx (idx)}
-					<div class="bwrap" class:tucked={autoRetract && bannerOpen !== idx}>
+					<div class="bwrap" data-h={idx} class:tucked={autoRetract && bannerOpen !== idx}>
 						<CardBanner heroId={mine.hero} {idx} sel={selected === idx} on:click={() => bannerTap(idx, () => { if (!mateTake(idx)) preview(idx); })} />
 					</div>
 				{/each}
 			</div>
 		{:else}
-			<div class="tray mob" class:p2={phone2} class:land class:retracted class:spread={spreadHand}>
+			<div class="tray mob" class:p2={phone2} class:land class:retracted class:spread={spreadHand} use:handSort={handSortOpts}>
 				{#each handOrdered as idx, k (idx)}
 					{@const f = fan(k, handOrdered.length)}
-					<button class="hc" class:armed={phone2 && armed === idx} style="--rot:{spreadHand ? 0 : f.rot}deg; --y:{spreadHand ? 0 : f.y}px" on:click={() => (phone2 ? handCardClick2(idx) : handCardClick(idx))}>
+					<button class="hc" data-h={idx} class:armed={phone2 && armed === idx} style="--rot:{spreadHand ? 0 : f.rot}deg; --y:{spreadHand ? 0 : f.y}px" on:click={() => (phone2 ? handCardClick2(idx) : handCardClick(idx))}>
 						<Card heroId={mine.hero} card={heroCards(mine.hero)[idx]} />
 					</button>
 				{/each}
@@ -2138,10 +2151,10 @@
 		{/if}
 	{:else if mine && hud2}
 		{#if !dockHand}
-			<div class="tray h2" class:retracted class:spread={spreadHand}>
+			<div class="tray h2" class:retracted class:spread={spreadHand} use:handSort={handSortOpts}>
 				{#each handOrdered as idx, k (idx)}
 					{@const f = fan(k, handOrdered.length)}
-					<button class="hc" class:armed={armed === idx} style="--rot:{spreadHand ? 0 : f.rot}deg; --y:{spreadHand ? 0 : f.y * lay.s}px"
+					<button class="hc" data-h={idx} class:armed={armed === idx} style="--rot:{spreadHand ? 0 : f.rot}deg; --y:{spreadHand ? 0 : f.y * lay.s}px"
 						on:click={() => handCardClick2(idx)} on:pointerenter={raiseHand} on:pointerleave={lowerHandSoon}>
 						<Card heroId={mine.hero} card={heroCards(mine.hero)[idx]} />
 					</button>
@@ -2151,7 +2164,7 @@
 		<div class="h2dash">
 			<HudDash cs={mine} swapOffer={!!mateOff} runes={runeMap[clientId]} runeFx={dashFx} power={myPower ? powerBtn : undefined} name={myName} color={colorHex(myColor)} team={myTeam === 'blue' ? 'blue' : 'orange'} {turnIdx} {revealed} ini={myInit} marks={statusMap[clientId] ?? EMPTY_STATUS} {markArt}
 				ultIdx={myUlt} {ultReady} deckCount={deckCards(mine).length} levelUp={iMustLevel} order={order2} fxAt={(t) => !!fxFor(clientId, slotIdx(mine, t))}
-				autoHide={autoRetract} spread={spreadHand} docked={dockHand} hand={handOrdered} rowMax={h2rowMax} {ringColor} {armed} {pingArmed} discOpen={discOpen === 'dash'} radius={radiusCtl} tokens={tokenCtl}
+				autoHide={autoRetract} spread={spreadHand} docked={dockHand} hand={handOrdered} onReorder={reorderHand} rowMax={h2rowMax} {ringColor} {armed} {pingArmed} discOpen={discOpen === 'dash'} radius={radiusCtl} tokens={tokenCtl}
 				onMe={() => (overlayId = clientId)} onCoins={changeCoins} onSlot={(e, t) => peekSlot(e, mine, t)}
 				onDiscard={() => (mine.discard.length === 1 ? openDiscard(mine.hero, mine.discard[0], true) : discTap('dash'))} onDiscPick={(i) => openDiscard(mine.hero, i, true)}
 				onDeck={() => (deckOpen = true)} {onUlt} onPing={onPing} onAutoHide={toggleRetract} onSpread={toggleSpread} onDock={toggleDock} onPick={(i) => (mateTake(i) ? null : canCommit && armed !== i ? (armed = i) : preview(i))} />

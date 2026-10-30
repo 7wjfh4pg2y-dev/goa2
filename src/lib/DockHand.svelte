@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { handSort } from '$lib/hud2/handSort';
 	// The hand, docked in the desktop dash, as a RIBBON RACK: every card is a small hanging
 	// spell ribbon (Gydion's spell-mark art, one per card colour) with its action icon and
 	// value stamped on the cloth. Hover a ribbon → its full Runeterra-style banner pops up
@@ -9,6 +10,7 @@
 
 	export let heroId: string;
 	export let hand: number[] = [];
+	export let onReorder: ((card: number, onto: number) => void) | null = null;
 	export let onPick: (idx: number) => void = () => {};
 	export let fanned = false; // the hand stays up as banners (auto-hide off)
 	export let stack = true; // false: someone else lays the kept-up hand out (the 2.0 dash: one row across the screen)
@@ -25,10 +27,10 @@
 </script>
 
 <div class="rack" on:mouseleave={() => (hover = null)} role="group" aria-label="Your hand">
-	<div class="ribbons">
+	<div class="ribbons" use:handSort={{ onMove: (a, b) => onReorder?.(a, b), off: !onReorder }}>
 		{#each hand as i (i)}
 			{@const c = cards[i]}
-			<button class="rb" class:hot={hover === i} on:mouseenter={() => (hover = i)} on:focus={() => (hover = i)} on:click={() => pick(i)} aria-label={c?.name}>
+			<button class="rb" data-h={i} class:hot={hover === i} on:mouseenter={() => (hover = i)} on:focus={() => (hover = i)} on:click={() => pick(i)} aria-label={c?.name}>
 				<img class="cloth" src={rib(c)} alt="" />
 				<span class="val">
 					{#if act(c)}<img src={act(c)} alt="" />{/if}

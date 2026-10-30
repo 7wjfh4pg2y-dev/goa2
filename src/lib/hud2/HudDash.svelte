@@ -27,6 +27,7 @@
 	import TurnSlot from '$lib/cards/TurnSlot.svelte';
 	import Card from '$lib/cards/Card.svelte';
 	import DockHand from '$lib/DockHand.svelte';
+	import { handSort } from '$lib/hud2/handSort';
 	import CardBanner from '$lib/CardBanner.svelte';
 	import CardBack from '$lib/cards/CardBack.svelte';
 	import StatBubbles from './StatBubbles.svelte';
@@ -58,6 +59,7 @@
 	export let spread = false;
 	export let docked = false;
 	export let hand: number[] = [];
+	export let onReorder: ((card: number, onto: number) => void) | null = null; // drag a card to another's place (your own hand order)
 	// the dock is as long as the hand: each card played takes its ribbon out, and the ring slides back left (transform)
 	$: dockW = Math.max(56, 32 + 27 * hand.length);
 	export let armed: number | null = null;
@@ -261,13 +263,13 @@
 
 		<!-- the hand kept up (auto-hide off) while docked: every banner in one row above the dash, edge to edge if need be -->
 		{#if docked && !autoHide && hand.length}
-			<div class="brow" style="width:{(perRow * cellW + (perRow - 1) * 8).toFixed(0)}px; --cw:{cellW.toFixed(1)}px">
-				{#each hand as i, k (i)}<div class="bcell" style="--k:{k}"><CardBanner heroId={cs.hero} idx={i} sel={armed === i} on:click={() => onPick(i)} /></div>{/each}
+			<div class="brow" use:handSort={{ onMove: (a, b) => onReorder?.(a, b), off: !onReorder }} style="width:{(perRow * cellW + (perRow - 1) * 8).toFixed(0)}px; --cw:{cellW.toFixed(1)}px">
+				{#each hand as i, k (i)}<div class="bcell" data-h={i} style="--k:{k}"><CardBanner heroId={cs.hero} idx={i} sel={armed === i} on:click={() => onPick(i)} /></div>{/each}
 			</div>
 		{/if}
 		<div class="dexw" class:open={docked} class:sliding aria-hidden={!docked}>
 			<div class="dext">
-				{#if docked || sliding}<div class="dock" class:armed={armed != null}><DockHand heroId={cs.hero} {hand} fanned={!autoHide} stack={false} {onPick} /></div>{/if}
+				{#if docked || sliding}<div class="dock" class:armed={armed != null}><DockHand heroId={cs.hero} {hand} fanned={!autoHide} stack={false} {onPick} {onReorder} /></div>{/if}
 			</div>
 		</div>
 
