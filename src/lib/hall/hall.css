@@ -1,6 +1,8 @@
-@font-face { font-family: 'IM Fell English'; font-style: normal; font-weight: 400; font-display: swap; src: url('../fonts/imfell.woff2') format('woff2'); }
-@font-face { font-family: 'IM Fell English'; font-style: italic; font-weight: 400; font-display: swap; src: url('../fonts/imfell_italic.woff2') format('woff2'); }
-@font-face { font-family: 'IM Fell English SC'; font-style: normal; font-weight: 400; font-display: swap; src: url('../fonts/imfell_sc.woff2') format('woff2'); }
+@font-face { font-family: 'Cinzel'; font-style: normal; font-weight: 400 900; font-display: swap; src: url('../fonts/cinzel.woff2') format('woff2'); }
+@font-face { font-family: 'Alegreya Sans'; font-style: normal; font-weight: 400; font-display: swap; src: url('../fonts/alegreya_sans.woff2') format('woff2'); }
+@font-face { font-family: 'Alegreya Sans'; font-style: italic; font-weight: 400; font-display: swap; src: url('../fonts/alegreya_sans_italic.woff2') format('woff2'); }
+@font-face { font-family: 'Alegreya Sans'; font-style: normal; font-weight: 500 600; font-display: swap; src: url('../fonts/alegreya_sans_500.woff2') format('woff2'); }
+@font-face { font-family: 'Alegreya Sans'; font-style: normal; font-weight: 700 900; font-display: swap; src: url('../fonts/alegreya_sans_700.woff2') format('woff2'); }
 /* THE HALL OF RECORDS — its own look (2026-10-12, the user's ask: "super cool", like a stats site, not the
    Guards font). A near-black dashboard: charcoal cards, a clean system sans with tabular numbers, green = good /
    win, red = bad / loss, blue = picks / rates, gold = records. Everything is scoped under `.hall`. */
@@ -9,19 +11,19 @@
 	--tx: #e9ecf2; --tx2: #c3c9d3; --mu: #8a93a2; --mu2: #5d6675;
 	--gr: #35d07a; --rd: #ef4f5c; --bl: #3aa3ff; --au: #f3c454; --vi: #a978ff;
 	--or: #ef7d22; --ti: #2f7fe6;
-	/* "Old ledger" (2026-10-31, the user's pick of seven): IM Fell English for the text, its small-caps cut for
-	   titles; one weight only (no faux bold), lifted to a readable x-height */
-	font-family: 'IM Fell English', 'Iowan Old Style', Georgia, serif;
+	/* "Carved stone" (2026-10-31, the user's pick): Alegreya Sans for the text (lining figures, so the stats
+	   read straight), Cinzel for titles */
+	font-family: 'Alegreya Sans', ui-sans-serif, system-ui, sans-serif;
+	font-variant-numeric: lining-nums;
 	font-synthesis: none;
-	font-size-adjust: 0.47;
 	color: var(--tx);
 	background: var(--bg);
 	-webkit-font-smoothing: antialiased;
 }
 .hall .num, .hall .n { font-variant-numeric: tabular-nums; }
 .hall button, .hall input, .hall select, .hall textarea { font-family: inherit; }
-/* titles, tabs, table heads and the small uppercase labels in the small-caps cut */
-.hall :is(h1, h2, h3, h4, .ch, th, .sub, .tabs button) { font-family: 'IM Fell English SC', 'IM Fell English', Georgia, serif; }
+/* titles, tabs, table heads and the small uppercase labels in Cinzel */
+.hall :is(h1, h2, h3, h4, .ch, th, .sub, .tabs button) { font-family: 'Cinzel', Georgia, serif; }
 
 /* cards */
 .hall .card { background: var(--p1); border: 1px solid var(--ln); border-radius: 12px; padding: 18px 20px; min-width: 0; }
