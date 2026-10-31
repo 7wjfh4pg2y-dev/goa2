@@ -28,8 +28,18 @@
 			if ((e.deltaY > 0 && at >= max - 1) || (e.deltaY < 0 && at <= 0)) return;
 			e.preventDefault(); node.scrollLeft = at + e.deltaY;
 		};
+		// fades at the edges that have more to show (`fl` / `fr`), kept up to date on scroll and resize
+		const edge = () => {
+			const max = node.scrollWidth - node.clientWidth;
+			node.classList.toggle('fl', max > 1 && node.scrollLeft > 1);
+			node.classList.toggle('fr', max > 1 && node.scrollLeft < max - 1);
+		};
+		const ro = new ResizeObserver(edge);
+		ro.observe(node);
+		node.addEventListener('scroll', edge, { passive: true });
 		node.addEventListener('wheel', on, { passive: false });
-		return { destroy: () => node.removeEventListener('wheel', on) };
+		edge();
+		return { destroy: () => { ro.disconnect(); node.removeEventListener('scroll', edge); node.removeEventListener('wheel', on); } };
 	}
 	const day = (t: number) => new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 </script>
@@ -110,6 +120,9 @@
 	.hold::-webkit-scrollbar { height: 4px; }
 	.hold::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.18); border-radius: 2px; }
 	.hold > * { flex: none; }
+	.hold.fr { -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 36px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 36px), transparent); }
+	.hold.fl { -webkit-mask-image: linear-gradient(90deg, transparent, #000 36px); mask-image: linear-gradient(90deg, transparent, #000 36px); }
+	.hold.fl.fr { -webkit-mask-image: linear-gradient(90deg, transparent, #000 36px, #000 calc(100% - 36px), transparent); mask-image: linear-gradient(90deg, transparent, #000 36px, #000 calc(100% - 36px), transparent); }
 	.tn.t-blue:not(:first-child) { margin-left: 6px; }
 	.h.tm { border-color: color-mix(in srgb, var(--tc) 55%, transparent); }
 	.h { display: inline-flex; align-items: center; gap: 7px; padding: 3px 11px 3px 3px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.1); background: rgba(255, 255, 255, 0.05); color: var(--ink); font: inherit; font-size: 15px; cursor: pointer; }
