@@ -15,7 +15,7 @@
 		buildLeague, useAliases, leagueOf, gameOfReport, titlesOf, rowOfSelect, LEAGUE_SELECT, WIN_LABEL,
 		type League, type PlayerAgg, type HeroAgg, type GameRowIn, type LeagueGame
 	} from '$lib/league';
-	import { heroById, portraitCss, TRAIT_LABELS, type Trait } from '$lib/heroes';
+	import { HEROES, heroById, portraitCss, TRAIT_LABELS, type Trait } from '$lib/heroes';
 	import { colorHex } from '$lib/match';
 	import { heroRanks, overview, heroPlayers } from '$lib/hallstats';
 	import OverTime from '$lib/hall/OverTime.svelte';
@@ -145,7 +145,11 @@
 	let hq = '', hsort: 'picks' | 'win' | 'kdm' | 'gold' | 'impact' | 'global' | 'name' = 'picks', hflip = false;
 	// the community site's global win rate (globalstats.ts; shown with a GLOBAL tag), −1 = none
 	const gwr = (id: string) => { const g = globalOf(id); return g ? globalWin(g) : -1; };
-	$: hlist = flip((league?.heroes ?? []).filter((h) => !hq.trim() || has(heroName(h.hero), hq) || (heroById(h.hero)?.traits ?? []).some((t) => has(TRAIT_LABELS[t as Trait], hq))).sort((a, b) =>
+	// every hero, played or not: the unplayed ones as empty rows (dimmed, no page of their own yet)
+	const blankHero = (id: string): HeroAgg => ({ hero: id, games: 0, wins: 0, players: {}, paths: [], kills: 0, deaths: 0, assists: 0, kdaGames: 0, coins: 0, coinGames: 0, minions: 0, mGames: 0,
+		byType: { throne: { games: 0, wins: 0 }, final: { games: 0, wins: 0 }, life: { games: 0, wins: 0 }, other: { games: 0, wins: 0 } }, mates: {}, foes: {}, impact: null, impactN: 0 });
+	$: allHeroes = league ? [...league.heroes, ...HEROES.filter((x) => !league!.heroes.some((h) => h.hero === x.id)).map((x) => blankHero(x.id))] : [];
+	$: hlist = flip(allHeroes.filter((h) => !hq.trim() || has(heroName(h.hero), hq) || (heroById(h.hero)?.traits ?? []).some((t) => has(TRAIT_LABELS[t as Trait], hq))).sort((a, b) =>
 		hsort === 'win' ? pct(b.wins, b.games) - pct(a.wins, a.games) || b.games - a.games
 		: hsort === 'kdm' ? perG(b.kills, b.kdaGames) - perG(a.kills, a.kdaGames) || perG(b.minions, b.mGames) - perG(a.minions, a.mGames)
 		: hsort === 'gold' ? (b.coinGames ? b.coins / b.coinGames : -1) - (a.coinGames ? a.coins / a.coinGames : -1)
@@ -240,11 +244,11 @@
 									{#each hlist as h (h.hero)}
 										{@const top1 = masters.get(h.hero)?.[0]}
 										{@const gw = gwr(h.hero)}
-										<tr on:click={() => openHero(h.hero)}>
+										<tr class:unplayed={!h.games} on:click={() => h.games && openHero(h.hero)} title={h.games ? '' : 'Not played yet'}>
 											<td><span class="hcell"><span class="face" style="--fs:38px; {portraitCss(h.hero)}"></span><span><b>{heroName(h.hero)}</b><small class="tr">{(heroById(h.hero)?.traits ?? []).map((t) => TRAIT_LABELS[t as Trait]).join(' · ')}</small></span></span></td>
 											<td class="rt">{h.games}</td>
 											<td class="barcell"><span class="bv"><b class="b">{f1(pct(h.games, totalGames))}%</b><span class="bar thin"><i style="--v:{h.games / maxPick}"></i></span></span></td>
-											{@render winCell(h.wins, h.games)}
+											{#if h.games}{@render winCell(h.wins, h.games)}{:else}<td class="rt muted">–</td>{/if}
 											<td class="rt">{h.kdaGames ? `${avg(h.kills, h.kdaGames)} / ${avg(h.deaths, h.kdaGames)} / ${avg(h.minions, h.mGames)}` : '–'}</td>
 											<td class="rt au">{avg(h.coins, h.coinGames)}</td>
 											<td class="rt" class:up={(h.impact ?? 0) > 0} class:down={(h.impact ?? 0) < 0}>{h.impact == null ? '–' : `${h.impact > 0 ? '+' : ''}${h.impact}`}</td>
@@ -420,6 +424,9 @@
 	.hcell > span:last-child { display: flex; flex-direction: column; gap: 4px; }
 	.hcell b { font-size: 14.5px; }
 	.tr { font-size: 12px; color: var(--mu); }
+	.heroes tr.unplayed { cursor: default; }
+	.heroes tr.unplayed td { opacity: 0.5; }
+	.heroes tr.unplayed:hover td { background: none; }
 	.heroes td:last-child { max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
 	.tp { font-weight: 600; }
 	.rk { display: inline-grid; place-items: center; min-width: 24px; height: 24px; padding: 0 4px; border-radius: 6px; font-size: 12.5px; font-weight: 800; background: var(--p3); color: var(--tx2); }

@@ -71,11 +71,13 @@
 
 <div class="hall">
 	<section class="banner">
-		<span class="rays" aria-hidden="true"></span>
-		<div class="bmed"><Medal metal="gold" glyph="trophy" size={92} art="tier-gold" /></div>
+		<span class="rays" aria-hidden="true"><i></i></span>
+		<span class="corner tl" aria-hidden="true"></span><span class="corner tr" aria-hidden="true"></span><span class="corner bl" aria-hidden="true"></span><span class="corner br" aria-hidden="true"></span>
+		<div class="bmed"><span class="halo" aria-hidden="true"></span><Medal metal="gold" glyph="trophy" size={124} art="tier-gold" /></div>
 		<div class="btx">
 			<span class="eyebrow">Hall of Records</span>
 			<h2>The Trophy Hall</h2>
+			<span class="brule" aria-hidden="true"><i></i></span>
 			<p>Every award, and who holds it now. Beat the record and it's yours.</p>
 		</div>
 		<div class="counts">
@@ -139,18 +141,38 @@
 <style>
 	.hall { display: flex; flex-direction: column; gap: 22px; }
 	/* the banner */
-	.banner { position: relative; overflow: hidden; display: flex; align-items: center; gap: 22px; padding: 22px 28px; border-radius: 16px;
-		background: radial-gradient(120% 140% at 12% 50%, rgba(216, 179, 106, 0.22), transparent 55%), linear-gradient(180deg, #123250, #071628); border: 1px solid rgba(216, 179, 106, 0.4); box-shadow: 0 14px 30px rgba(0, 0, 0, 0.5); }
-	.rays { position: absolute; left: -10%; top: 50%; width: 520px; height: 520px; margin-top: -260px; border-radius: 50%; pointer-events: none; opacity: 0.18;
-		background: repeating-conic-gradient(from 0deg, rgba(244, 223, 168, 0.9) 0deg 5deg, transparent 5deg 15deg); -webkit-mask: radial-gradient(closest-side, #000 20%, transparent 100%); mask: radial-gradient(closest-side, #000 20%, transparent 100%); }
-	.bmed { position: relative; flex: none; }
-	.btx { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
-	.eyebrow { font-size: 12px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--brass); }
-	.btx h2 { margin: 0; font-size: 38px; font-weight: 400; letter-spacing: 0.04em; color: var(--brass-hi); text-shadow: 0 2px 10px rgba(0, 0, 0, 0.6); }
-	.btx p { margin: 0; font-size: 14px; color: var(--ink-2); }
-	.counts { position: relative; display: flex; gap: 10px; }
-	.counts div { min-width: 92px; display: flex; flex-direction: column; align-items: center; padding: 10px 12px; border-radius: 12px; background: rgba(4, 14, 26, 0.6); border: 1px solid rgba(216, 179, 106, 0.25); }
-	.counts b { font-weight: 400; font-size: 30px; line-height: 1; color: #fff; }
+	/* bold and epic (2026-10-31, the user): a deep gilded plaque — slowly turning sunburst (transform only), brass
+	   corner brackets and a double frame, a big medal in a breathing halo (opacity only), the title in heavy
+	   gold-leaf capitals over a rule with a diamond */
+	.banner { position: relative; overflow: hidden; display: flex; align-items: center; gap: 30px; padding: 34px 44px; border-radius: 18px;
+		background: radial-gradient(70% 160% at 14% 50%, rgba(232, 190, 98, 0.34), transparent 60%), radial-gradient(60% 120% at 100% 0%, rgba(47, 127, 230, 0.16), transparent 60%), linear-gradient(180deg, #14385c 0%, #0a2036 55%, #050f1c 100%);
+		border: 1px solid rgba(232, 196, 120, 0.7); box-shadow: inset 0 0 0 5px rgba(3, 10, 20, 0.55), inset 0 0 0 6px rgba(216, 179, 106, 0.35), inset 0 -40px 60px rgba(0, 0, 0, 0.35), 0 18px 40px rgba(0, 0, 0, 0.6); }
+	.rays { position: absolute; left: -330px; top: 50%; width: 1000px; height: 1000px; margin-top: -500px; pointer-events: none; opacity: 0.26;
+		-webkit-mask: radial-gradient(closest-side, #000 12%, transparent 100%); mask: radial-gradient(closest-side, #000 12%, transparent 100%); }
+	.rays i { position: absolute; inset: 0; border-radius: 50%; background: repeating-conic-gradient(from 0deg, rgba(255, 228, 160, 0.95) 0deg 4deg, transparent 4deg 12deg); animation: sun 120s linear infinite; }
+	@keyframes sun { to { transform: rotate(360deg); } }
+	.corner { position: absolute; width: 26px; height: 26px; border: 2px solid rgba(244, 223, 168, 0.75); pointer-events: none; }
+	.corner.tl { left: 12px; top: 12px; border-right: 0; border-bottom: 0; border-top-left-radius: 6px; }
+	.corner.tr { right: 12px; top: 12px; border-left: 0; border-bottom: 0; border-top-right-radius: 6px; }
+	.corner.bl { left: 12px; bottom: 12px; border-right: 0; border-top: 0; border-bottom-left-radius: 6px; }
+	.corner.br { right: 12px; bottom: 12px; border-left: 0; border-top: 0; border-bottom-right-radius: 6px; }
+	.bmed { position: relative; flex: none; display: grid; place-items: center; }
+	.halo { position: absolute; left: 50%; top: 42%; width: 220px; height: 220px; margin: -110px 0 0 -110px; border-radius: 50%; pointer-events: none;
+		background: radial-gradient(closest-side, rgba(255, 220, 140, 0.55), rgba(255, 200, 100, 0.12) 55%, transparent 75%); animation: halo 4.5s ease-in-out infinite; }
+	@keyframes halo { 0%, 100% { opacity: 0.55; transform: scale(0.94); } 50% { opacity: 1; transform: scale(1.04); } }
+	.btx { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+	.eyebrow { font-family: 'Cinzel', Georgia, serif; font-weight: 700; font-size: 13px; letter-spacing: 0.34em; text-transform: uppercase; color: var(--brass); }
+	.btx h2 { margin: 0; font-size: clamp(40px, 4.6vw, 64px); font-weight: 900; line-height: 1; letter-spacing: 0.06em; text-transform: uppercase;
+		background: linear-gradient(180deg, #fffbe8 0%, #f7e3a6 32%, #d9b056 58%, #a7782a 82%, #e8c46e 100%); -webkit-background-clip: text; background-clip: text; color: transparent;
+		filter: drop-shadow(0 3px 0 rgba(20, 10, 0, 0.55)) drop-shadow(0 0 18px rgba(255, 200, 100, 0.25)); }
+	.brule { position: relative; display: block; width: min(440px, 100%); height: 2px; margin: 4px 0 2px; background: linear-gradient(90deg, rgba(244, 223, 168, 0.9), rgba(244, 223, 168, 0.25) 70%, transparent); }
+	.brule i { position: absolute; left: 0; top: 50%; width: 10px; height: 10px; margin-top: -5px; transform: rotate(45deg); background: #f4dfa8; box-shadow: 0 0 8px rgba(255, 220, 140, 0.8); }
+	.btx p { margin: 0; font-size: 15px; color: var(--ink-2); }
+	.counts { position: relative; display: flex; gap: 12px; }
+	.counts div { min-width: 104px; display: flex; flex-direction: column; align-items: center; padding: 12px 14px; border-radius: 12px;
+		background: linear-gradient(180deg, rgba(10, 28, 48, 0.85), rgba(3, 10, 20, 0.85)); border: 1px solid rgba(232, 196, 120, 0.45); box-shadow: inset 0 1px 0 rgba(255, 230, 170, 0.15); }
+	.counts b { font-family: 'Cinzel', Georgia, serif; font-weight: 900; font-size: 36px; line-height: 1; color: #f4dfa8; text-shadow: 0 2px 0 rgba(0, 0, 0, 0.5); }
+	@media (prefers-reduced-motion: reduce) { .rays i, .halo { animation: none; } }
 	.counts span { margin-top: 4px; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); }
 	/* ribbon headers */
 	.ribbon { position: relative; align-self: center; display: flex; align-items: baseline; gap: 10px; margin: 0 auto; padding: 7px 34px; font-size: 16px; font-weight: 400; letter-spacing: 0.16em; text-transform: uppercase;
@@ -198,8 +220,10 @@
 	.none, .fine { margin: 0; text-align: center; color: var(--ink-3); }
 	.fine { font-size: 12px; }
 	@media (max-width: 760px) {
-		.banner { flex-wrap: wrap; justify-content: center; text-align: center; padding: 18px; }
-		.btx h2 { font-size: 30px; }
+		.banner { flex-wrap: wrap; justify-content: center; text-align: center; padding: 26px 18px; gap: 16px; }
+		.btx h2 { font-size: 34px; }
+		.brule { margin-inline: auto; background: linear-gradient(90deg, transparent, rgba(244, 223, 168, 0.9), transparent); }
+		.brule i { left: 50%; margin-left: -5px; }
 		.counts { width: 100%; justify-content: center; }
 		.counts div { min-width: 0; flex: 1; }
 		.grid { grid-template-columns: 1fr; }

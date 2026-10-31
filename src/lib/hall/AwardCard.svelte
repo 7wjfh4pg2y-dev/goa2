@@ -41,6 +41,19 @@
 		edge();
 		return { destroy: () => { ro.disconnect(); node.removeEventListener('scroll', edge); node.removeEventListener('wheel', on); } };
 	}
+	// the title on ONE line: bold, shrunk a pixel at a time until it fits (re-fitted when the card resizes or the font loads)
+	function fitLine(node: HTMLElement, _text: string) {
+		const fit = () => {
+			let f = 21;
+			node.style.fontSize = `${f}px`;
+			while (node.scrollWidth > node.clientWidth + 1 && f > 12) node.style.fontSize = `${--f}px`;
+		};
+		const ro = new ResizeObserver(fit);
+		ro.observe(node);
+		document.fonts?.ready.then(fit).catch(() => {});
+		fit();
+		return { update: fit, destroy: () => ro.disconnect() };
+	}
 	const day = (t: number) => new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 </script>
 
@@ -50,7 +63,7 @@
 		<Medal {metal} {glyph} locked={open} size={72} art={a.id} />
 		<div class="tx">
 			<span class="kind">{kind}</span>
-			<h3>{a.title}</h3>
+			<h3 use:fitLine={a.title}>{a.title}</h3>
 			<p>{a.blurb}</p>
 		</div>
 	</div>
@@ -104,7 +117,7 @@
 	.top p { display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 	.tx { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; padding-top: 4px; }
 	.kind { font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--mt); }
-	h3 { margin: 0; font-size: 21px; font-weight: 400; line-height: 1.1; letter-spacing: 0.02em; color: #fff; }
+	h3 { margin: 0; font-size: 21px; font-weight: 700; line-height: 1.15; letter-spacing: 0.02em; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 	p { margin: 0; font-size: 13px; line-height: 1.3; color: var(--ink-3); }
 	.claim { position: relative; margin-top: auto; display: flex; flex-direction: column; gap: 8px; padding: 10px 16px 14px; border-top: 1px solid rgba(255, 255, 255, 0.06); background: rgba(0, 0, 0, 0.18); }
 	.val { display: flex; align-items: baseline; gap: 6px; }
