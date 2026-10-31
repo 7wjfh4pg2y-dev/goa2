@@ -20,6 +20,17 @@
 	$: teams = a.holders.some((h) => h.team) ? (['orange', 'blue'] as const).map((t) => ({ t, won: a.holders.some((h) => h.team === t && h.won), hs: a.holders.filter((h) => h.team === t) })).filter((x) => x.hs.length).sort((x, y) => Number(y.won) - Number(x.won)) : null;
 	// "5 kills" → a big 5 and a small "kills"
 	$: parts = (() => { const m = /^([\d.,]+%?)\s+(.*)$/.exec(a.value); return m ? { n: m[1], u: m[2] } : { n: a.value, u: '' }; })();
+	// a holder row that overflows: the mouse wheel scrolls it sideways (it only takes the wheel while it can move)
+	function sideScroll(node: HTMLElement) {
+		const on = (e: WheelEvent) => {
+			if (node.scrollWidth <= node.clientWidth || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+			const max = node.scrollWidth - node.clientWidth, at = node.scrollLeft;
+			if ((e.deltaY > 0 && at >= max - 1) || (e.deltaY < 0 && at <= 0)) return;
+			e.preventDefault(); node.scrollLeft = at + e.deltaY;
+		};
+		node.addEventListener('wheel', on, { passive: false });
+		return { destroy: () => node.removeEventListener('wheel', on) };
+	}
 	const day = (t: number) => new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 </script>
 
@@ -39,23 +50,20 @@
 		{:else}
 			<div class="val"><b>{parts.n}</b>{#if parts.u}<span>{parts.u}</span>{/if}{#if a.at}<small>{day(a.at)}</small>{/if}</div>
 			{#if teams}
-				<div class="sides">
+				<!-- both teams on ONE row (every card the same height); it scrolls sideways when it doesn't fit -->
+				<div class="hold" use:sideScroll>
 					{#each teams as side (side.t)}
-						<div class="side t-{side.t}">
-							<span class="tn">{teamName(side.t)}{#if side.won}<em>Won</em>{/if}</span>
-							<div class="hold">
-								{#each side.hs as h (h.key)}
-									{@const w = who(h.key)}
-									<button class="h" on:click={() => onOpen(h.key)} style="--pc:{w?.color ?? 'var(--brass)'}" title="Open {h.name}">
-										{#if h.hero ?? w?.hero}<span class="face" style={portraitCss(h.hero ?? w?.hero ?? '')}></span>{/if}<span class="nm">{h.name}</span>
-									</button>
-								{/each}
-							</div>
-						</div>
+						<span class="tn t-{side.t}">{teamName(side.t)}{#if side.won}<em>Won</em>{/if}</span>
+						{#each side.hs as h (h.key)}
+							{@const w = who(h.key)}
+							<button class="h t-{side.t} tm" on:click={() => onOpen(h.key)} style="--pc:{w?.color ?? 'var(--brass)'}" title="Open {h.name}">
+								{#if h.hero ?? w?.hero}<span class="face" style={portraitCss(h.hero ?? w?.hero ?? '')}></span>{/if}<span class="nm">{h.name}</span>
+							</button>
+						{/each}
 					{/each}
 				</div>
 			{:else}
-			<div class="hold">
+			<div class="hold" use:sideScroll>
 				{#each a.holders as h (h.key)}
 					{@const w = who(h.key)}
 					<button class="h" on:click={() => onOpen(h.key)} style="--pc:{w?.color ?? 'var(--brass)'}" title="Open {h.name}">
@@ -80,7 +88,10 @@
 	.ac::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: linear-gradient(90deg, transparent, var(--mt), transparent); }
 	.glow { position: absolute; left: -40px; top: -50px; width: 220px; height: 200px; background: radial-gradient(closest-side, var(--mtl), transparent); pointer-events: none; }
 	.mine { border-color: var(--mt); box-shadow: 0 0 0 1px var(--mt), 0 10px 24px rgba(0, 0, 0, 0.45); }
-	.top { position: relative; display: flex; gap: 14px; padding: 16px 16px 10px; }
+	/* every card the same height: a fixed head (the blurb clamped to 3 lines) and a fixed claim strip */
+	.ac { height: 228px; }
+	.top { position: relative; display: flex; gap: 14px; padding: 16px 16px 10px; height: 122px; flex: none; box-sizing: border-box; }
+	.top p { display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 	.tx { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; padding-top: 4px; }
 	.kind { font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--mt); }
 	h3 { margin: 0; font-size: 21px; font-weight: 400; line-height: 1.1; letter-spacing: 0.02em; color: #fff; }
@@ -90,13 +101,17 @@
 	.val b { font-weight: 400; font-size: 30px; line-height: 1; color: var(--mt); }
 	.val span { font-size: 15px; color: var(--ink-2); }
 	.val small { margin-left: auto; font-size: 12px; color: var(--ink-3); }
-	.sides { display: flex; flex-direction: column; gap: 8px; }
-	.side { display: flex; flex-direction: column; gap: 4px; padding-left: 8px; border-left: 2px solid var(--tc); }
 	.t-orange { --tc: #ef7d22; --th: #ffb878; }
 	.t-blue { --tc: #2f7fe6; --th: #8fc0ff; }
 	.tn { display: flex; align-items: center; gap: 8px; font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--th); }
 	.tn em { font-style: normal; padding: 1px 7px; border-radius: 999px; background: rgba(22, 163, 74, 0.22); color: #7ee2a0; letter-spacing: 0.1em; }
-	.hold { display: flex; flex-wrap: wrap; gap: 6px; }
+	.hold { display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain;
+		scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.18) transparent; padding-bottom: 3px; }
+	.hold::-webkit-scrollbar { height: 4px; }
+	.hold::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.18); border-radius: 2px; }
+	.hold > * { flex: none; }
+	.tn.t-blue:not(:first-child) { margin-left: 6px; }
+	.h.tm { border-color: color-mix(in srgb, var(--tc) 55%, transparent); }
 	.h { display: inline-flex; align-items: center; gap: 7px; padding: 3px 11px 3px 3px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.1); background: rgba(255, 255, 255, 0.05); color: var(--ink); font: inherit; font-size: 15px; cursor: pointer; }
 	.h:hover { border-color: var(--mt); }
 	.face { width: 26px; height: 26px; border-radius: 50%; background-color: #0b101a; background-repeat: no-repeat; box-shadow: 0 0 0 2px var(--pc); }
