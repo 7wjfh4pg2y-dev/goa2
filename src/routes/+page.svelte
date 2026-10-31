@@ -879,35 +879,41 @@
 					{:else if mode === 'adminhub'}
 						<div class="step" transition:reveal bind:clientHeight={h['adminhub']}>
 							<header class="head"><span class="t-label">You're in as Admin</span><h1 class="t-h1">GM tools</h1></header>
-							<div class="choices dense">
+							<div class="choices gmgrid">
 								<button class="choice card p" on:click={() => (mode = 'menu')}>
 									<span class="choice-ic"><Icon name="plus" /></span>
 									<span class="choice-txt"><span class="t-h2">Create / Join</span><span class="t-body c-muted">Run a game</span></span>
-									<span class="choice-go"><Icon name="go" /></span>
 								</button>
-								<a class="choice card a" href={base + '/editor'}>
-									<span class="choice-ic"><Icon name="pen" /></span>
-									<span class="choice-txt"><span class="t-h2">Map editor</span><span class="t-body c-muted">Maps & battle zones</span></span>
-									<span class="choice-go"><Icon name="go" /></span>
+								<a class="choice card a" href={base + '/rooms'}>
+									<span class="choice-ic"><Icon name="eye" /></span>
+									<span class="choice-txt"><span class="t-h2">Open games</span><span class="t-body c-muted">Watch or end</span></span>
 								</a>
 								<a class="choice card a" href={base + '/stats'}>
 									<span class="choice-ic"><Icon name="trophy" /></span>
 									<span class="choice-txt"><span class="t-h2">Hall of Records</span><span class="t-body c-muted">Stats & reports</span></span>
-									<span class="choice-go"><Icon name="go" /></span>
+								</a>
+								<a class="choice card a" href={base + '/names'}>
+									<span class="choice-ic"><Icon name="link" /></span>
+									<span class="choice-txt"><span class="t-h2">Names</span><span class="t-body c-muted">Merge players</span></span>
 								</a>
 								<a class="choice card a" href={base + '/heroes'}>
+									<span class="choice-ic"><Icon name="user" /></span>
+									<span class="choice-txt"><span class="t-h2">Heroes</span><span class="t-body c-muted">Guides & matchups</span></span>
+								</a>
+								<a class="choice card a" href={base + '/cards'}>
+									<span class="choice-ic"><Icon name="copy" /></span>
+									<span class="choice-txt"><span class="t-h2">Cards</span><span class="t-body c-muted">Decks & builds</span></span>
+								</a>
+								<a class="choice card a" href={base + '/opening-builder'}>
 									<span class="choice-ic"><Icon name="flag" /></span>
-									<span class="choice-txt"><span class="t-h2">Heroes</span><span class="t-body c-muted">Work in progress</span></span>
-									<span class="choice-go"><Icon name="go" /></span>
+									<span class="choice-txt"><span class="t-h2">Openings</span><span class="t-body c-muted">Build round one</span></span>
+								</a>
+								<a class="choice card a" href={base + '/editor'}>
+									<span class="choice-ic"><Icon name="pen" /></span>
+									<span class="choice-txt"><span class="t-h2">Map editor</span><span class="t-body c-muted">Maps & zones</span></span>
 								</a>
 							</div>
-							<div class="row gmrow">
-								<a class="btn btn-ghost on-art" href={base + '/rooms'}><Icon name="eye" /> Open games</a>
-								<a class="btn btn-ghost on-art" href={base + '/opening-builder'}><Icon name="flag" /> Openings</a>
-								<a class="btn btn-ghost on-art" href={base + '/names'}>Names</a>
-								<a class="btn btn-ghost on-art" href={base + '/cards'}>Cards</a>
-								<button class="btn btn-ghost on-art" on:click={() => { signOut(); goHome(); }}>Sign out</button>
-							</div>
+							<button class="btn btn-ghost on-art signout" on:click={() => { signOut(); goHome(); }}><Icon name="lock" /> Sign out</button>
 						</div>
 					{:else if mode === 'menu'}
 						<div class="step" transition:reveal bind:clientHeight={h['menu']}>
@@ -1250,12 +1256,14 @@
 	.choices { display: flex; flex-direction: column; gap: 16px; width: 100%; position: relative; }
 	/* the menu's third card: hangs one gap below the last, outside the measured height */
 	.choices :global(.choice.hang) { position: absolute; left: 0; right: 0; top: calc(100% + 16px); }
-	/* the GM tools: four cards, so a little tighter (they must fit a phone) */
-	.choices.dense { gap: 10px; }
-	.choices.dense :global(.choice) { min-height: 74px; padding: 10px 16px; }
-	.choices.dense :global(.choice-ic) { width: 46px; height: 46px; }
-	.step .gmrow { display: flex; gap: 10px; }
-	.step .gmrow .btn { flex: 1; justify-content: center; white-space: nowrap; }
+	/* the GM tools: every tool one bubble, two across (icon over the words) */
+	.choices.gmgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+	.choices.gmgrid :global(.choice) { min-height: 0; height: clamp(84px, 10.5vh, 104px); padding: 6px 10px; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: 5px; }
+	.choices.gmgrid :global(.choice-ic) { width: 36px; height: 36px; flex: none; }
+	.choices.gmgrid :global(.choice-txt) { align-items: center; min-width: 0; max-width: 100%; }
+	.choices.gmgrid :global(.choice .t-h2) { font-size: 22px; line-height: 1.1; white-space: nowrap; }
+	.choices.gmgrid :global(.choice .t-body) { font-size: 15px; white-space: nowrap; }
+	.step .signout { align-self: stretch; justify-content: center; }
 	.step .formpanel { display: flex; flex-direction: column; gap: 16px; padding: 24px 26px; }
 	.step .formpanel .row { margin-top: 4px; }
 	.field.up { text-transform: uppercase; }
@@ -1440,12 +1448,12 @@
 		.choices :global(.choice.hang) { top: calc(100% + 12px); }
 		.choices :global(.choice) { min-height: 88px; padding: 12px 16px; gap: 14px; }
 		.choices :global(.choice-ic) { width: 52px; height: 52px; font-size: 24px; }
-		.choices.dense { gap: 8px; }
-		.step .gmrow { gap: 6px; }
-		.step .gmrow .btn { padding: 0 8px; min-height: 40px; height: 40px; font-size: 13px; }
-		.step .gmrow .btn :global(svg) { display: none; }
-		.choices.dense :global(.choice) { min-height: 62px; padding: 8px 14px; }
-		.choices.dense :global(.choice-ic) { width: 40px; height: 40px; }
+		.choices.gmgrid { gap: 8px; }
+		.choices.gmgrid :global(.choice) { height: clamp(56px, 9.2dvh, 90px); padding: 4px 6px; gap: 3px; }
+		.choices.gmgrid :global(.choice-ic) { width: clamp(28px, 4.6dvh, 40px); height: clamp(28px, 4.6dvh, 40px); font-size: 18px; }
+		.choices.gmgrid :global(.choice .t-h2) { font-size: 17px; }
+		.choices.gmgrid :global(.choice .t-body) { display: none; }
+		.step .signout { min-height: 40px; height: 40px; }
 
 		/* create: a top line, one scrolling panel, the actions pinned to the bottom edge */
 		.s-create { padding: 0; overflow: hidden; }
