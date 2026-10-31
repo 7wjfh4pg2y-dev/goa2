@@ -905,6 +905,7 @@
 								<a class="btn btn-ghost on-art" href={base + '/rooms'}><Icon name="eye" /> Open games</a>
 								<a class="btn btn-ghost on-art" href={base + '/opening-builder'}><Icon name="flag" /> Openings</a>
 								<a class="btn btn-ghost on-art" href={base + '/names'}>Names</a>
+								<a class="btn btn-ghost on-art" href={base + '/cards'}>Cards</a>
 								<button class="btn btn-ghost on-art" on:click={() => { signOut(); goHome(); }}>Sign out</button>
 							</div>
 						</div>
