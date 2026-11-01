@@ -46,7 +46,7 @@ export type PowerState = {
 	/** NebKher: the colour he named (Imbue Doubt…) and the turn he named it in — shown till the next turn ends */
 	/** the colour he named (Imbue Doubt · Time to Reconsider · An Illusion of Choice): `r` = the card's radius + Area items,
 	 *  `n` = how many heroes discard, `done` = next turn's discard has been dealt out */
-	doubt?: { key: string; color: NkColor; r?: number; n?: number; done?: boolean }
+	doubt?: { key: string; color: NkColor; r?: number; n?: number; done?: boolean; told?: string[] }
 	/** NebKher: the enemy hero whose previous card he took with Mind Grip / Probe, for this acting card */
 	grip?: { mark: string; target: string }
 	/** NebKher: the Crack in Reality / Shift Reality line for this turn: through `hex`, along axis `dir` (0–2) */
@@ -509,17 +509,30 @@ export const nkSwapsLeft = (s: S, pid: string, ctx: TurnCtx) => { const n = s.po
 /** the turn after `key` ("r-t" → "r-(t+1)"; none after the 4th) */
 const keyAfter = (key: string) => { const [r, t] = key.split('-').map(Number); return t < 4 ? `${r}-${t + 1}` : null }
 /** Imbue Doubt & co, NEXT turn after the cards are revealed: the enemy heroes in the card's radius who may be made to
- *  discard a card of the named colour (on the board, not already forced); empty once dealt out or out of time */
+ *  discard a card of the named colour (on the board, not already forced, not yet asked) */
 export function doubtTargets(s: S, pid: string, ctx: TurnCtx): string[] {
 	const d = s.power?.[pid]?.doubt, me = ctx.teams?.[pid]
 	if (!d || d.done || !ctx.revealed || keyAfter(d.key) !== ctx.key || !me || s.pieces?.[pid]?.kind !== 'hero') return []
 	const r = d.r ?? 3
 	return Object.keys(s.cards ?? {}).filter((t) => {
 		const team = ctx.teams?.[t]
-		if (!team || team === me || s.pieces?.[t]?.kind !== 'hero' || s.forced?.[t]) return false
+		if (!team || team === me || s.pieces?.[t]?.kind !== 'hero' || s.forced?.[t] || d.told?.includes(t)) return false
 		const dd = pieceDist(s, pid, t)
 		return dd != null && dd <= r
 	})
+}
+type ForcedEntry = { by: string; die: boolean; at: number; only?: 'basic' | 'nonbasic'; color?: string }
+/** the hero his doubt reaches RIGHT NOW: an enemy in radius whose own acting turn has just begun (2026-11-01, the
+ *  user: the discard comes when THEIR turn starts, not at the reveal; every enemy in radius is asked, each may opt out) */
+export function doubtDue(s: S, pid: string, ctx: TurnCtx): string | null {
+	const actor = ctx.at >= 0 ? ctx.order[ctx.at] : undefined
+	return actor && doubtTargets(s, pid, ctx).includes(actor) ? actor : null
+}
+/** deal the doubt that is due: the actor gets the forced 'discard a <colour> card, if able' */
+function dealDoubt(s: S, pid: string, ctx: TurnCtx): { forced: Record<string, ForcedEntry>; power: Record<string, PowerState> } | null {
+	const t = doubtDue(s, pid, ctx), d = s.power?.[pid]?.doubt
+	if (!t || !d) return null
+	return { forced: { ...(s.forced as Record<string, ForcedEntry> | undefined ?? {}), [t]: { by: pid, die: false, at: Date.now(), color: d.color } }, power: { ...s.power, [pid]: { ...s.power?.[pid], doubt: { ...d, told: [...(d.told ?? []), t] } } } }
 }
 /** how many heroes his doubt reaches (An Illusion of Choice: up to two) */
 export const doubtCount = (s: S, pid: string) => s.power?.[pid]?.doubt?.n ?? 1
@@ -787,14 +800,8 @@ export function applyPower(s: S & { tieTurn?: { key: string; coin: Team } | null
 		const n = /up to two/i.test(card?.description ?? '') ? 2 : 1
 		return { ...(fx ? { effects: fx } : {}), power: { ...s.power, [req.pid]: { ...s.power?.[req.pid], doubt: { key: ctx.key, color: req.color, r, n } } }, nkNews: nkNewsOf('doubt', req.pid, { detail: req.color[0] + req.color.slice(1).toLowerCase(), to: Object.keys(s.cards ?? {}).filter((p) => ctx.teams?.[p] && ctx.teams[p] !== ctx.teams?.[req.pid]) }) }
 	}
-	if (req.op === 'nkDoubt') {
-		const d = s.power?.[req.pid]?.doubt, ok = doubtTargets(s, req.pid, ctx), ts = req.targets ?? []
-		if (!d || !ok.length || ts.length > doubtCount(s, req.pid) || ts.some((t) => !ok.includes(t)) || new Set(ts).size !== ts.length) return {}
-		const at = Date.now()
-		const out: Record<string, unknown> = { power: { ...s.power, [req.pid]: { ...s.power?.[req.pid], doubt: { ...d, done: true } } } }
-		if (ts.length) out.forced = { ...(s.forced ?? {}), ...Object.fromEntries(ts.map((t) => [t, { by: req.pid, die: false, at, color: d.color }])) }
-		return out
-	}
+	// sent by the target's (or the host's) screen when a turn opens on them without a card request (the first actor)
+	if (req.op === 'nkDoubt') return dealDoubt(s, req.pid, ctx) ?? {}
 	if (req.op === 'nkCrack') {
 		const hex = s.pieces?.[req.pid]?.hex
 		if (nkPower(s, req.pid, ctx) !== 'crack' || !hex || req.dir == null || ![0, 1, 2].includes(req.dir)) return {}
@@ -934,8 +941,8 @@ export function applyPower(s: S & { tieTurn?: { key: string; coin: Team } | null
 
 /** after any change: what follows by itself (Takahide's Ready for War as his ultimate comes on / off; Ignatia's
  *  Equilibrium switching on, for the splash). Returns a patch (cards / power / fxNews) or null */
-export function syncPowers(s: S, _ctx: TurnCtx): { cards?: Record<string, PlayerCardState>; power?: Record<string, PowerState>; fxNews?: FxNews } | null {
-	let cards: Record<string, PlayerCardState> | undefined, power: Record<string, PowerState> | undefined, fxNews: FxNews | undefined
+export function syncPowers(s: S, ctx: TurnCtx): { cards?: Record<string, PlayerCardState>; power?: Record<string, PowerState>; fxNews?: FxNews; forced?: Record<string, ForcedEntry> } | null {
+	let cards: Record<string, PlayerCardState> | undefined, power: Record<string, PowerState> | undefined, fxNews: FxNews | undefined, forced: Record<string, ForcedEntry> | undefined
 	for (const pid in s.cards ?? {}) {
 		const cs = s.cards![pid]
 		if (cs.hero === 'ignatia') {
@@ -945,6 +952,12 @@ export function syncPowers(s: S, _ctx: TurnCtx): { cards?: Record<string, Player
 				power = { ...(power ?? s.power), [pid]: { ...s.power?.[pid], eqOn: on || undefined } }
 				if (on) fxNews = fxNewsOf('eq', pid)
 			}
+			continue
+		}
+		if (cs.hero === 'nebkher') {
+			// Imbue Doubt: an enemy in his radius has just become the actor → their forced discard
+			const dd = dealDoubt({ ...s, ...(power ? { power } : {}), ...(forced ? { forced } : {}) }, pid, ctx)
+			if (dd) { forced = dd.forced; power = dd.power }
 			continue
 		}
 		if (cs.hero !== TAKA) continue
@@ -961,6 +974,6 @@ export function syncPowers(s: S, _ctx: TurnCtx): { cards?: Record<string, Player
 		if (war) power = { ...(power ?? s.power), [pid]: { ...s.power?.[pid], war: cs.ultimate } }
 		if (war && cs.ultimate) fxNews = fxNewsOf('war', pid)
 	}
-	if (!cards && !power) return null
-	return { ...(cards ? { cards } : {}), ...(power ? { power } : {}), ...(fxNews ? { fxNews } : {}) }
+	if (!cards && !power && !forced) return null
+	return { ...(cards ? { cards } : {}), ...(power ? { power } : {}), ...(fxNews ? { fxNews } : {}), ...(forced ? { forced } : {}) }
 }

@@ -1824,7 +1824,6 @@ export function joinMatch(
 			if (req.op === 'gyWish') { const w = (patch.power as Record<string, PowerState>)?.[req.pid]?.gy?.wish ?? 0; note(req.pid, `casts Wish (${w} of 3)${patch.wonBy ? ' — the third Wish!' : ''} instead of preparing his spells`) }
 			if (req.op === 'gyCast') { const p2 = patch.power as Record<string, PowerState> | undefined; note(req.pid, `casts ${sn(req.spell)}${p2?.[req.pid]?.gy?.cast?.wish ? ' (Wish)' : ''}${req.spell === 'midas-touch' && patch.cards ? ` — +${(patch.cards[req.pid]?.coins ?? 0) - (local.cards?.[req.pid]?.coins ?? 0)} coins` : ''}${req.spell === 'energy-drain' && patch.life ? ' — his team regains a Life counter' : ''}`) }
 			if (req.op === 'gyStrike') note(req.pid, req.spells?.length ? `removes ${req.spells.map(sn).join(', ')} from his spellbook (Find Familiar)` : 'removes no spells (Find Familiar)')
-			if (req.op === 'nkDoubt' && patch.forced) { const f = patch.forced as MatchState['forced']; const ts = (req.targets ?? []).filter((t) => f?.[t]); const c = f?.[ts[0]]?.color ?? ''; if (ts.length) note(req.pid, `makes ${ts.map(nameOf).join(' and ')} discard a ${c[0] + c.slice(1).toLowerCase()} card, if able`) }
 			if (req.op === 'gyForce' && req.target) { const f = (patch.forced as MatchState['forced'])?.[req.target]; note(req.pid, `makes ${nameOf(req.target)} discard ${f?.only === 'basic' ? 'a basic card' : f?.only === 'nonbasic' ? 'a non-basic card' : 'a card'}, if able`) }
 			if (req.op === 'gyRaise') note(req.pid, 'raises a minion from the dead (Create Undead)')
 			if (req.op === 'gyDrink' && req.idx != null) note(req.pid, `retrieves ${heroCards('gydion')[req.idx]?.name ?? 'a card'} from his discard (Vampiric Touch)`)
@@ -1835,10 +1834,12 @@ export function joinMatch(
 		if (req.kind === 'spawn' && patch.pieces) note(req.pid, 'entered the battlefield')
 		if (req.kind === 'attack' && patch.attacks) note(req.pid, `attacks ${nameOf(req.target)}!`)
 		if (req.kind === 'defend' && patch.immune) { const i = patch.immune[req.pid]?.slice(-1)[0]; if (i) note(req.pid, `is immune to every other enemy's attacks ${i.span === 'round' ? 'this round' : 'this turn'} (${i.card})`) }
+		// Imbue Doubt dealt (by syncPowers when the target's turn begins, or the nkDoubt op)
+		if (patch.forced) for (const [t, f] of Object.entries(patch.forced as NonNullable<MatchState['forced']>)) if (f?.color && !local.forced?.[t]) note(f.by, `makes ${nameOf(t)} discard a ${f.color[0] + f.color.slice(1).toLowerCase()} card, if able`)
 		if (req.kind === 'force' && patch.forced) note(req.pid, req.die ? `forces ${nameOf(req.target)} to discard — or be defeated!` : `forces ${nameOf(req.target)} to discard a card`)
 		if (req.kind === 'forceResolve' && patch.forced && !patch.lastDefeat) {
 			const by = local.forced?.[req.target]?.by ?? ''
-			if (req.result === 'cancel') note(req.pid, `called off the forced discard on ${nameOf(req.target)}`)
+			if (req.result === 'cancel') note(req.pid, req.pid === req.target ? `won't discard (${nameOf(by)}'s doubt)` : `called off the forced discard on ${nameOf(req.target)}`)
 			else if (req.result === 'none') note(req.target, `has no card to discard (${nameOf(by)})`)
 		}
 		if (req.kind === 'defend' && local.forced?.[req.pid] && patch.forced && !patch.forced[req.pid]) note(req.pid, `discarded a card (forced by ${nameOf(local.forced[req.pid].by)})`)
@@ -2430,7 +2431,8 @@ export function resolveForce(s: MatchState, pid: string, target: string, result:
 	const f = s.forced?.[target]
 	if (!f) return {}
 	const isHost = pid === s.host
-	if (result === 'cancel' ? pid !== f.by && !isHost : pid !== target && !isHost) return {}
+	// Imbue Doubt's 'if able' discard: the target may opt out (2026-11-01, the user)
+	if (result === 'cancel' ? pid !== f.by && !isHost && !(f.color && pid === target) : pid !== target && !isHost) return {}
 	// "…or die": not discarding = defeated, the forcer takes the rewards (like an attack)
 	if (result === 'defeated') { if (!f.die) return {}; const d = defeatHero(s, f.by, target); return d.lastDefeat ? { ...d, lastClash: clashNews('force', f.by, target, 'died', false) } : d }
 	const forced = { ...s.forced }

@@ -9,7 +9,7 @@
 	import type { Readable } from 'svelte/store';
 	import type { MatchSession, MatchState, Player } from '$lib/match';
 	import { teamForSeat, colorHex, battlePatch, levelPatch, canRespawn, turnPlan, claimable, actingIdx, actorOf, turnOrder, teamOf, turnKey as keyOfTurn, cardInitiative } from '$lib/match';
-	import { hasPower, equilibrium, canFlip, flipUsed, runesOf, secondRune, canInscribe, canSecond, RUNES, takaSwapKind, mateOffer, canReverse, nextTurnKey, reversedTurn, warpOffer, warpSlots, capsuleOffer, RE_REVERSE, RE_TEMPORAL, nkPower, laughed, laughTargets, doubtTargets, doubtCount, nkSwapsLeft, nkSlots, nkCardAt, prevCard, doubtNow, crackNow, pieceDist, rzPower, rzRemoves, rzTwin, rzSpawnsLeft, rzLeft, bodiesOf, crowdBonus, crowdOn, canCommit2, wantsSecond, timelinePick, type NkColor, type NkEnemy, type Rune, type TurnCtx } from '$lib/heropower';
+	import { hasPower, equilibrium, canFlip, flipUsed, runesOf, secondRune, canInscribe, canSecond, RUNES, takaSwapKind, mateOffer, canReverse, nextTurnKey, reversedTurn, warpOffer, warpSlots, capsuleOffer, RE_REVERSE, RE_TEMPORAL, nkPower, laughed, laughTargets, doubtDue, nkSwapsLeft, nkSlots, nkCardAt, prevCard, doubtNow, crackNow, pieceDist, rzPower, rzRemoves, rzTwin, rzSpawnsLeft, rzLeft, bodiesOf, crowdBonus, crowdOn, canCommit2, wantsSecond, timelinePick, type NkColor, type NkEnemy, type Rune, type TurnCtx } from '$lib/heropower';
 	import EmmittClock from '$lib/hud2/EmmittClock.svelte';
 	import TakaGold from '$lib/hud2/TakaGold.svelte';
 	import IgnatiaCoin from '$lib/hud2/IgnatiaCoin.svelte';
@@ -432,20 +432,12 @@
 	// Imbue Doubt & co: the colour picked loads onto the ring (STABLE: the panel calls it from a reactive line);
 	// confirming names it AND switches the card's Next-turn effect on (heropower withCardFx) — no 'Effect?' after
 	let nkNamePick: NkColor | null = null, nkOpen = false, nkNoLaugh = '';
-	// Imbue Doubt & co: NEXT turn, after the reveal, he picks who discards a card of the named colour (in his radius;
-	// up to two for An Illusion of Choice). Every choice of heroes is one option; ⇄ cycles them, × = nobody
-	$: dbTargets = myPower === 'nebkher' ? doubtTargets($ms, clientId, pctx) : [];
-	$: dbN = Math.min(dbTargets.length, myPower === 'nebkher' ? doubtCount($ms, clientId) : 1);
-	$: dbOpts = dbTargets.length ? combos(dbTargets, dbN) : [];
-	let dbI = 0;
-	$: if (dbI >= dbOpts.length) dbI = 0;
-	function combos(xs: string[], k: number): string[][] { if (k <= 0) return [[]]; if (xs.length < k) return []; const [h, ...t] = xs; return [...combos(t, k - 1).map((c) => [h, ...c]), ...combos(t, k)]; }
-	const dbSend = (ts: string[]) => session.cardAction({ kind: 'power', pid: clientId, op: 'nkDoubt', targets: ts });
-	// no choice to make (the heroes in radius are no more than the card reaches): it fires by itself the moment the
-	// cards are revealed (the user, 2026-10-23 — players missed the ring); a real choice still waits on the ring
-	let dbAuto = '';
-	$: if (dbOpts.length === 1 && dbAuto !== pctx.key) { dbAuto = pctx.key; dbSend(dbOpts[0]); }
-	$: dbColor = myPower === 'nebkher' ? ($ms.power?.[clientId]?.doubt?.color ?? '') : '';
+	// Imbue Doubt & co: NEXT turn, each enemy in his radius gets the forced discard when THEIR acting turn begins
+	// (heropower syncPowers deals it on every card request; the first actor after the reveal comes with no request,
+	// so their own screen — or the host's — asks for it once)
+	let dbSent = '';
+	$: dbDue = Object.entries(cards).filter(([, c]) => c.hero === 'nebkher').map(([pid]) => [pid, doubtDue($ms, pid, pctx)] as const).find(([, t]) => t && (t === clientId || iAmHost));
+	$: if (dbDue && dbSent !== `${pctx.key}:${dbDue[1]}`) { dbSent = `${pctx.key}:${dbDue[1]}`; session.cardAction({ kind: 'power', pid: dbDue[0], op: 'nkDoubt' }); }
 	const colName = (c: string) => (c ? c[0] + c.slice(1).toLowerCase() : '');
 	// a forced discard of one colour (Imbue Doubt): 'if able' — no card of it in hand = No <colour> card
 	$: forcedColor = myForced?.color ?? '';
@@ -1254,7 +1246,7 @@
 		// forced to discard: pick a card (it arms Discard, above); "…or die" can also take the defeat
 		if (myForced) return myForced.die
 			? { label: 'Defeated', sub: 'or discard', kind: 'bad', run: () => forceAnswer(clientId, 'defeated') }
-			: forcedColor ? (hasForcedColor ? { label: 'Discard', sub: `A ${colName(forcedColor)} card`, subShort: colName(forcedColor), kind: 'wait' } : { label: `No ${colName(forcedColor)}`, sub: 'card to discard', kind: 'go', run: () => forceAnswer(clientId, 'none') })
+			: forcedColor ? (hasForcedColor ? { label: 'Discard', sub: `A ${colName(forcedColor)} card`, subShort: colName(forcedColor), kind: 'wait', cancel: () => forceAnswer(clientId, 'cancel') } : { label: `No ${colName(forcedColor)}`, sub: 'card to discard', kind: 'go', run: () => forceAnswer(clientId, 'none') })
 			: mine && mine.hand.length ? { label: 'Discard', sub: myForced.only === 'basic' ? 'A basic card' : myForced.only === 'nonbasic' ? 'A non-basic card' : 'Pick a card', subShort: myForced.only === 'basic' ? 'Basic' : myForced.only === 'nonbasic' ? 'Non-basic' : undefined, kind: 'wait' } : { label: 'No card', kind: 'go', run: () => forceAnswer(clientId, 'none') };
 		if (myForcing) { const t = myForcing[0], more = Object.values($ms.forced ?? {}).filter((f) => f.by === clientId).length - 1; return { label: 'Waiting', sub: heroName(cards[t]?.hero ?? '') + (more > 0 ? ` +${more}` : ''), kind: 'wait', cancel: () => forceAnswer(t, 'cancel') }; }
 		if (spawnWaiting.length) return { label: 'Waiting', sub: waitFor(spawnWaiting), kind: 'wait' };
@@ -1276,8 +1268,6 @@
 				}
 				return { label: 'Waiting', sub: `${heroName(cards[em2Pick]?.hero ?? '')} · choosing`, kind: 'wait', alt: iAmHost ? { label: 'Keep the first', run: () => em2Keep(1, em2Pick!) } : undefined };
 			}
-			// NebKher's doubt, the turn after he named a colour: who discards it (⇄ = another choice, × = nobody)
-			if (dbOpts.length) { const pick = dbOpts[dbI] ?? dbOpts[0]; return { label: 'Doubt', sub: `${pick.map((t) => heroName(cards[t]?.hero ?? '')).join(' + ')} · ${colName(dbColor)}`, subShort: colName(dbColor), kind: 'go', pulse: true, run: () => dbSend(pick), alt: dbOpts.length > 1 ? { label: '⇄', run: () => (dbI = (dbI + 1) % dbOpts.length) } : undefined, cancel: () => dbSend([]) }; }
 			// Emmitt's gold: Reverse time? (× = not this time)
 			if (emAsk && actor === clientId) return { label: 'Reverse time', short: 'Reverse', sub: 'Next turn', card: true /* the phone pill keeps just the label */, kind: 'go', tint: true, pulse: true, run: () => session.cardAction({ kind: 'power', pid: clientId, op: 'emReverse' }), cancel: declineEm };
 			// Time Capsule / Future Proof: take back this turn's discards? (× = no)

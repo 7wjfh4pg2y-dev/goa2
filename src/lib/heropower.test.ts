@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { applyCardReq, transferSeat, turnOrder, turnKey, actingIdx, actorOf, minionDefense, respawnHero, type MatchState, type Piece } from './match'
 import { newPlayerCardState } from './cards/cardstate'
 import { heroCards } from './cards/deck'
-import { equilibrium, canFlip, flipUsed, hasPower, canInscribe, activeRune, runesOf, secondRune, heldGolds, deckGolds, takaSwapKind, mateOffer, canReverse, warpOffer, capsuleOffer, nkPower, canLaugh, laughTargets, nkSwapsLeft, nkSlots, doubtNow, doubtTargets, crackNow, lineHexes, rzPower, rzRemoves, rzTwin, crowdField, wantsSecond, facesInUse, rzSpawnsLeft, rzLeft, bodiesOf, isDouble, heroPidOf, crowdBonus, pieceDist, comicNewsOf, type Rune, type TurnCtx } from './heropower'
+import { equilibrium, canFlip, flipUsed, hasPower, canInscribe, activeRune, runesOf, secondRune, heldGolds, deckGolds, takaSwapKind, mateOffer, canReverse, warpOffer, capsuleOffer, nkPower, canLaugh, laughTargets, nkSwapsLeft, nkSlots, doubtNow, doubtTargets, doubtDue, crackNow, lineHexes, rzPower, rzRemoves, rzTwin, crowdField, wantsSecond, facesInUse, rzSpawnsLeft, rzLeft, bodiesOf, isDouble, heroPidOf, crowdBonus, pieceDist, comicNewsOf, type Rune, type TurnCtx } from './heropower'
 import { goldsOf, isHidden, repairCards, revealTurn, endRound, type PlayerCardState } from './cards/cardstate'
 import { draftable, isLabHero, FOUR_STAR_LAB, FOUR_STAR_LIVE, HEROES } from './heroes'
 import { isFullGame, type Journal } from './recorder'
@@ -510,40 +510,56 @@ describe('NebKher: Diabolical Laughter, What the Hell Are You?, card swaps, a na
 		expect((y.effects ?? []).filter((e) => e.pid === 'N').length).toBe(1)
 		expect(pw(actingAs(ng(laughC), 'N'), 'N', 'nkName', { color: 'RED' })).toEqual({})
 	})
-	it('Imbue Doubt: next turn, after the reveal, an enemy hero in radius must discard the named colour (if able)', () => {
+	it('Imbue Doubt: next turn, each enemy in radius must discard the named colour when THEIR turn begins (may opt out)', () => {
 		const s = actingAs(ng(doubtC), 'N')
 		const x = { ...s, ...pw(s, 'N', 'nkName', { color: 'RED' }) } as MatchState
 		expect(x.power?.N?.doubt).toMatchObject({ color: 'RED', n: 1 })
 		// the turn he named it: nothing yet
 		expect(doubtTargets(x, 'N', tc(x))).toEqual([])
-		expect(pw(x, 'N', 'nkDoubt', { targets: ['B'] })).toEqual({})
+		expect(pw(x, 'N', 'nkDoubt')).toEqual({})
 		// next turn, revealed: B (2 away) is in radius, C (7 away) and his teammate M are not
 		const nx = { ...x, turn: 4, acting: null } as MatchState
 		expect(doubtTargets(nx, 'N', tc(nx))).toEqual(['B'])
 		expect(doubtTargets(nx, 'N', { ...tc(nx), revealed: false })).toEqual([])
-		expect(pw(nx, 'N', 'nkDoubt', { targets: ['C'] })).toEqual({})
-		const p = pw(nx, 'N', 'nkDoubt', { targets: ['B'] })
+		// not while someone else acts (the reveal itself deals nothing)
+		const mAct = actingAs(nx, 'M')
+		expect(doubtDue(mAct, 'N', tc(mAct))).toBe(null)
+		expect(pw(mAct, 'N', 'nkDoubt')).toEqual({})
+		// B's own turn begins: due; any request (here the target's screen asking) deals it
+		const bAct = actingAs(nx, 'B')
+		expect(doubtDue(bAct, 'N', tc(bAct))).toBe('B')
+		const p = pw(bAct, 'B', 'nkDoubt', { pid: 'N' })
 		expect(p.forced?.B).toMatchObject({ by: 'N', die: false, color: 'RED' })
-		const y = { ...nx, ...p } as MatchState
+		const y = { ...bAct, ...p } as MatchState
 		expect(doubtTargets(y, 'N', tc(y))).toEqual([]) // once only
-		// 'if able': no card of that colour = no card to discard
-		const z = { ...y, ...applyCardReq(y, { kind: 'forceResolve', pid: 'B', target: 'B', result: 'none' }) } as MatchState
+		// the target may opt out (× on the ring) — and is not asked again
+		const z = { ...y, ...applyCardReq(y, { kind: 'forceResolve', pid: 'B', target: 'B', result: 'cancel' }) } as MatchState
 		expect(z.forced?.B).toBeUndefined()
-		// × = nobody this time: dealt out all the same
-		const w = { ...nx, ...pw(nx, 'N', 'nkDoubt', { targets: [] }) } as MatchState
+		expect(doubtDue(z, 'N', tc(z))).toBe(null)
+		expect(pw(z, 'B', 'nkDoubt', { pid: 'N' })).toEqual({})
+		// 'if able': no card of that colour = no card to discard
+		const w = { ...y, ...applyCardReq(y, { kind: 'forceResolve', pid: 'B', target: 'B', result: 'none' }) } as MatchState
 		expect(w.forced?.B).toBeUndefined()
-		expect(doubtTargets(w, 'N', tc(w))).toEqual([])
+		// another forced discard can't be opted out of by its target
+		const f = { ...bAct, forced: { B: { by: 'N', die: false, at: 1 } } } as MatchState
+		expect(applyCardReq(f, { kind: 'forceResolve', pid: 'B', target: 'B', result: 'cancel' })).toEqual({})
+		// the turn moving on to B (any card request while B acts) deals it too
+		const e = applyCardReq(mAct, { kind: 'setAct', pid: 'H', idx: turnOrder(mAct).indexOf('B') } as never)
+		expect(actorOf({ ...mAct, ...e } as MatchState)).toBe('B')
+		expect(({ ...mAct, ...e } as MatchState).forced?.B).toMatchObject({ color: 'RED' })
 	})
-	it('An Illusion of Choice: up to two heroes; Area items widen the radius', () => {
+	it('An Illusion of Choice: everyone in radius is asked (Area items widen it)', () => {
 		const ill = heroCards('nebkher').findIndex((c) => c.name === 'An Illusion of Choice')
 		const s = actingAs(ng(ill), 'N')
 		s.cards!.N = { ...s.cards!.N, items: { radius: 3 } }
 		const x = { ...s, ...pw(s, 'N', 'nkName', { color: 'GREEN' }), turn: 4, acting: null } as MatchState
 		expect(x.power?.N?.doubt).toMatchObject({ n: 2, r: 7 })
 		expect(doubtTargets(x, 'N', tc(x)).sort()).toEqual(['B', 'C'])
-		const p = pw(x, 'N', 'nkDoubt', { targets: ['B', 'C'] })
-		expect(Object.keys(p.forced ?? {}).sort()).toEqual(['B', 'C'])
-		expect(pw(x, 'N', 'nkDoubt', { targets: ['B', 'B'] })).toEqual({})
+		const b = { ...actingAs(x, 'B') }
+		const y = { ...b, ...pw(b, 'B', 'nkDoubt', { pid: 'N' }) } as MatchState
+		expect(Object.keys(y.forced ?? {})).toEqual(['B'])
+		const c = { ...actingAs({ ...y, forced: {} } as MatchState, 'C') }
+		expect(pw(c, 'C', 'nkDoubt', { pid: 'N' }).forced?.C).toMatchObject({ color: 'GREEN' })
 	})
 	it('the Crack: a straight line through his space, this turn only', () => {
 		const s = actingAs(ng(crackC), 'N')
