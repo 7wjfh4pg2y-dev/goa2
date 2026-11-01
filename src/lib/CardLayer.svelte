@@ -9,7 +9,7 @@
 	import type { Readable } from 'svelte/store';
 	import type { MatchSession, MatchState, Player } from '$lib/match';
 	import { teamForSeat, colorHex, battlePatch, levelPatch, canRespawn, turnPlan, claimable, actingIdx, actorOf, turnOrder, teamOf, turnKey as keyOfTurn, cardInitiative } from '$lib/match';
-	import { hasPower, equilibrium, canFlip, flipUsed, runesOf, secondRune, canInscribe, canSecond, RUNES, takaSwapKind, mateOffer, canReverse, nextTurnKey, reversedTurn, warpOffer, warpSlots, capsuleOffer, RE_REVERSE, RE_TEMPORAL, nkPower, laughed, laughTargets, doubtDue, nkSwapsLeft, nkSlots, nkCardAt, prevCard, doubtNow, crackNow, pieceDist, rzPower, rzRemoves, rzTwin, rzSpawnsLeft, rzLeft, bodiesOf, crowdBonus, crowdOn, canCommit2, wantsSecond, timelinePick, type NkColor, type NkEnemy, type Rune, type TurnCtx } from '$lib/heropower';
+	import { hasPower, equilibrium, canFlip, flipUsed, runesOf, secondRune, canInscribe, canSecond, RUNES, takaSwapKind, mateOffer, canReverse, nextTurnKey, reversedTurn, warpOffer, warpSlots, capsuleOffer, RE_REVERSE, RE_TEMPORAL, nkPower, laughed, laughTargets, doubtTargets, nkSwapsLeft, nkSlots, nkCardAt, prevCard, doubtNow, crackNow, pieceDist, rzPower, rzRemoves, rzTwin, rzSpawnsLeft, rzLeft, bodiesOf, crowdBonus, crowdOn, canCommit2, wantsSecond, timelinePick, type NkColor, type NkEnemy, type Rune, type TurnCtx } from '$lib/heropower';
 	import EmmittClock from '$lib/hud2/EmmittClock.svelte';
 	import TakaGold from '$lib/hud2/TakaGold.svelte';
 	import IgnatiaCoin from '$lib/hud2/IgnatiaCoin.svelte';
@@ -432,12 +432,11 @@
 	// Imbue Doubt & co: the colour picked loads onto the ring (STABLE: the panel calls it from a reactive line);
 	// confirming names it AND switches the card's Next-turn effect on (heropower withCardFx) — no 'Effect?' after
 	let nkNamePick: NkColor | null = null, nkOpen = false, nkNoLaugh = '';
-	// Imbue Doubt & co: NEXT turn, each enemy in his radius gets the forced discard when THEIR acting turn begins
-	// (heropower syncPowers deals it on every card request; the first actor after the reveal comes with no request,
-	// so their own screen — or the host's — asks for it once)
+	// Imbue Doubt & co: NEXT turn, the moment the cards are revealed, every enemy in his radius gets the forced
+	// discard at once (the reveal is a clock, not a request, so a target's screen — or the host's — asks for it)
 	let dbSent = '';
-	$: dbDue = Object.entries(cards).filter(([, c]) => c.hero === 'nebkher').map(([pid]) => [pid, doubtDue($ms, pid, pctx)] as const).find(([, t]) => t && (t === clientId || iAmHost));
-	$: if (dbDue && dbSent !== `${pctx.key}:${dbDue[1]}`) { dbSent = `${pctx.key}:${dbDue[1]}`; session.cardAction({ kind: 'power', pid: dbDue[0], op: 'nkDoubt' }); }
+	$: dbDue = Object.entries(cards).filter(([, c]) => c.hero === 'nebkher').map(([pid]) => [pid, doubtTargets($ms, pid, pctx)] as const).find(([, ts]) => ts.length && (ts.includes(clientId) || iAmHost));
+	$: if (dbDue && dbSent !== `${pctx.key}:${dbDue[0]}`) { dbSent = `${pctx.key}:${dbDue[0]}`; session.cardAction({ kind: 'power', pid: dbDue[0], op: 'nkDoubt' }); }
 	const colName = (c: string) => (c ? c[0] + c.slice(1).toLowerCase() : '');
 	// a forced discard of one colour (Imbue Doubt): 'if able' — no card of it in hand = No <colour> card
 	$: forcedColor = myForced?.color ?? '';

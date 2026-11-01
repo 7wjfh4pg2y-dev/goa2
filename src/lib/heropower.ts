@@ -522,17 +522,14 @@ export function doubtTargets(s: S, pid: string, ctx: TurnCtx): string[] {
 	})
 }
 type ForcedEntry = { by: string; die: boolean; at: number; only?: 'basic' | 'nonbasic'; color?: string }
-/** the hero his doubt reaches RIGHT NOW: an enemy in radius whose own acting turn has just begun (2026-11-01, the
- *  user: the discard comes when THEIR turn starts, not at the reveal; every enemy in radius is asked, each may opt out) */
-export function doubtDue(s: S, pid: string, ctx: TurnCtx): string | null {
-	const actor = ctx.at >= 0 ? ctx.order[ctx.at] : undefined
-	return actor && doubtTargets(s, pid, ctx).includes(actor) ? actor : null
-}
-/** deal the doubt that is due: the actor gets the forced 'discard a <colour> card, if able' */
+/** deal the doubt: the moment the cards are revealed on the turn after he named a colour, EVERY enemy hero in his
+ *  radius gets the forced 'discard a <colour> card, if able' at once, before anyone acts; each may opt out
+ *  (2026-11-01, the user) */
 function dealDoubt(s: S, pid: string, ctx: TurnCtx): { forced: Record<string, ForcedEntry>; power: Record<string, PowerState> } | null {
-	const t = doubtDue(s, pid, ctx), d = s.power?.[pid]?.doubt
-	if (!t || !d) return null
-	return { forced: { ...(s.forced as Record<string, ForcedEntry> | undefined ?? {}), [t]: { by: pid, die: false, at: Date.now(), color: d.color } }, power: { ...s.power, [pid]: { ...s.power?.[pid], doubt: { ...d, told: [...(d.told ?? []), t] } } } }
+	const ts = doubtTargets(s, pid, ctx), d = s.power?.[pid]?.doubt
+	if (!ts.length || !d) return null
+	const at = Date.now()
+	return { forced: { ...(s.forced as Record<string, ForcedEntry> | undefined ?? {}), ...Object.fromEntries(ts.map((t) => [t, { by: pid, die: false, at, color: d.color }])) }, power: { ...s.power, [pid]: { ...s.power?.[pid], doubt: { ...d, told: [...(d.told ?? []), ...ts] } } } }
 }
 /** how many heroes his doubt reaches (An Illusion of Choice: up to two) */
 export const doubtCount = (s: S, pid: string) => s.power?.[pid]?.doubt?.n ?? 1
@@ -800,7 +797,7 @@ export function applyPower(s: S & { tieTurn?: { key: string; coin: Team } | null
 		const n = /up to two/i.test(card?.description ?? '') ? 2 : 1
 		return { ...(fx ? { effects: fx } : {}), power: { ...s.power, [req.pid]: { ...s.power?.[req.pid], doubt: { key: ctx.key, color: req.color, r, n } } }, nkNews: nkNewsOf('doubt', req.pid, { detail: req.color[0] + req.color.slice(1).toLowerCase(), to: Object.keys(s.cards ?? {}).filter((p) => ctx.teams?.[p] && ctx.teams[p] !== ctx.teams?.[req.pid]) }) }
 	}
-	// sent by the target's (or the host's) screen when a turn opens on them without a card request (the first actor)
+	// sent by a target's (or the host's) screen once the cards are revealed (the reveal is a clock, not a request)
 	if (req.op === 'nkDoubt') return dealDoubt(s, req.pid, ctx) ?? {}
 	if (req.op === 'nkCrack') {
 		const hex = s.pieces?.[req.pid]?.hex
@@ -955,7 +952,7 @@ export function syncPowers(s: S, ctx: TurnCtx): { cards?: Record<string, PlayerC
 			continue
 		}
 		if (cs.hero === 'nebkher') {
-			// Imbue Doubt: an enemy in his radius has just become the actor → their forced discard
+			// Imbue Doubt: revealed on the turn after naming → every enemy in his radius gets the forced discard
 			const dd = dealDoubt({ ...s, ...(power ? { power } : {}), ...(forced ? { forced } : {}) }, pid, ctx)
 			if (dd) { forced = dd.forced; power = dd.power }
 			continue
