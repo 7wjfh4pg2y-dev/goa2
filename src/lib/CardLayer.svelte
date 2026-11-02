@@ -436,7 +436,7 @@
 	// discard at once (the reveal is a clock, not a request, so a target's screen — or the host's — asks for it)
 	let dbSent = '';
 	$: dbDue = Object.entries(cards).filter(([, c]) => c.hero === 'nebkher').map(([pid]) => [pid, doubtTargets($ms, pid, pctx)] as const).find(([, ts]) => ts.length && (ts.includes(clientId) || iAmHost));
-	$: if (dbDue && dbSent !== `${pctx.key}:${dbDue[0]}`) { dbSent = `${pctx.key}:${dbDue[0]}`; session.cardAction({ kind: 'power', pid: dbDue[0], op: 'nkDoubt' }); }
+	$: if (dbDue && dbSent !== `${pctx.key}:${dbDue[0]}`) { dbSent = `${pctx.key}:${dbDue[0]}`; const neb = dbDue[0]; setTimeout(() => session.cardAction({ kind: 'power', pid: neb, op: 'nkDoubt' })); } // after this update: on the host the request applies at once, and a store change inside a reactive pass left the ring stale
 	const colName = (c: string) => (c ? c[0] + c.slice(1).toLowerCase() : '');
 	// a forced discard of one colour (Imbue Doubt): 'if able' — no card of it in hand = No <colour> card
 	$: forcedColor = myForced?.color ?? '';
