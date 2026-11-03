@@ -6,6 +6,8 @@ import { hasPower, takaHit, type TurnCtx } from './heropower'
 import { FOUR_STAR_LAB, isLabHero } from './heroes'
 import { BOOK, castsByTurn, etherSpells, inBook, bookSpells, castOptions, gyMode, canPrepare, canWish, spellNums, othersGone, forceTargets, raiseSpots, canStrike, canDrink, guardNow, gyOf, castNow } from './gydion'
 import { zoneTable } from './zones'
+import { attackFigures } from './attackValue'
+import { attackSpell } from './gydion'
 import map from './maps/forgotten_island.json'
 
 const GC = heroCards('gydion'), AC = heroCards('arien')
@@ -120,6 +122,17 @@ describe('Gydion: numbers and scaling', () => {
 		expect(othersGone(x, 'G', 'sunburst')).toBe(3)
 		expect(spellNums(x, 'G', 'sunburst')).toEqual({ attack: 4, range: 5 })
 		expect(spellNums(s, 'G', 'fireball')).toEqual({ attack: 5 + 1, range: 3 + 2 })
+	})
+	it("the board's sword: the spell's attack + the ether + Attack items, the same as spellNums", () => {
+		const s = actingAs(gg(GEVO, { items: { atk: 1 } }, book(['burning-hands', 'shield', 'suggestion'])), 'G')
+		expect(attackSpell(s, 'G', tc(s))).toBe(null) // nothing cast yet
+		expect(attackFigures(s.cards!.G, undefined, [], null, attackSpell(s, 'G', tc(s)) ?? false).atk).toBe(null)
+		const x = go(s, pw(s, 'G', 'gyCast', { spell: 'sunburst' }))
+		const f = attackFigures(x.cards!.G, undefined, [], null, attackSpell(x, 'G', tc(x)))
+		expect(f.atk!.total).toBe(spellNums(x, 'G', 'sunburst').attack)
+		expect(f.atk!.lines.map((l) => [l.label, l.value])).toEqual([['Sunburst', 0], ['Spells in the ether', 3], ['Item', 1]])
+		const y = go(s, pw(s, 'G', 'gyCast', { spell: 'fireball' }))
+		expect(attackFigures(y.cards!.G, undefined, [], null, attackSpell(y, 'G', tc(y))).atk!.total).toBe(6)
 	})
 	it('Dimension Door: radius = gone spells + Area items', () => {
 		const s = actingAs(gg(LCON, { items: { radius: 1 } }, book(['shield', 'fireball'])), 'G')

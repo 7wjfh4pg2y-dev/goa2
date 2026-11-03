@@ -51,14 +51,17 @@ export function attackFigures(
 	attacker: PlayerCardState | undefined,
 	defender: PlayerCardState | undefined,
 	mods: CalcLine[],
-	defCard: number | null | undefined
+	defCard: number | null | undefined,
+	/** Gydion: the attack spell his card cast this turn (it replaces the card's own value) — its printed attack,
+	 *  plus `extra` lines (Sunburst: +1 per other spell in the ether); false = his card cast no attack spell (no sword) */
+	spell?: { name: string; value: number; extra?: CalcLine[] } | null | false
 ): AttackFigures {
 	let atk: AttackFigures['atk'] = null
 	const ac = attacker && attacker.pending != null && attacker.pending >= 0 ? heroCards(attacker.hero)[attacker.pending] : undefined
-	const av = cardAttack(ac)
-	if (av != null && ac) {
+	const av = spell ? spell.value : spell === false ? null : cardAttack(ac)
+	if (av != null && (ac || spell)) {
 		const items = itemLines(attacker, 'ATTACK')
-		const lines = [{ label: ac.name, value: av, plain: true }, ...items]
+		const lines: CalcLine[] = [{ label: spell ? spell.name : ac!.name, value: av, plain: true }, ...(spell ? spell.extra ?? [] : []).filter((l: CalcLine) => l.value), ...items]
 		atk = { total: lines.reduce((a, l) => a + l.value, 0), lines, pip: items[0]?.pip }
 	}
 	const items = itemLines(defender, 'DEFENSE')

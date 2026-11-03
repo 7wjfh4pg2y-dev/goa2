@@ -276,5 +276,12 @@ export function applyGydion(s: GyS, req: GyReq, ctx: GyCtx): Record<string, unkn
 
 /** the spell cast for his acting card is an attack (Takahide's "hit" mark then tells Vampiric Touch the attack landed) */
 export const castsAttack = (s: GyS, pid: string, ctx: GyCtx) => { const sp = castNow(s, pid, ctx); return !!sp && spellOf(sp)?.primaryAction === 'ATTACK' }
+/** the attack spell his card cast this turn, for the board's sword (attackValue `spell`): the printed attack +
+ *  Sunburst's +1 per other spell in the ether (his Attack items are added by attackFigures) — null otherwise */
+export function attackSpell(s: GyS, pid: string, ctx: GyCtx): { name: string; value: number; extra: { label: string; value: number }[] } | null {
+	const id = castNow(s, pid, ctx), sp = id ? spellOf(id) : undefined
+	if (!id || !sp || sp.primaryAction !== 'ATTACK') return null
+	return { name: sp.name, value: sp.primaryValue ?? 0, extra: id === 'sunburst' ? [{ label: 'Spells in the ether', value: othersGone(s, pid, id) }] : [] }
+}
 export const spellName = (id: string) => (id === 'prepare' ? 'Prepare Spells' : spellOf(id)?.name ?? id)
 export type { Spell }

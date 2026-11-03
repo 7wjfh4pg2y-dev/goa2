@@ -6,7 +6,7 @@
 	import CardLayer from '$lib/CardLayer.svelte';
 	import SpellToast from '$lib/hud2/SpellToast.svelte';
 	import EssenceWisps from '$lib/hud2/EssenceWisps.svelte';
-	import { castNow as gyCastNow, guardNow, castsAttack, spellNums } from '$lib/gydion';
+	import { castNow as gyCastNow, guardNow, castsAttack, spellNums, attackSpell } from '$lib/gydion';
 	import { schoolIcon, schoolOf, SCHOOL_COLOR } from '$lib/cards/spells';
 	const guardIcon = schoolIcon('abjuration');
 	import DefeatSplash from '$lib/DefeatSplash.svelte';
@@ -1137,7 +1137,7 @@
 		const lit = (id: string) => crowd.played && !ticketWait.includes(id);
 		// the shield's sum (option A, 2026-11-03): minions + powers + Defence items, then the defence card once it's down
 		const crowdN = 2 * crowd.ids.filter(lit).length;
-		const f = attackFigures($ms.cards?.[attacks[t].by], $ms.cards?.[t], [{ label: 'Minions', value: r.total }, { label: 'Crowd Control', value: crowdN }], attacks[t].discarded ? attacks[t].card : null);
+		const f = attackFigures($ms.cards?.[attacks[t].by], $ms.cards?.[t], [{ label: 'Minions', value: r.total }, { label: 'Crowd Control', value: crowdN }], attacks[t].discarded ? attacks[t].card : null, spellOfAtk(attacks[t].by, turnCtx));
 		const d = f.def, sg = (n: number) => (n > 0 ? `+${n}` : n < 0 ? `−${-n}` : '±0');
 		const tone = (d.total != null ? (f.atk ? (d.total >= f.atk.total ? 'up' : 'down') : 'even') : d.bonus > 0 ? 'up' : d.bonus < 0 ? 'down' : 'even') as 'up' | 'down' | 'even';
 		return [
@@ -1148,9 +1148,11 @@
 					note: d.total != null ? (f.atk ? (d.total >= f.atk.total ? `Holds against ${f.atk.total}` : `Breaks against ${f.atk.total}`) : '') : 'The defence card is still to come' } }
 		];
 	});
+	// Gydion's cards attack through the spell they cast: its value replaces the card's
+	const spellOfAtk = (by: string, ctx: TurnCtx | null) => ($ms.cards?.[by]?.hero !== 'gydion' ? null : ctx ? attackSpell($ms, by, ctx) ?? false : false);
 	// the attacker's raised sword: the attack value with Attack items added in (hover / tap = the sum)
 	$: swords = Object.entries(attacks).flatMap(([t, a]) => {
-		const f = attackFigures($ms.cards?.[a.by], $ms.cards?.[t], [], null);
+		const f = attackFigures($ms.cards?.[a.by], $ms.cards?.[t], [], null, spellOfAtk(a.by, turnCtx));
 		return f.atk && $ms.pieces?.[a.by] ? [{ id: a.by, total: f.atk.total, pip: f.atk.pip, calc: { title: 'Attack', tone: 'atk' as const, lines: f.atk.lines, total: String(f.atk.total) } }] : [];
 	});
 	$: myDefMods = incoming ? minionDefense($ms, clientId).total : 0;
