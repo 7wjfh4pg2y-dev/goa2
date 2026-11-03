@@ -46,6 +46,7 @@
 	import { battleZone, canBattleRemove, pushLane, laneNotes, heavyImmune, returnPatch, minionCount, inZone } from '$lib/battle';
 	import lifeSplit from '$lib/images/life_split.png';
 	import { heroCards } from '$lib/cards/deck';
+	import { attackFigures } from '$lib/attackValue';
 	import { ultimateIndex, allowedMoves } from '$lib/cards/cardstate';
 	import { uiLayout, layoutVars } from '$lib/layout';
 	import { placeToken, moveToken, effectiveHex, MINES, tokenName, tokensLeft, removalOptions, applyRemoval, removalLog, canRemove, type ArmToken, type RemovalOption } from '$lib/tokens';
@@ -1134,12 +1135,23 @@
 		const crowd = crowdField($ms, t, body);
 		// a double whose Crowd Control ticket is still in the air stays grey (and out of the total) until it lands
 		const lit = (id: string) => crowd.played && !ticketWait.includes(id);
-		const total = r.total + 2 * crowd.ids.filter(lit).length;
+		// the shield's sum (option A, 2026-11-03): minions + powers + Defence items, then the defence card once it's down
+		const crowdN = 2 * crowd.ids.filter(lit).length;
+		const f = attackFigures($ms.cards?.[attacks[t].by], $ms.cards?.[t], [{ label: 'Minions', value: r.total }, { label: 'Crowd Control', value: crowdN }], attacks[t].discarded ? attacks[t].card : null);
+		const d = f.def, sg = (n: number) => (n > 0 ? `+${n}` : n < 0 ? `−${-n}` : '±0');
+		const tone = (d.total != null ? (f.atk ? (d.total >= f.atk.total ? 'up' : 'down') : 'even') : d.bonus > 0 ? 'up' : d.bonus < 0 ? 'down' : 'even') as 'up' | 'down' | 'even';
 		return [
 			...r.mods.map((m) => ({ id: m.id, text: m.d > 0 ? '+1' : '−1', tone: (m.d > 0 ? 'up' : 'down') as 'up' | 'down' | 'even' | 'ghost' })),
 			...crowd.ids.map((id) => ({ id, text: '+2', tone: (lit(id) ? 'up' : 'ghost') as 'up' | 'ghost' })),
-			{ id: body, text: total > 0 ? `+${total}` : total < 0 ? `−${-total}` : '±0', tone: (total > 0 ? 'up' : total < 0 ? 'down' : 'even') as 'up' | 'down' | 'even', total: true }
+			{ id: body, text: d.total != null ? String(d.total) : sg(d.bonus), tone, total: true, pip: d.pip,
+				calc: { title: 'Defence', tone: 'def' as const, lines: d.lines, total: d.total != null ? String(d.total) : sg(d.bonus),
+					note: d.total != null ? (f.atk ? (d.total >= f.atk.total ? `Holds against ${f.atk.total}` : `Breaks against ${f.atk.total}`) : '') : 'The defence card is still to come' } }
 		];
+	});
+	// the attacker's raised sword: the attack value with Attack items added in (hover / tap = the sum)
+	$: swords = Object.entries(attacks).flatMap(([t, a]) => {
+		const f = attackFigures($ms.cards?.[a.by], $ms.cards?.[t], [], null);
+		return f.atk && $ms.pieces?.[a.by] ? [{ id: a.by, total: f.atk.total, pip: f.atk.pip, calc: { title: 'Attack', tone: 'atk' as const, lines: f.atk.lines, total: String(f.atk.total) } }] : [];
 	});
 	$: myDefMods = incoming ? minionDefense($ms, clientId).total : 0;
 	const heroIdOf = (pid: string) => $ms.pieces?.[pid]?.hero ?? $ms.cards?.[pid]?.hero ?? '';
@@ -1496,7 +1508,7 @@
 	<div class="ocean"></div>
 	<!-- on a phone the board sits between the top bar + player strip and the dash -->
 	<div class="boardarea" class:mob={mobile} class:p2={phone2} class:land>
-	<BoardCanvas bind:this={board} map={$ms.map ?? {}} inset={boardInset} look={boardLook} theme={boardTheme} {glowZone} activeZone={$ms.wonBy ? null : battleZone($ms)} effects={!deckCovered} sea={$boardPrefs.sea} rims={$boardPrefs.rims} rotation={orientation} interactive={true} touchDrag={!!$ms.touchDrag} {placing} {placeGhost} holdColor={myHoldColor} onCancelPlace={cancelPlace} {areas} marks={boardMarks} badges={defBadges} zoomLock={mobile && $boardPrefs.zoomLock} wisps={$boardPrefs.wisps} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} pings={boardPings} onPing={doPing} {pingArmed} />
+	<BoardCanvas bind:this={board} map={$ms.map ?? {}} inset={boardInset} look={boardLook} theme={boardTheme} {glowZone} activeZone={$ms.wonBy ? null : battleZone($ms)} effects={!deckCovered} sea={$boardPrefs.sea} rims={$boardPrefs.rims} rotation={orientation} interactive={true} touchDrag={!!$ms.touchDrag} {placing} {placeGhost} holdColor={myHoldColor} onCancelPlace={cancelPlace} {areas} marks={boardMarks} badges={defBadges} {swords} zoomLock={mobile && $boardPrefs.zoomLock} wisps={$boardPrefs.wisps} pieces={boardPieces} onMovePiece={move} onSelect={onSelectPiece} onHex={onBoardHex} {thrones} pings={boardPings} onPing={doPing} {pingArmed} />
 	</div>
 
 	<CardLayer bind:this={cardLayer} bind:lShut bind:rShut bind:turnCtx bind:crackPreview bind:gyRaise areaW={gvw} areaH={gvh} {mobile} {hud2} {phone2} {land} ringAsk={ringAsk ?? swapAsk ?? autoAsk} onResults={() => (victoryClosed = false)} compact={$boardPrefs.compact} cTop={$boardPrefs.cTop} cOrder={$boardPrefs.cOrder} cLog={$boardPrefs.cLog} bind:topW {session} {ms} {players} {clientId} onAdvanceTurn={advanceTurn} bind:covered={deckCovered} bind:phoneStatus onRespawn={placeMyHero} onEnter={placeMyHero} onArmToken={armToken} onArmDouble={armDouble} placingDouble={pendingDouble} holdingToken={!!pendingToken} {pingArmed} onPing={pingButton} bind:previewId />

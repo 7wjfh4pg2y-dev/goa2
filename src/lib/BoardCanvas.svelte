@@ -6,6 +6,9 @@
 	import InkLayer from '$lib/board/InkLayer.svelte';
 	import DoodleLayer from '$lib/board/DoodleLayer.svelte';
 	import SpawnMark from '$lib/board/SpawnMark.svelte';
+	import SwordBadge from '$lib/board/SwordBadge.svelte';
+	import CalcBubble from '$lib/board/CalcBubble.svelte';
+	import { PIP_HUE, type CalcLine } from '$lib/attackValue';
 	import PieceDefs from '$lib/board/PieceDefs.svelte';
 	import HeroToken from '$lib/board/HeroToken.svelte';
 	import KitToken from '$lib/board/KitToken.svelte';
@@ -85,7 +88,11 @@
 	 *  minion that counts, the total over the defender; upright whatever the board's turn, above the pieces */
 	/** a two-finger pinch never zooms (the phone's zoom lock — the wheel's buttons still do) */
 	export let zoomLock = false;
-	export let badges: Array<{ id: string; text: string; tone: 'up' | 'down' | 'even' | 'ghost'; total?: boolean }> = []; // ghost = would count (Razzle's Crowd Control before the silver is played)
+	// the sum behind a sword / shield number (hover or tap shows it in a bubble)
+	type Calc = { title: string; lines: CalcLine[]; total: string; note?: string; tone: 'atk' | 'def' };
+	/** the attacker's raised sword (attack value, items added in; `pip` = the item gem's card colour) */
+	export let swords: Array<{ id: string; total: number; pip?: string; calc: Calc }> = [];
+	export let badges: Array<{ id: string; text: string; tone: 'up' | 'down' | 'even' | 'ghost'; total?: boolean; pip?: string; calc?: Calc }> = []; // ghost = would count (Razzle's Crowd Control before the silver is played)
 	export let inset: { t: number; b: number; l?: number; r?: number } | null = null;
 	/** extra drawings in board units (the openings' marks): `under` the pieces, `over` them; never hit-tested.
 	 *  They get the hex centre function, the hex size and the board's turn (to keep text upright). */
@@ -327,6 +334,17 @@
 	let landEl: SVGSVGElement | null = null;
 	let viewG: SVGGElement;
 	let wrapEl: HTMLDivElement;
+	// the open sum bubble: which sword / shield (key), where (px in the board box), pinned = opened by a tap
+	let calcOn: { key: string; x: number; y: number; pinned: boolean } | null = null;
+	function showCalc(key: string, el: HTMLElement | null, tap = false) {
+		if (!el) { if (calcOn && !calcOn.pinned) calcOn = null; return; }
+		if (tap && calcOn?.pinned && calcOn.key === key) { calcOn = null; return; }
+		const r = el.getBoundingClientRect(), w = wrapEl.getBoundingClientRect();
+		calcOn = { key, x: r.left + r.width / 2 - w.left, y: r.top - w.top, pinned: tap || !!(calcOn?.pinned && calcOn.key === key) };
+	}
+	$: calcNow = calcOn ? (calcOn.key.startsWith('sw:') ? swords.find((x) => 'sw:' + x.id === calcOn!.key)?.calc : badges.find((x) => 'sh:' + x.id === calcOn!.key)?.calc) ?? null : null;
+	// the board moved: the bubble would point at the wrong place
+	$: { scale; panX; panY; spin; calcOn = null; }
 	const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
 	// client px → SVG user coords (root; independent of the view transform)
 	function toUser(clientX: number, clientY: number) {
@@ -766,7 +784,7 @@
 		{/if}
 {/snippet}
 
-<svelte:window on:keydown={onKey} />
+<svelte:window on:keydown={onKey} on:pointerdown={() => { if (calcOn?.pinned) calcOn = null; }} />
 <div
 	class="board-wrap"
 	class:interactive
@@ -980,8 +998,19 @@
 			{/each}
 		</div>
 	{/if}
-	{#if fit && viewM && badges.length}
-		<div class="badges" class:bob={effects} style:transform={landTf} aria-hidden="true">
+	{#if fit && viewM && (badges.length || swords.length)}
+		<div class="badges" class:bob={effects} style:transform={landTf}>
+			{#each swords as sw (sw.id)}
+				{@const p = pieces.find((q) => q.id === sw.id)}
+				{#if p && !shufHide.includes(p.id)}
+					{@const base = centerOf(p.hex)}
+					{@const off = pieceOffset[p.id] ?? { x: 0, y: 0 }}
+					{@const k = fit.s}
+					<span class="bbox" style="left:{((base.x + off.x) * k + fit.ox).toFixed(2)}px; top:{((base.y + off.y) * k + fit.oy).toFixed(2)}px; transform:rotate({-rotEff}deg)">
+						<span class="bfloat"><SwordBadge total={sw.total} pip={sw.pip ? PIP_HUE[sw.pip] ?? sw.pip : ''} s={size * k} uid={sw.id} onCalc={(el, tap) => showCalc('sw:' + sw.id, el, tap)} /></span>
+					</span>
+				{/if}
+			{/each}
 			{#each badges as b (b.id)}
 				{@const p = pieces.find((q) => q.id === b.id)}
 				{#if p && !shufHide.includes(p.id)}
@@ -992,12 +1021,17 @@
 					<span class="bbox" style="left:{((base.x + off.x) * k + fit.ox).toFixed(2)}px; top:{((base.y + off.y) * k + fit.oy).toFixed(2)}px; transform:rotate({-rotEff}deg)">
 						<!-- the bob and the pop-in are on different elements: two transform animations on one element (one of
 						     them finished but filling) pushed the bob off the GPU — ~285 ms of main-thread work a second -->
-						<span class="bfloat"><span class="bdg {b.tone}" class:tot={b.total} style="width:{w.toFixed(1)}px; height:{(w * 1.12).toFixed(1)}px; top:{(-size * k * (b.total ? 1.8 : 1.4)).toFixed(1)}px; font-size:{(w * (b.total ? 0.36 : 0.46)).toFixed(1)}px"><b>{b.text}</b></span></span>
+						<span class="bfloat">{#if b.calc}
+							<button class="bdg {b.tone} hit" class:tot={b.total} tabindex="-1" aria-label="Defence {b.text}" style="width:{w.toFixed(1)}px; height:{(w * 1.12).toFixed(1)}px; top:{(-size * k * (b.total ? 1.8 : 1.4)).toFixed(1)}px; font-size:{(w * (b.total ? 0.36 : 0.46)).toFixed(1)}px"
+								on:pointerenter={(e) => e.pointerType === 'mouse' && showCalc('sh:' + b.id, e.currentTarget)} on:pointerleave={(e) => e.pointerType === 'mouse' && showCalc('sh:' + b.id, null)}
+								on:pointerdown|stopPropagation on:click|stopPropagation={(e) => showCalc('sh:' + b.id, e.currentTarget, true)}><b>{b.text}</b>{#if b.pip}<i class="bpip" style="--pc:{PIP_HUE[b.pip] ?? b.pip}"></i>{/if}</button>
+						{:else}<span class="bdg {b.tone}" class:tot={b.total} style="width:{w.toFixed(1)}px; height:{(w * 1.12).toFixed(1)}px; top:{(-size * k * (b.total ? 1.8 : 1.4)).toFixed(1)}px; font-size:{(w * (b.total ? 0.36 : 0.46)).toFixed(1)}px"><b>{b.text}</b>{#if b.pip}<i class="bpip" style="--pc:{PIP_HUE[b.pip] ?? b.pip}"></i>{/if}</span>{/if}</span>
 					</span>
 				{/if}
 			{/each}
 		</div>
 	{/if}
+	{#if calcOn && calcNow}<CalcBubble x={calcOn.x} y={calcOn.y} title={calcNow.title} lines={calcNow.lines} total={calcNow.total} note={calcNow.note ?? ''} tone={calcNow.tone} />{/if}
 	{#if hoverName}<div class="pname" style="left:{hoverName.x}px; top:{hoverName.y}px; color:{hoverName.color}">{hoverName.text}</div>{/if}
 </div>
 
@@ -1077,6 +1111,10 @@
 	.bdg.down { --fill: linear-gradient(180deg, #ef5a4a, #8f1d12); } .bdg.down::before { background: #ffd0c8; }
 	.bdg.even { --fill: linear-gradient(180deg, #8a96a6, #47505c); } .bdg.even::before { background: #e5e9ee; }
 	.bdg.ghost { --fill: linear-gradient(180deg, #6b7480, #3a4049); opacity: .62; } .bdg.ghost::before { background: #aeb6c0; } .bdg.ghost b { color: #e3e8ee; }
+	.bdg.hit { pointer-events: auto; cursor: help; padding: 0; border: 0; background: none; font: inherit; color: inherit; }
+	/* the gem: an item counts in this number (the colour of the card behind it) */
+	.bpip { position: absolute; right: 2%; bottom: 8%; z-index: 2; width: 26%; height: 23%; clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%); background: #1a1308; }
+	.bpip::after { content: ''; position: absolute; inset: 22%; clip-path: inherit; background: var(--pc); }
 	.bdg.tot::before { background: linear-gradient(180deg, #fff3cf, #d8b36a); }
 	.bfloat { position: absolute; left: 0; top: 0; width: 0; height: 0; }
 	.badges.bob .bfloat { animation: bdgbob 2.2s ease-in-out .35s infinite; }
