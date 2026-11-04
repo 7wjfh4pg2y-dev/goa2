@@ -267,37 +267,46 @@ export function playByPlay(row: GameRowIn, opts: { match?: number | null; prompt
 
 /** One act as plain lines: moves, swaps, conversions, tokens, minions, kills, blocks, effects, the log, notes. */
 function actLines(st: Story, a: Act, nm: ReturnType<typeof namer>): string[] {
-	const out: string[] = []
+	return actItems(st, a, nm).map((x) => x.text)
+}
+
+/** What one act did, as kinds + plain sentences (the replay draws each kind with its own mark). */
+export type ActItemKind = 'swap' | 'spawn' | 'respawn' | 'off' | 'move' | 'convert' | 'token' | 'tokenOff' | 'minion' | 'kill' | 'block' | 'hit' | 'force' | 'disc' | 'fx' | 'ace' | 'removed' | 'wave' | 'log' | 'note'
+export type ActItem = { kind: ActItemKind; text: string }
+export function actItems(st: Story, a: Act, nm: ReturnType<typeof namer>): ActItem[] {
+	const out: ActItem[] = []
+	const add = (kind: ActItemKind, text: string) => out.push({ kind, text })
 	const swapped = new Set(a.swaps.flat())
-	for (const [x, y] of a.swaps) out.push(`${nm.who(x)} and ${nm.who(y)} SWAPPED places (${nm.zone(a.p[x])} ↔ ${nm.zone(a.p[y])})`)
+	for (const [x, y] of a.swaps) add('swap', `${nm.who(x)} and ${nm.who(y)} SWAPPED places (${nm.zone(a.p[x])} ↔ ${nm.zone(a.p[y])})`)
 	for (const m of a.moves) {
 		if (swapped.has(m.id)) continue
-		if (!m.from) out.push(`${nm.who(m.id)} ${a.r === st.from && a.t === 1 && a.i === -1 ? 'spawned' : 'respawned'} at ${nm.zone(m.to)}`)
-		else if (!m.to) out.push(`${nm.who(m.id)} left the board (from ${nm.zone(m.from)})`)
+		if (!m.from) { const first = a.r === st.from && a.t === 1 && a.i === -1; add(first ? 'spawn' : 'respawn', `${nm.who(m.id)} ${first ? 'spawned' : 'respawned'} at ${nm.zone(m.to)}`) }
+		else if (!m.to) add('off', `${nm.who(m.id)} left the board (from ${nm.zone(m.from)})`)
 		else {
 			const zf = nm.zone(m.from), zt = nm.zone(m.to)
-			out.push(`${nm.who(m.id)} moved ${zf === zt ? `within ${zt}` : `${zf} → ${zt}`} (${m.dist} ${m.dist === 1 ? 'space' : 'spaces'} away)`)
+			add('move', `${nm.who(m.id)} moved ${zf === zt ? `within ${zt}` : `${zf} → ${zt}`} (${m.dist} ${m.dist === 1 ? 'space' : 'spaces'} away)`)
 		}
 	}
 	const conv = new Set(a.converts.flatMap((c) => [c.minion.id, c.token.id]))
-	for (const c of a.converts) out.push(`${nm.minion(c.minion.tag)} on ${nm.zone(c.minion.hex)} was turned into a ${nm.token(c.token.tag)}${c.token.tag.o && st.players[c.token.tag.o] ? ` by ${nm.who(c.token.tag.o)}` : ''}`)
-	for (const x of a.placed) if (!conv.has(x.id)) out.push(`${x.tag.o && st.players[x.tag.o] ? nm.who(x.tag.o) : 'someone'} placed a ${nm.token(x.tag)} on ${nm.zone(x.hex)}`)
-	for (const x of a.gone) out.push(`a ${nm.token(x.tag)}${x.tag.o && st.players[x.tag.o] ? ` of ${nm.heroName(x.tag.o)}'s` : ''} came off ${nm.zone(x.hex)}`)
+	for (const c of a.converts) add('convert', `${nm.minion(c.minion.tag)} on ${nm.zone(c.minion.hex)} was turned into a ${nm.token(c.token.tag)}${c.token.tag.o && st.players[c.token.tag.o] ? ` by ${nm.who(c.token.tag.o)}` : ''}`)
+	for (const x of a.placed) if (!conv.has(x.id)) add('token', `${x.tag.o && st.players[x.tag.o] ? nm.who(x.tag.o) : 'someone'} placed a ${nm.token(x.tag)} on ${nm.zone(x.hex)}`)
+	for (const x of a.gone) add('tokenOff', `a ${nm.token(x.tag)}${x.tag.o && st.players[x.tag.o] ? ` of ${nm.heroName(x.tag.o)}'s` : ''} came off ${nm.zone(x.hex)}`)
 	const killed = new Set<string>()
 	for (const e of a.events) {
-		if (e.k === 'minion') { killed.add(e.id); out.push(`${nm.who(e.by)} defeated ${aMinion(e.team, e.role)} (+${e.role === 'heavy' ? 4 : 2} coins)`) }
-		else if (e.k === 'hero') out.push(`${nm.who(e.by)} DEFEATED ${nm.who(e.v)}${e.a?.length ? ` (assist: ${e.a.map((x) => nm.who(x)).join(', ')})` : ''} — the ${teamName(e.team)} lost ${e.l} Life`)
-		else if (e.k === 'clash') out.push(e.kind === 'attack'
-			? `${nm.who(e.by)} attacked ${nm.who(e.v)}: ${e.out === 'defended' ? 'BLOCKED' : e.out === 'died' ? (e.disc ? 'they defended but still fell' : 'they could not defend') : e.out === 'cancel' ? 'called off' : 'no answer'}`
-			: `${nm.who(e.by)} forced ${nm.who(e.v)} to discard${e.out === 'died' ? ' — they had no card and were defeated' : ''}`)
-		else if (e.k === 'disc') { const n = nm.cardName(e.by, e.card); if (n) out.push(`${nm.who(e.by)} discarded "${n}"${e.why === 'attack' ? ' to defend' : e.why === 'force' ? ' (forced)' : ''}`) }
-		else if (e.k === 'fx') { const n = nm.cardName(e.by, e.card); out.push(`${nm.who(e.by)} switched on the lasting effect of "${n}" (${e.dur === 'turn' ? 'this turn' : e.dur === 'next' ? 'until next turn' : 'this round'})`) }
-		else if (e.k === 'ace') out.push(`ACE — every ${teamAdj(e.team === 'orange' ? 'blue' : 'orange')} hero was down`)
+		if (e.k === 'minion') { killed.add(e.id); add('minion', `${nm.who(e.by)} defeated ${aMinion(e.team, e.role)} (+${e.role === 'heavy' ? 4 : 2} coins)`) }
+		else if (e.k === 'hero') add('kill', `${nm.who(e.by)} DEFEATED ${nm.who(e.v)}${e.a?.length ? ` (assist: ${e.a.map((x) => nm.who(x)).join(', ')})` : ''} — the ${teamName(e.team)} lost ${e.l} Life`)
+		else if (e.k === 'clash') {
+			if (e.kind === 'attack') add(e.out === 'defended' ? 'block' : 'hit', `${nm.who(e.by)} attacked ${nm.who(e.v)}: ${e.out === 'defended' ? 'BLOCKED' : e.out === 'died' ? (e.disc ? 'they defended but still fell' : 'they could not defend') : e.out === 'cancel' ? 'called off' : 'no answer'}`)
+			else add('force', `${nm.who(e.by)} forced ${nm.who(e.v)} to discard${e.out === 'died' ? ' — they had no card and were defeated' : ''}`)
+		}
+		else if (e.k === 'disc') { const n = nm.cardName(e.by, e.card); if (n) add('disc', `${nm.who(e.by)} discarded "${n}"${e.why === 'attack' ? ' to defend' : e.why === 'force' ? ' (forced)' : ''}`) }
+		else if (e.k === 'fx') { const n = nm.cardName(e.by, e.card); add('fx', `${nm.who(e.by)} switched on the lasting effect of "${n}" (${e.dur === 'turn' ? 'this turn' : e.dur === 'next' ? 'until next turn' : 'this round'})`) }
+		else if (e.k === 'ace') add('ace', `ACE — every ${teamAdj(e.team === 'orange' ? 'blue' : 'orange')} hero was down`)
 	}
 	const removed = a.minionsGone.filter((m) => !killed.has(m.id) && !conv.has(m.id))
-	if (removed.length) out.push(`${removed.length === 1 ? `${nm.minion(removed[0].tag)} was` : `${removed.length} minions were`} removed from the board${removed.length > 1 ? ` (${removed.map((m) => nm.minion(m.tag)).join(', ')})` : ''}`)
-	if (a.spawned >= 3) out.push(`a new minion wave came in (${a.spawned} minions)`)
-	for (const e of a.log) out.push(`log: ${e.by ? `${e.by} ` : ''}${e.text}`)
-	for (const n of a.notes) out.push(`HOST NOTE: ${n.text.trim()}`)
+	if (removed.length) add('removed', `${removed.length === 1 ? `${nm.minion(removed[0].tag)} was` : `${removed.length} minions were`} removed from the board${removed.length > 1 ? ` (${removed.map((m) => nm.minion(m.tag)).join(', ')})` : ''}`)
+	if (a.spawned >= 3) add('wave', `a new minion wave came in (${a.spawned} minions)`)
+	for (const e of a.log) add('log', `log: ${e.by ? `${e.by} ` : ''}${e.text}`)
+	for (const n of a.notes) add('note', `HOST NOTE: ${n.text.trim()}`)
 	return out
 }

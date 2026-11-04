@@ -10,6 +10,8 @@
 	export let onPlayer: (key: string) => void = () => {};
 	export let onHero: (id: string) => void = () => {};
 	export let onReport: (() => void) | null = null;
+	/** GM replay of the game, step by step (online games) */
+	export let onReplay: (() => void) | null = null;
 	let open = false;
 
 	const heroName = (id: string) => heroById(id)?.name ?? id;
@@ -52,7 +54,7 @@
 			{#if g.defeats.length}
 				<div class="tl"><span class="sub">Defeats</span>{#each g.defeats as d, i (i)}<span class="dv">{nameOf(d.by)} <i>→</i> {nameOf(d.v)} <small>R{d.r}·T{d.t}</small></span>{/each}</div>
 			{/if}
-			{#if onReport}<button class="btn2 rp" on:click={onReport}>Match report</button>{/if}
+			{#if onReplay || onReport}<div class="acts">{#if onReplay}<button class="btn2 rp" on:click={onReplay}>▶ Replay</button>{/if}{#if onReport}<button class="btn2 rp" on:click={onReport}>Match report</button>{/if}</div>{/if}
 		</div>
 	{/if}
 </div>
@@ -87,7 +89,7 @@
 	.mt { font-weight: 400; color: #f4dfa8; }
 	.dv i { font-style: normal; color: var(--rd); }
 	.dv small { color: var(--mu); }
-	.rp { grid-column: 1 / -1; justify-self: start; }
+	.acts { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; }
 	@media (max-width: 760px) {
 		.ml { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
 		.md { grid-column: 1 / -1; }

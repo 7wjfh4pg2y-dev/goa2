@@ -7,7 +7,7 @@
 	// a hero's page) · Matches · Awards · Reports.
 	import { onMount } from 'svelte';
 	import { base } from '$app/paths';
-	import { pushState } from '$app/navigation';
+	import { pushState, goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { goBack } from '$lib/nav';
 	import { supabase } from '$lib/supabase';
@@ -325,7 +325,7 @@
 			{:else if tab === 'matches'}
 				<div class="tbar"><label class="search grow"><span>⌕</span><input placeholder="Search by player or hero…" bind:value={gq} /></label><span class="muted cnt">{glist.length} games</span></div>
 				<section class="card flush mlist">
-					{#each glist.slice(0, glimit) as g (g.id)}<MatchRow {g} onPlayer={openPlayer} onHero={openHero} onReport={g.legacy ? null : () => go('reports')} />{:else}<p class="muted pad">No game matches.</p>{/each}
+					{#each glist.slice(0, glimit) as g (g.id)}<MatchRow {g} onPlayer={openPlayer} onHero={openHero} onReport={g.legacy ? null : () => go('reports')} onReplay={g.legacy ? null : () => goto(`${base}/replay?game=${encodeURIComponent(g.id)}`)} />{:else}<p class="muted pad">No game matches.</p>{/each}
 				</section>
 				{#if glist.length > glimit}<button class="btn2 more" on:click={() => (glimit += 30)}>Show more ({glist.length - glimit} left)</button>{/if}
 			{:else if ov}
