@@ -329,8 +329,10 @@
 	.stepno { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--mu2); }
 	.head h2 { margin: 2px 0 8px; font-size: 18px; line-height: 1.25; text-wrap: balance; }
 	.muted { color: var(--mu); } .sm { font-size: 14px; margin: 0; }
-	.played { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 12px; align-items: center; width: 100%; text-align: left; padding: 8px; border-radius: 10px; border: 1px solid var(--ln2); background: var(--p2); color: inherit; cursor: zoom-in; }
-	.played .cf { display: block; width: 92px; aspect-ratio: 1192 / 1664; }
+	.played { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 12px; align-items: center; width: 100%; text-align: left; padding: 8px; border-radius: 10px; border: 1px solid var(--ln2); background: var(--p2); color: inherit; cursor: zoom-in; }
+	.played .cf { display: block; width: 112px; aspect-ratio: 1192 / 1664; }
+	/* the card face's own wrapper is `.card`, which hall.css styles as a panel (padding, border, fill): undo that here */
+	.played .cf :global(.card), .pvc :global(.card) { padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; min-width: 0; }
 	.played .cf :global(.cardface) { width: 100%; height: 100%; border-radius: 6px; }
 	.pi { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 	.pname { display: flex; align-items: center; gap: 8px; }
