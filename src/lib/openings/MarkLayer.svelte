@@ -11,7 +11,7 @@
 	import KitToken from '$lib/board/KitToken.svelte';
 	import { outlineLoops, loopsPath } from '$lib/board/hexgeo';
 	import { COMPANIONS } from '$lib/tokens';
-	import { CARD_HEX, MARK_HEX, type Mark, type Side, type StepMark } from '$lib/openings';
+	import { CARD_HEX, MARK_HEX, OPENING_MAP, spawnDirs, chipColors, type Mark, type Side, type StepMark } from '$lib/openings';
 
 	export let marks: Mark[] = [];
 	export let layer: 'under' | 'over' = 'over';
@@ -35,10 +35,19 @@
 	// a mark's look in a walk-through: this turn bright, earlier turns faded
 	const fade = (m: Mark) => (step > 0 && m.turn > 0 && m.turn < step ? 0.5 : 1) * (m.alt ? 0.5 : 1);
 	const up = (x: number, y: number) => (rot ? `rotate(${-rot} ${x} ${y})` : undefined);
+	const DIRS = spawnDirs(OPENING_MAP);
+	const minionRef = (team: Side, role: string) => `#mn-token-${team}-${role === 'ranged' || role === 'heavy' ? role : 'melee'}`;
+	// a pie slice of a chip (a hybrid of 2 or 3 cards), from the top, clockwise
+	function slice(c: { x: number; y: number }, r: number, k: number, n: number) {
+		const a0 = -Math.PI / 2 + (k * 2 * Math.PI) / n, a1 = a0 + (2 * Math.PI) / n;
+		const p = (a: number) => `${(c.x + r * Math.cos(a)).toFixed(2)} ${(c.y + r * Math.sin(a)).toFixed(2)}`;
+		return n === 2 ? `M${c.x} ${c.y - r}A${r} ${r} 0 0 ${k ? 0 : 1} ${c.x} ${c.y + r}Z` : `M${c.x} ${c.y}L${p(a0)}A${r} ${r} 0 0 1 ${p(a1)}Z`;
+	}
 
 	$: areas = marks.filter((m) => m.kind === 'area');
 	$: arrows = marks.filter((m) => m.kind === 'arrow');
 	$: rings = marks.filter((m) => m.kind === 'ring');
+	$: minions = marks.filter((m) => m.kind === 'minion');
 	$: things = marks.filter((m) => m.kind === 'unit' || m.kind === 'token' || m.kind === 'label');
 	$: steps = marks.filter((m): m is StepMark => m.kind === 'step');
 	// Everything that sits ON a space (E / A units, tokens, turn chips) shares it: one alone fills the middle; several
@@ -46,7 +55,7 @@
 	// hero) they sit round its rim. Laid out ON SCREEN (turned back by the board's rotation), so the fan reads the same
 	// whichever way the board faces. `s` = the scale against the mark's own size.
 	type Slot = { x: number; y: number; s: number };
-	const NATURAL = (m: Mark) => (m.kind === 'step' ? 0.36 : m.kind === 'token' ? 0.8 : m.kind === 'unit' ? (m.hero ? 0.66 : 0.5) : 0.36);
+	const NATURAL = (m: Mark) => (m.kind === 'step' ? 0.36 : m.kind === 'token' ? (m.token === 'double' ? 0.5 : 0.8) : m.kind === 'unit' ? (m.hero ? 0.66 : 0.5) : 0.36);
 	const ORDER: Record<string, number> = { unit: 0, token: 1, step: 2 };
 	$: slots = (() => {
 		const by: Record<string, Mark[]> = {};
@@ -59,7 +68,7 @@
 			// an E / A unit stands on its space like a piece: full size in the middle, the rest round its rim
 			const unit = list.find((m) => m.kind === 'unit');
 			if (unit) { out[unit.id] = { ...c, s: 1 }; list = list.filter((m) => m !== unit); }
-			const occ = occupied.has(hex) || !!unit, n = list.length;
+			const occ = occupied.has(hex) || !!unit || marks.some((x) => x.kind === 'minion' && x.hex === hex), n = list.length;
 			if (!n) continue;
 			if (n === 1 && !occ) { out[list[0].id] = { ...c, s: 1 }; continue; }
 			// round the rim of a piece: up to six places from the top right, clockwise; else a circle filling the space
@@ -85,15 +94,24 @@
 	};
 	// a ring circles its space, and so whatever stands there (a minion, the hero, an E / A unit), all kept in the middle
 	$: ringAt = (m: Mark & { hex: string }) => ({ ...at(m.hex), r: size * 0.8 });
-	function arrowGeo(from: string, to: string) {
+	function arrowGeo(from: string, to: string, both = false) {
 		const a = at(from), b = at(to), dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
-		const ux = dx / len, uy = dy / len, s0 = size * 0.42, s1 = size * 0.52;
+		const ux = dx / len, uy = dy / len, s0 = size * (both ? 0.52 : 0.42), s1 = size * 0.52;
 		const p = { x: a.x + ux * s0, y: a.y + uy * s0 }, q = { x: b.x - ux * s1, y: b.y - uy * s1 };
 		const bend = Math.min(len * 0.16, size * 0.9), c = { x: (p.x + q.x) / 2 - uy * bend, y: (p.y + q.y) / 2 + ux * bend };
 		const tx = q.x - c.x, ty = q.y - c.y, tl = Math.hypot(tx, ty) || 1, hx = tx / tl, hy = ty / tl, hl = size * 0.36, hw = size * 0.24;
 		const tip = { x: q.x + hx * hl * 0.55, y: q.y + hy * hl * 0.55 };
 		const head = `${tip.x.toFixed(1)},${tip.y.toFixed(1)} ${(q.x - hx * hl * 0.45 - hy * hw).toFixed(1)},${(q.y - hy * hl * 0.45 + hx * hw).toFixed(1)} ${(q.x - hx * hl * 0.45 + hy * hw).toFixed(1)},${(q.y - hy * hl * 0.45 - hx * hw).toFixed(1)}`;
-		return { d: `M${p.x.toFixed(1)} ${p.y.toFixed(1)}Q${c.x.toFixed(1)} ${c.y.toFixed(1)} ${q.x.toFixed(1)} ${q.y.toFixed(1)}`, head };
+		// the head at the start (a swap): the same shape, along the curve's first tangent
+		const sx = p.x - c.x, sy = p.y - c.y, sl = Math.hypot(sx, sy) || 1, gx = sx / sl, gy = sy / sl;
+		const tip0 = { x: p.x + gx * hl * 0.55, y: p.y + gy * hl * 0.55 };
+		const tail = `${tip0.x.toFixed(1)},${tip0.y.toFixed(1)} ${(p.x - gx * hl * 0.45 - gy * hw).toFixed(1)},${(p.y - gy * hl * 0.45 + gx * hw).toFixed(1)} ${(p.x - gx * hl * 0.45 + gy * hw).toFixed(1)},${(p.y - gy * hl * 0.45 - gx * hw).toFixed(1)}`;
+		return { d: `M${p.x.toFixed(1)} ${p.y.toFixed(1)}Q${c.x.toFixed(1)} ${c.y.toFixed(1)} ${q.x.toFixed(1)} ${q.y.toFixed(1)}`, head, tail };
+	}
+	// a plain line (no head) runs centre to centre, straight: the compendium's links between rings
+	function lineGeo(from: string, to: string) {
+		const a = at(from), b = at(to), dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1, ux = dx / len, uy = dy / len, s = size * 0.8;
+		return `M${(a.x + ux * s).toFixed(1)} ${(a.y + uy * s).toFixed(1)}L${(b.x - ux * s).toFixed(1)} ${(b.y - uy * s).toFixed(1)}`;
 	}
 	const hexPts = (c: { x: number; y: number }, r: number) => [0, 1, 2, 3, 4, 5].map((i) => { const a = ((60 * i - 90) * Math.PI) / 180; return `${(c.x + r * Math.cos(a)).toFixed(1)},${(c.y + r * Math.sin(a)).toFixed(1)}`; }).join(' ');
 	const label = (m: StepMark) => m.text?.trim() || `T${m.turn}`;
@@ -122,14 +140,34 @@
 			</g>
 		{/if}
 	{/each}
+	{#each minions as m (m.id)}
+		{#if m.kind === 'minion'}
+			{@const c = at(m.hex)}
+			{@const team = m.team === 'enemy' ? other(side) : side}
+			<g opacity={0.55 * fade(m)} pointer-events="none">
+				<use href={minionRef(team, m.role)} transform="translate({c.x} {c.y}) rotate({(DIRS[team] ?? 0) * 60}) scale({(size * 0.72) / 100})" />
+				<circle cx={c.x} cy={c.y} r={size * 0.74} fill="none" stroke="#f4f1e8" stroke-opacity=".8" stroke-width={size * 0.05} stroke-dasharray="{size * 0.16} {size * 0.12}" />
+			</g>
+			{#if picked === m.id}<circle cx={c.x} cy={c.y} r={size * 0.88} fill="none" stroke="#fde047" stroke-width={size * 0.05} stroke-dasharray="{size * 0.2} {size * 0.15}" />{/if}
+		{/if}
+	{/each}
 	{#each arrows as m (m.id)}
-		{#if m.kind === 'arrow' && m.from && m.to && m.from !== m.to}
-			{@const g = arrowGeo(m.from, m.to)}
+		{#if m.kind === 'arrow' && m.from && m.to && m.from !== m.to && m.head === 'none'}
+			{@const d = lineGeo(m.from, m.to)}
 			<g opacity={fade(m)} pointer-events="none">
+				<path {d} fill="none" stroke="#0b0e14" stroke-opacity=".6" stroke-width={size * 0.17} stroke-linecap="round" />
+				<path {d} fill="none" stroke={col(m.color)} stroke-width={size * 0.1} stroke-linecap="round" stroke-dasharray={m.alt ? `${size * 0.26} ${size * 0.18}` : undefined} />
+				{#if picked === m.id}<path {d} fill="none" stroke="#fde047" stroke-width={size * 0.04} stroke-dasharray="{size * 0.15} {size * 0.12}" />{/if}
+			</g>
+		{:else if m.kind === 'arrow' && m.from && m.to && m.from !== m.to}
+			{@const g = arrowGeo(m.from, m.to, m.head === 'both')}
+			<g opacity={fade(m)} pointer-events="none">
+				{#if m.head === 'both'}<polygon points={g.tail} fill="#0b0e14" fill-opacity=".6" stroke="#0b0e14" stroke-opacity=".6" stroke-width={size * 0.08} stroke-linejoin="round" />{/if}
 				<path d={g.d} fill="none" stroke="#0b0e14" stroke-opacity=".6" stroke-width={size * 0.19} stroke-linecap="round" />
 				<polygon points={g.head} fill="#0b0e14" fill-opacity=".6" stroke="#0b0e14" stroke-opacity=".6" stroke-width={size * 0.08} stroke-linejoin="round" />
 				<path d={g.d} fill="none" stroke={col(m.color)} stroke-width={size * 0.11} stroke-linecap="round" stroke-dasharray={m.alt ? `${size * 0.26} ${size * 0.18}` : undefined} />
 				<polygon points={g.head} fill={col(m.color)} />
+				{#if m.head === 'both'}<polygon points={g.tail} fill={col(m.color)} />{/if}
 				{#if picked === m.id}<path d={g.d} fill="none" stroke="#fde047" stroke-width={size * 0.04} stroke-dasharray="{size * 0.15} {size * 0.12}" />{/if}
 			</g>
 		{/if}
@@ -141,14 +179,23 @@
 		{@const k = sl.s}
 		<g opacity={fade(m)} pointer-events="none" transform={up(c.x, c.y)}>
 			{#if m.kind === 'unit'}
+				{@const ur = (m.hero ? 0.66 : 0.5) * size * k}
 				{#if m.hero}
-					<HeroToken x={c.x} y={c.y} r={size * 0.66 * k} hero={m.hero} team={m.unit === 'enemy' ? other(side) : side} color={TEAM[m.unit === 'enemy' ? other(side) : side]} uid="{uid}-{m.id}" />
+					<HeroToken x={c.x} y={c.y} r={size * 0.66 * k} hero={m.hero} team={m.unit === 'enemy' ? other(side) : side} color={m.color ? col(m.color) : TEAM[m.unit === 'enemy' ? other(side) : side]} uid="{uid}-{m.id}" />
 				{:else}
-					<circle cx={c.x} cy={c.y} r={size * 0.5 * k} fill={m.unit === 'enemy' ? '#111318' : '#f4f1e8'} stroke={m.unit === 'enemy' ? '#f4f1e8' : '#111318'} stroke-width={size * 0.07 * k} />
+					<circle cx={c.x} cy={c.y} r={ur} fill={m.unit === 'enemy' ? '#111318' : '#f4f1e8'} stroke={m.unit === 'enemy' ? '#f4f1e8' : '#111318'} stroke-width={size * 0.07 * k} />
 					<text x={c.x} y={c.y} dy=".35em" text-anchor="middle" font-size={size * 0.56 * k} fill={m.unit === 'enemy' ? '#fff' : '#111318'} class="t">{m.unit === 'enemy' ? 'E' : 'A'}</text>
+					{#if m.color}<circle cx={c.x} cy={c.y} r={ur + size * 0.09 * k} fill="none" stroke={col(m.color)} stroke-width={size * 0.13 * k} />{/if}
+				{/if}
+				{#if m.tag}
+					{@const tw = Math.max(0.5, m.tag.length * 0.2) * size * k}
+					<rect x={c.x + ur * 0.35} y={c.y + ur * 0.3} width={tw} height={size * 0.3 * k} rx={size * 0.08 * k} fill={m.color ? col(m.color) : '#111318'} stroke="#fff" stroke-width={size * 0.025 * k} />
+					<text x={c.x + ur * 0.35 + tw / 2} y={c.y + ur * 0.3 + size * 0.15 * k} dy=".35em" text-anchor="middle" font-size={size * 0.22 * k} fill={m.color === 'gold' || m.color === 'silver' || m.color === 'white' ? '#111318' : '#fff'} class="t">{m.tag}</text>
 				{/if}
 			{:else if m.kind === 'token'}
-				{#if m.token === 'companion'}
+				{#if m.token === 'double'}
+					<HeroToken x={c.x} y={c.y} r={size * 0.5 * k} hero="razzle" face={1} team={side} color={TEAM[side]} uid="{uid}-{m.id}" />
+				{:else if m.token === 'companion'}
 					<KitToken x={c.x} y={c.y} size={size * k} team={side} color={TEAM[side]} letter={(COMPANIONS[hero] ?? '?')[0]} label={COMPANIONS[hero]} rot={0} uid="{uid}-{m.id}" />
 				{:else}
 					<KitToken x={c.x} y={c.y} size={size * k} token={m.token} team={side} color={TEAM[side]} rot={0} uid="{uid}-{m.id}" />
@@ -170,9 +217,9 @@
 			{#if now && !m.alt}<circle cx={c.x} cy={c.y} r={z * 0.5} fill="none" stroke="#fff" stroke-opacity=".85" stroke-width={z * 0.06} />{/if}
 			<circle cx={c.x + z * 0.02} cy={c.y + z * 0.05} r={z * 0.37} fill="#000" fill-opacity=".35" />
 			{#if m.color2}
-				<!-- a hybrid: either card -->
-				<path d="M{c.x} {c.y - z * 0.36}A{z * 0.36} {z * 0.36} 0 0 0 {c.x} {c.y + z * 0.36}Z" fill={CARD_HEX[m.color]} />
-				<path d="M{c.x} {c.y - z * 0.36}A{z * 0.36} {z * 0.36} 0 0 1 {c.x} {c.y + z * 0.36}Z" fill={CARD_HEX[m.color2]} />
+				<!-- a hybrid: any of these cards -->
+				{@const cols = chipColors(m)}
+				{#each cols as cc, i (i)}<path d={slice(c, z * 0.36, i, cols.length)} fill={CARD_HEX[cc]} />{/each}
 				<circle cx={c.x} cy={c.y} r={z * 0.36} fill="none" stroke="#fff" stroke-opacity=".9" stroke-width={z * 0.045} stroke-dasharray={m.stay ? `${z * 0.1} ${z * 0.07}` : undefined} />
 				<text x={c.x} y={c.y} dy=".36em" text-anchor="middle" font-size={z * (label(m).length > 2 ? 0.26 : 0.32)} fill="#fff" stroke="#000" stroke-opacity=".75" stroke-width={z * 0.05} class="t chip">{label(m)}</text>
 			{:else}

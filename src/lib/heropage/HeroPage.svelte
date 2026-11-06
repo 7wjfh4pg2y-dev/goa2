@@ -16,6 +16,7 @@
 	import { heroSplash, splashFace, heroLogo, statIcon, traitIcon, starIcon, STAT_LABELS, STAT_PIPS, TRAIT_LABELS, portraitCss, heroById, HEROES_ALPHA, type Trait } from '$lib/heroes';
 	import { heroCards } from '$lib/cards/deck';
 	import { startingHand } from '$lib/cards/cardstate';
+	import RuneMark from '$lib/hud2/RuneMark.svelte';
 	import { onSide, turnCards, CARD_HEX, LANES, SIZES, MINION_PREFS, GUIDE_TAGS, type Opening, type HeroGuide, type Side } from '$lib/openings';
 	import { guideFor } from './guide';
 	import type { HeroMatchups, Matchup } from '$lib/hallstats';
@@ -109,6 +110,7 @@
 	<div class="guide {cls}">
 		<h3>Overview</h3>
 		<div class="over">{#each g.overview.split(/\n+/).filter(Boolean) as para, k (k)}<p class:auto={g.auto.overview}>{para}</p>{/each}</div>
+		{#if g.funFact?.trim()}<p class="fun"><b>Fun fact</b> {g.funFact}</p>{/if}
 		<div class="sw">
 			<div><h3>Strengths</h3><ul>{#each g.strengths as x, k (k)}<li class="good">{x}</li>{/each}</ul></div>
 			<div><h3>Weaknesses</h3><ul>{#each g.weaknesses as x, k (k)}<li class="bad">{x}</li>{/each}</ul></div>
@@ -226,6 +228,9 @@
 				<h2>{op.name}</h2>
 				<div class="ochips">{#if op.size !== 'any'}<span>{SIZES[op.size]}</span>{/if}{#if op.lane}<span>{LANES[op.lane]}</span>{/if}</div>
 				{#if op.goal}<p class="goal">{op.goal}</p>{/if}
+				{#if op.runes?.some(Boolean)}
+					<div class="oprunes"><span>Runes</span>{#each [0, 1, 2, 3] as k (k)}<span class="orc" class:key={!!op.runeKey?.[k]} title="Turn {k + 1}{op.runeKey?.[k] ? ' · important' : ''}"><small>{['I', 'II', 'III', 'IV'][k]}</small>{#if op.runes[k]}<RuneMark rune={op.runes[k] ?? null} size={26} on={!!op.runeKey?.[k]} />{:else}<i>any</i>{/if}</span>{/each}</div>
+				{/if}
 				<ol class="steps">
 					<li><button class="all" class:on={step === 0} on:click={() => (step = 0)}><span class="tn">All</span><b>Whole round</b></button></li>
 					{#each [1, 2, 3, 4] as t (t)}
@@ -387,6 +392,13 @@
 	.opinfo h2 { margin: 0; font-weight: 400; font-size: 26px; color: #fff; line-height: 1.1; }
 	.ochips { display: flex; gap: 6px; }
 	.ochips span { padding: 2px 10px; border-radius: 999px; font-size: 12px; color: var(--brass-hi); border: 1px solid var(--brass-line); }
+	.fun { margin: 6px 0 0; font-size: 13px; line-height: 1.4; color: var(--ink-2); }
+	.fun b { font-weight: 400; color: var(--brass-hi); margin-right: 4px; }
+	.oprunes { display: flex; align-items: center; gap: 8px; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); }
+	.orc { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 3px; border-radius: 8px; }
+	.orc.key { box-shadow: inset 0 0 0 1px #fde047; }
+	.orc small { font-size: 10px; letter-spacing: 0; color: var(--brass-hi); }
+	.orc i { font-style: normal; font-size: 10px; text-transform: none; letter-spacing: 0; }
 	.goal { margin: 0; font-size: 14px; line-height: 1.45; color: var(--ink-2); white-space: pre-wrap; }
 	.steps { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 	.steps button { width: 100%; display: grid; grid-template-columns: 62px auto 1fr; align-items: center; gap: 4px 10px; padding: 9px 12px; border-radius: 11px; border: 1px solid var(--hair); background: rgba(255, 255, 255, 0.03); text-align: left; cursor: pointer; }

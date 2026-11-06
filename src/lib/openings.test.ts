@@ -117,3 +117,39 @@ describe('the builder tools', () => {
 		expect(markLabel(e.marks[0])).toBe('Area · 1 space · T2')
 	})
 })
+
+describe('the compendium tools (2026-11-05)', () => {
+	const o: ToolOpts = { turn: 2, color: 'blue', alt: false, taken: false, areaStyle: 'both', unit: 'enemy', unitHero: '', text: '', token: '', areaId: null, arrowFrom: null, picked: null }
+	const op0 = blankOpening('arien')
+	it('a chip takes up to three card colours, and loses them one by one', () => {
+		let op = applyTool(op0, 'step', '5_5', { ...o, color: 'blue' }).op
+		op = applyTool(op, 'step', '5_5', { ...o, color: 'silver' }).op
+		op = applyTool(op, 'step', '5_5', { ...o, color: 'red' }).op
+		op = applyTool(op, 'step', '5_5', { ...o, color: 'gold' }).op // a fourth is ignored
+		const m = op.marks[0]
+		expect(op.marks.length).toBe(1)
+		expect(m.kind === 'step' && [m.color, m.color2, m.color3]).toEqual(['blue', 'silver', 'red'])
+		expect(markLabel(m)).toContain('Blue or Silver or Red')
+		op = applyTool(op, 'step', '5_5', { ...o, color: 'silver' }).op
+		const m2 = op.marks[0]
+		expect(m2.kind === 'step' && [m2.color, m2.color2, m2.color3]).toEqual(['blue', 'red', undefined])
+	})
+	it('arrows keep their heads; units their rim and tag; moved minions toggle and follow the side', () => {
+		let r = applyTool(op0, 'arrow', '5_5', { ...o, head: 'both' })
+		r = applyTool(r.op, 'arrow', '6_5', { ...o, head: 'both', arrowFrom: r.arrowFrom })
+		expect(r.op.marks[0]).toMatchObject({ kind: 'arrow', head: 'both' })
+		let op = applyTool(op0, 'unit', '7_7', { ...o, unitColor: 'blue', unitTag: 'T1' }).op
+		expect(op.marks[0]).toMatchObject({ kind: 'unit', color: 'blue', tag: 'T1' })
+		op = applyTool(op0, 'minion', '8_8', { ...o, minionTeam: 'enemy', minionRole: 'ranged' }).op
+		expect(op.marks[0]).toMatchObject({ kind: 'minion', team: 'enemy', role: 'ranged', turn: 2 })
+		const flipped = onSide(op, 'orange')
+		expect(flipped.marks[0]).toMatchObject({ kind: 'minion', hex: twinHex('8_8') })
+		expect(applyTool(op, 'minion', '8_8', o).op.marks.length).toBe(0)
+	})
+	it('runes ride through a saved row', () => {
+		const op = { ...op0, hero: 'snorri', runes: ['horn', null, 'axe', 'bird'] as Opening['runes'], runeKey: [true, false, false, true] }
+		const back = openingOfRow(rowOfOpening(op))
+		expect(back?.runes).toEqual(['horn', null, 'axe', 'bird'])
+		expect(back?.runeKey).toEqual([true, false, false, true])
+	})
+})

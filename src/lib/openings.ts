@@ -24,18 +24,28 @@ type Base = { id: string; turn: Turn; alt?: boolean }
 /** a turn chip ("T2") on a space, in the card's colour; alt = an alternative (dimmed) */
 /** `color2` = a hybrid chip: either card colour will do; `stay` = the hero acts from where it stands (an attack, a skill) —
  *  the chip doesn't move the hero */
-export type StepMark = Base & { kind: 'step'; hex: string; color: CardColor; color2?: CardColor; stay?: boolean; text?: string }
+export type StepMark = Base & { kind: 'step'; hex: string; color: CardColor; color2?: CardColor; color3?: CardColor; stay?: boolean; text?: string }
 /** a ring round a space (the minion you take); taken = that minion is gone from this turn on */
 export type RingMark = Base & { kind: 'ring'; hex: string; color: string; taken?: boolean }
-export type ArrowMark = Base & { kind: 'arrow'; from: string; to: string; color: string }
+/** head: 'end' (default) · 'both' (a swap) · 'none' (a plain line: a chain, a link) */
+export type ArrowHead = 'end' | 'both' | 'none'
+export type ArrowMark = Base & { kind: 'arrow'; from: string; to: string; color: string; head?: ArrowHead }
 /** shaded spaces: fill = tinted, outline = a line round them (both: the compendium's pale hexes with an edge) */
 export type AreaMark = Base & { kind: 'area'; hexes: string[]; color: string; style: 'fill' | 'outline' | 'both' }
 /** an enemy (E) / ally (A) hero — a letter disc, or a real hero's token */
-export type UnitMark = Base & { kind: 'unit'; hex: string; unit: 'enemy' | 'ally'; hero?: string }
+/** `color` = a rim in a card colour (the card that hits / moves them); `tag` = a small tag on it ("T1": where they stand that turn) */
+export type UnitMark = Base & { kind: 'unit'; hex: string; unit: 'enemy' | 'ally'; hero?: string; color?: string; tag?: string }
+/** a minion where it's pushed / dragged to (drawn faded): your team's ('ally') or the enemy's */
+export type MinionRole = 'melee' | 'ranged' | 'heavy'
+export type MinionMark = Base & { kind: 'minion'; hex: string; team: 'ally' | 'enemy'; role: MinionRole }
 export type LabelMark = Base & { kind: 'label'; hex: string; text: string }
-/** one of the hero's own tokens (the opening hero's kit) */
+/** one of the hero's own tokens (the opening hero's kit; 'companion'; Razzle's 'double') */
 export type TokenMark = Base & { kind: 'token'; hex: string; token: string }
-export type Mark = StepMark | RingMark | ArrowMark | AreaMark | UnitMark | LabelMark | TokenMark
+export type Mark = StepMark | RingMark | ArrowMark | AreaMark | UnitMark | LabelMark | TokenMark | MinionMark
+/** pieces an opening can place beyond HERO_KIT (Razzle's doubles are hero pieces in the game, not kit tokens) */
+export const OPENING_KIT_EXTRA: Record<string, string[]> = { razzle: ['double'] }
+export const RUNE_IDS = ['axe', 'bird', 'anvil', 'horn'] as const
+export type OpeningRune = (typeof RUNE_IDS)[number]
 
 export type OpeningTurn = { cards: CardColor[]; note: string }
 export type Opening = {
@@ -51,6 +61,9 @@ export type Opening = {
 	/** where the hero spawns (a hero spawn point), or '' */
 	start: string
 	marks: Mark[]
+	/** Snorri: the rune under each turn slot I–IV (null = any), and which of them matter ('important') */
+	runes?: (OpeningRune | null)[]
+	runeKey?: boolean[]
 	order: number
 	updatedAt: number
 	deleted?: boolean
@@ -147,6 +160,8 @@ export type HeroGuide = {
 	weaknesses: string[]
 	minions: MinionPref[]
 	tags: Partial<Record<GuideTag, 1 | 2>>
+	/** an optional one-liner shown under the overview */
+	funFact?: string
 	strong: string[]
 	weak: string[]
 	partners: string[]
@@ -213,15 +228,17 @@ export function spawnDirs(map: GameMap = OPENING_MAP): Record<string, number> {
 }
 
 // ── the builder's tools: what a tap on a space does ──
-export type Tool = 'step' | 'ring' | 'arrow' | 'area' | 'unit' | 'label' | 'token' | 'start' | 'erase' | 'pick'
+export type Tool = 'step' | 'ring' | 'arrow' | 'area' | 'unit' | 'minion' | 'label' | 'token' | 'start' | 'erase' | 'pick'
 export type ToolOpts = {
 	turn: Turn; color: string; alt: boolean; taken: boolean; stay?: boolean; areaStyle: AreaMark['style']
 	unit: 'enemy' | 'ally'; unitHero: string; text: string; token: string
+	/** arrows: heads; units: a card-colour rim ('' = none) + a tag; minions: whose and which */
+	head?: ArrowHead; unitColor?: string; unitTag?: string; minionTeam?: 'ally' | 'enemy'; minionRole?: MinionRole
 	/** the area being painted, the arrow's first space, the mark picked (carried between taps) */
 	areaId: string | null; arrowFrom: string | null; picked: string | null
 }
 export type ToolResult = { op: Opening; changed: boolean; areaId: string | null; arrowFrom: string | null; picked: string | null }
-const PICK_ORDER: Mark['kind'][] = ['step', 'unit', 'label', 'token', 'ring', 'arrow', 'area']
+const PICK_ORDER: Mark['kind'][] = ['step', 'unit', 'label', 'token', 'minion', 'ring', 'arrow', 'area']
 /** the marks on a space, top-most first (the order they're drawn in, reversed) */
 export const marksOnHex = (op: Opening, hex: string) =>
 	op.marks.filter((m) => marksOn(m).includes(hex)).sort((a, b) => PICK_ORDER.indexOf(a.kind) - PICK_ORDER.indexOf(b.kind))
@@ -236,17 +253,14 @@ export function applyTool(op: Opening, tool: Tool, hex: string, o: ToolOpts): To
 	switch (tool) {
 		case 'step': {
 			const color = (CARD_COLORS as string[]).includes(o.color) ? (o.color as CardColor) : 'gold'
-			// one chip per space, turn and route: the same colour again takes it off (or one side of a hybrid);
-			// another colour makes it a hybrid (either card)
+			// one chip per space, turn and route: the same colour again takes it off (or that part of a hybrid);
+			// another colour makes it a hybrid (either card; up to three)
 			const same = op.marks.find((m): m is StepMark => m.kind === 'step' && m.hex === hex && m.turn === t1 && !!m.alt === !!o.alt)
 			if (same) {
-				const swap = (m: StepMark) => res(op.marks.map((x) => (x === same ? m : x)))
-				if (same.color2 === color) { const { color2: _, ...rest } = same; return swap(rest) }
-				if (same.color === color) {
-					if (!same.color2) return res(op.marks.filter((m) => m !== same))
-					const { color2, ...rest } = same; return swap({ ...rest, color: color2 })
-				}
-				return swap({ ...same, color2: color })
+				const cols = chipColors(same)
+				const next = cols.includes(color) ? cols.filter((c) => c !== color) : cols.length < 3 ? [...cols, color] : cols
+				if (!next.length) return res(op.marks.filter((m) => m !== same))
+				return res(op.marks.map((x) => (x === same ? withChipColors(same, next) : x)))
 			}
 			const text = o.text.trim() || undefined
 			return res([...op.marks, { id: newId('m'), kind: 'step', hex, turn: t1, color, alt, ...(o.stay ? { stay: true } : {}), ...(text ? { text } : {}) }])
@@ -259,7 +273,7 @@ export function applyTool(op: Opening, tool: Tool, hex: string, o: ToolOpts): To
 		case 'arrow': {
 			if (!o.arrowFrom) return { op, changed: false, ...keep, arrowFrom: hex }
 			if (o.arrowFrom === hex) return { op, changed: false, ...keep, arrowFrom: null }
-			return res([...op.marks, { id: newId('m'), kind: 'arrow', from: o.arrowFrom, to: hex, turn: o.turn, color: o.color, alt }], { arrowFrom: null })
+			return res([...op.marks, { id: newId('m'), kind: 'arrow', from: o.arrowFrom, to: hex, turn: o.turn, color: o.color, alt, ...(o.head && o.head !== 'end' ? { head: o.head } : {}) }], { arrowFrom: null })
 		}
 		case 'area': {
 			const area = op.marks.find((m): m is AreaMark => m.kind === 'area' && m.id === o.areaId)
@@ -274,7 +288,13 @@ export function applyTool(op: Opening, tool: Tool, hex: string, o: ToolOpts): To
 		case 'unit': {
 			const same = op.marks.find((m) => m.kind === 'unit' && m.hex === hex)
 			if (same) return res(op.marks.filter((m) => m !== same))
-			return res([...op.marks, { id: newId('m'), kind: 'unit', hex, turn: o.turn, unit: o.unit, alt, ...(o.unitHero ? { hero: o.unitHero } : {}) }])
+			const tag = o.unitTag?.trim().slice(0, 4)
+			return res([...op.marks, { id: newId('m'), kind: 'unit', hex, turn: o.turn, unit: o.unit, alt, ...(o.unitHero ? { hero: o.unitHero } : {}), ...(o.unitColor ? { color: o.unitColor } : {}), ...(tag ? { tag } : {}) }])
+		}
+		case 'minion': {
+			const same = op.marks.find((m) => m.kind === 'minion' && m.hex === hex)
+			if (same) return res(op.marks.filter((m) => m !== same))
+			return res([...op.marks, { id: newId('m'), kind: 'minion', hex, turn: o.turn, team: o.minionTeam ?? 'ally', role: o.minionRole ?? 'melee', alt }])
 		}
 		case 'label': {
 			const same = op.marks.find((m) => m.kind === 'label' && m.hex === hex)
@@ -312,12 +332,20 @@ export function markLabel(m: Mark, heroName: (id: string) => string = (id) => id
 	const t = m.turn ? `T${m.turn}` : 'Always'
 	const alt = m.alt ? ' · alt' : ''
 	switch (m.kind) {
-		case 'step': return `${m.text?.trim() || `T${m.turn}`} chip · ${CARD_NAME[m.color]}${m.color2 ? ` or ${CARD_NAME[m.color2]}` : ''}${m.stay ? ' · stays' : ''}${alt}`
+		case 'step': return `${m.text?.trim() || `T${m.turn}`} chip · ${chipColors(m).map((c) => CARD_NAME[c]).join(' or ')}${m.stay ? ' · stays' : ''}${alt}`
 		case 'ring': return `Ring · ${m.color}${m.taken ? ' · taken' : ''} · ${t}${alt}`
-		case 'arrow': return `Arrow · ${m.color} · ${t}${alt}`
+		case 'arrow': return `${m.head === 'none' ? 'Line' : m.head === 'both' ? 'Swap arrow' : 'Arrow'} · ${m.color} · ${t}${alt}`
+		case 'minion': return `${m.team === 'enemy' ? 'Enemy' : 'Our'} ${m.role} minion moved here · ${t}${alt}`
 		case 'area': return `Area · ${m.hexes.length} ${m.hexes.length === 1 ? 'space' : 'spaces'} · ${t}${alt}`
-		case 'unit': return `${m.unit === 'enemy' ? 'Enemy' : 'Ally'}${m.hero ? ` · ${heroName(m.hero)}` : ''} · ${t}${alt}`
+		case 'unit': return `${m.unit === 'enemy' ? 'Enemy' : 'Ally'}${m.hero ? ` · ${heroName(m.hero)}` : ''}${m.color ? ` · ${m.color} rim` : ''}${m.tag ? ` · ${m.tag}` : ''} · ${t}${alt}`
 		case 'label': return `Label "${m.text}" · ${t}`
-		case 'token': return `Token · ${m.token.replace(/^(token|marker|rune)_/, '').replace(/_marker$/, '').replace(/_/g, ' ')} · ${t}`
+		case 'token': return m.token === 'double' ? `Double · ${t}` : `Token · ${m.token.replace(/^(token|marker|rune)_/, '').replace(/_marker$/, '').replace(/_/g, ' ')} · ${t}`
 	}
+}
+
+/** a chip's colours, in order (one, or a hybrid of two or three) */
+export const chipColors = (m: StepMark): CardColor[] => [m.color, ...(m.color2 ? [m.color2] : []), ...(m.color3 ? [m.color3] : [])]
+export function withChipColors(m: StepMark, cols: CardColor[]): StepMark {
+	const { color2: _a, color3: _b, ...rest } = m
+	return { ...rest, color: cols[0], ...(cols[1] ? { color2: cols[1] } : {}), ...(cols[2] ? { color3: cols[2] } : {}) }
 }

@@ -14,8 +14,10 @@
 	import { loadOpenings, saveOpening, saveGuide } from '$lib/openings/store';
 	import { HEROES_ALPHA, heroById, portraitCss } from '$lib/heroes';
 	import { HERO_KIT, COMPANIONS, tokenName } from '$lib/tokens';
+	import RuneMark from '$lib/hud2/RuneMark.svelte';
 	import {
-		blankOpening, blankGuide, onSide, applyTool, markLabel, sortOpenings, newId, spawnsOf, turnCards,
+		blankOpening, blankGuide, onSide, applyTool, markLabel, sortOpenings, newId, spawnsOf, turnCards, chipColors as chipCols, withChipColors, openingOfRow, guideOfRow,
+		OPENING_KIT_EXTRA, RUNE_IDS, type OpeningRune, type ArrowHead, type MinionRole, type OpeningRow,
 		CARD_COLORS, CARD_HEX, CARD_NAME, MARK_HEX, LANES, SIZES, MINION_PREFS, GUIDE_TAGS, OPENINGS_SQL,
 		type Opening, type HeroGuide, type Mark, type Tool, type ToolOpts, type Turn, type Side, type CardColor, type MinionPref, type GuideTag
 	} from '$lib/openings';
@@ -136,6 +138,11 @@
 	let unitHero = '';
 	let text = '';
 	let token = '';
+	let head: ArrowHead = 'end';
+	let unitColor = '';
+	let unitTag = '';
+	let minionTeam: 'ally' | 'enemy' = 'enemy';
+	let minionRole: MinionRole = 'melee';
 	let areaId: string | null = null;
 	let arrowFrom: string | null = null;
 	let picked: string | null = null;
@@ -149,6 +156,7 @@
 		{ k: 'area', label: 'Area', hint: 'Tap spaces to shade them; tap again to unshade. “New area” starts another.' },
 		{ k: 'unit', unit: 'enemy', label: 'Enemy (E)', hint: 'An enemy hero — the E disc, or pick the hero for its token. Tap again to remove.' },
 		{ k: 'unit', unit: 'ally', label: 'Ally (A)', hint: 'An allied hero — the A disc, or pick the hero for its token. Tap again to remove.' },
+		{ k: 'minion', label: 'Moved minion', hint: 'A minion where it’s pushed or dragged to (drawn faded). Pair it with an arrow and a “taken” ring where it came from.' },
 		{ k: 'label', label: 'Label', hint: 'Type the text, then tap a space (e.g. “Start”). Tap again to remove.' },
 		{ k: 'token', label: 'Token', hint: 'One of the hero’s own tokens.' },
 		{ k: 'start', label: 'Start', hint: 'Where the hero spawns (its token stands there before turn 1).' },
@@ -157,7 +165,7 @@
 	];
 	$: toolHint = arrowFrom ? 'Now tap where the arrow goes (the same space cancels).' : TOOLS.find((t) => t.k === tool && (!t.unit || t.unit === unit))?.hint ?? '';
 	$: curIdx = cur ? heroOps.findIndex((o) => o.id === cur?.id) : -1;
-	$: kit = HERO_KIT[heroId] ?? [];
+	$: kit = [...(HERO_KIT[heroId] ?? []), ...(OPENING_KIT_EXTRA[heroId] ?? [])];
 	$: if (tool === 'token' && !kit.includes(token)) token = kit[0] ?? '';
 	$: if (tool !== 'arrow') arrowFrom = null;
 	$: if (tool !== 'area') areaId = null;
@@ -171,7 +179,7 @@
 	$: if (tool === 'step' && !(CARD_COLORS as string[]).includes(color)) color = 'green';
 	function onHex(hex: string) {
 		if (!cur) return;
-		const o: ToolOpts = { turn, color, alt, taken, stay, areaStyle, unit, unitHero, text, token, areaId, arrowFrom, picked };
+		const o: ToolOpts = { turn, color, alt, taken, stay, areaStyle, unit, unitHero, text, token, areaId, arrowFrom, picked, head, unitColor, unitTag, minionTeam, minionRole };
 		const r = applyTool(cur, tool, hex, o);
 		areaId = r.areaId; arrowFrom = r.arrowFrom; picked = r.picked;
 		if (r.changed) edit(r.op);
@@ -187,6 +195,54 @@
 		patch({ turns });
 	}
 	function setNote(t: number, note: string) { if (cur) patch({ turns: cur.turns.map((x, k) => (k === t ? { ...x, note } : x)) }); }
+	// Snorri: the rune under each turn slot (tap = the next rune, then none), and which ones matter
+	function cycleRune(t: number) {
+		if (!cur) return;
+		const runes = [0, 1, 2, 3].map((k) => cur?.runes?.[k] ?? null);
+		const now = runes[t], i = now ? RUNE_IDS.indexOf(now) : -1;
+		runes[t] = i + 1 < RUNE_IDS.length ? RUNE_IDS[i + 1] : null;
+		patch({ runes: runes.some(Boolean) ? (runes as (OpeningRune | null)[]) : undefined });
+	}
+	function toggleRuneKey(t: number) {
+		if (!cur) return;
+		const key = [0, 1, 2, 3].map((k) => !!cur?.runeKey?.[k]);
+		key[t] = !key[t];
+		patch({ runeKey: key.some(Boolean) ? key : undefined });
+	}
+	// ── import: a JSON file of rows ({id, hero, kind, data}) or of openings / guides — every one saved ──
+	let importing = '';
+	async function importFile(e: Event) {
+		const f = (e.currentTarget as HTMLInputElement).files?.[0];
+		(e.currentTarget as HTMLInputElement).value = '';
+		if (!f) return;
+		let rows: OpeningRow[] = [];
+		try {
+			const j = JSON.parse(await f.text());
+			const list: unknown[] = Array.isArray(j) ? j : Array.isArray(j?.rows) ? j.rows : [];
+			rows = list.map((x) => {
+				const r = x as Record<string, unknown>;
+				if (r && typeof r === 'object' && 'kind' in r && 'data' in r) return r as unknown as OpeningRow;
+				const hero = String(r.hero ?? '');
+				return 'marks' in r ? { id: String(r.id), hero, kind: 'opening', data: r } : { id: `guide:${hero}`, hero, kind: 'guide', data: r };
+			});
+		} catch { say('That file isn’t valid JSON.'); return; }
+		let ok = 0, bad = 0;
+		for (const [k, row] of rows.entries()) {
+			importing = `Importing ${k + 1} / ${rows.length}…`;
+			const o = openingOfRow(row), gd = o ? null : guideOfRow(row);
+			const err = o ? await saveOpening(o) : gd ? await saveGuide(gd) : 'not an opening or a guide';
+			if (err) { bad++; if (o) drafts = { ...drafts, [o.id]: o }; } else {
+				ok++;
+				if (o) server = [...server.filter((x) => x.id !== o.id), o];
+				if (gd) guides = { ...guides, [gd.hero]: gd };
+			}
+		}
+		keepDrafts();
+		importing = '';
+		gFor = '';
+		say(bad ? `Imported ${ok}; ${bad} failed (kept here as drafts).` : `Imported ${ok}.`);
+		if (!cur) open(sortOpenings(merged.filter((o) => o.hero === heroId))[0] ?? null);
+	}
 	const hname = (id: string) => heroById(id)?.name ?? id;
 	$: spawnHint = cur && !cur.start ? `Set the Start: one of the ${cur.side === 'orange' ? 'Atlantean' : 'Titan'} spawn points.` : '';
 	$: startOk = !cur?.start || spawnsOf(cur.side).includes(cur.start);
@@ -261,6 +317,7 @@
 			</label>
 			<span class="seg"><button class:on={mode === 'openings'} on:click={() => (mode = 'openings')}>Openings</button><button class:on={mode === 'guide'} on:click={() => (mode = 'guide')}>Guide{#if gDirty}<i>•</i>{/if}</button></span>
 			<a class="lnk" href="{base}/heroes?hero={heroId}&tab={mode === 'guide' ? 'overview' : 'openings'}">See the hero page <Icon name="go" /></a>
+			<label class="lnk imp" title="A JSON file of openings / guides — each one is saved">{importing || 'Import file'}<input type="file" accept=".json,application/json" on:change={importFile} hidden /></label>
 			<span class="msg" class:on={!!msg}>{msg}</span>
 		</header>
 
@@ -325,6 +382,12 @@
 								</div>
 							{/each}
 						</div>
+						{#if heroId === 'snorri'}
+							<div class="runes">
+								<span class="fl">Runes <small>tap: the next rune · ★ = important</small></span>
+								<div class="rrow">{#each [0, 1, 2, 3] as k (k)}<span class="rcell"><small>{['I', 'II', 'III', 'IV'][k]}</small><button class="rb" on:click={() => cycleRune(k)} title="Turn {k + 1}'s rune">{#if cur.runes?.[k]}<RuneMark rune={cur.runes[k] ?? null} size={30} on />{:else}<i>any</i>{/if}</button><button class="rk" class:on={!!cur.runeKey?.[k]} on:click={() => toggleRuneKey(k)} title="Important">★</button></span>{/each}</div>
+							</div>
+						{/if}
 						<div class="acts">
 							<button class="sm pri" disabled={saving || !unsaved(cur.id)} on:click={() => save()}>{saving ? 'Saving…' : unsaved(cur.id) ? 'Save' : 'Saved'}</button>
 							<button class="sm" on:click={() => cur && duplicate(cur)}><Icon name="copy" /> Duplicate</button>
@@ -385,12 +448,21 @@
 					<div class="opt"><span class="fl">Look</span><span class="seg sm2">{#each [['both', 'Shade + edge'], ['fill', 'Shade'], ['outline', 'Edge']] as [k, l] (k)}<button class:on={areaStyle === k} on:click={() => (areaStyle = k as typeof areaStyle)}>{l}</button>{/each}</span></div>
 					<button class="sm" on:click={() => (areaId = null)} disabled={!areaId}>New area</button>
 				{/if}
+				{#if tool === 'arrow'}
+					<div class="opt"><span class="fl">Heads</span><span class="seg sm2">{#each [['end', 'Arrow →'], ['both', 'Swap ↔'], ['none', 'Line —']] as [k, l] (k)}<button class:on={head === k} on:click={() => (head = k as ArrowHead)}>{l}</button>{/each}</span></div>
+				{/if}
+				{#if tool === 'minion'}
+					<div class="opt"><span class="fl">Whose</span><span class="seg sm2"><button class:on={minionTeam === 'enemy'} on:click={() => (minionTeam = 'enemy')}>Enemy</button><button class:on={minionTeam === 'ally'} on:click={() => (minionTeam = 'ally')}>Ours</button></span></div>
+					<div class="opt"><span class="fl">Type</span><span class="seg sm2">{#each ['melee', 'ranged', 'heavy'] as k (k)}<button class:on={minionRole === k} on:click={() => (minionRole = k as MinionRole)}>{k}</button>{/each}</span></div>
+				{/if}
 				{#if tool === 'unit'}
+					<div class="opt"><span class="fl">Rim <small>the card that hits / moves them</small></span><span class="sw"><button class="cdot none" class:on={!unitColor} title="No rim" on:click={() => (unitColor = '')}></button>{#each CARD_COLORS as c (c)}<button class="cdot" class:on={unitColor === c} style="--c:{CARD_HEX[c]}" title={c} on:click={() => (unitColor = c)}></button>{/each}</span></div>
+					<label class="opt">Tag <input bind:value={unitTag} maxlength="4" placeholder="e.g. T1" /></label>
 					<label class="opt">Token<select bind:value={unitHero}><option value="">Letter ({unit === 'enemy' ? 'E' : 'A'})</option>{#each HEROES_ALPHA as x (x.id)}<option value={x.id}>{x.name}</option>{/each}</select></label>
 				{/if}
 				{#if tool === 'label'}<label class="opt">Text <input bind:value={text} maxlength="18" placeholder="Start" /></label>{/if}
 				{#if tool === 'token'}
-					<div class="opt kit">{#each kit as k (k)}<button class:on={token === k} on:click={() => (token = k)}>{k === 'companion' ? COMPANIONS[heroId] ?? 'Companion' : tokenName(k)}</button>{/each}</div>
+					<div class="opt kit">{#each kit as k (k)}<button class:on={token === k} on:click={() => (token = k)}>{k === 'companion' ? COMPANIONS[heroId] ?? 'Companion' : k === 'double' ? 'Double' : tokenName(k)}</button>{/each}</div>
 				{/if}
 
 				{#if pickedMark}
@@ -398,11 +470,18 @@
 						<b>{markLabel(pickedMark, hname)}</b>
 						<span class="seg sm2">{#if pickedMark.kind !== 'step'}<button class:on={pickedMark.turn === 0} on:click={() => pickedMark && changeMark(pickedMark.id, { turn: 0 })}>Always</button>{/if}{#each [1, 2, 3, 4] as s (s)}<button class:on={pickedMark.turn === s} on:click={() => pickedMark && changeMark(pickedMark.id, { turn: s as Turn })}>T{s}</button>{/each}</span>
 						{#if pickedMark.kind === 'step'}
-							<span class="sw">{#each CARD_COLORS as c (c)}<button class="cdot" class:on={pickedMark.color === c} style="--c:{CARD_HEX[c]}" title={c} on:click={() => pickedMark && changeMark(pickedMark.id, { color: c, ...(pickedMark.color2 === c ? { color2: undefined } : {}) })}></button>{/each}</span>
-							<span class="sw"><span class="fl">or</span><button class="cdot none" class:on={!pickedMark.color2} title="One colour" on:click={() => pickedMark && changeMark(pickedMark.id, { color2: undefined })}></button>{#each CARD_COLORS as c (c)}{#if c !== pickedMark.color}<button class="cdot" class:on={pickedMark.color2 === c} style="--c:{CARD_HEX[c]}" title="or {c}" on:click={() => pickedMark && changeMark(pickedMark.id, { color2: c })}></button>{/if}{/each}</span>
+							{@const pc = chipCols(pickedMark)}
+							<span class="sw"><span class="fl">Cards <small>tap to add / remove (up to 3)</small></span>{#each CARD_COLORS as c (c)}<button class="cdot" class:on={pc.includes(c)} style="--c:{CARD_HEX[c]}" title={c} on:click={() => { if (pickedMark?.kind !== 'step') return; const nx = pc.includes(c) ? pc.filter((x) => x !== c) : pc.length < 3 ? [...pc, c] : pc; if (nx.length) changeMark(pickedMark.id, withChipColors(pickedMark, nx)); }}>{pc.length > 1 && pc.includes(c) ? pc.indexOf(c) + 1 : ''}</button>{/each}</span>
 							<span class="seg sm2"><button class:on={!pickedMark.stay} on:click={() => pickedMark && changeMark(pickedMark.id, { stay: undefined })}>Moves here</button><button class:on={!!pickedMark.stay} on:click={() => pickedMark && changeMark(pickedMark.id, { stay: true })}>Stays</button></span>
 						{:else if pickedMark.kind === 'ring' || pickedMark.kind === 'arrow' || pickedMark.kind === 'area'}
 							<span class="sw">{#each [...CARD_COLORS, 'white', 'black'] as c (c)}<button class="cdot" class:on={pickedMark.color === c} style="--c:{MARK_HEX[c]}" title={c} on:click={() => pickedMark && changeMark(pickedMark.id, { color: c })}></button>{/each}</span>
+							{#if pickedMark.kind === 'arrow'}<span class="seg sm2">{#each [['end', 'Arrow'], ['both', 'Swap'], ['none', 'Line']] as [k, l] (k)}<button class:on={(pickedMark.head ?? 'end') === k} on:click={() => pickedMark && changeMark(pickedMark.id, { head: k === 'end' ? undefined : (k as ArrowHead) })}>{l}</button>{/each}</span>{/if}
+						{:else if pickedMark.kind === 'unit'}
+							<span class="sw"><button class="cdot none" class:on={!pickedMark.color} title="No rim" on:click={() => pickedMark && changeMark(pickedMark.id, { color: undefined })}></button>{#each CARD_COLORS as c (c)}<button class="cdot" class:on={pickedMark.color === c} style="--c:{CARD_HEX[c]}" title={c} on:click={() => pickedMark && changeMark(pickedMark.id, { color: c })}></button>{/each}</span>
+							<label class="opt">Tag <input value={pickedMark.tag ?? ''} maxlength="4" on:change={(e) => pickedMark && changeMark(pickedMark.id, { tag: e.currentTarget.value.trim() || undefined })} /></label>
+						{:else if pickedMark.kind === 'minion'}
+							<span class="seg sm2"><button class:on={pickedMark.team === 'enemy'} on:click={() => pickedMark && changeMark(pickedMark.id, { team: 'enemy' })}>Enemy</button><button class:on={pickedMark.team === 'ally'} on:click={() => pickedMark && changeMark(pickedMark.id, { team: 'ally' })}>Ours</button></span>
+							<span class="seg sm2">{#each ['melee', 'ranged', 'heavy'] as k (k)}<button class:on={pickedMark.role === k} on:click={() => pickedMark && changeMark(pickedMark.id, { role: k as MinionRole })}>{k}</button>{/each}</span>
 						{/if}
 						<label class="chk"><input type="checkbox" checked={!!pickedMark.alt} on:change={(e) => pickedMark && changeMark(pickedMark.id, { alt: e.currentTarget.checked || undefined })} /> Alternative</label>
 						{#if pickedMark.kind === 'ring'}<label class="chk"><input type="checkbox" checked={!!pickedMark.taken} on:change={(e) => pickedMark && changeMark(pickedMark.id, { taken: e.currentTarget.checked || undefined })} /> Taken</label>{/if}
@@ -415,7 +494,7 @@
 						<span class="fl">Marks · {cur.marks.length}</span>
 						{#each [...cur.marks].sort((a, b) => a.turn - b.turn) as m (m.id)}
 							<div class="mrow" class:on={picked === m.id}>
-								<button class="mlab" on:click={() => { tool = 'pick'; picked = m.id; }}>{#if m.kind === 'step'}<i style:background={CARD_HEX[m.color]}></i>{:else if 'color' in m}<i style:background={MARK_HEX[m.color] ?? m.color}></i>{/if}{markLabel(m, hname)}</button>
+								<button class="mlab" on:click={() => { tool = 'pick'; picked = m.id; }}>{#if m.kind === 'step'}<i style:background={CARD_HEX[m.color]}></i>{:else if 'color' in m && m.color}<i style:background={MARK_HEX[m.color] ?? m.color}></i>{/if}{markLabel(m, hname)}</button>
 								<button class="mx" on:click={() => dropMark(m.id)} aria-label="Delete">×</button>
 							</div>
 						{/each}
@@ -431,6 +510,7 @@
 						<label>Strengths <small>one per line</small><textarea rows="5" value={g.strengths.join('\n')} on:input={(e) => gset({ strengths: lines(e.currentTarget.value) })}></textarea></label>
 						<label>Weaknesses <small>one per line</small><textarea rows="5" value={g.weaknesses.join('\n')} on:input={(e) => gset({ weaknesses: lines(e.currentTarget.value) })}></textarea></label>
 					</div>
+					<label>Fun fact <small>optional, one line</small><input value={g.funFact ?? ''} maxlength="200" on:input={(e) => gset({ funFact: e.currentTarget.value || undefined })} /></label>
 					<div class="opt"><span class="fl">Preferred minions</span><span class="kit">{#each Object.entries(MINION_PREFS) as [k, l] (k)}<button class:on={g.minions.includes(k as MinionPref)} on:click={() => gset({ minions: toggleIn(g.minions, k as MinionPref) })}>{l}</button>{/each}</span></div>
 					<div class="opt"><span class="fl">Tags <small>tap: round 1 → round 2+ → off</small></span><span class="kit">{#each GUIDE_TAGS as t (t)}<button class="tagb" class:on={!!g.tags[t]} class:later={g.tags[t] === 2} on:click={() => cycleTag(t)}>{t}{g.tags[t] === 2 ? ' (R2+)' : ''}</button>{/each}</span></div>
 				</div>
@@ -506,6 +586,15 @@
 	.cdot.on { opacity: 1; border-color: #fff; box-shadow: 0 0 0 2px var(--brass); }
 	.cdot.none { background: repeating-linear-gradient(45deg, #2a3242 0 4px, #1a2030 4px 8px); }
 	.acts { display: flex; flex-wrap: wrap; gap: 6px; }
+	.imp { cursor: pointer; padding: 4px 10px; border-radius: 8px; border: 1px solid var(--hair); }
+	.runes { display: flex; flex-direction: column; gap: 6px; }
+	.rrow { display: flex; gap: 10px; }
+	.rcell { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+	.rcell small { font-size: 11px; color: var(--brass-hi); }
+	.rb { width: 40px; height: 40px; display: grid; place-items: center; padding: 0; border-radius: 50%; border: 1px dashed var(--hair); background: rgba(0, 0, 0, 0.3); }
+	.rb i { font-style: normal; font-size: 10px; color: var(--ink-3); }
+	.rk { padding: 0 4px; border: 0; background: none; color: var(--ink-3); font-size: 13px; }
+	.rk.on { color: #fde047; }
 
 	.btop { position: absolute; left: 10px; top: 10px; right: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; z-index: 2; pointer-events: none; }
 	.btop > * { pointer-events: auto; }
