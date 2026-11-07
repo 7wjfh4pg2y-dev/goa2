@@ -523,7 +523,9 @@
 		.side { grid-column: 1; grid-row: 3; min-height: 280px; }
 		.hpage.opt { grid-template-columns: 1fr; }
 		.opt .stage { grid-row: 2; }
-		.opt .side { grid-row: 3; min-height: 0; }
+		/* the page scrolls: the panel keeps its full height (an overflow-hidden grid item could shrink to nothing) */
+		.hpage.opt { grid-template-rows: 52px 46vh auto; }
+		.opt .side { grid-row: 3; min-height: 0; overflow: visible; }
 		.opt .opcard { position: relative; inset: auto; }
 		.opt .opcard .opinfo { overflow: visible; }
 		.othw { flex: none; height: min(300px, 80vw); max-height: none; }
