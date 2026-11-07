@@ -76,6 +76,9 @@
 	$: if (list.length && !list.some((o) => o.id === selId)) selId = list[0].id;
 	$: op = list.find((o) => o.id === selId) ?? null;
 	function pick(id: string) { selId = id; step = 0; }
+	// the side panel's ‹ › (and ↑ ↓): the previous / next opening, wrapping round
+	$: opIdx = list.findIndex((o) => o.id === selId);
+	function shuffle(d: number) { if (list.length > 1) pick(list[(opIdx + d + list.length) % list.length].id); }
 	// the snapshots' island picture, painted once by the live board
 	let board: OpeningBoard | null = null;
 	let pic = '';
@@ -91,9 +94,10 @@
 		if (tab !== 'openings' || !op || (e.target as HTMLElement)?.closest?.('input, textarea, select')) return;
 		if (e.key === 'ArrowRight') step = Math.min(4, step + 1);
 		else if (e.key === 'ArrowLeft') step = Math.max(0, step - 1);
+		else if (e.key === 'ArrowDown') { e.preventDefault(); shuffle(1); }
+		else if (e.key === 'ArrowUp') { e.preventDefault(); shuffle(-1); }
 	}
 	// a turn's dot: its card colour, or split into every colour when the turn could be played with either
-	const turnsOf = (o: Opening) => o.turns.filter((t) => t.cards.length);
 	const dotBg = (cards: string[] = []) => {
 		const c = cards.length ? cards : ['silver'];
 		if (c.length === 1) return CARD_HEX[c[0] as keyof typeof CARD_HEX];
@@ -151,7 +155,7 @@
 	{/if}
 {/snippet}
 
-<div class="hpage tide">
+<div class="hpage tide" class:opt={tab === 'openings'}>
 	<header class="bar">
 		<a class="ib" href={base + '/'} on:click|preventDefault={() => goBack()} aria-label="Back"><Icon name="back" /></a>
 		<span class="ttl">Heroes</span>
@@ -224,34 +228,44 @@
 				{#if shownCard != null && cards[shownCard]}<div class="pcard"><Card heroId={h.id} card={cards[shownCard]} /></div>{/if}
 			</div>
 		{:else if op}
-			<div class="opinfo">
-				<h2>{op.name}</h2>
-				<div class="ochips">{#if op.size !== 'any'}<span>{SIZES[op.size]}</span>{/if}{#if op.lane}<span>{LANES[op.lane]}</span>{/if}</div>
-				{#if op.goal}<p class="goal">{op.goal}</p>{/if}
-				{#if op.runes?.some(Boolean)}
-					<div class="oprunes"><span>Runes</span>{#each [0, 1, 2, 3] as k (k)}<span class="orc" class:key={!!op.runeKey?.[k]} title="Turn {k + 1}{op.runeKey?.[k] ? ' · important' : ''}"><small>{['I', 'II', 'III', 'IV'][k]}</small>{#if op.runes[k]}<RuneMark rune={op.runes[k] ?? null} size={26} on={!!op.runeKey?.[k]} />{:else}<i>any</i>{/if}</span>{/each}</div>
-				{/if}
-				<ol class="steps">
-					<li><button class="all" class:on={step === 0} on:click={() => (step = 0)}><span class="tn">All</span><b>Whole round</b></button></li>
-					{#each [1, 2, 3, 4] as t (t)}
-						{@const tt = op.turns[t - 1]}
-						<li><button class:on={step === t} on:click={() => (step = t)}>
-							<span class="tn">Turn {t}</span>
-							<span class="dots">{#each tt?.cards ?? [] as c (c)}<i style:background={CARD_HEX[c]}></i>{/each}</span>
-							<b>{turnCards(tt)}</b>
-							{#if tt?.note}<small>{tt.note}</small>{/if}
-						</button></li>
-					{/each}
-				</ol>
+			<!-- one opening at a time: ‹ › on the panel's sides; title · snapshot · details · the cards turn by turn -->
+			<div class="opcard">
+				<button class="onav" on:click={() => shuffle(-1)} disabled={list.length < 2} aria-label="Previous opening" title="Previous opening (↑)">‹</button>
+				<div class="opinfo">
+					<div class="ohead">
+						<h2>{op.name}</h2>
+						<span class="ocount">{opIdx + 1} / {list.length}</span>
+					</div>
+					{#if list.length > 1}<div class="odots">{#each list as o (o.id)}<button class:on={o.id === selId} on:click={() => pick(o.id)} title={o.name} aria-label={o.name}></button>{/each}</div>{/if}
+					<div class="othw"><button class="othumb" on:click={() => (step = 0)} title="Whole round">{#key op.id}<OpeningThumb {op} {pic} {turned} uid="s{op.id}" />{/key}</button></div>
+					<div class="ochips">{#if op.lane}<span>{LANES[op.lane]}</span>{/if}{#if op.size !== 'any'}<span>{SIZES[op.size]}</span>{/if}</div>
+					{#if op.goal}<div class="goal">{#each op.goal.split(/\n+/).filter(Boolean) as para, k (k)}<p>{para}</p>{/each}</div>{/if}
+					{#if op.runes?.some(Boolean)}
+						<div class="oprunes"><span>Runes</span>{#each [0, 1, 2, 3] as k (k)}<span class="orc" class:key={!!op.runeKey?.[k]} title="Turn {k + 1}{op.runeKey?.[k] ? ' · important' : ''}"><small>{['I', 'II', 'III', 'IV'][k]}</small>{#if op.runes[k]}<RuneMark rune={op.runes[k] ?? null} size={26} on={!!op.runeKey?.[k]} />{:else}<i>any</i>{/if}</span>{/each}</div>
+					{/if}
+					<ol class="steps">
+						<li><button class="all" class:on={step === 0} on:click={() => (step = 0)}><span class="tn">All</span><b>Whole round</b></button></li>
+						{#each [1, 2, 3, 4] as t (t)}
+							{@const tt = op.turns[t - 1]}
+							<li><button class:on={step === t} on:click={() => (step = t)}>
+								<span class="tn">Turn {t}</span>
+								<span class="dots">{#each tt?.cards ?? [] as c (c)}<i style:background={CARD_HEX[c]}></i>{/each}</span>
+								<b>{turnCards(tt)}</b>
+								{#if tt?.note}<small>{tt.note}</small>{/if}
+							</button></li>
+						{/each}
+					</ol>
+				</div>
+				<button class="onav" on:click={() => shuffle(1)} disabled={list.length < 2} aria-label="Next opening" title="Next opening (↓)">›</button>
 			</div>
 		{:else}
 			<div class="opinfo"><p class="goal muted">Openings are a hero's round-1 plans, turn by turn.</p></div>
 		{/if}
 	</aside>
 
-	<!-- ───── strip (the guide / every opening) ───── -->
+	<!-- ───── strip (the guide; the openings tab has none — the side panel steps through them) ───── -->
+	{#if tab === 'overview'}
 	<section class="strip">
-		{#if tab === 'overview'}
 			<div class="ov">
 				<div class="col gph">{@render guideBlock('instrip')}</div>
 				<div class="col hand">
@@ -272,20 +286,8 @@
 				</div>
 				{#if gm && (gl || hasLocal)}<div class="col gcol">{@render globalBox('instrip')}</div>{/if}
 			</div>
-		{:else}
-			<div class="olist">
-				{#each list as o (o.id)}
-					<button class="ocard" class:on={o.id === selId} on:click={() => pick(o.id)}>
-						<OpeningThumb op={o} {pic} {turned} uid="t{o.id}" />
-						<span class="oname">{o.name}</span>
-						<span class="oflow">{#each turnsOf(o) as t, k (k)}{#if k}<em>→</em>{/if}<i style:background={dotBg(t.cards)} title={turnCards(t)}></i>{/each}{#if o.size !== 'any'}<small>{SIZES[o.size]}</small>{/if}</span>
-					</button>
-				{/each}
-				{#if gm}<a class="ocard add" href="{base}/opening-builder?hero={h.id}&new=1"><Icon name="plus" /><span>New opening</span></a>{/if}
-				{#if !list.length && !gm}<p class="muted">No openings yet.</p>{/if}
-			</div>
-		{/if}
 	</section>
+	{/if}
 </div>
 
 <style>
@@ -309,6 +311,9 @@
 	.stage { grid-column: 1; grid-row: 2; }
 	.side { grid-column: 2; grid-row: 2; }
 	.strip { grid-column: 1 / -1; grid-row: 3; }
+	/* openings: the board fills the left, one tall panel on the right */
+	.hpage.opt { grid-template-columns: minmax(0, 1fr) clamp(340px, 30vw, 480px); }
+	.opt .stage, .opt .side { grid-row: 2 / 4; }
 
 	/* overview: the painting */
 	.art { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
@@ -389,6 +394,25 @@
 	.pcard { position: relative; height: 100%; max-width: 100%; aspect-ratio: 1192 / 1664; }
 	.pcard :global(.card) { position: absolute; inset: 0; }
 	.opinfo { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 10px; padding: 18px; overflow-y: auto; }
+	.opcard { position: absolute; inset: 0; display: grid; grid-template-columns: 30px minmax(0, 1fr) 30px; }
+	.opcard .opinfo { position: relative; inset: auto; min-height: 0; padding: 16px 6px; scrollbar-width: thin; }
+	.onav { display: grid; place-items: center; padding: 0; border: 0; background: rgba(255, 255, 255, 0.025); color: var(--brass-hi); font-size: 30px; line-height: 1; cursor: pointer; }
+	.onav:first-child { border-right: 1px solid var(--hair); }
+	.onav:last-child { border-left: 1px solid var(--hair); }
+	.onav:hover:not(:disabled) { background: var(--brass-faint); color: #fff; }
+	.onav:disabled { opacity: 0.25; cursor: default; }
+	.ohead { display: flex; align-items: baseline; gap: 10px; }
+	.ohead h2 { flex: 1; min-width: 0; }
+	.ocount { flex: none; font-size: 12px; letter-spacing: 0.1em; color: var(--ink-3); }
+	.odots { display: flex; flex-wrap: wrap; gap: 5px; margin-top: -4px; }
+	.odots button { width: 8px; height: 8px; padding: 0; border-radius: 50%; border: 0; background: rgba(255, 255, 255, 0.18); cursor: pointer; }
+	.odots button.on { background: var(--brass-hi); }
+	/* the snapshot takes what the details leave (up to 36vh), never less than 120 px — the panel makes room before it scrolls */
+	.othw { flex: 1 1 0; min-height: 120px; max-height: 36vh; container-type: size; display: grid; place-items: center; }
+	.othumb { width: min(100cqw, 100cqh); padding: 0; border: 1px solid var(--hair); border-radius: 12px; background: none; cursor: pointer; overflow: hidden; }
+	.othumb :global(.thumb) { border-radius: 11px; }
+	.goal p { margin: 0 0 8px; }
+	.goal p:last-child { margin-bottom: 0; }
 	.opinfo h2 { margin: 0; font-weight: 400; font-size: 26px; color: #fff; line-height: 1.1; }
 	.ochips { display: flex; gap: 6px; }
 	.ochips span { padding: 2px 10px; border-radius: 999px; font-size: 12px; color: var(--brass-hi); border: 1px solid var(--brass-line); }
@@ -401,14 +425,14 @@
 	.orc i { font-style: normal; font-size: 10px; text-transform: none; letter-spacing: 0; }
 	.goal { margin: 0; font-size: 14px; line-height: 1.45; color: var(--ink-2); white-space: pre-wrap; }
 	.steps { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-	.steps button { width: 100%; display: grid; grid-template-columns: 62px auto 1fr; align-items: center; gap: 4px 10px; padding: 9px 12px; border-radius: 11px; border: 1px solid var(--hair); background: rgba(255, 255, 255, 0.03); text-align: left; cursor: pointer; }
+	.steps button { width: 100%; display: grid; grid-template-columns: 62px auto 1fr; align-items: center; gap: 4px 10px; padding: 7px 12px; border-radius: 11px; border: 1px solid var(--hair); background: rgba(255, 255, 255, 0.03); text-align: left; cursor: pointer; }
 	.steps button.on { border-color: var(--brass); background: var(--brass-faint); }
 	.steps .tn { font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--brass-hi); }
 	.steps b { font-weight: 400; font-size: 15px; color: #fff; }
 	.steps small { grid-column: 1 / -1; font-size: 13px; line-height: 1.35; color: var(--ink-2); white-space: pre-wrap; }
 	.steps .all { grid-template-columns: 62px 1fr; }
 	.dots { display: flex; gap: 3px; }
-	.dots i, .oflow i { width: 12px; height: 12px; border-radius: 50%; box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.8); }
+	.dots i { width: 12px; height: 12px; border-radius: 50%; box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.8); }
 	.muted { color: var(--ink-3); }
 
 	/* the strip: the guide */
@@ -483,17 +507,7 @@
 	.mface { display: block; width: 46px; height: 46px; border-radius: 50%; background-repeat: no-repeat; background-color: #0b101a; box-shadow: 0 0 0 2px var(--brass-line); }
 
 	/* the strip: every opening */
-	.olist { position: absolute; inset: 0; display: flex; gap: 12px; padding: 12px; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
 	/* each snapshot is an exact square sized from the strip's height (it used to stretch into whatever box was left) */
-	.olist { --th: calc(clamp(220px, 30vh, 300px) - 92px); }
-	.ocard { flex: none; width: calc(var(--th) + 14px); height: 100%; box-sizing: border-box; display: flex; flex-direction: column; gap: 5px; padding: 6px; border-radius: 13px; border: 1px solid var(--hair); background: rgba(255, 255, 255, 0.03); cursor: pointer; text-align: left; }
-	.ocard :global(.thumb) { flex: none; width: var(--th); height: var(--th); }
-	.ocard.on { border-color: var(--brass); box-shadow: 0 0 0 1px var(--brass); }
-	.oname { font-size: 14px; color: #fff; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-	.oflow { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--ink-3); }
-	.oflow em { font-style: normal; font-size: 10px; }
-	.oflow small { margin-left: 6px; }
-	.ocard.add { width: 150px; align-items: center; justify-content: center; gap: 8px; color: var(--brass-hi); border-style: dashed; font-size: 14px; }
 
 	@media (max-width: 760px) {
 		.hpage { position: absolute; min-height: 100%; grid-template-columns: 1fr; grid-template-rows: 52px 54vh auto auto; overflow-y: auto; }
@@ -507,12 +521,17 @@
 		.build { font-size: 0; padding: 7px; }
 		.stage { grid-row: 2; }
 		.side { grid-column: 1; grid-row: 3; min-height: 280px; }
+		.hpage.opt { grid-template-columns: 1fr; }
+		.opt .stage { grid-row: 2; }
+		.opt .side { grid-row: 3; min-height: 0; }
+		.opt .opcard { position: relative; inset: auto; }
+		.opt .opcard .opinfo { overflow: visible; }
+		.othw { flex: none; height: min(300px, 80vw); max-height: none; }
 		.strip { grid-row: 4; min-height: 260px; }
 		.ov { position: relative; grid-template-columns: 1fr; }
 		.col.hand { container-type: normal; }
 		.spread { --ch: 150px; overflow-x: auto; }
 		.col.gcol { width: auto; }
-		.olist { height: 240px; position: relative; --th: 160px; }
 		.id { left: 16px; top: 16px; width: calc(100% - 32px); }
 		.guide.onart { display: none; }
 		.col.gph { display: flex; }
