@@ -5,14 +5,13 @@
 	//  ├──────────────── strip ────────┴──────────┤   (overview, strengths, weaknesses, the starting hand side by
 	//  └───────────────────────────────────────────┘   side, matchups).
 	// Openings: the opening on the live island, turn by turn (either side of the board, or turned) · its four turns ·
-	// every opening of the hero as a snapshot. No tier, win rate or pick rate (the user's call: nothing to sway a pick).
+	// one opening at a time beside the big board. No tier, win rate or pick rate (the user's call: nothing to sway a pick).
 	import { onMount, tick } from 'svelte';
 	import { base } from '$app/paths';
 	import { goBack } from '$lib/nav';
 	import Card from '$lib/cards/Card.svelte';
 	import Icon from '$lib/ui/Icon.svelte';
 	import OpeningBoard from '$lib/openings/OpeningBoard.svelte';
-	import OpeningThumb from '$lib/openings/OpeningThumb.svelte';
 	import { heroSplash, splashFace, heroLogo, statIcon, traitIcon, starIcon, STAT_LABELS, STAT_PIPS, TRAIT_LABELS, portraitCss, heroById, HEROES_ALPHA, type Trait } from '$lib/heroes';
 	import { heroCards } from '$lib/cards/deck';
 	import { startingHand } from '$lib/cards/cardstate';
@@ -79,17 +78,7 @@
 	// the side panel's ‹ › (and ↑ ↓): the previous / next opening, wrapping round
 	$: opIdx = list.findIndex((o) => o.id === selId);
 	function shuffle(d: number) { if (list.length > 1) pick(list[(opIdx + d + list.length) % list.length].id); }
-	// the snapshots' island picture, painted once by the live board
 	let board: OpeningBoard | null = null;
-	let pic = '';
-	async function paint() {
-		for (let k = 0; k < 12 && !pic; k++) {
-			await new Promise((r) => setTimeout(r, k ? 500 : 250));
-			if (!board) return;
-			pic = await board.picture();
-		}
-	}
-	$: if (tab === 'openings' && board && !pic) void paint();
 	function key(e: KeyboardEvent) {
 		if (tab !== 'openings' || !op || (e.target as HTMLElement)?.closest?.('input, textarea, select')) return;
 		if (e.key === 'ArrowRight') step = Math.min(4, step + 1);
@@ -228,7 +217,7 @@
 				{#if shownCard != null && cards[shownCard]}<div class="pcard"><Card heroId={h.id} card={cards[shownCard]} /></div>{/if}
 			</div>
 		{:else if op}
-			<!-- one opening at a time: ‹ › on the panel's sides; title · snapshot · details · the cards turn by turn -->
+			<!-- one opening at a time: ‹ › on the panel's sides; title · details · the cards turn by turn (the big board on the left shows the plan) -->
 			<div class="opcard">
 				<button class="onav" on:click={() => shuffle(-1)} disabled={list.length < 2} aria-label="Previous opening" title="Previous opening (↑)">‹</button>
 				<div class="opinfo">
@@ -237,7 +226,6 @@
 						<span class="ocount">{opIdx + 1} / {list.length}</span>
 					</div>
 					{#if list.length > 1}<div class="odots">{#each list as o (o.id)}<button class:on={o.id === selId} on:click={() => pick(o.id)} title={o.name} aria-label={o.name}></button>{/each}</div>{/if}
-					<div class="othw"><button class="othumb" on:click={() => (step = 0)} title="Whole round">{#key op.id}<OpeningThumb {op} {pic} {turned} uid="s{op.id}" />{/key}</button></div>
 					<div class="ochips">{#if op.lane}<span>{LANES[op.lane]}</span>{/if}{#if op.size !== 'any'}<span>{SIZES[op.size]}</span>{/if}</div>
 					{#if op.goal}<div class="goal">{#each op.goal.split(/\n+/).filter(Boolean) as para, k (k)}<p>{para}</p>{/each}</div>{/if}
 					{#if op.runes?.some(Boolean)}
@@ -407,10 +395,6 @@
 	.odots { display: flex; flex-wrap: wrap; gap: 5px; margin-top: -4px; }
 	.odots button { width: 8px; height: 8px; padding: 0; border-radius: 50%; border: 0; background: rgba(255, 255, 255, 0.18); cursor: pointer; }
 	.odots button.on { background: var(--brass-hi); }
-	/* the snapshot takes what the details leave (up to 36vh), never less than 120 px — the panel makes room before it scrolls */
-	.othw { flex: 1 1 0; min-height: 120px; max-height: 36vh; container-type: size; display: grid; place-items: center; }
-	.othumb { width: min(100cqw, 100cqh); padding: 0; border: 1px solid var(--hair); border-radius: 12px; background: none; cursor: pointer; overflow: hidden; }
-	.othumb :global(.thumb) { border-radius: 11px; }
 	.goal p { margin: 0 0 8px; }
 	.goal p:last-child { margin-bottom: 0; }
 	.opinfo h2 { margin: 0; font-weight: 400; font-size: 26px; color: #fff; line-height: 1.1; }
@@ -506,8 +490,6 @@
 	.mface.vac { background: none; box-shadow: none; border: 1px dashed var(--hair); }
 	.mface { display: block; width: 46px; height: 46px; border-radius: 50%; background-repeat: no-repeat; background-color: #0b101a; box-shadow: 0 0 0 2px var(--brass-line); }
 
-	/* the strip: every opening */
-	/* each snapshot is an exact square sized from the strip's height (it used to stretch into whatever box was left) */
 
 	@media (max-width: 760px) {
 		.hpage { position: absolute; min-height: 100%; grid-template-columns: 1fr; grid-template-rows: 52px 54vh auto auto; overflow-y: auto; }
@@ -528,7 +510,6 @@
 		.opt .side { grid-row: 3; min-height: 0; overflow: visible; }
 		.opt .opcard { position: relative; inset: auto; }
 		.opt .opcard .opinfo { overflow: visible; }
-		.othw { flex: none; height: min(300px, 80vw); max-height: none; }
 		.strip { grid-row: 4; min-height: 260px; }
 		.ov { position: relative; grid-template-columns: 1fr; }
 		.col.hand { container-type: normal; }
