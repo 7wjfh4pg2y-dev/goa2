@@ -79,6 +79,36 @@
 	$: opIdx = list.findIndex((o) => o.id === selId);
 	function shuffle(d: number) { if (list.length > 1) pick(list[(opIdx + d + list.length) % list.length].id); }
 	let board: OpeningBoard | null = null;
+	/** The openings panel's type as large as it fits: --fk steps 1.4 → 1.15 until nothing scrolls; still too long → the panel WIDENS
+	 *  (the golden rule: make room) up to half the window, and only then the type goes down to 0.9. Phones scroll the page: one size. */
+	function fitType(el: HTMLElement, _dep: unknown) {
+		let raf = 0;
+		const page = el.closest('.hpage') as HTMLElement | null;
+		const over = () => el.scrollHeight - el.clientHeight > 1;
+		const set = (k: number) => el.style.setProperty('--fk', String(Math.round(k * 100) / 100));
+		const run = () => {
+			cancelAnimationFrame(raf);
+			raf = requestAnimationFrame(() => {
+				page?.style.removeProperty('--pw');
+				if (matchMedia('(max-width: 760px)').matches) { set(1.08); return; }
+				let k = 1.4;
+				set(k);
+				while (k > 1.15 && over()) set((k -= 0.05));
+				if (over() && page) {
+					const base = el.closest('.side')?.clientWidth ?? 0;
+					for (let w = base + 40; w <= innerWidth * 0.5 && over(); w += 40) page.style.setProperty('--pw', w + 'px');
+					// the wider panel may have room to spare: take the type back up while it still fits
+					while (!over() && k < 1.4) set((k += 0.05));
+					if (over() && k > 0.9) set((k -= 0.05));
+				}
+				while (k > 0.9 && over()) set((k -= 0.05));
+			});
+		};
+		const ro = new ResizeObserver(run);
+		ro.observe(el);
+		run();
+		return { update: run, destroy() { ro.disconnect(); cancelAnimationFrame(raf); } };
+	}
 	function key(e: KeyboardEvent) {
 		if (tab !== 'openings' || !op || (e.target as HTMLElement)?.closest?.('input, textarea, select')) return;
 		if (e.key === 'ArrowRight') step = Math.min(4, step + 1);
@@ -220,7 +250,7 @@
 			<!-- one opening at a time: ‹ › on the panel's sides; title · details · the cards turn by turn (the big board on the left shows the plan) -->
 			<div class="opcard">
 				<button class="onav" on:click={() => shuffle(-1)} disabled={list.length < 2} aria-label="Previous opening" title="Previous opening (↑)">‹</button>
-				<div class="opinfo">
+				<div class="opinfo" use:fitType={op.id + step}>
 					<div class="ohead">
 						<h2>{op.name}</h2>
 						<span class="ocount">{opIdx + 1} / {list.length}</span>
@@ -300,7 +330,7 @@
 	.side { grid-column: 2; grid-row: 2; }
 	.strip { grid-column: 1 / -1; grid-row: 3; }
 	/* openings: the board fills the left, one tall panel on the right */
-	.hpage.opt { grid-template-columns: minmax(0, 1fr) clamp(340px, 30vw, 480px); }
+	.hpage.opt { grid-template-columns: minmax(0, 1fr) max(clamp(360px, 32vw, 540px), var(--pw, 0px)); }
 	.opt .stage, .opt .side { grid-row: 2 / 4; }
 
 	/* overview: the painting */
@@ -383,7 +413,7 @@
 	.pcard :global(.card) { position: absolute; inset: 0; }
 	.opinfo { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 10px; padding: 18px; overflow-y: auto; }
 	.opcard { position: absolute; inset: 0; display: grid; grid-template-columns: 30px minmax(0, 1fr) 30px; }
-	.opcard .opinfo { position: relative; inset: auto; min-height: 0; padding: 16px 6px; scrollbar-width: thin; }
+	.opcard .opinfo { --fk: 1; position: relative; inset: auto; min-height: 0; gap: calc(10px * var(--fk)); padding: calc(16px * var(--fk)) calc(10px * var(--fk)); scrollbar-width: thin; }
 	.onav { display: grid; place-items: center; padding: 0; border: 0; background: rgba(255, 255, 255, 0.025); color: var(--brass-hi); font-size: 30px; line-height: 1; cursor: pointer; }
 	.onav:first-child { border-right: 1px solid var(--hair); }
 	.onav:last-child { border-left: 1px solid var(--hair); }
@@ -391,32 +421,32 @@
 	.onav:disabled { opacity: 0.25; cursor: default; }
 	.ohead { display: flex; align-items: baseline; gap: 10px; }
 	.ohead h2 { flex: 1; min-width: 0; }
-	.ocount { flex: none; font-size: 12px; letter-spacing: 0.1em; color: var(--ink-3); }
+	.ocount { flex: none; font-size: calc(12px * var(--fk, 1)); letter-spacing: 0.1em; color: var(--ink-3); }
 	.odots { display: flex; flex-wrap: wrap; gap: 5px; margin-top: -4px; }
-	.odots button { width: 8px; height: 8px; padding: 0; border-radius: 50%; border: 0; background: rgba(255, 255, 255, 0.18); cursor: pointer; }
+	.odots button { width: calc(8px * var(--fk, 1)); height: calc(8px * var(--fk, 1)); padding: 0; border-radius: 50%; border: 0; background: rgba(255, 255, 255, 0.18); cursor: pointer; }
 	.odots button.on { background: var(--brass-hi); }
-	.goal p { margin: 0 0 8px; }
+	.goal p { margin: 0 0 0.6em; }
 	.goal p:last-child { margin-bottom: 0; }
-	.opinfo h2 { margin: 0; font-weight: 400; font-size: 26px; color: #fff; line-height: 1.1; }
+	.opinfo h2 { margin: 0; font-weight: 400; font-size: calc(26px * var(--fk, 1)); color: #fff; line-height: 1.1; text-wrap: balance; }
 	.ochips { display: flex; gap: 6px; }
-	.ochips span { padding: 2px 10px; border-radius: 999px; font-size: 12px; color: var(--brass-hi); border: 1px solid var(--brass-line); }
+	.ochips span { padding: 0.15em 0.85em; border-radius: 999px; font-size: calc(12px * var(--fk, 1)); color: var(--brass-hi); border: 1px solid var(--brass-line); }
 	.fun { margin: 6px 0 0; font-size: 13px; line-height: 1.4; color: var(--ink-2); }
 	.fun b { font-weight: 400; color: var(--brass-hi); margin-right: 4px; }
-	.oprunes { display: flex; align-items: center; gap: 8px; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); }
+	.oprunes { display: flex; align-items: center; gap: 8px; font-size: calc(11px * var(--fk, 1)); letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); }
 	.orc { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 3px; border-radius: 8px; }
 	.orc.key { box-shadow: inset 0 0 0 1px #fde047; }
 	.orc small { font-size: 10px; letter-spacing: 0; color: var(--brass-hi); }
 	.orc i { font-style: normal; font-size: 10px; text-transform: none; letter-spacing: 0; }
-	.goal { margin: 0; font-size: 14px; line-height: 1.45; color: var(--ink-2); white-space: pre-wrap; }
-	.steps { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-	.steps button { width: 100%; display: grid; grid-template-columns: 62px auto 1fr; align-items: center; gap: 4px 10px; padding: 7px 12px; border-radius: 11px; border: 1px solid var(--hair); background: rgba(255, 255, 255, 0.03); text-align: left; cursor: pointer; }
+	.goal { margin: 0; font-size: calc(14px * var(--fk, 1)); line-height: 1.45; max-width: 62ch; color: var(--ink-2); white-space: pre-wrap; }
+	.steps { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: calc(6px * var(--fk, 1)); }
+	.steps button { width: 100%; display: grid; grid-template-columns: calc(62px * var(--fk, 1)) auto 1fr; align-items: center; gap: calc(4px * var(--fk, 1)) calc(10px * var(--fk, 1)); padding: calc(7px * var(--fk, 1)) calc(12px * var(--fk, 1)); border-radius: 11px; border: 1px solid var(--hair); background: rgba(255, 255, 255, 0.03); text-align: left; cursor: pointer; }
 	.steps button.on { border-color: var(--brass); background: var(--brass-faint); }
-	.steps .tn { font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--brass-hi); }
-	.steps b { font-weight: 400; font-size: 15px; color: #fff; }
-	.steps small { grid-column: 1 / -1; font-size: 13px; line-height: 1.35; color: var(--ink-2); white-space: pre-wrap; }
-	.steps .all { grid-template-columns: 62px 1fr; }
+	.steps .tn { font-size: calc(12px * var(--fk, 1)); letter-spacing: 0.1em; text-transform: uppercase; color: var(--brass-hi); }
+	.steps b { font-weight: 400; font-size: calc(15px * var(--fk, 1)); color: #fff; }
+	.steps small { grid-column: 1 / -1; font-size: calc(13px * var(--fk, 1)); line-height: 1.35; color: var(--ink-2); white-space: pre-wrap; }
+	.steps .all { grid-template-columns: calc(62px * var(--fk, 1)) 1fr; }
 	.dots { display: flex; gap: 3px; }
-	.dots i { width: 12px; height: 12px; border-radius: 50%; box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.8); }
+	.dots i { width: calc(12px * var(--fk, 1)); height: calc(12px * var(--fk, 1)); border-radius: 50%; box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.8); }
 	.muted { color: var(--ink-3); }
 
 	/* the strip: the guide */
