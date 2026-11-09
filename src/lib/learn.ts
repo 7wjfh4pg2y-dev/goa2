@@ -18,13 +18,17 @@ export type ScenePiece = { id: string; hex: string; team: string; role?: string;
 export type Area = { hex: string; r: number; color: string; hexes?: string[]; alpha?: number }
 export type Badge = { id: string; text: string; tone: 'up' | 'down' | 'even'; total?: boolean }
 export type LearnCard = { hero: string; card: HeroCardJson; tag?: string; short?: string; tone?: 'hand' | 'item' | 'gone' | 'pick'; order?: number }
-export type Scene = { pieces: ScenePiece[]; zone: string | null; areas?: Area[]; badges?: Badge[]; cards?: LearnCard[]; cardSize?: 'big' | 'row' }
+/** `hud` = the step shows the game's HUD (the HUD chapters) instead of the bare board; `pills` = the actions round your hero */
+export type Scene = { pieces: ScenePiece[]; zone: string | null; areas?: Area[]; badges?: Badge[]; cards?: LearnCard[]; cardSize?: 'big' | 'row'; hud?: 'desktop' | 'phone'; pills?: boolean; close?: boolean }
+/** one numbered marker on the HUD picture: `sel` = a CSS selector inside the tour's box */
+export type Spot = { label: string; note: string; sel: string }
 export type Block =
 	| { p: string }
 	| { list: string[] }
 	| { table: string[][] }
 	| { tip: string }
 	| { keys: { color: string; label: string; note: string; area: Area }[] }
+	| { spots: Spot[] }
 export type Step = { id: string; chapter: string; title: string; blocks: Block[]; scene: Scene }
 
 // ── the map ──
@@ -150,6 +154,20 @@ function sceneLevel(): Scene {
 }
 
 const all = (): Scene => ({ pieces: [...wave, ...startHeroes], zone: 'Center' })
+/** turn 2 of round 1: the four heroes have walked up to the middle (the HUD chapters) */
+function hudPieces(): ScenePiece[] {
+	const ps: ScenePiece[] = [...wave]
+	const put = (id: string, team: 'orange' | 'blue', to: string) => { ps.push(hero(id, nearFree('Center', to, ps), team)) }
+	put('wasp', 'blue', '9_11'); put('xargatha', 'blue', '7_11'); put('arien', 'orange', '9_7'); put('brogan', 'orange', '11_7')
+	return ps
+}
+const hudScene = (hud: 'desktop' | 'phone', pills = false): Scene => ({ pieces: hudPieces(), zone: 'Center', hud, pills })
+function sceneOthers(): Scene {
+	// Wasp pushes the Atlantean melee minion next to her two spaces straight back
+	const target = minionsOf('orange', 'melee')[0]
+	const d = nearFree('Center', target.hex, wave)
+	return { pieces: [...wave, hero('wasp', d, 'blue')], zone: 'Center', areas: [{ hex: target.hex, r: 0, color: C.violet, hexes: [target.hex] }, { hex: d, r: 0, color: HERO_COLOR.wasp, hexes: [d] }] }
+}
 
 export function learnSteps(): Step[] {
 	const shock = card('wasp', 'Shock')
@@ -257,6 +275,21 @@ export function learnSteps(): Step[] {
 			scene: sceneFastTravel()
 		},
 		{
+			id: 'others', chapter: 'Moving', title: 'Moving other units',
+			blocks: [
+				{ p: 'Many cards move **other** heroes, minions or tokens. The words matter:' },
+				{ list: [
+					'**Push N:** straight away from you, up to N spaces. It stops at the first obstacle.',
+					'**Move a unit N:** like a normal move, along any path of empty spaces.',
+					'**Swap:** two units trade spaces.',
+					'**Place:** put it on the named space, ignoring everything in between.'
+				] },
+				{ p: 'A minion that ends up outside the battle zone walks straight back to the nearest empty space of it.' },
+				{ tip: 'In the app anyone can move any piece by hand, so you carry out these effects yourself. Only an immune heavy minion is locked.' }
+			],
+			scene: sceneOthers()
+		},
+		{
 			id: 'minions', chapter: 'Fighting', title: 'Attacking minions',
 			blocks: [
 				{ p: 'The sword shows the attack value; a range or radius icon shows how far it reaches. **Range 1** = a space next to you.' },
@@ -278,6 +311,19 @@ export function learnSteps(): Step[] {
 				{ tip: 'The shields show this for Arien: two Titan minions count against him, one Atlantean melee helps. The app shows the same shields during every attack.' }
 			],
 			scene: sceneAttackHero()
+		},
+		{
+			id: 'reach', chapter: 'Fighting', title: 'Range, radius and skills',
+			blocks: [
+				{ list: [
+					'**Range N:** you may target one unit up to N spaces away. Count spaces, not a line of sight.',
+					'**Radius N:** the card affects every space up to N spaces from you.',
+					'**Skill:** a primary action that isn’t an attack, a move or a defence. Just do what the card says.'
+				] },
+				{ p: '**“Discard a card, or be defeated”** is not an attack: no defence helps. The target must discard any card from their hand. With no card to discard, they are defeated, and the hero who forced it gets the usual rewards.' },
+				{ tip: 'The radius tool on your dashboard draws a ring round your hero, so you can see who a card reaches.' }
+			],
+			scene: { ...sceneMovement(), areas: [{ hex: sceneMovement().areas![0].hex, r: 2, color: C.violet }] }
 		},
 		{
 			id: 'defeat', chapter: 'Fighting', title: 'A hero is defeated',
@@ -319,10 +365,11 @@ export function learnSteps(): Step[] {
 				{ p: 'Everyone takes back their played and discarded cards (a hand of five again). Then, if you can afford it, you **must** level up, as many times as you can pay for.' },
 				{ list: [
 					'A level costs **coins equal to your current level**.',
-					'Return one coloured card to your deck. Take the two cards of that colour one tier higher: one goes into your hand, the other becomes an **item**, a lasting +1 bonus (upside down under your board).',
+					'Return one coloured card to your deck. Take the two cards of that colour one tier higher: one goes into your hand, the other becomes an **item**, a lasting +1 to one stat (attack, defence, initiative, movement, range or radius) for the rest of the game.',
 					'All three colours reach **Tier II** before any goes to Tier III.',
 					'At **level 8** your **Ultimate** switches on for the rest of the game.',
-					'Couldn’t afford a level this round? Take a **pity coin** (no level this round even if you now could).'
+					'Couldn’t afford a level this round? Take a **pity coin** (no level this round even if you now could).',
+						'This round’s pick can still be swapped for its twin until the next round starts.'
 				] }
 			],
 			scene: sceneLevel()
@@ -337,7 +384,7 @@ export function learnSteps(): Step[] {
 					'**Hold:** do nothing with your card.',
 					'“This turn / Next turn / This round” effects last that long. The app lights the card while it runs.',
 					'A minion pushed out of the battle zone walks straight back to the nearest empty space of it.',
-					'Tokens and markers leave at the end of the round unless the card says otherwise.',
+					'**Tokens** (trees, mines, zombies…) sit on spaces and block like obstacles. **Markers** (Poison, Bounty) ride on a hero. Both leave at the end of the round unless the card says otherwise. A defeated hero’s tokens stay.',
 					'Pushes go in a straight line, and units that can’t move can still be pushed.',
 					'If you can’t do something a card says, stop there.',
 					'You can’t attack your own team’s heroes or minions.'
@@ -354,9 +401,123 @@ export function learnSteps(): Step[] {
 					'Try to defeat a minion in the first round.',
 					'After the reveal, read everyone’s cards, especially **red** and **gold**.'
 				] },
-				{ tip: 'That’s everything for a first game. Create a game or join your friends from the menu.' }
+				{ tip: 'That’s the rules. Next: the game’s screen, on a computer and on a phone.' }
 			],
 			scene: all()
+		},
+		{
+			id: 'hud-screen', chapter: 'Desktop HUD', title: 'The game screen',
+			blocks: [
+				{ p: 'On a computer or tablet the board fills the screen and the HUD sits round its edges. Tap a number, on the picture or below, to light that part.' },
+				{ spots: [
+					{ label: 'Game lobby', sel: '.t-menu', note: 'The ☰ button: the room, the players and their seats, your HUD settings, and Leave.' },
+					{ label: 'Top bar', sel: '.t-bar', note: 'Round and turn, each team’s Life (the enemy on the left, yours on the right), the tie-breaker coin and the waves left. The beam under it shows the lane: where the battle zone is and how each side’s wave is holding.' },
+					{ label: 'Control wheel', sel: '.t-wheel', note: 'Your view and effects: recentre, zoom, turn the board, saved views, the map’s look, a compact HUD, effects on or off. These change only your screen.' },
+					{ label: 'Turn order', sel: '.t-order .orow', note: 'While players choose: a dot per player, filled once they’re in. After the reveal: every card in initiative order, the lit one acting now. Tap a card to read it.' },
+					{ label: 'Enemy boards', sel: '.t-enemies', note: 'Each enemy’s board: level, coins, items, their four turn slots and their hand size. Tap a board for the whole thing: discards, removed cards, markers.' },
+					{ label: 'Your team', sel: '.t-allies', note: 'Your teammates’ boards, laid out the same way.' },
+					{ label: 'Chronicle', sel: '.t-log', note: 'The game log, newest at the bottom. Point at it to see every lasting effect in play; tap one to read its card.' },
+					{ label: 'Your hand', sel: '.t-hand', note: 'Your cards, tucked under the screen’s edge. Point at them (or tap) to raise the hand.' },
+					{ label: 'Your dashboard', sel: '.t-dash .mydash', note: 'Everything about you. The next step goes through it.' }
+				] }
+			],
+			scene: hudScene('desktop')
+		},
+		{
+			id: 'hud-dash', chapter: 'Desktop HUD', title: 'Your dashboard',
+			blocks: [
+				{ spots: [
+					{ label: 'Your hero', sel: '.t-dash .cap.medal', note: 'Your portrait in the level ring: eight segments, one per level. Tap it for your full board.' },
+					{ label: 'Name and coins', sel: '.t-dash .dme', note: 'Your hero, your name and your coins. The − and + fix a miscount.' },
+					{ label: 'Turn slots', sel: '.t-dash .dwells', note: 'Turns I to IV of this round. A played card stays face up in its slot. Tap a slot to read its card, even your own face-down one before the reveal.' },
+					{ label: 'Discard pile', sel: '.t-dash .dw.pile', note: 'Cards you discarded this round, to defend or because a card said so. Tap to look through them.' },
+					{ label: 'Deck', sel: '.t-dash .dw.deckw', note: 'Your deck and level-ups: the tree of every card your hero can grow into. It glows when you can level up.' },
+					{ label: 'Tools', sel: '.t-dash .dtools', note: 'Tokens and markers your hero can place (greyed out if it has none) · a radius ring round your hero, public or private · ping · how your hand shows: auto-hide, side by side, or docked as small ribbons.' },
+					{ label: 'Action ring', sel: '.t-dash .dgo', note: 'The one button that matters. It always names the next thing to do: Spawn hero, Commit, Take back, End turn, Defended, Level up. Whatever you load (a card, an attack) is confirmed here; the small × unloads it.' }
+				] }
+			],
+			scene: { ...hudScene('desktop'), close: true }
+		},
+		{
+			id: 'hud-cards', chapter: 'Desktop HUD', title: 'Playing your cards',
+			blocks: [
+				{ list: [
+					'**Choose:** tap a card in your hand. The ring turns into **Commit**; tap it to play the card face down. Changed your mind? **Take back**, until everyone is in.',
+					'Tap the chosen card again to read it large. Any other card on screen (a slot, a board, the turn order) opens when you tap it.',
+					'**The reveal:** once everyone is in, a short countdown runs and every card turns over, in acting order. Click to close it.',
+					'**Your turn:** “Your turn” flies into the ring. Carry out your card on the board, then tap **End turn**.',
+					'**Lasting effects:** if your card has one, the ring asks **Effect?** on your turn. Confirm it and the card glows for everyone while it lasts.',
+					'**Defending:** an attack on you shows who is attacking. Tap a card, **Discard** it on the ring (that is your defence), then **Defended**. Or **Defeated** if it doesn’t hold.',
+					'Drag the cards in your hand into any order you like. Only you see it.'
+				] }
+			],
+			scene: hudScene('desktop')
+		},
+		{
+			id: 'hud-pieces', chapter: 'Desktop HUD', title: 'Pieces on the board',
+			blocks: [
+				{ p: 'Click a piece to select it. Its actions appear round it, always on the same side:' },
+				{ spots: [
+					{ label: 'Fight', sel: '.pills .pside.top', note: 'Above: Attack a hero, Defeat it outright (for “discard or be defeated” effects), Forced discard. On a minion: Defeat, with the coins it pays.' },
+					{ label: 'Move', sel: '.pills .pside.right', note: 'Right: Move picks the piece up and your next click puts it down. Swap trades its space with the next piece you click.' },
+					{ label: 'Off the board', sel: '.pills .pside.bottom', note: 'Below: Remove (no rewards), Defeated (your own hero: pick who defeated you). Tokens get their Remove here too.' },
+					{ label: 'Card powers', sel: '.pills .pside.left', note: 'Left: what your card lets you do, e.g. Clear the tokens next to you after an attack card, or a hero’s special move.' }
+				] },
+				{ list: [
+					'Anything that costs coins or Life loads onto the **action ring** first: confirm there, or × to cancel.',
+					'You can drag a piece with the mouse too. **Esc** puts it back.',
+					'**Ping:** Alt+click a space (or the ping tool) to flash a ring your table can see.'
+				] }
+			],
+			scene: hudScene('desktop', true)
+		},
+		{
+			id: 'hud-host', chapter: 'Desktop HUD', title: 'The wheel, the lobby and the host',
+			blocks: [
+				{ spots: [
+					{ label: 'Control wheel', sel: '.t-wheel', note: 'Effects (switch off anything that moves) · Zoom · Turn the board · Views (save three) · HUD (make the top bar, boards, order or log compact) · Version (the map’s look). 4★ heroes add a Heroes item for their own effects.' },
+					{ label: 'Game lobby', sel: '.t-menu', note: 'Seats and watchers, your connection, Leave. A watcher can ask for a seat here. When a new version of the app is ready, Update reloads you straight back into your seat.' },
+					{ label: 'Chronicle', sel: '.t-log', note: 'The host’s Undo sits in its head: it takes back the last action.' },
+					{ label: 'Top bar', sel: '.t-bar', note: 'The host flips Life counters, wave counters and the tie-breaker coin by tapping them, for card effects the app leaves to you.' }
+				] },
+				{ p: 'The **host** (whoever created the room) keeps the game moving: **Next turn**, **Minion battle**, **Level up** and **Next round** appear on their ring. In the lobby the host can give seats, pass the host role on, fix a player’s deck and end the game; the wheel adds **Spawn** (a minion) and **Push** (a manual push). Tapping a card in the turn order skips to it. Drop out and the next player takes over as host after 15 seconds.' }
+			],
+			scene: hudScene('desktop')
+		},
+		{
+			id: 'phone-screen', chapter: 'Phone HUD', title: 'On a phone',
+			blocks: [
+				{ p: 'Phones get their own layout: the same parts, stacked to fit.' },
+				{ spots: [
+					{ label: 'Game lobby', sel: '.t-ptop .ib.menu', note: 'The room, the players, the log with the host’s Undo, and Leave.' },
+					{ label: 'Round and coin', sel: '.t-ptop .rt', note: 'R1 and this turn’s number, then the tie-breaker coin.' },
+					{ label: 'Waves and Life', sel: '.t-ptop .pill.life', note: 'Waves left and each team’s Life (the enemy’s on the left). Tap for the counters themselves.' },
+					{ label: 'Turn status', sel: '.t-ptop .mid', note: 'Dots while players choose; after the reveal, the faces in acting order. Tap your face to see every card in play.' },
+					{ label: 'Control wheel', sel: '.t-ptop .ib.wheel', note: 'View, zoom (with a lock against accidental pinches), effects.' },
+					{ label: 'Players', sel: '.t-strip', note: 'Everyone else: level ring, hero, this turn’s card, items. Tap a player for their full board.' },
+					{ label: 'Your hand', sel: '.t-phand', note: 'Tap to raise it, tap a card to choose it, tap again to read it.' },
+					{ label: 'You', sel: '.t-pdash .me', note: 'Your hero and items. Tap for your full board.' },
+					{ label: 'Slots and piles', sel: '.t-pdash .wells', note: 'Turns I to IV, your discard pile and your deck (it glows for a level-up).' },
+					{ label: 'Tools', sel: '.t-pdash .tools', note: 'Tokens, the radius ring, ping, and the hand style: fanned, side by side, or banners.' },
+					{ label: 'Action pill', sel: '.t-pdash .act', note: 'The phone’s action ring: Commit, End turn, Defended and the rest. The small × unloads it.' }
+				] }
+			],
+			scene: hudScene('phone')
+		},
+		{
+			id: 'phone-play', chapter: 'Phone HUD', title: 'Playing on a phone',
+			blocks: [
+				{ list: [
+					'**Pieces:** tap one for its actions. **Move**, then tap a space. A finger drag pans the board, so pieces don’t slide by accident (the host can switch dragging on).',
+					'**Ping:** press and hold the board.',
+					'**Zoom:** pinch, or the wheel’s Zoom. Lock it there if you keep zooming by mistake.',
+					'**Hand style:** the hand tool cycles fanned, side by side and banners. Hold it to keep the hand up.',
+					'**Sideways:** turn the phone and the other players move to a left column, your dashboard to a right one. Swipe either column to the edge to give the board more room.',
+					'**Full screen:** add the site to your Home Screen and it opens like an app.'
+				] },
+				{ tip: 'That’s everything. Create a game or join your friends from the menu.' }
+			],
+			scene: hudScene('phone')
 		}
 	]
 }

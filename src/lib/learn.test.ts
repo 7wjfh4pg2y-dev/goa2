@@ -38,4 +38,16 @@ describe('how to play (learn.ts)', () => {
 		expect(mid.color).toBe('#ef4f5c')
 		expect(a.filter((x) => x.color !== '#ef4f5c').length).toBeGreaterThan(1)
 	})
+	it('the HUD chapters: desktop and phone steps, every marker named once with a target and a note', () => {
+		const hud = steps.filter((s) => s.scene.hud)
+		expect(hud.some((s) => s.scene.hud === 'desktop')).toBe(true)
+		expect(hud.some((s) => s.scene.hud === 'phone')).toBe(true)
+		for (const s of hud) {
+			for (const b of s.blocks) if ('spots' in b) {
+				expect(new Set(b.spots.map((x) => x.label)).size, s.id).toBe(b.spots.length)
+				for (const x of b.spots) { expect(x.sel, `${s.id}: ${x.label}`).toBeTruthy(); expect(x.note.length, `${s.id}: ${x.label}`).toBeGreaterThan(10) }
+			}
+		}
+		expect(steps[steps.length - 1].scene.hud).toBe('phone')
+	})
 })

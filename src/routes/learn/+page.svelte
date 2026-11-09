@@ -7,7 +7,8 @@
 	import BoardCanvas from '$lib/BoardCanvas.svelte';
 	import Card from '$lib/cards/Card.svelte';
 	import Icon from '$lib/ui/Icon.svelte';
-	import { learnSteps, LEARN_MAP } from '$lib/learn';
+	import { learnSteps, LEARN_MAP, type Spot } from '$lib/learn';
+	import HudTour from '$lib/learn/HudTour.svelte';
 	import { throneHex } from '$lib/match';
 
 	const steps = learnSteps();
@@ -25,6 +26,10 @@
 	$: zoneOn = zoneHover >= 0 ? zoneHover : zonePick;
 	$: areas = keyBlock ? (zoneOn >= 0 ? [keyBlock.keys[zoneOn].area] : []) : scene.areas ?? [];
 	$: chapters = [...new Set(steps.map((s) => s.chapter))];
+	// the HUD steps: numbered parts of the HUD picture; a tap (here or on the picture) lights one
+	let spotPick = -1;
+	$: spotBlock = step.blocks.find((b) => 'spots' in b) as { spots: Spot[] } | undefined;
+	$: spots = spotBlock?.spots ?? [];
 	const thrones = (['orange', 'blue'] as const).map((t) => ({ hex: throneHex(LEARN_MAP, t), team: t })).filter((t): t is { hex: string; team: 'orange' | 'blue' } => !!t.hex);
 	// desktop: the island sits right of the text panel (and above the cards, when there are some)
 	$: inset = phone ? null : { t: 100, b: scene.cards ? Math.min(h * 0.42, 360) : 24, l: Math.min(560, w * 0.4) + 24, r: 24 };
@@ -37,7 +42,7 @@
 		const k = Math.max(0, Math.min(steps.length - 1, n));
 		if (k === i) return;
 		i = k;
-		zonePick = -1; zoneHover = -1;
+		zonePick = -1; zoneHover = -1; spotPick = -1;
 		textEl?.scrollTo(0, 0);
 		board?.reset();
 		try { sessionStorage.setItem('goa2-learn', String(k)); } catch { /* ignore */ }
@@ -88,7 +93,11 @@
 		</header>
 	{/if}
 	<div class="stage">
-		{#if ready}
+		{#if ready && scene.hud}
+			<div class="tourbox" class:phonebox={scene.hud === 'phone'}>
+				<HudTour mode={scene.hud} pieces={scene.pieces} {spots} active={spotPick} pills={!!scene.pills} close={!!scene.close} onSpot={(n) => (spotPick = spotPick === n ? -1 : n)} />
+			</div>
+		{:else if ready}
 			<BoardCanvas bind:this={board} map={LEARN_MAP} look="island" pieces={scene.pieces} {thrones} glowZone={scene.zone} activeZone={scene.zone}
 				{areas} badges={scene.badges ?? []} {inset} />
 		{/if}
@@ -128,6 +137,9 @@
 						{:else if 'keys' in b}
 							<div class="keys">{#each b.keys as z, n (z.label)}<button class:on={zonePick === n} on:click={() => (zonePick = zonePick === n ? -1 : n)} on:mouseenter={() => (zoneHover = n)} on:mouseleave={() => (zoneHover = -1)}><i style="background:{z.color}"></i>{z.label}</button>{/each}</div>
 							<p class="znote">{zoneOn >= 0 ? b.keys[zoneOn].note : 'Pick a zone to see it on the island.'}</p>
+						{:else if 'spots' in b}
+							<div class="spots">{#each b.spots as sp, n (sp.label)}<button class:on={spotPick === n} on:click={() => (spotPick = spotPick === n ? -1 : n)}><i>{n + 1}</i>{sp.label}</button>{/each}</div>
+							<p class="znote snote">{spotPick >= 0 ? b.spots[spotPick].note : 'Pick a number to see what that part does.'}</p>
 						{:else if 'table' in b}
 							<table><tbody>{#each b.table as row, r (r)}<tr>{#each row as cell, c (c)}{#if r === 0 || c === 0}<th>{cell}</th>{:else}<td>{cell}</td>{/if}{/each}</tr>{/each}</tbody></table>
 						{/if}
@@ -175,6 +187,15 @@
 	.keys button:hover { border-color: var(--brass-line); color: var(--ink); }
 	.keys button.on { border-color: var(--brass); color: var(--ink); background: var(--brass-faint); }
 	.znote { min-height: 4.5em; color: var(--ink-2); }
+	.spots { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; margin: 2px 0 10px; }
+	.spots button { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 8px; border: 1px solid var(--hair); background: rgba(4, 14, 26, 0.4); color: var(--ink-2); font: inherit; font-size: 14px; text-align: left; cursor: pointer; }
+	.spots button:hover { border-color: var(--brass-line); color: var(--ink); }
+	.spots button.on { border-color: var(--brass); color: var(--ink); background: var(--brass-faint); }
+	.spots i { flex: none; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-size: 12px; color: #1b1204; background: linear-gradient(180deg, #f4dfa8, #d8b36a); }
+	.snote { min-height: 6em; }
+	/* the HUD steps: the picture fills the stage right of the text (phones: the board's place) */
+	.tourbox { position: absolute; left: calc(min(540px, 40vw) + 40px); right: 24px; top: 96px; bottom: 16px; }
+	.phone .tourbox { left: 8px; right: 8px; top: 8px; bottom: 8px; }
 	.keys i { width: 14px; height: 14px; border-radius: 3px; flex: none; opacity: 0.85; }
 	table { width: 100%; border-collapse: collapse; margin: 0 0 14px; font-size: 15px; }
 	th, td { padding: 7px 8px; border-bottom: 1px solid var(--hair); text-align: left; }
@@ -216,8 +237,8 @@
 	.learn:not(.phone) .side { top: 96px; padding: 20px 22px 18px; gap: 12px; }
 	.kick { display: flex; align-items: center; gap: 10px; color: var(--ink-3); }
 	.kick em { font-style: normal; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--hair); font-size: 11px; }
-	/* narrower windows: only the current chapter keeps its name */
-	@media (max-width: 1380px) { .st:not(.on) .lbl { display: none; } .ln { max-width: 22px; } }
+	/* eleven chapters: only the current one keeps its name (all of them fit from ~2100 px) */
+	@media (max-width: 2100px) { .st:not(.on) .lbl { display: none; } .ln { max-width: 22px; } }
 
 	/* phone: board on top, the text below, all on one screen */
 	.phone .stage { bottom: auto; height: 42dvh; }
@@ -227,6 +248,10 @@
 	.phone .txt h1 { font-size: 22px; margin: 2px 0 6px; }
 	.phone .txt p, .phone .txt li { font-size: 14px; line-height: 1.45; }
 	.phone .sf .btn { min-height: 42px; }
+	.phone .spots { gap: 4px 6px; margin-bottom: 6px; }
+	.phone .spots button { padding: 2px 6px; font-size: 12.5px; gap: 6px; }
+	.phone .spots i { width: 17px; height: 17px; font-size: 11px; }
+	.phone .snote { min-height: 4.4em; font-size: 13px; margin-bottom: 0; }
 	.phone .cards { left: 10px; right: 10px; bottom: 8px; gap: 6px; }
 	.phone .lc { max-width: 22vw; }
 	.phone .cards.big .lc { width: 30vw; max-width: 30vw; }

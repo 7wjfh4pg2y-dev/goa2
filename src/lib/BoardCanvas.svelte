@@ -385,6 +385,8 @@
 		zoomAt(scale * f, r.left + r.width / 2, r.top + r.height / 2);
 	}
 	export function rotateBy(deg: number) { spin += deg; }
+	/** zoom by `f` round a point on screen (client px), e.g. a piece — How to play's HUD tour */
+	export function zoomAround(f: number, clientX: number, clientY: number) { zoomAt(scale * f, clientX, clientY); }
 	export function reset() { spin = 0; atHome = true; scale = home?.scale ?? 1; panX = home?.panX ?? 0; panY = home?.panY ?? 0; }
 	// The resting view when the HUD takes a slice of the box (`inset`): the island a little smaller and moved to the
 	// middle of the free area. It follows the window until the player pans, zooms or loads a saved view (`atHome`).
