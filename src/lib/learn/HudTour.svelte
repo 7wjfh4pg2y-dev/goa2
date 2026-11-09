@@ -20,7 +20,7 @@
 	import { throneHex, type LogEntry } from '$lib/match';
 	import { heroById, portraitCss } from '$lib/heroes';
 	import { heroCards, heroName } from '$lib/cards/deck';
-	import { newPlayerCardState, commitCard, revealTurn, levelOf, type PlayerCardState } from '$lib/cards/cardstate';
+	import { newPlayerCardState, commitCard, revealTurn, takeUpgrade, levelOf, type PlayerCardState } from '$lib/cards/cardstate';
 
 	type Team = 'orange' | 'blue';
 	export let mode: 'desktop' | 'phone' = 'desktop';
@@ -37,7 +37,7 @@
 	const markArt = () => '';
 	const nop = () => {};
 
-	// ── a made-up 2 v 2: you are Wasp (Titans), turn 2 of round 1, the cards are face up and yours acts first ──
+	// ── a made-up 2 v 2: you are Wasp (Titans), turn 2 of round 2 (everyone levelled once: one item each), the cards are face up and yours acts first ──
 	const P = [
 		{ id: 'p1', name: 'Zara', hero: 'wasp', team: 'blue' as Team, color: '#eab308', t1: 'GREEN', t2: 'BLUE' },
 		{ id: 'p2', name: 'Priya', hero: 'xargatha', team: 'blue' as Team, color: '#22c55e', t1: 'GREEN', t2: 'RED' },
@@ -45,8 +45,10 @@
 		{ id: 'p4', name: 'Sam', hero: 'brogan', team: 'orange' as Team, color: '#a855f7', t1: 'GREEN', t2: 'RED' }
 	];
 	const tierOne = (h: string, c: string) => heroCards(h).findIndex((x) => x.level === 1 && x.color === c);
+	const tierTwo = (h: string, c: string) => heroCards(h).findIndex((x) => x.level === 2 && x.color === c && !x.handicapped);
 	function stateOf(p: (typeof P)[number]): PlayerCardState {
-		let s = newPlayerCardState(p.hero);
+		let s = takeUpgrade(newPlayerCardState(p.hero), tierTwo(p.hero, 'RED'));
+		s = { ...s, level: levelOf(s) };
 		s = revealTurn(commitCard(s, tierOne(p.hero, p.t1)), 0);
 		s = revealTurn(commitCard(s, tierOne(p.hero, p.t2)), 1);
 		return { ...s, coins: p.id === 'p1' ? 2 : 1 };
@@ -135,7 +137,7 @@
 			{#if mode === 'desktop'}
 				<button class="corner menu t-menu" aria-label="Game lobby" on:click={nop}><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" /></svg></button>
 				<div class="bar t-bar">
-					<HudTop W={1440} round={1} turn={2} lifeTok={life} waveTok={waves} tieBreaker="blue" left="orange" zone={1} zones={3}
+					<HudTop W={1440} round={2} turn={2} lifeTok={life} waveTok={waves} tieBreaker="blue" left="orange" zone={1} zones={3}
 						counts={{ orange: 5, blue: 6 }} starts={{ orange: 6, blue: 6 }} {lifeArt} {tieArt} />
 				</div>
 				<button class="corner ctl t-wheel" aria-label="Control centre" on:click={nop}><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" /><path d="M12 6.5l1.6 4 4 1.5-4 1.5-1.6 4-1.6-4-4-1.5 4-1.5z" /></svg></button>
@@ -168,7 +170,7 @@
 				{/if}
 			{:else}
 				<div class="ptop t-ptop">
-					<PhoneTop round={1} turn={2} tieBreaker="blue" {tieArt} waves={4} life={{ orange: 6, blue: 6 }} left="orange" coins={mine.coins} zone={1} zones={3}
+					<PhoneTop round={2} turn={2} tieBreaker="blue" {tieArt} waves={4} life={{ orange: 6, blue: 6 }} left="orange" coins={mine.coins} zone={1} zones={3}
 						counts={{ orange: 5, blue: 6 }} starts={{ orange: 6, blue: 6 }} me={me.id}
 						status={{ planning: false, countdown: false, dots, order: order.map((o) => ({ pid: o.pid, portrait: o.portrait, color: o.color, team: o.team })), acting }} />
 				</div>

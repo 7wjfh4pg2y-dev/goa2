@@ -413,7 +413,7 @@ export function learnSteps(): Step[] {
 					{ label: 'Game lobby', sel: '.t-menu', note: 'The ☰ button: the room, the players and their seats, your HUD settings, and Leave.' },
 					{ label: 'Top bar', sel: '.t-bar', note: 'Round and turn, each team’s Life (the enemy on the left, yours on the right), the tie-breaker coin and the waves left. The beam under it shows the lane: where the battle zone is and how each side’s wave is holding.' },
 					{ label: 'Control wheel', sel: '.t-wheel', note: 'Your view and effects: recentre, zoom, turn the board, saved views, the map’s look, a compact HUD, effects on or off. These change only your screen.' },
-					{ label: 'Turn order', sel: '.t-order .orow', note: 'While players choose: a dot per player, filled once they’re in. After the reveal: every card in initiative order, the lit one acting now. Tap a card to read it.' },
+					{ label: 'Turn order', sel: '.t-order .orow', note: 'While players choose: a dot per player, filled once they’re in. After the reveal: every card in initiative order, the lit one acting now. Tap your card to read it; tap someone else’s to nudge them.' },
 					{ label: 'Enemy boards', sel: '.t-enemies', note: 'Each enemy’s board: level, coins, items, their four turn slots and their hand size. Tap a board for the whole thing: discards, removed cards, markers.' },
 					{ label: 'Your team', sel: '.t-allies', note: 'Your teammates’ boards, laid out the same way.' },
 					{ label: 'Chronicle', sel: '.t-log', note: 'The game log, newest at the bottom. Point at it to see every lasting effect in play; tap one to read its card.' },
@@ -427,11 +427,12 @@ export function learnSteps(): Step[] {
 			id: 'hud-dash', chapter: 'Desktop HUD', title: 'Your dashboard',
 			blocks: [
 				{ spots: [
-					{ label: 'Your hero', sel: '.t-dash .cap.medal', note: 'Your portrait in the level ring: eight segments, one per level. Tap it for your full board.' },
+					{ label: 'Your hero', sel: '.t-dash .cap.medal', note: 'Your portrait in the level ring: eight segments, one per level. The clock badge is your initiative this turn, items included. Tap it for your full board.' },
 					{ label: 'Name and coins', sel: '.t-dash .dme', note: 'Your hero, your name and your coins. The − and + fix a miscount.' },
+						{ label: 'Stats and items', sel: '.t-dash .bubs', note: 'Your six stats: attack, defence, initiative, movement, range and radius. Every level-up turns the twin of the card you take into an item: +1 to one stat for the rest of the game. A bubble with items lights up, its rim in the colour of the card behind each one. Point at a bubble for its name and bonus.' },
 					{ label: 'Turn slots', sel: '.t-dash .dwells', note: 'Turns I to IV of this round. A played card stays face up in its slot. Tap a slot to read its card, even your own face-down one before the reveal.' },
 					{ label: 'Discard pile', sel: '.t-dash .dw.pile', note: 'Cards you discarded this round, to defend or because a card said so. Tap to look through them.' },
-					{ label: 'Deck', sel: '.t-dash .dw.deckw', note: 'Your deck and level-ups: the tree of every card your hero can grow into. It glows when you can level up.' },
+					{ label: 'Deck', sel: '.t-dash .dw.deckw', note: 'Your deck and level-ups: the tree of every card your hero can grow into. It glows when you can level up. Once the ultimate is within reach, a drawer slides out beside your portrait with Unlock.' },
 					{ label: 'Tools', sel: '.t-dash .dtools', note: 'Tokens and markers your hero can place (greyed out if it has none) · a radius ring round your hero, public or private · ping · how your hand shows: auto-hide, side by side, or docked as small ribbons.' },
 					{ label: 'Action ring', sel: '.t-dash .dgo', note: 'The one button that matters. It always names the next thing to do: Spawn hero, Commit, Take back, End turn, Defended, Level up. Whatever you load (a card, an attack) is confirmed here; the small × unloads it.' }
 				] }
@@ -448,6 +449,7 @@ export function learnSteps(): Step[] {
 					'**Your turn:** “Your turn” flies into the ring. Carry out your card on the board, then tap **End turn**.',
 					'**Lasting effects:** if your card has one, the ring asks **Effect?** on your turn. Confirm it and the card glows for everyone while it lasts.',
 					'**Defending:** an attack on you shows who is attacking. Tap a card, **Discard** it on the ring (that is your defence), then **Defended**. Or **Defeated** if it doesn’t hold.',
+					'During an attack a **sword** floats over the attacker and a **shield** over the defender, with the numbers worked out: card, items and minions. Point at either (or tap) to see the sum.',
 					'Drag the cards in your hand into any order you like. Only you see it.'
 				] }
 			],
@@ -470,6 +472,20 @@ export function learnSteps(): Step[] {
 				] }
 			],
 			scene: hudScene('desktop', true)
+		},
+		{
+			id: 'hud-round', chapter: 'Desktop HUD', title: 'Battle and level-up on screen',
+			blocks: [
+				{ list: [
+					'**Minion battle:** after turn 4 the host starts it from their ring. If your team has fewer minions, yours glow: tap one and pick **For the battle**, or **Let the game choose**.',
+					'**Level up:** the host opens the level-up step. A splash tells you whether you can level (and how many coins you have to spend), and your deck opens by itself if you must.',
+					'**Your deck:** three colour trees, Tier I at the bottom up to Tier III, the ultimate on top. Tap **Take** under the card you want. The choice shows the card going into your hand and its twin becoming your item; ⇄ flips them. Confirm pays the coins.',
+					'Until the next round you can still **Swap** this round’s pick for its twin. Other players’ picks stay hidden until then.',
+					'Couldn’t afford a level? You get a **pity coin** at the end of the round.',
+					'Everyone done: the host taps **Next round** twice.'
+				] }
+			],
+			scene: { ...hudScene('desktop'), close: true }
 		},
 		{
 			id: 'hud-host', chapter: 'Desktop HUD', title: 'The wheel, the lobby and the host',
@@ -496,7 +512,8 @@ export function learnSteps(): Step[] {
 					{ label: 'Control wheel', sel: '.t-ptop .ib.wheel', note: 'View, zoom (with a lock against accidental pinches), effects.' },
 					{ label: 'Players', sel: '.t-strip', note: 'Everyone else: level ring, hero, this turn’s card, items. Tap a player for their full board.' },
 					{ label: 'Your hand', sel: '.t-phand', note: 'Tap to raise it, tap a card to choose it, tap again to read it.' },
-					{ label: 'You', sel: '.t-pdash .me', note: 'Your hero and items. Tap for your full board.' },
+					{ label: 'You', sel: '.t-pdash .me', note: 'Your hero in the level ring and your initiative this turn. Tap for your full board.' },
+						{ label: 'Stats and items', sel: '.t-pdash .bubs', note: 'Your six stats. Each level-up adds an item (+1 to one stat); a bubble with items lights up, its rim in the colour of the card behind it.' },
 					{ label: 'Slots and piles', sel: '.t-pdash .wells', note: 'Turns I to IV, your discard pile and your deck (it glows for a level-up).' },
 					{ label: 'Tools', sel: '.t-pdash .tools', note: 'Tokens, the radius ring, ping, and the hand style: fanned, side by side, or banners.' },
 					{ label: 'Action pill', sel: '.t-pdash .act', note: 'The phone’s action ring: Commit, End turn, Defended and the rest. The small × unloads it.' }
