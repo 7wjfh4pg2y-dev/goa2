@@ -31,16 +31,19 @@
 	export let onHero: (id: string) => void = () => {};
 	/** matchups from the game records (null = none yet → the guide's hand-written lists) */
 	export let record: HeroMatchups | null = null;
-	type MuRow = { label: string; faces: { id: string; tip: string }[] };
+	type MuRow = { label: string; faces: { id: string; tip: string; wl?: string }[] };
 	const tipOf = (m: Matchup, with_: boolean) => `${heroById(m.hero)?.name ?? m.hero} — ${m.wins}–${m.games - m.wins} ${with_ ? 'together' : 'against'}`;
 	$: muFromData = !!record && (record.strong.length + record.weak.length + record.partners.length) > 0;
 	/** our own record of this hero (the Hall's Total), for the Local side of the stats panel */
 	export let local: HeroAgg | null = null;
+	/** the BETA page (/heroes-beta, GMs): the logo top right, no minion tags, strengths / weaknesses on the right of
+	 *  the painting, our own records only (no Local | Global switch), wins / losses as counts, matchups with their W–L */
+	export let beta = false;
 	// ONE switch for the stats panel and Matchups: Local (our games, else the guide's lists) | Global (globalstats.ts)
 	let srcPick: 'local' | 'global' | '' = '';
 	$: gl = globalOf(h.id);
 	$: hasLocal = !!local && local.games > 0;
-	$: src = !gl ? 'local' : srcPick || (hasLocal || muFromData ? 'local' : 'global');
+	$: src = beta || !gl ? 'local' : srcPick || (hasLocal || muFromData ? 'local' : 'global');
 	$: muSrc = src;
 	type StatView = { wr: number | null; impact: number | null; ci: [number, number, number] | null; won: number[] };
 	$: view = (src === 'global' && gl
@@ -50,7 +53,7 @@
 	$: muRows = (muSrc === 'global' && gl
 		? [['Strong against', gl.beats], ['Struggles against', gl.countered], ['Best with', gl.mates]].map(([label, vs]) => ({ label, faces: (vs as GlobalVs[]).map((v) => ({ id: v[0], tip: glTip(v) })) }))
 		: muFromData && record
-		? [['Strong against', record.strong, false], ['Struggles against', record.weak, false], ['Best with', record.partners, true]].map(([label, ms, w]) => ({ label, faces: (ms as Matchup[]).map((m) => ({ id: m.hero, tip: tipOf(m, w as boolean) })) }))
+		? [['Strong against', record.strong, false], ['Struggles against', record.weak, false], ['Best with', record.partners, true]].map(([label, ms, w]) => ({ label, faces: (ms as Matchup[]).map((m) => ({ id: m.hero, tip: tipOf(m, w as boolean), wl: `${m.wins}–${m.games - m.wins}` })) }))
 		: [['Strong against', g.strong], ['Struggles against', g.weak], ['Best with', g.partners]].map(([label, ids]) => ({ label, faces: (ids as string[]).map((id) => ({ id, tip: heroById(id)?.name ?? id })) }))
 	) as MuRow[];
 
@@ -134,30 +137,30 @@
 		<h3>Overview</h3>
 		<div class="over">{#each g.overview.split(/\n+/).filter(Boolean) as para, k (k)}<p class:auto={g.auto.overview}>{para}</p>{/each}</div>
 		{#if g.funFact?.trim()}<p class="fun"><b>Fun fact</b> {g.funFact}</p>{/if}
-		<div class="sw">
+		{#if !beta || cls === 'instrip'}<div class="sw">
 			<div><h3>Strengths</h3><ul>{#each g.strengths as x, k (k)}<li class="good">{x}</li>{/each}</ul></div>
 			<div><h3>Weaknesses</h3><ul>{#each g.weaknesses as x, k (k)}<li class="bad">{x}</li>{/each}</ul></div>
-		</div>
+		</div>{/if}
 	</div>
 {/snippet}
 
 <!-- the hero's numbers: Local (our games) | Global (globalstats.ts) — the same switch as Matchups -->
 {#snippet globalBox(cls: string)}
-	{#if gl || hasLocal}
+	{#if gl || hasLocal || beta}
 		{@const wr = view.wr}
 		{@const wonN = view.won.reduce((a, b) => a + b, 0)}
 		{@const wp = sharePct(view.won)}
 		<div class="gbox {cls}">
-			<div class="ghd">
+			{#if !beta}<div class="ghd">
 				<button class="gsw" class:on={src === 'local'} on:click={() => (srcPick = 'local')} title="Our games">Local</button>
 				{#if gl}<button class="gsw" class:on={src === 'global'} on:click={() => (srcPick = 'global')} title="Global stats ({GLOBAL_AS_OF}) — every recorded game, not just ours">Global</button>{/if}
 				{#if src === 'global' && gl?.tag}<span class="gt {gl.tag}">{GLOBAL_TAG[gl.tag]}</span>{/if}
-			</div>
+			</div>{/if}
 			<div class="gcells">
 				<div class="gcell">
 					<div class="gl2"><span>Win rate</span><b class:up={wr != null && wr >= 50} class:down={wr != null && wr < 50}>{wr == null ? '—' : `${wr.toFixed(1)}%`}</b></div>
 					<span class="gsplit" class:none={wr == null}><i style="--v:{(wr ?? 0) / 100}"></i></span>
-					<div class="gsm"><span>{wr == null ? 'No games yet' : `${Math.round(wr)}% wins`}</span><span>{wr == null ? '' : `${100 - Math.round(wr)}% losses`}</span></div>
+					{#if beta && local && hasLocal}<div class="gsm"><span>{local.wins} {local.wins === 1 ? 'win' : 'wins'}</span><span>{local.games - local.wins} {local.games - local.wins === 1 ? 'loss' : 'losses'}</span></div>{:else}<div class="gsm"><span>{wr == null ? 'No games yet' : `${Math.round(wr)}% wins`}</span><span>{wr == null ? '' : `${100 - Math.round(wr)}% losses`}</span></div>{/if}
 				</div>
 				<div class="gcell">
 					<div class="gl2"><span>Hero impact</span><b class:up={(view.impact ?? 0) > 0} class:down={(view.impact ?? 0) < 0}>{view.impact == null ? '—' : `${view.impact > 0 ? '+' : ''}${view.impact}%`}</b></div>
@@ -174,7 +177,7 @@
 	{/if}
 {/snippet}
 
-<div class="hpage tide" class:opt={tab === 'openings'}>
+<div class="hpage tide" class:opt={tab === 'openings'} class:beta>
 	<header class="bar">
 		<a class="ib" href={base + '/'} on:click|preventDefault={() => goBack()} aria-label="Back"><Icon name="back" /></a>
 		<span class="ttl">Heroes</span>
@@ -193,8 +196,9 @@
 		{#if tab === 'overview'}
 			<img class="art" src={heroSplash(h.id)} alt="" style="object-position: {Math.round(face[0] * 100)}% {Math.round(face[1] * 100)}%" />
 			<div class="shade"></div>
+			{#if beta}<img class="logo blogo" src={heroLogo(h.id)} alt="" />{/if}
 			<div class="id">
-				<img class="logo" src={heroLogo(h.id)} alt="" />
+				{#if !beta}<img class="logo" src={heroLogo(h.id)} alt="" />{/if}
 				<h1 class="name">{h.name} <span>{h.title}</span></h1>
 				<div class="meta">
 					<span class="stars" title="Complexity {h.stars}">{#each Array(h.stars) as _, k (k)}<img src={starIcon()} alt="★" />{/each}</span>
@@ -206,7 +210,7 @@
 						<div class="st"><img src={statIcon(k)} alt="" /><span class="sl">{STAT_LABELS[k]}</span><span class="pips">{#each Array(STAT_PIPS) as _, p (p)}<i class:on={p < lo} class:up={p >= lo && p < hi}></i>{/each}</span></div>
 					{/each}
 				</div>
-				{#if g.minions.length || Object.keys(g.tags).length}
+				{#if !beta && (g.minions.length || Object.keys(g.tags).length)}
 					<div class="tags">
 						{#if g.minions.length}<span class="pref">Preferred minions: <b>{g.minions.map((m) => MINION_PREFS[m]).join(', ')}</b></span>{/if}
 						{#each GUIDE_TAGS.filter((t) => g.tags[t]) as t (t)}<span class="tag" class:later={g.tags[t] === 2} title={g.tags[t] === 2 ? 'From round 2 or later' : 'From round 1'}>{t}</span>{/each}
@@ -214,6 +218,12 @@
 				{/if}
 				{@render guideBlock('onart')}
 			</div>
+			{#if beta && (g.strengths.length || g.weaknesses.length)}
+				<div class="swart">
+					<div><h3>Strengths</h3><ul>{#each g.strengths as x, k (k)}<li class="good">{x}</li>{/each}</ul></div>
+					<div><h3>Weaknesses</h3><ul>{#each g.weaknesses as x, k (k)}<li class="bad">{x}</li>{/each}</ul></div>
+				</div>
+			{/if}
 		{:else if op}
 			{#key op.id}
 				<OpeningBoard bind:this={board} {op} {step} {turned} uid="hp" inset={{ t: 56, b: 16, l: 12, r: 12 }} interactive />
@@ -294,15 +304,15 @@
 				</div>
 				<div class="col mu">
 					<h3>Matchups
-						{#if gl}<span class="msw"><button class:on={src === 'local'} on:click={() => (srcPick = 'local')}>Local</button><button class:on={src === 'global'} on:click={() => (srcPick = 'global')}>Global</button></span>{/if}</h3>
+						{#if gl && !beta}<span class="msw"><button class:on={src === 'local'} on:click={() => (srcPick = 'local')}>Local</button><button class:on={src === 'global'} on:click={() => (srcPick = 'global')}>Global</button></span>{/if}</h3>
 					<div class="mgrid">
 						{#each muRows as r (r.label)}
 							<small>{r.label}</small>
-							{#each [0, 1, 2] as k (k)}{@const f = r.faces[k]}{#if f}<span class="mface" style={portraitCss(f.id)} title={f.tip}></span>{:else}<span class="mface vac"></span>{/if}{/each}
+							{#each [0, 1, 2] as k (k)}{@const f = r.faces[k]}{#if beta}<span class="mcell">{#if f}<span class="mface" style={portraitCss(f.id)} title={f.tip}></span><em>{f.wl ?? ''}</em>{:else}<span class="mface vac"></span><em></em>{/if}</span>{:else if f}<span class="mface" style={portraitCss(f.id)} title={f.tip}></span>{:else}<span class="mface vac"></span>{/if}{/each}
 						{/each}
 					</div>
 				</div>
-				{#if gm && (gl || hasLocal)}<div class="col gcol">{@render globalBox('instrip')}</div>{/if}
+				{#if gm && (gl || hasLocal || beta)}<div class="col gcol">{@render globalBox('instrip')}</div>{/if}
 			</div>
 	</section>
 	{/if}
@@ -520,6 +530,30 @@
 	.mface.vac { background: none; box-shadow: none; border: 1px dashed var(--hair); }
 	.mface { display: block; width: 46px; height: 46px; border-radius: 50%; background-repeat: no-repeat; background-color: #0b101a; box-shadow: 0 0 0 2px var(--brass-line); }
 
+
+	/* ── the beta layout ── */
+	.blogo { position: absolute; right: 26px; top: 22px; z-index: 1; width: 84px; height: 84px; }
+	.beta .swart { position: absolute; right: 24px; bottom: 20px; width: clamp(240px, 24%, 340px); display: flex; flex-direction: column; gap: 12px;
+		padding: 14px 16px; border-radius: 12px; background: rgba(3, 10, 20, 0.72); border: 1px solid var(--hair); max-height: calc(100% - 130px); overflow-y: auto; scrollbar-width: thin; }
+	.beta .swart ul { margin: 6px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 5px; }
+	.beta .swart li { font-size: 15px; padding-left: 14px; position: relative; }
+	.beta .swart li::before { content: ''; position: absolute; left: 0; top: 0.5em; width: 7px; height: 7px; border-radius: 50%; }
+	.beta .swart li.good::before { background: #35d07a; }
+	.beta .swart li.bad::before { background: #ef5a4b; }
+	.beta .stage .id { width: min(760px, calc(100% - clamp(240px, 24%, 340px) - 80px)); }
+	.beta .guide.onart .over p { font-size: 15px; }
+	.beta .mgrid { grid-template-columns: auto repeat(3, 44px); gap: 4px 12px; margin-top: 8px; }
+	.mcell { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+	.mcell .mface { width: 40px; height: 40px; }
+	@media (max-height: 860px) and (min-width: 761px) { .beta .mgrid { gap: 2px 10px; margin-top: 4px; } .mcell .mface { width: 36px; height: 36px; } }
+	@media (max-width: 1280px) and (min-width: 761px) { .beta .col.mu .mgrid { grid-template-columns: repeat(3, 40px); gap: 0 10px; margin-top: 0; } .beta .col.mu .mgrid small { padding: 2px 0 0; } .beta .mcell .mface { width: 30px; height: 30px; } .beta .mcell em { height: 13px; line-height: 13px; font-size: 11px; } }
+	/* make room, don't scroll: the beta's matchups carry a W–L under each face, so the strip is a little taller */
+	.hpage.beta:not(.opt) { grid-template-rows: 52px minmax(0, 1fr) clamp(250px, 32vh, 300px); }
+	.mcell em { height: 14px; font-style: normal; font-size: 12px; line-height: 14px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+	@media (max-width: 760px) {
+		.beta .swart { display: none; }
+		.blogo { width: 52px; height: 52px; right: 14px; top: 14px; }
+	}
 
 	@media (max-width: 760px) {
 		.hpage { position: absolute; min-height: 100%; grid-template-columns: 1fr; grid-template-rows: 52px 54vh auto auto; overflow-y: auto; }

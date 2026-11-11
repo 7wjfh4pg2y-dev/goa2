@@ -912,6 +912,10 @@
 									<span class="choice-ic"><Icon name="pen" /></span>
 									<span class="choice-txt"><span class="t-h2">Map editor</span><span class="t-body c-muted">Maps & zones</span></span>
 								</a>
+								<a class="choice card a gmwide" href={base + '/heroes-beta'}>
+									<span class="choice-ic"><Icon name="user" /></span>
+									<span class="choice-txt"><span class="t-h2">Heroes beta</span><span class="t-body c-muted">The next hero pages</span></span>
+								</a>
 							</div>
 							<button class="btn btn-ghost on-art signout" on:click={() => { signOut(); goHome(); }}><Icon name="lock" /> Sign out</button>
 						</div>
@@ -1260,6 +1264,9 @@
 	.choices.gmgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 	.choices.gmgrid :global(.choice) { min-height: 0; height: clamp(84px, 10.5vh, 104px); padding: 6px 10px; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: 5px; }
 	.choices.gmgrid :global(.choice-ic) { width: 36px; height: 36px; flex: none; }
+	.choices.gmgrid :global(.choice.gmwide) { grid-column: 1 / -1; height: 52px; flex-direction: row; gap: 10px; }
+	.choices.gmgrid :global(.choice.gmwide .choice-ic) { width: 28px; height: 28px; }
+	.choices.gmgrid :global(.choice.gmwide .choice-txt) { flex-direction: row; align-items: baseline; gap: 10px; }
 	.choices.gmgrid :global(.choice-txt) { align-items: center; min-width: 0; max-width: 100%; }
 	.choices.gmgrid :global(.choice .t-h2) { font-size: 22px; line-height: 1.1; white-space: nowrap; }
 	.choices.gmgrid :global(.choice .t-body) { font-size: 15px; white-space: nowrap; }
@@ -1453,6 +1460,7 @@
 		.choices.gmgrid :global(.choice-ic) { width: clamp(28px, 4.6dvh, 40px); height: clamp(28px, 4.6dvh, 40px); font-size: 18px; }
 		.choices.gmgrid :global(.choice .t-h2) { font-size: 17px; }
 		.choices.gmgrid :global(.choice .t-body) { display: none; }
+		.choices.gmgrid :global(.choice.gmwide) { height: 40px; }
 		.step .signout { min-height: 40px; height: 40px; }
 
 		/* create: a top line, one scrolling panel, the actions pinned to the bottom edge */
