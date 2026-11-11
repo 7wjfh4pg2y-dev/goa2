@@ -20,7 +20,7 @@
 	import CardBack from '$lib/cards/CardBack.svelte';
 	import LevelConfirm from '$lib/LevelConfirm.svelte';
 	import StatBubbles from '$lib/hud2/StatBubbles.svelte';
-	import { heroCards } from '$lib/cards/deck';
+	import { heroCards, byPath } from '$lib/cards/deck';
 	import { heroSplash, HERO_BY_ID } from '$lib/heroes';
 	import ultGear from '$lib/images/ult_gear.png';
 	import {
@@ -54,7 +54,7 @@
 	$: cards = heroCards(H);
 	$: hero = HERO_BY_ID[H];
 	$: find = (color: string, level?: number) =>
-		cards.map((c, i) => ({ c, i })).filter((x) => x.c.color === color && !x.c.handicapped && (level == null || (x.c.level ?? 1) === level)).map((x) => x.i);
+		cards.map((c, i) => ({ c, i })).filter((x) => x.c.color === color && !x.c.handicapped && (level == null || (x.c.level ?? 1) === level)).map((x) => x.i).sort(byPath(cards));
 	$: tr = Object.fromEntries(COLS.map((c) => [c, { I: find(c, 1)[0], II: find(c, 2), III: find(c, 3) }])) as Record<string, { I: number; II: number[]; III: number[] }>;
 	$: ult = ultimateIndex(H);
 	// the gold he holds now (Takahide swaps golds; with Ready for War he holds all three — stacked, cycled by ⇄)

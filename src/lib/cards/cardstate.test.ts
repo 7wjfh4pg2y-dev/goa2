@@ -595,3 +595,22 @@ describe('host moves (free deck edit: level a player up / down)', () => {
 		clean(s)
 	})
 })
+
+import { heroCards as allCards, byPath as pathOrder, pathRank as rankOf } from './deck';
+import heroesJson from './new_heroes.json';
+describe('upgrade paths', () => {
+	it('every hero has one primary (1 of 2) and one alternative (2 of 2) card per colour and tier, primary first once sorted', () => {
+		for (const hero of Object.keys(heroesJson)) {
+			const cards = allCards(hero);
+			for (const colour of ['RED', 'BLUE', 'GREEN']) for (const tier of [2, 3]) {
+				const pair = cards.map((c, i) => ({ c, i })).filter((x) => x.c.color === colour && x.c.level === tier && !x.c.handicapped).map((x) => x.i).sort(pathOrder(cards));
+				expect(pair.map((i) => rankOf(cards[i])), `${hero} ${colour} ${tier}`).toEqual([1, 2]);
+			}
+		}
+	});
+	it("Arien's red Tier II: Raging Stream is the primary path", () => {
+		const cards = allCards('arien');
+		const pair = cards.map((c, i) => ({ c, i })).filter((x) => x.c.color === 'RED' && x.c.level === 2).map((x) => x.i).sort(pathOrder(cards));
+		expect(pair.map((i) => cards[i].name)).toEqual(['Raging Stream', 'Rogue Wave']);
+	});
+});

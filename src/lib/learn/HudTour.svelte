@@ -19,7 +19,7 @@
 	import { LEARN_MAP, type ScenePiece } from '$lib/learn';
 	import { throneHex, type LogEntry } from '$lib/match';
 	import { heroById, portraitCss } from '$lib/heroes';
-	import { heroCards, heroName } from '$lib/cards/deck';
+	import { heroCards, heroName, pathRank } from '$lib/cards/deck';
 	import { newPlayerCardState, commitCard, revealTurn, takeUpgrade, levelOf, type PlayerCardState } from '$lib/cards/cardstate';
 
 	type Team = 'orange' | 'blue';
@@ -45,7 +45,7 @@
 		{ id: 'p4', name: 'Sam', hero: 'brogan', team: 'orange' as Team, color: '#a855f7', t1: 'GREEN', t2: 'RED' }
 	];
 	const tierOne = (h: string, c: string) => heroCards(h).findIndex((x) => x.level === 1 && x.color === c);
-	const tierTwo = (h: string, c: string) => heroCards(h).findIndex((x) => x.level === 2 && x.color === c && !x.handicapped);
+	const tierTwo = (h: string, c: string) => heroCards(h).findIndex((x) => x.level === 2 && x.color === c && !x.handicapped && pathRank(x) === 1);
 	function stateOf(p: (typeof P)[number]): PlayerCardState {
 		let s = takeUpgrade(newPlayerCardState(p.hero), tierTwo(p.hero, 'RED'));
 		s = { ...s, level: levelOf(s) };

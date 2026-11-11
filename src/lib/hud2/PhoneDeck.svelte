@@ -11,7 +11,7 @@
 	// Rules: cardstate, exactly as the desktop deck (Take / Swap open the level-up confirm via onAsk).
 	import { onMount } from 'svelte';
 	import Card from '$lib/cards/Card.svelte';
-	import { heroCards } from '$lib/cards/deck';
+	import { heroCards, byPath } from '$lib/cards/deck';
 	import { heroSplash } from '$lib/heroes';
 	import ultGear from '$lib/images/ult_gear.png';
 	import {
@@ -39,7 +39,7 @@
 	$: H = cs.hero;
 	$: cards = heroCards(H);
 	$: find = (color: string, level?: number) =>
-		cards.map((c, i) => ({ c, i })).filter((x) => x.c.color === color && !x.c.handicapped && (level == null || (x.c.level ?? 1) === level)).map((x) => x.i);
+		cards.map((c, i) => ({ c, i })).filter((x) => x.c.color === color && !x.c.handicapped && (level == null || (x.c.level ?? 1) === level)).map((x) => x.i).sort(byPath(cards));
 	$: ult = ultimateIndex(H);
 	// the gold he holds now (Takahide: with Ready for War all three — one shown, ⇄ cycles)
 	$: heldG = basicsOf(cs).filter((i) => cards[i]?.color === 'GOLD');

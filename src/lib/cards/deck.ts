@@ -36,6 +36,13 @@ for (const deck of Object.values(DECKS)) deck.filter((c) => c.extra).forEach((c,
 /** where an extra card stands among its hero's extra cards (-1 = unknown) */
 const extraIndex = (card: HeroCardJson) => EXTRA_AT.get(card.name) ?? -1;
 
+/** Which side of its tier a Tier II / III card sits on, as printed ("1 of 2" = the primary path, LEFT; "2 of 2" =
+ *  the alternative, RIGHT). Deck positions must not be relied on: card indices are saved in games and records,
+ *  so a pair listed in the wrong order in the data stays where it is and is sorted by this instead. */
+export const pathRank = (card: HeroCardJson | undefined) => card?.variant?.first ?? 1;
+/** sort card indices of one tier: primary path first */
+export const byPath = (cards: HeroCardJson[]) => (a: number, b: number) => pathRank(cards[a]) - pathRank(cards[b]) || a - b;
+
 /** File slug for a card's background art (e.g. "GreenIA", "Gold", "Ultimate"). */
 export function backgroundSlug(card: HeroCardJson, extraSlotIndex: number | null = null): string {
 	// an EXTRA card (e.g. Takahide's Sting like a Bee / Strike like a Tiger) has its own painting: Extra1, Extra2…

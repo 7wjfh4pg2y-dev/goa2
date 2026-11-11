@@ -5,7 +5,7 @@
 	import type { HeroAgg, LeagueGame, Path } from '$lib/league';
 	import { WIN_LABEL, WIN_TYPES } from '$lib/league';
 	import { heroById, heroSplash, splashFace, portraitCss, traitIcon, TRAIT_LABELS, type Trait } from '$lib/heroes';
-	import { heroCards } from '$lib/cards/deck';
+	import { heroCards, pathRank } from '$lib/cards/deck';
 	import { heroTrend, matchups, heroSplits, byMastery } from '$lib/hallstats';
 	import Line from './Line.svelte';
 	import GlobalCard from './GlobalCard.svelte';
@@ -46,6 +46,7 @@
 	$: baseBuilt = pct(builtWins, builtGames);
 	$: pickRows = [2, 3].flatMap((tier) => ['RED', 'BLUE', 'GREEN'].map((colour) => {
 		const opts = deck.map((c, i) => ({ c, i })).filter((x) => x.c.color === colour && x.c.level === tier)
+			.sort((a, b) => pathRank(a.c) - pathRank(b.c) || a.i - b.i)
 			.map((x) => ({ i: x.i, name: x.c.name, ...(tally.get(x.i) ?? { games: 0, wins: 0 }) }));
 		const all = opts.reduce((s, o) => s + o.games, 0);
 		return { tier, colour: colour.toLowerCase(), all, opts };
