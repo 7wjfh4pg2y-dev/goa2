@@ -139,6 +139,14 @@
 		return `linear-gradient(90deg, ${c.map((x, i) => `${CARD_HEX[x as keyof typeof CARD_HEX]} ${(i * w).toFixed(1)}% ${((i + 1) * w).toFixed(1)}%`).join(', ')})`;
 	};
 	onMount(() => { void tick(); });
+	/* a box whose text runs on: `more` while there is text below (the bottom edge fades; the scrollbar stays hidden) */
+	function more(node: HTMLElement) {
+		const set = () => node.classList.toggle('more', node.scrollTop + node.clientHeight < node.scrollHeight - 2);
+		const ro = new ResizeObserver(set); ro.observe(node);
+		const mo = new MutationObserver(set); mo.observe(node, { childList: true, subtree: true, characterData: true });
+		node.addEventListener('scroll', set, { passive: true }); set();
+		return { destroy() { ro.disconnect(); mo.disconnect(); node.removeEventListener('scroll', set); } };
+	}
 </script>
 
 <svelte:window on:keydown={key} />
@@ -147,11 +155,13 @@
 {#snippet guideBlock(cls: string)}
 	<div class="guide {cls}">
 		<h3>Overview</h3>
+		<div class="gbody" use:more>
 		<div class="over">{#each g.overview.split(/\n+/).filter(Boolean) as para, k (k)}<p class:auto={g.auto.overview}>{para}</p>{/each}</div>
 		{#if g.funFact?.trim()}<p class="fun"><b>Fun fact</b> {g.funFact}</p>{/if}
 		<div class="sw">
 			<div><h3>Strengths</h3><ul>{#each g.strengths as x, k (k)}<li class="good">{x}</li>{/each}</ul></div>
 			<div><h3>Weaknesses</h3><ul>{#each g.weaknesses as x, k (k)}<li class="bad">{x}</li>{/each}</ul></div>
+		</div>
 		</div>
 	</div>
 {/snippet}
@@ -234,10 +244,10 @@
 				{@render guideBlock('onart')}
 			</div>
 			{#if beta && (g.strengths.length || g.weaknesses.length)}
-				<div class="swart">
+				<div class="swart"><div class="gbody" use:more>
 					<div><h3>Strengths</h3><ul>{#each g.strengths as x, k (k)}<li class="good">{x}</li>{/each}</ul></div>
 					<div><h3>Weaknesses</h3><ul>{#each g.weaknesses as x, k (k)}<li class="bad">{x}</li>{/each}</ul></div>
-				</div>
+				</div></div>
 			{/if}
 		{:else if op}
 			{#key op.id}
@@ -589,6 +599,19 @@
 	.mcell em { height: 14px; font-style: normal; font-size: 12px; line-height: 14px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 	/* beta strip: three matching panels — the hand as wide as five full-height cards (≤ 52 %), Matchups and the stats
 	   share the rest equally; the cards and the faces grow with the panel they sit in */
+	/* every hero's detail boxes are the same size (≈ the median guide's overview): the text scrolls inside, no bar */
+	.gbody { display: contents; }
+	@media (min-width: 761px) {
+		.beta .stage { --dh: clamp(120px, calc(100vh - 776px), 210px); }
+		@media (max-height: 860px) { .beta .stage { --dh: clamp(112px, 19vh, 150px); } }
+		.beta .guide.onart { flex: 0 0 var(--dh); min-height: 0; overflow: hidden; }
+		.beta .swart { height: var(--dh); max-height: none; overflow: hidden; }
+		.beta .guide.onart .gbody, .beta .swart .gbody { display: flex; flex-direction: column; gap: 6px; flex: 1; min-height: 0;
+			overflow-y: auto; scrollbar-width: none; overscroll-behavior: contain; }
+		.beta .swart .gbody { gap: 12px; height: 100%; }
+		.beta .guide.onart .gbody::-webkit-scrollbar, .beta .swart .gbody::-webkit-scrollbar { display: none; }
+		.beta .gbody:global(.more) { mask-image: linear-gradient(to bottom, #000 calc(100% - 26px), transparent); -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 26px), transparent); }
+	}
 	@media (min-width: 761px) {
 		.hpage.beta:not(.opt) { --sh: clamp(260px, 33vh, 390px); grid-template-rows: 52px minmax(0, 1fr) var(--sh); }
 		@media (max-width: 1100px) { .hpage.beta:not(.opt) { --sh: clamp(250px, 32vh, 330px); } }
