@@ -79,4 +79,24 @@ describe('play-by-play', () => {
 		expect(h).toContain('The deciding play:')
 		expect(h).toContain('Note (R1 T2): Priya baited the attack')
 	})
+	it('shows a token at its owner\'s card, not when the board was first snapped', async () => {
+		const { ownTurnShots } = await import('./playbyplay')
+		const pcs = { a: { k: 'hero', tm: 'orange' }, b: { k: 'hero', tm: 'blue' }, t1: { k: 'token', tm: 'blue', o: 'b', tk: 'token_ice' }, t2: { k: 'token', tm: 'orange', o: 'a', tk: 'token_ice' } } as never
+		const sh = (i: number, pid: string | null, p: Record<string, string>) => ({ r: 1, t: 1, i, pid, card: null, at: i, p })
+		const shots = [
+			sh(-1, null, { a: 'x1', b: 'y1', t1: 'z1' }), // b's token seen already in planning
+			sh(0, 'a', { a: 'x2', b: 'y1', t1: 'z1', t2: 'z2' }), // a's own token: stays here
+			sh(1, 'b', { a: 'x2', b: 'y2', t1: 'z1', t2: 'z2' })
+		] as never
+		const out = ownTurnShots(shots, pcs)
+		expect('t1' in out[0].p).toBe(false)
+		expect('t1' in out[1].p).toBe(false)
+		expect(out[2].p.t1).toBe('z1')
+		expect(out[1].p.t2).toBe('z2')
+		// the input is left alone
+		expect((shots as { p: Record<string, string> }[])[0].p.t1).toBe('z1')
+		// no later card of its owner this turn: left as recorded
+		const solo = ownTurnShots([sh(-1, null, { t1: 'z1' }), sh(0, 'a', { t1: 'z1' })] as never, pcs)
+		expect(solo[0].p.t1).toBe('z1')
+	})
 })

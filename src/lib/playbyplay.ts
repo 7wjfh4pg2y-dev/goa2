@@ -54,11 +54,36 @@ const LANE = ['Orange Beach', 'Center', 'Blue Beach'] as const
 const dist = (a: string, b: string) => { try { return cubeDist(hexCube(a), hexCube(b)) } catch { return 0 } }
 
 /** The game as acts (null when the row has no board shots — a game recorded before evv 3). */
+/** A token belongs to its owner's card: the board is only snapped when a segment of the turn ends, so a token can
+ *  first be seen in the planning shot or under another player's card (placed early, or the card before never pressed
+ *  End turn). When its owner's card acts later in the same turn, the token is held back until that card. */
+export function ownTurnShots(shots: BoardShot[], pcs: Record<string, PieceTag>): BoardShot[] {
+	const out = shots.map((sh) => ({ ...sh, p: { ...(sh.p ?? {}) } }))
+	const isAct = (sh: BoardShot) => sh.i >= 0 && sh.i < SEG_BATTLE
+	for (let k = 0; k < out.length; k++) {
+		const sh = out[k], before = k > 0 ? out[k - 1].p : {}
+		for (const id of Object.keys(sh.p)) {
+			const t = pcs[id]
+			if (!t || t.k !== 'token' || !t.o || id in before) continue
+			if (isAct(sh) && sh.pid === t.o) continue
+			let own = -1
+			for (let m = k + 1; m < out.length && out[m].r === sh.r && out[m].t === sh.t; m++) if (isAct(out[m]) && out[m].pid === t.o) { own = m; break }
+			if (own < 0) continue
+			// only while it stays where it was put (a token moved or gone before then is left as recorded)
+			const hex = sh.p[id]
+			if (out.slice(k, own + 1).some((x) => x.p[id] !== hex)) continue
+			for (let m = k; m < own; m++) delete out[m].p[id]
+		}
+	}
+	return out
+}
+
 export function story(data: Data): Story | null {
-	const shots = (Array.isArray(data?.shots) ? data.shots : []) as BoardShot[]
-	if (!shots.length) return null
+	const raw = (Array.isArray(data?.shots) ? data.shots : []) as BoardShot[]
+	if (!raw.length) return null
 	const players = (data.players ?? {}) as Record<string, P>
 	const pcs = (data.pcs ?? {}) as Record<string, PieceTag>
+	const shots = ownTurnShots(raw, pcs)
 	const zones = (data.zones ?? {}) as Record<string, string>
 	const ev = (Array.isArray(data.ev) ? data.ev : []) as GameEvent[]
 	const log = (Array.isArray(data.log) ? data.log : []) as LogEntry[]
