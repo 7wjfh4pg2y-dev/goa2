@@ -837,7 +837,7 @@
 <div class="uiscale tide pre" class:land={land && mode === 'lobby'} style="--ui:{mode === 'lobby' ? uiL : ui}">
 	{#if family}
 		<!-- landing · role · admin · menu · join: the crest and one column of steps beside the island -->
-		<main class="screen s-col" class:landing={mode === 'landing'} class:compact={mode === 'join' || mode === 'admin'} class:placed={!!crestW} style:--crest-w={crestW ? crestW + 'px' : null} style:--crest-x={crestW ? Math.round(crestL / 2 - crestW / 2) + 'px' : null} transition:reveal>
+		<main class="screen s-col" class:landing={mode === 'landing'} class:compact={mode === 'join' || mode === 'admin'} class:gmhub={mode === 'adminhub'} class:placed={!!crestW} style:--crest-w={crestW ? crestW + 'px' : null} style:--crest-x={crestW ? Math.round(crestL / 2 - crestW / 2) + 'px' : null} transition:reveal>
 			<div class="leftcol">
 				<button id="crest-home" class="home" bind:this={homeEl} on:click={onLogo} aria-label={mode === 'landing' ? 'Enter' : 'Main menu'}>
 					<img class="logo" src={logoImage} alt="Guards of Atlantis II" />
@@ -1218,6 +1218,8 @@
 	.s-col { padding: 32px max(40px, 7%); }
 	.leftcol { width: 420px; max-width: 100%; margin: auto 0; display: flex; flex-direction: column; align-items: flex-start; }
 	.s-col.landing .leftcol { width: 420px; }
+	/* the GM tools: two bubbles a row with the icon beside the words — a little wider so every title fits */
+	.s-col.gmhub .leftcol { width: 470px; }
 	.s-col .home { width: 168px; margin: 0 0 20px -10px; transform-origin: 0 0; will-change: transform; }
 	.s-col.compact .home { width: 124px; margin-bottom: 14px; }
 	.s-col.landing .home { width: 400px; margin: 0 0 22px -14px; }
@@ -1260,16 +1262,19 @@
 	.choices { display: flex; flex-direction: column; gap: 16px; width: 100%; position: relative; }
 	/* the menu's third card: hangs one gap below the last, outside the measured height */
 	.choices :global(.choice.hang) { position: absolute; left: 0; right: 0; top: calc(100% + 16px); }
-	/* the GM tools: every tool one bubble, two across (icon over the words) */
+	/* the GM tools: every tool one bubble, two across — the icon BESIDE the words (stacked, a short window pushed the
+	   icon over the bubble's top edge) */
 	.choices.gmgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-	.choices.gmgrid :global(.choice) { min-height: 0; height: clamp(84px, 10.5vh, 104px); padding: 6px 10px; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: 5px; }
-	.choices.gmgrid :global(.choice-ic) { width: 36px; height: 36px; flex: none; }
+	.choices.gmgrid :global(.choice) { min-height: 0; height: clamp(64px, 8.6vh, 84px); padding: 6px 10px; flex-direction: row; justify-content: flex-start; align-items: center; text-align: left; gap: 9px; overflow: hidden; }
+	.choices.gmgrid :global(.choice-ic) { width: 36px; height: 36px; flex: none; font-size: 20px; }
+	.choices.gmgrid :global(.choice-ic svg) { width: 1em; height: 1em; }
 	.choices.gmgrid :global(.choice.gmwide) { grid-column: 1 / -1; height: 52px; flex-direction: row; gap: 10px; }
-	.choices.gmgrid :global(.choice.gmwide .choice-ic) { width: 28px; height: 28px; }
+	.choices.gmgrid :global(.choice.gmwide .choice-ic) { width: 30px; height: 30px; font-size: 16px; }
 	.choices.gmgrid :global(.choice.gmwide .choice-txt) { flex-direction: row; align-items: baseline; gap: 10px; }
-	.choices.gmgrid :global(.choice-txt) { align-items: center; min-width: 0; max-width: 100%; }
-	.choices.gmgrid :global(.choice .t-h2) { font-size: 22px; line-height: 1.1; white-space: nowrap; }
-	.choices.gmgrid :global(.choice .t-body) { font-size: 15px; white-space: nowrap; }
+	.choices.gmgrid :global(.choice-txt) { align-items: flex-start; min-width: 0; max-width: 100%; }
+	.choices.gmgrid :global(.choice .t-h2), .choices.gmgrid :global(.choice .t-body) { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+	.choices.gmgrid :global(.choice .t-h2) { font-size: 19px; line-height: 1.1; white-space: nowrap; }
+	.choices.gmgrid :global(.choice .t-body) { font-size: 13px; white-space: nowrap; }
 	.step .signout { align-self: stretch; justify-content: center; }
 	.step .formpanel { display: flex; flex-direction: column; gap: 16px; padding: 24px 26px; }
 	.step .formpanel .row { margin-top: 4px; }
@@ -1456,7 +1461,8 @@
 		.choices :global(.choice) { min-height: 88px; padding: 12px 16px; gap: 14px; }
 		.choices :global(.choice-ic) { width: 52px; height: 52px; font-size: 24px; }
 		.choices.gmgrid { gap: 8px; }
-		.choices.gmgrid :global(.choice) { height: clamp(56px, 9.2dvh, 90px); padding: 4px 6px; gap: 3px; }
+		.choices.gmgrid :global(.choice) { height: clamp(56px, 9.2dvh, 90px); padding: 4px 6px; gap: 3px; flex-direction: column; justify-content: center; text-align: center; }
+		.choices.gmgrid :global(.choice-txt) { align-items: center; }
 		.choices.gmgrid :global(.choice-ic) { width: clamp(28px, 4.6dvh, 40px); height: clamp(28px, 4.6dvh, 40px); font-size: 18px; }
 		.choices.gmgrid :global(.choice .t-h2) { font-size: 17px; }
 		.choices.gmgrid :global(.choice .t-body) { display: none; }
