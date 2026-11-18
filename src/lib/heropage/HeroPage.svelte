@@ -112,7 +112,19 @@
 		run();
 		return { update: run, destroy() { ro.disconnect(); cancelAnimationFrame(raf); } };
 	}
+	/** the beta's ‹ › on the art box (and ← → on the Overview): the previous / next hero A–Z, wrapping round */
+	function stepHero(d: number) {
+		const i = HEROES_ALPHA.findIndex((x) => x.id === h.id);
+		onHero(HEROES_ALPHA[(i + d + HEROES_ALPHA.length) % HEROES_ALPHA.length].id);
+	}
+	$: prevHero = HEROES_ALPHA[(HEROES_ALPHA.findIndex((x) => x.id === h.id) + HEROES_ALPHA.length - 1) % HEROES_ALPHA.length];
+	$: nextHero = HEROES_ALPHA[(HEROES_ALPHA.findIndex((x) => x.id === h.id) + 1) % HEROES_ALPHA.length];
 	function key(e: KeyboardEvent) {
+		if (beta && tab === 'overview' && !(e.target as HTMLElement)?.closest?.('input, textarea, select')) {
+			if (e.key === 'ArrowRight') stepHero(1);
+			else if (e.key === 'ArrowLeft') stepHero(-1);
+			return;
+		}
 		if (tab !== 'openings' || !op || (e.target as HTMLElement)?.closest?.('input, textarea, select')) return;
 		if (e.key === 'ArrowRight') step = Math.min(4, step + 1);
 		else if (e.key === 'ArrowLeft') step = Math.max(0, step - 1);
@@ -137,10 +149,10 @@
 		<h3>Overview</h3>
 		<div class="over">{#each g.overview.split(/\n+/).filter(Boolean) as para, k (k)}<p class:auto={g.auto.overview}>{para}</p>{/each}</div>
 		{#if g.funFact?.trim()}<p class="fun"><b>Fun fact</b> {g.funFact}</p>{/if}
-		{#if !beta || cls === 'instrip'}<div class="sw">
+		<div class="sw">
 			<div><h3>Strengths</h3><ul>{#each g.strengths as x, k (k)}<li class="good">{x}</li>{/each}</ul></div>
 			<div><h3>Weaknesses</h3><ul>{#each g.weaknesses as x, k (k)}<li class="bad">{x}</li>{/each}</ul></div>
-		</div>{/if}
+		</div>
 	</div>
 {/snippet}
 
@@ -196,9 +208,13 @@
 		{#if tab === 'overview'}
 			<img class="art" src={heroSplash(h.id)} alt="" style="object-position: {Math.round(face[0] * 100)}% {Math.round(face[1] * 100)}%" />
 			<div class="shade"></div>
+			{#if beta}
+				<button class="hnav l" on:click={() => stepHero(-1)} aria-label="Previous hero: {prevHero.name}" title="{prevHero.name} (←)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg></button>
+				<button class="hnav r" on:click={() => stepHero(1)} aria-label="Next hero: {nextHero.name}" title="{nextHero.name} (→)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" /></svg></button>
+			{/if}
 						<div class="id">
-				<img class="logo" src={heroLogo(h.id)} alt="" />
-				<h1 class="name">{h.name} <span>{h.title}</span></h1>
+				<div class="nmrow"><img class="logo" src={heroLogo(h.id)} alt="" />
+				<h1 class="name">{h.name} <span>{h.title}</span></h1></div>
 				<div class="meta">
 					<span class="stars" title="Complexity {h.stars}">{#each Array(h.stars) as _, k (k)}<img src={starIcon()} alt="★" />{/each}</span>
 					<span class="sep"></span>
@@ -532,15 +548,36 @@
 
 	/* ── the beta layout ── */
 	/* the name, stats and overview sit at the foot of the painting (the face stays clear above) */
-	.beta .stage .id { justify-content: flex-end; }
-	.beta .swart { position: absolute; right: 24px; bottom: 20px; width: clamp(240px, 24%, 340px); display: flex; flex-direction: column; gap: 12px;
+	.beta .stage .id { justify-content: flex-end; left: 66px; }
+	.beta .id .logo { width: 116px; height: 116px; }
+	/* the logo over the name; on short windows beside it (room for the overview, no scrolling) */
+	.nmrow { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+	@media (max-height: 860px) and (min-width: 761px) { .beta .nmrow { flex-direction: row; align-items: center; gap: 14px; } .beta .id .logo { width: 84px; height: 84px; } .beta .guide.onart .over p { font-size: 13.5px; line-height: 1.4; } .beta .id .meta { margin-top: -4px; } }
+	@media (max-height: 790px) and (min-width: 761px) { .beta .id .logo { width: 72px; height: 72px; } .beta .stage .id { gap: 6px; } }
+	/* ‹ › down the art box's sides: the previous / next hero */
+	.hnav { position: absolute; top: 50%; z-index: 2; width: 46px; height: 46px; margin-top: -23px; display: grid; place-items: center; padding: 0;
+		border-radius: 50%; border: 1px solid var(--brass-line); background: rgba(3, 10, 20, 0.72); color: var(--brass-hi); cursor: pointer;
+		box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45); transition: background-color 0.15s, color 0.15s, border-color 0.15s; }
+	.hnav svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+	.hnav.l { left: 10px; }
+	.hnav.r { right: 10px; }
+	.hnav:hover { color: var(--ink-dark); background: linear-gradient(180deg, var(--brass-hi), var(--brass)); border-color: var(--brass-hi); }
+	.beta .swart { position: absolute; right: 66px; bottom: 20px; width: var(--sww); display: flex; flex-direction: column; gap: 12px;
 		padding: 14px 16px; border-radius: 12px; background: rgba(3, 10, 20, 0.72); border: 1px solid var(--hair); max-height: calc(100% - 130px); overflow-y: auto; scrollbar-width: thin; }
 	.beta .swart ul { margin: 6px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 5px; }
 	.beta .swart li { font-size: 15px; padding-left: 14px; position: relative; }
 	.beta .swart li::before { content: ''; position: absolute; left: 0; top: 0.5em; width: 7px; height: 7px; border-radius: 50%; }
 	.beta .swart li.good::before { background: #35d07a; }
 	.beta .swart li.bad::before { background: #ef5a4b; }
-	.beta .stage .id { width: min(760px, calc(100% - clamp(240px, 24%, 340px) - 80px)); }
+	.beta .stage .id { width: min(760px, calc(100% - var(--sww) - 66px - 66px - 20px)); }
+	.beta .stage { --sww: clamp(240px, 24%, 340px); }
+	/* wide: strengths / weaknesses in their own panel on the art's right; narrow: back under the overview, full width */
+	@media (min-width: 1101px) { .beta .guide.onart .sw { display: none; } }
+	@media (max-width: 1100px) and (min-width: 761px) { .beta .swart { display: none; } .beta .stage .id { width: calc(100% - 132px); } }
+	@media (max-width: 1280px) and (min-width: 761px) { .beta .stage { --sww: clamp(200px, 27%, 260px); } .beta .swart li { font-size: 14px; } }
+	/* too narrow for two stats a row (the pips shrank to slivers): one column, the pips a fixed width */
+	@container (max-width: 520px) { .beta .stats { grid-template-columns: max-content; gap: 3px 0; } .beta .stats .st { grid-template-columns: 22px 92px 170px; } }
+	.beta .stage .id { container-type: inline-size; }
 	.beta .guide.onart .over p { font-size: 15px; }
 	.beta .mgrid { grid-template-columns: auto repeat(3, 44px); gap: 4px 12px; margin-top: 8px; }
 	.mcell { display: flex; flex-direction: column; align-items: center; gap: 2px; }
@@ -552,7 +589,10 @@
 	.mcell em { height: 14px; font-style: normal; font-size: 12px; line-height: 14px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 	@media (max-width: 760px) {
 		.beta .swart { display: none; }
-		.beta .stage .id { width: calc(100% - 32px); }
+		.beta .stage .id { left: 16px; width: calc(100% - 32px); }
+		.beta .id .logo { width: 76px; height: 76px; }
+		.hnav { top: 10px; width: 36px; height: 36px; margin-top: 0; } .hnav.l { left: 10px; } .hnav.r { right: 10px; }
+		.hnav svg { width: 18px; height: 18px; }
 	}
 
 	@media (max-width: 760px) {
