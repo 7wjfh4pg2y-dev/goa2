@@ -196,9 +196,8 @@
 		{#if tab === 'overview'}
 			<img class="art" src={heroSplash(h.id)} alt="" style="object-position: {Math.round(face[0] * 100)}% {Math.round(face[1] * 100)}%" />
 			<div class="shade"></div>
-			{#if beta}<img class="logo blogo" src={heroLogo(h.id)} alt="" />{/if}
-			<div class="id">
-				{#if !beta}<img class="logo" src={heroLogo(h.id)} alt="" />{/if}
+						<div class="id">
+				<img class="logo" src={heroLogo(h.id)} alt="" />
 				<h1 class="name">{h.name} <span>{h.title}</span></h1>
 				<div class="meta">
 					<span class="stars" title="Complexity {h.stars}">{#each Array(h.stars) as _, k (k)}<img src={starIcon()} alt="★" />{/each}</span>
@@ -532,7 +531,8 @@
 
 
 	/* ── the beta layout ── */
-	.blogo { position: absolute; right: 26px; top: 22px; z-index: 1; width: 84px; height: 84px; }
+	/* the name, stats and overview sit at the foot of the painting (the face stays clear above) */
+	.beta .stage .id { justify-content: flex-end; }
 	.beta .swart { position: absolute; right: 24px; bottom: 20px; width: clamp(240px, 24%, 340px); display: flex; flex-direction: column; gap: 12px;
 		padding: 14px 16px; border-radius: 12px; background: rgba(3, 10, 20, 0.72); border: 1px solid var(--hair); max-height: calc(100% - 130px); overflow-y: auto; scrollbar-width: thin; }
 	.beta .swart ul { margin: 6px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 5px; }
@@ -548,11 +548,11 @@
 	@media (max-height: 860px) and (min-width: 761px) { .beta .mgrid { gap: 2px 10px; margin-top: 4px; } .mcell .mface { width: 36px; height: 36px; } }
 	@media (max-width: 1280px) and (min-width: 761px) { .beta .col.mu .mgrid { grid-template-columns: repeat(3, 40px); gap: 0 10px; margin-top: 0; } .beta .col.mu .mgrid small { padding: 2px 0 0; } .beta .mcell .mface { width: 30px; height: 30px; } .beta .mcell em { height: 13px; line-height: 13px; font-size: 11px; } }
 	/* make room, don't scroll: the beta's matchups carry a W–L under each face, so the strip is a little taller */
-	.hpage.beta:not(.opt) { grid-template-rows: 52px minmax(0, 1fr) clamp(250px, 32vh, 300px); }
+	@media (min-width: 761px) { .hpage.beta:not(.opt) { grid-template-rows: 52px minmax(0, 1fr) clamp(250px, 32vh, 300px); } }
 	.mcell em { height: 14px; font-style: normal; font-size: 12px; line-height: 14px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 	@media (max-width: 760px) {
 		.beta .swart { display: none; }
-		.blogo { width: 52px; height: 52px; right: 14px; top: 14px; }
+		.beta .stage .id { width: calc(100% - 32px); }
 	}
 
 	@media (max-width: 760px) {
