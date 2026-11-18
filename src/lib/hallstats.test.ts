@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { buildLeague } from './league'
 import { sampleRows } from './league.sample'
-import { buckets, heroTrend, heroRanks, matchups, heroMatchups, heroSplits, playerRoles, winTrend, peopleMatchups, overview, heroPlayers } from './hallstats'
+import { buckets, heroTrend, heroRanks, matchups, heroMatchups, heroMatchupsAll, heroSplits, playerRoles, winTrend, peopleMatchups, overview, heroPlayers } from './hallstats'
 
 describe('hall stats', () => {
 	const L = buildLeague(sampleRows(24, 5))
@@ -27,6 +27,19 @@ describe('hall stats', () => {
 		expect(hm.partners).toEqual(matchups(h, 'with').best)
 		expect(heroMatchups(L, 'nobody')).toBeNull()
 		expect(heroMatchups(null, h.hero)).toBeNull()
+		// the beta's version fills every row it can, even for a hero that never won
+		const full = heroMatchupsAll(L, h.hero)!
+		const nf = Object.keys(h.foes).length
+		expect(full.strong.length).toBe(Math.min(3, Math.ceil(nf / 2)))
+		expect(full.weak.length).toBe(Math.min(3, nf - full.strong.length))
+		expect(full.partners.length).toBe(Math.min(3, Object.keys(h.mates).length))
+		expect(new Set([...full.strong, ...full.weak].map((m) => m.hero)).size).toBe(full.strong.length + full.weak.length)
+		const loser = { ...h, wins: 0, foes: { a: { games: 2, wins: 0 }, b: { games: 1, wins: 0 }, c: { games: 3, wins: 0 } }, mates: { d: { games: 1, wins: 0 } } }
+		const lm = heroMatchupsAll({ heroes: [loser] } as never, h.hero)!
+		expect(lm.strong.map((m) => m.hero)).toEqual(['b', 'a'])
+		expect(lm.weak.map((m) => m.hero)).toEqual(['c'])
+		expect(lm.partners.map((m) => m.hero)).toEqual(['d'])
+		expect(heroMatchupsAll(null, h.hero)).toBeNull()
 		const sp = heroSplits(L.games, h.hero)
 		expect(sp.all.games).toBe(h.games)
 		expect(sp.sizes.reduce((s, x) => s + x.games, 0)).toBe(h.games)

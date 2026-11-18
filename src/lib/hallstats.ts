@@ -62,6 +62,25 @@ export function heroMatchups(league: League | null, hero: string): HeroMatchups 
 	return { games: h.games, strong: vs.best, weak: vs.worst, partners: matchups(h, 'with').best }
 }
 
+/** The beta hero page's Matchups: every row filled whenever the records allow, however few the games. Heroes are ranked
+ *  by a smoothed win rate ((wins + 1) / (games + 2), more games first on a tie) — so a hero that lost every game
+ *  still shows who it did least badly against. Strong against = the best half of its foes (≤ 3), Struggles against =
+ *  the worst of the rest (≤ 3, worst first), Best with = its best 3 team-mates. */
+export function heroMatchupsAll(league: League | null, hero: string): HeroMatchups | null {
+	const h = league?.heroes.find((x) => x.hero === hero)
+	if (!h || !h.games) return null
+	const base = rate(h.wins, h.games)
+	const score = (m: Matchup) => (m.wins + 1) / (m.games + 2)
+	const rank = (rec: Record<string, { games: number; wins: number }>) => Object.entries(rec)
+		.map(([hero, t]) => ({ hero, games: t.games, wins: t.wins, delta: one(rate(t.wins, t.games) - base) }))
+		.sort((a, b) => score(b) - score(a) || b.games - a.games || a.hero.localeCompare(b.hero))
+	const foes = rank(h.foes)
+	const nStrong = Math.min(3, Math.ceil(foes.length / 2))
+	const strong = foes.slice(0, nStrong)
+	const weak = foes.slice(nStrong).reverse().slice(0, 3)
+	return { games: h.games, strong, weak, partners: rank(h.mates).slice(0, 3) }
+}
+
 export type Split = {
 	key: string; label: string; games: number; wins: number; share: number; win: number
 	/** per game, over the games that kept the numbers (null when none did) */

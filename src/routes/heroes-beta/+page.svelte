@@ -14,13 +14,17 @@
 	import { buildLeague, useAliases, leagueOf, gameOfReport, rowOfSelect, LEAGUE_SELECT, type GameRowIn, type LeagueGame, type League } from '$lib/league';
 	import { REPORT_TABLE, reportOfRow, type Report } from '$lib/reports';
 	import { loadAliases, resolveAliases } from '$lib/aliases';
-	import { heroMatchups } from '$lib/hallstats';
+	import { heroMatchupsAll } from '$lib/hallstats';
 
-	// Matchups from the records: every online game plus the table games (the Hall's Total), read once.
+	// Matchups from the records: every online game plus the table games (the Hall's Total) — read on opening, again
+	// whenever the tab comes back into view and every 5 minutes, so a finished match shows without a reload.
 	let league: League | null = null;
 	let leagueAsked = false;
+	let leagueBusy = false;
 	async function loadLeague() {
 		leagueAsked = true;
+		if (leagueBusy) return;
+		leagueBusy = true;
 		try {
 			const got: GameRowIn[] = [];
 			for (let from = 0; ; from += 1000) {
@@ -37,10 +41,10 @@
 			useAliases(resolveAliases((await loadAliases()).rows)); // the GM tools' merged names
 			const legacy = table.map((r) => { try { return gameOfReport(r); } catch { return null; } }).filter((g): g is LeagueGame => !!g);
 			league = leagueOf([...buildLeague(got).games, ...legacy]);
-		} catch { league = null; }
+		} catch { /* keep what we had */ } finally { leagueBusy = false; }
 	}
 	$: if (ready && $role === 'admin' && !leagueAsked) void loadLeague();
-	$: record = heroMatchups(league, heroId);
+	$: record = heroMatchupsAll(league, heroId);
 	$: localHero = league?.heroes.find((x) => x.hero === heroId) ?? null;
 
 	let heroId = 'arien'; // the default hero (first alphabetically)
@@ -68,6 +72,10 @@
 		if (h && HEROES_ALPHA.some((x) => x.id === h)) heroId = h;
 		if (q.get('tab') === 'openings') tab = 'openings';
 		ready = true;
+		const again = () => { if (leagueAsked && document.visibilityState === 'visible' && $role === 'admin') void loadLeague(); };
+		const t = setInterval(again, 5 * 60 * 1000);
+		document.addEventListener('visibilitychange', again);
+		return () => { clearInterval(t); document.removeEventListener('visibilitychange', again); };
 	});
 </script>
 
