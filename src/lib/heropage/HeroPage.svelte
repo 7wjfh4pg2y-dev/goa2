@@ -327,7 +327,7 @@
 						{/each}
 					</div>
 				</div>
-				{#if gm && (gl || hasLocal || beta)}<div class="col gcol">{@render globalBox('instrip')}</div>{/if}
+				{#if gm && (gl || hasLocal || beta)}<div class="col gcol">{#if beta}<h3>Record</h3>{/if}{@render globalBox('instrip')}</div>{/if}
 			</div>
 	</section>
 	{/if}
@@ -587,6 +587,31 @@
 	/* make room, don't scroll: the beta's matchups carry a W–L under each face, so the strip is a little taller */
 	@media (min-width: 761px) { .hpage.beta:not(.opt) { grid-template-rows: 52px minmax(0, 1fr) clamp(250px, 32vh, 300px); } }
 	.mcell em { height: 14px; font-style: normal; font-size: 12px; line-height: 14px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+	/* beta strip: three matching panels — the hand as wide as five full-height cards (≤ 52 %), Matchups and the stats
+	   share the rest equally; the cards and the faces grow with the panel they sit in */
+	@media (min-width: 761px) {
+		.hpage.beta:not(.opt) { --sh: clamp(260px, 33vh, 390px); grid-template-rows: 52px minmax(0, 1fr) var(--sh); }
+		@media (max-width: 1100px) { .hpage.beta:not(.opt) { --sh: clamp(250px, 32vh, 330px); } }
+		.beta .strip .ov { gap: 16px; padding: 14px 18px;
+			grid-template-columns: min(calc((var(--sh) - 84px) * 1192 / 1664 * 5 + 62px), 52%) minmax(0, 1fr) minmax(0, 1fr); }
+		.beta .strip .ov > .col.hand, .beta .strip .ov > .col.mu, .beta .strip .ov > .col.gcol {
+			width: auto; justify-self: stretch; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--hair); background: rgba(3, 10, 20, 0.6); }
+		.beta .col.hand .spread { flex: 1; min-height: 0; justify-content: center; align-items: center; }
+		.beta .col.gcol .gbox { border: 0; background: none; padding: 0; }
+		.beta .col.mu { container-type: size; }
+		.beta .col.mu .mgrid { --mf: clamp(30px, min(calc((100cqh - 112px) / 3), calc((100cqw - 150px) / 3)), 96px);
+			grid-template-columns: auto repeat(3, var(--mf)); gap: 6px 14px; margin: auto 0; justify-content: center; }
+		.beta .col.mu .mgrid small { grid-column: auto; padding: 0 6px 0 0; font-size: clamp(11px, calc(var(--mf) * 0.2), 14px); }
+		.beta .col.mu .mcell .mface { width: var(--mf); height: var(--mf); }
+		.beta .col.mu .mcell em { height: 18px; line-height: 18px; font-size: clamp(11px, calc(var(--mf) * 0.2), 15px); }
+		/* a narrow panel: the labels go above their faces */
+		@container (max-width: 240px) {
+			.beta .col.mu .mgrid { --mf: clamp(24px, min(calc((100cqw - 28px) / 3), calc((100cqh - 146px) / 3)), 64px);
+				grid-template-columns: repeat(3, var(--mf)); gap: 0 14px; }
+			.beta .col.mu .mgrid small { grid-column: 1 / -1; padding: 2px 0 0; font-size: 11px; }
+			.beta .col.mu .mcell em { height: 15px; line-height: 15px; font-size: 11px; }
+		}
+	}
 	@media (max-width: 760px) {
 		.beta .swart { display: none; }
 		.beta .stage .id { left: 16px; width: calc(100% - 32px); }
