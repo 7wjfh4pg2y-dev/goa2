@@ -424,6 +424,7 @@
 	.gt.beginner { color: #6be39a; background: rgba(53, 208, 122, 0.14); }
 	.gt.skill { color: #c9a2ff; background: rgba(123, 69, 201, 0.25); }
 	.gl2 { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-top: 2px; }
+	.gl2 span, .gl2 b { white-space: nowrap; } /* 'Hero impact' never breaks onto a second line (2026-11-19) */
 	.gl2 b { font-weight: 400; font-size: 18px; color: #fff; }
 	.gl2 b.up { color: #6be39a; }
 	.gl2 b.down { color: #ff7d73; }
@@ -515,7 +516,7 @@
 	.col.hand, .col.mu, .col.gcol { overflow: hidden; }
 	.col.gcol { width: clamp(330px, 26vw, 420px); justify-content: center; }
 	.col.gcol .gbox { flex: 1; min-height: 0; justify-content: center; }
-	.gcells { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 18px; }
+	.gcells { display: grid; grid-template-columns: minmax(max-content, 1fr) minmax(max-content, 1fr); gap: 10px 18px; }
 	.gcell { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 	.gcell.wide { grid-column: 1 / -1; }
 	/* narrower windows: the panel on the painting takes more of its width (room, not a scrollbar) */
