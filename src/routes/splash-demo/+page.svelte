@@ -386,7 +386,9 @@
 					<button class="t" on:click={() => nkSplash.play('laugh', '', true)}>He laughs (ultimate)</button>
 					<button on:click={() => nkSplash.play('steal', 'Stone Gaze')}>Steals your spell</button>
 					<button on:click={() => nkSplash.play('swap')}>Swaps your cards</button>
-					<button on:click={() => nkSplash.play('doubt', 'Red')}>Discard a colour</button>
+					<button on:click={() => nkSplash.play('doubt', 'Red')}>Names a colour</button>
+					<button on:click={() => nkSplash.play('discard', 'Red', false, 4500)}>Discard now! (Red)</button>
+					<button on:click={() => nkSplash.play('discard', 'Green', false, 4500)}>Discard now! (Green)</button>
 					<button on:click={() => nkSplash.play('crack')}>Cracks reality</button>
 				</div>
 				<div class="row sm nkrow">
