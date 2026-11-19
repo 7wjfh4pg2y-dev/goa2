@@ -21,7 +21,10 @@ export type Area = { hex: string; r: number; color: string; hexes?: string[]; al
 export type Badge = { id: string; text: string; tone: 'up' | 'down' | 'even'; total?: boolean }
 export type LearnCard = { hero: string; card: HeroCardJson; tag?: string; short?: string; tone?: 'hand' | 'item' | 'gone' | 'pick'; order?: number }
 /** `hud` = the step shows the game's HUD (the HUD chapters) instead of the bare board; `pills` = the actions round your hero */
-export type Scene = { pieces: ScenePiece[]; zone: string | null; areas?: Area[]; badges?: Badge[]; cards?: LearnCard[]; cardSize?: 'big' | 'row'; hud?: 'desktop' | 'phone'; pills?: boolean; close?: boolean }
+/** a labelled box on the big card (the card-reading step): `box` = [x0, y0, x1, y1] as fractions of the card face,
+ *  the label sits on the card's left / right at height `at` (fraction), joined to the box by an arrow */
+export type Anno = { n: number; label: string; box: [number, number, number, number]; side: 'l' | 'r'; at: number; low?: boolean }
+export type Scene = { pieces: ScenePiece[]; zone: string | null; areas?: Area[]; badges?: Badge[]; cards?: LearnCard[]; cardSize?: 'big' | 'row'; anno?: Anno[]; hud?: 'desktop' | 'phone'; pills?: boolean; close?: boolean }
 /** one numbered marker on the HUD picture: `sel` = a CSS selector inside the tour's box */
 export type Spot = { label: string; note: string; sel: string }
 export type Block =
@@ -114,6 +117,17 @@ const card = (h: string, name: string): HeroCardJson => cardsOf(h).find((c) => c
 const tier1 = (h: string, color: string) => cardsOf(h).find((c) => c.level === 1 && c.color === color)
 // the app's own starting hand (gold, silver, the three Tier I cards — the handicap variants left out)
 const startHand = (h: string): LearnCard[] => startingHand(h).map((i) => ({ hero: h, card: cardsOf(h)[i] }))
+
+// the parts of a card face (measured on a rendered card: initiative banner top left, name bar + tier coin along the
+// top, the backup icons down the left banner, the main action bar near the foot, its reach on the right, the text box)
+const CARD_ANNO: Anno[] = [
+	{ n: 1, label: 'Initiative', box: [0.01, 0.005, 0.215, 0.125], side: 'l', at: 0.065 },
+	{ n: 2, label: 'Name and tier', box: [0.21, 0.025, 0.975, 0.125], side: 'r', at: 0.075 },
+	{ n: 3, label: 'Backup actions', box: [0.045, 0.265, 0.185, 0.49], side: 'l', at: 0.38 },
+	{ n: 4, label: 'Main action', box: [0.02, 0.66, 0.75, 0.78], side: 'l', at: 0.72 },
+	{ n: 5, label: 'Reach', box: [0.76, 0.66, 0.985, 0.78], side: 'r', at: 0.72 },
+	{ n: 6, label: 'What it does', box: [0.05, 0.775, 0.95, 0.94], side: 'r', at: 0.86, low: true }
+]
 
 // ── scenes ──
 function sceneMovement(): Scene {
@@ -234,13 +248,16 @@ export function learnSteps(): Step[] {
 			id: 'card', chapter: 'The basics', title: 'Reading a card',
 			blocks: [
 				{ list: [
-					`**The number in the top left** is the card’s {{initiative}}: the higher it is, the sooner it acts. This one: **${shock.initiative}**.`,
-					`**The big action along the bottom** is the card’s {{main action|primary}}: this one attacks for **${shock.primaryValue}**. The card’s text belongs to it.`,
-					`**The small icons down the left** are {{backup actions|secondary}}: move **${shock.secondaryMovement}** spaces, or defend with **${shock.secondaryDefense}**.`
+					`**1 · {{Initiative|initiative}}:** the higher it is, the sooner the card acts. This one: **${shock.initiative}**.`,
+					`**2 · Name and {{tier}}:** “${shock.name}”; the **I** in the corner makes it a Tier I card.`,
+					`**3 · {{Backup actions|secondary}}:** defend with **${shock.secondaryDefense}**, or move **${shock.secondaryMovement}** spaces.`,
+					`**4 · {{Main action|primary}}:** this one attacks for **${shock.primaryValue}**.`,
+					`**5 · Reach:** how far the main action reaches: here a {{${shock.modifier === 'RANGE' ? 'range' : 'radius'}}} of **${shock.modifierValue ?? 1}**.`,
+					'**6 · What it does:** the card’s text, part of the main action.'
 				] },
 				{ p: 'When your card acts you do **one** thing: the main action **or** one backup action.' }
 			],
-			scene: { ...all(), cards: [{ hero: 'wasp', card: shock }], cardSize: 'big' }
+			scene: { ...all(), cards: [{ hero: 'wasp', card: shock }], cardSize: 'big', anno: CARD_ANNO }
 		},
 		// ── a first turn, played out ──
 		{

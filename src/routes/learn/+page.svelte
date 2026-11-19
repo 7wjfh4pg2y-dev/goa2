@@ -28,11 +28,13 @@
 	$: chapters = [...new Set(steps.map((s) => s.chapter))];
 	// the HUD steps: numbered parts of the HUD picture; a tap (here or on the picture) lights one
 	let spotPick = -1;
+	// the card-reading step: the part under the pointer (its label and box light together)
+	let annoOn = 0;
 	$: spotBlock = step.blocks.find((b) => 'spots' in b) as { spots: Spot[] } | undefined;
 	$: spots = spotBlock?.spots ?? [];
 	const thrones = (['orange', 'blue'] as const).map((t) => ({ hex: throneHex(LEARN_MAP, t), team: t })).filter((t): t is { hex: string; team: 'orange' | 'blue' } => !!t.hex);
 	// desktop: the island sits right of the text panel (and above the cards, when there are some)
-	$: inset = phone ? null : { t: 100, b: scene.cards ? Math.min(h * 0.42, 360) : 24, l: Math.min(560, w * 0.4) + 24, r: 24 };
+	$: inset = phone ? null : { t: 100, b: scene.anno ? Math.min(300, h * 0.38) * 1.396 + 40 : scene.cards ? Math.min(h * 0.42, 360) : 24, l: Math.min(560, w * 0.4) + 24, r: 24 };
 	// where this step sits in its chapter (desktop kicker: "The board · 2 / 2")
 	$: inChap = steps.filter((s) => s.chapter === step.chapter);
 	$: chapPos = inChap.indexOf(step) + 1;
@@ -128,11 +130,33 @@
 		{/if}
 		{#if scene.cards}
 			{#key step.id}
-				<div class="cards" class:big={scene.cardSize === 'big'} style="--n:{scene.cards.length}">
+				<div class="cards" class:big={scene.cardSize === 'big'} class:anno={!!scene.anno} style="--n:{scene.cards.length}">
 					{#each scene.cards as c, k (k)}
 						<figure class="lc t-{c.tone ?? 'plain'}" style="--d:{k * 70}ms">
 							{#if c.order}<span class="ord">{c.order}</span>{/if}
-							<div class="cw"><Card heroId={c.hero} card={c.card} /></div>
+							<div class="cbox">
+								<div class="cw"><Card heroId={c.hero} card={c.card} /></div>
+								{#if scene.anno && k === 0}
+									<!-- the card's parts: a box on each, an arrow from its label (the card is 1000 × 1396 here) -->
+									<svg class="annosvg" viewBox="0 0 1000 1396" preserveAspectRatio="none" aria-hidden="true">
+										<defs><marker id="annoarr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#f3c454" /></marker></defs>
+										{#each scene.anno as a (a.n)}
+											{@const x0 = a.box[0] * 1000}{@const y0 = a.box[1] * 1396}{@const x1 = a.box[2] * 1000}{@const y1 = a.box[3] * 1396}
+											<g class="ab" class:on={annoOn === a.n}>
+												<rect x={x0} y={y0} width={x1 - x0} height={y1 - y0} rx="14" />
+												{#if !phone}<line x1={a.side === 'l' ? -70 : 1070} y1={a.at * 1396} x2={a.side === 'l' ? x0 - 6 : x1 + 6} y2={Math.max(y0 + 10, Math.min(y1 - 10, a.at * 1396))} marker-end="url(#annoarr)" />{/if}
+												<circle cx={a.side === 'l' ? x0 + 4 : x1 - 4} cy={a.low ? y1 - 4 : y0 + 4} r="34" /><text x={a.side === 'l' ? x0 + 4 : x1 - 4} y={(a.low ? y1 - 4 : y0 + 4) + 12}>{a.n}</text>
+											</g>
+										{/each}
+									</svg>
+									{#if !phone}
+										{#each scene.anno as a (a.n)}
+											<!-- svelte-ignore a11y-no-static-element-interactions -->
+											<span class="al {a.side}" class:on={annoOn === a.n} style="top:{a.at * 100}%" on:mouseenter={() => (annoOn = a.n)} on:mouseleave={() => (annoOn = 0)}><i>{a.n}</i>{a.label}</span>
+										{/each}
+									{/if}
+								{/if}
+							</div>
 							{#if c.tag}<figcaption>{phone ? c.short ?? c.tag : c.tag}</figcaption>{/if}
 						</figure>
 					{/each}
@@ -246,6 +270,21 @@
 	.cards.big .lc { max-width: 260px; width: min(260px, 32vh); }
 	.cw { width: 100%; aspect-ratio: 1192 / 1664; border-radius: 6%; overflow: hidden; box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55); }
 	.cw :global(.cardface) { width: 100%; height: 100%; display: block; }
+	.cbox { position: relative; width: 100%; }
+	/* the card-reading step: the card larger, its parts boxed and labelled either side */
+	.cards.anno .lc { width: min(300px, 38vh); max-width: 300px; }
+	.annosvg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+	.ab rect { fill: rgba(243, 196, 84, 0.08); stroke: #f3c454; stroke-width: 6; }
+	.ab line { stroke: #f3c454; stroke-width: 5; }
+	.ab circle { fill: #f3c454; stroke: #0b1424; stroke-width: 5; }
+	.ab text { fill: #10141c; font-size: 40px; text-anchor: middle; }
+	.ab.on rect { fill: rgba(243, 196, 84, 0.24); stroke: #ffe39a; stroke-width: 9; }
+	.al { position: absolute; transform: translateY(-50%); display: flex; align-items: center; gap: 7px; padding: 4px 10px; border-radius: 999px; white-space: nowrap; font-size: 15px; color: var(--ink);
+		background: rgba(6, 14, 26, 0.92); border: 1px solid var(--brass-line); pointer-events: auto; cursor: default; }
+	.al.l { right: calc(100% + 7%); flex-direction: row-reverse; }
+	.al.r { left: calc(100% + 7%); }
+	.al i { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; font-style: normal; font-size: 12px; color: #10141c; background: #f3c454; }
+	.al.on { border-color: #ffe39a; background: rgba(40, 32, 10, 0.95); }
 	.lc figcaption { padding: 2px 10px; border-radius: 999px; font-size: 13px; color: var(--ink); background: rgba(6, 14, 26, 0.85); border: 1px solid var(--hair); white-space: nowrap; }
 	.t-item .cw { transform: rotate(180deg); }
 	.t-gone .cw { opacity: 0.45; filter: grayscale(1); }
@@ -290,6 +329,7 @@
 	.phone .cards { left: 10px; right: 10px; bottom: 8px; gap: 6px; }
 	.phone .lc { max-width: 22vw; }
 	.phone .cards.big .lc { width: 30vw; max-width: 30vw; }
+	.phone .cards.anno .lc { width: min(46vw, 24vh); max-width: none; }
 	.phone .lc figcaption { font-size: 10.5px; padding: 1px 6px; }
 	.phone .ord { width: 22px; height: 22px; font-size: 13px; top: -8px; left: -4px; }
 	@media (prefers-reduced-motion: reduce) { .in, .lc { animation: none; } }
