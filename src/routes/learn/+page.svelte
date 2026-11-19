@@ -48,7 +48,9 @@
 		try { sessionStorage.setItem('goa2-learn', String(k)); } catch { /* ignore */ }
 	}
 	// **bold** in the step texts (they're ours, not user input)
-	const md = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+	// … and the team names in their team's colour, wherever they appear
+	const md = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+		.replace(/\b(Atlanteans?)\b/g, '<span class="tm o">$1</span>').replace(/\b(Titans?)\b/g, '<span class="tm b">$1</span>');
 	// keep the current chapter chip in view (the phone's chip row scrolls)
 	$: if (ready && step) tick().then(() => document.querySelector('.learn .chap .on')?.scrollIntoView({ inline: 'center', block: 'nearest' }));
 	function key(e: KeyboardEvent) {
@@ -181,6 +183,8 @@
 	.txt li { position: relative; padding-left: 18px; }
 	.txt li::before { content: ''; position: absolute; left: 2px; top: 0.62em; width: 6px; height: 6px; border-radius: 1px; transform: rotate(45deg); background: var(--brass); }
 	.txt :global(b) { color: var(--ink); font-weight: inherit; }
+	.txt :global(.tm.o) { color: #ff9a45; }
+	.txt :global(.tm.b) { color: #5ea6ff; }
 	.tip { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--brass-line); background: var(--brass-faint); }
 	.keys { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; margin: 4px 0 12px; }
 	.keys button { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--hair); background: rgba(4, 14, 26, 0.4); color: var(--ink-2); font: inherit; font-size: 15px; text-align: left; cursor: pointer; }
