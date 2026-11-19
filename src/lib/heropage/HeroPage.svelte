@@ -58,6 +58,8 @@
 	) as MuRow[];
 
 	$: h = heroById(heroId) ?? HEROES_ALPHA[0];
+	// beta: the overview sits on the art's left, so these paintings are mirrored to keep the hero clear of it (2026-11-19, the user)
+	const FLIP_ART = new Set(['bain', 'emmitt', 'mortimer', 'mrak', 'rowenna', 'silverarrow', 'tali', 'tigerclaw', 'trinkets', 'ursafar', 'wasp', 'whisper', 'widget']);
 	$: face = splashFace(h.id);
 	$: cards = heroCards(h.id);
 	$: hand = startingHand(h.id);
@@ -229,7 +231,7 @@
 	<!-- ───── stage (the big area) ───── -->
 	<section class="stage">
 		{#if tab === 'overview'}
-			<img class="art" src={heroSplash(h.id)} alt="" style="object-position: {Math.round(face[0] * 100)}% {Math.round(face[1] * 100)}%" />
+			<img class="art" class:flip={beta && FLIP_ART.has(h.id)} src={heroSplash(h.id)} alt="" style="object-position: {Math.round(face[0] * 100)}% {Math.round(face[1] * 100)}%" />
 			<div class="shade"></div>
 			{#if beta}
 				<button class="hnav l" on:click={() => stepHero(-1)} aria-label="Previous hero: {prevHero.name}" title="{prevHero.name} (←)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg></button>
@@ -383,6 +385,7 @@
 
 	/* overview: the painting */
 	.art { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+	.art.flip { transform: scaleX(-1); }
 	.shade { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(3, 10, 20, 0.92) 0%, rgba(3, 10, 20, 0.6) 36%, rgba(3, 10, 20, 0) 64%), linear-gradient(0deg, rgba(3, 10, 20, 0.7), transparent 40%); }
 	.id { position: absolute; left: 32px; top: 26px; bottom: 20px; width: min(880px, 64%); display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
 	.logo { width: 68px; height: 68px; object-fit: contain; filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.6)); }
