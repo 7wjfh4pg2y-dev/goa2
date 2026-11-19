@@ -1,8 +1,8 @@
 // How to play: the illustrated walkthrough (/learn). Each step = a short text + a board SCENE drawn on the
 // real map (pieces, lit zones, coloured areas, defence badges) and, for the card steps, real cards.
-// The order teaches by playing (2026-11-19, after a first-timer got lost in the old rules-first order): the basics →
-// one turn played out → the minions and the lane → fighting heroes → the end of a round → winning + a first-game
-// summary → an optional Reference chapter (zones, fast travel, moving others, ties, setup, other rules) → the HUD.
+// The order (2026-11-19, after a first-timer got lost in the old rules-first order; reordered the same day by the user):
+// the basics → the board (zones, battle zone, pushing) → one turn played out (incl. ties) → fighting heroes → the end of a round → winning + a first-game
+// summary → an optional Reference chapter (fast travel, moving others, setup, other rules) → the HUD.
 // Game words are glossary terms ({{term}}, GLOSSARY) the page explains on hover / tap. The rules match the app's
 // engine (tested in learn.test.ts: every scene's pieces stand on real, open, distinct hexes).
 import M from './maps/forgotten_island.json'
@@ -224,7 +224,7 @@ function sceneOthers(): Scene {
 export function learnSteps(): Step[] {
 	const shock = card('wasp', 'Shock')
 	return [
-		// ── the basics: what's going on, and your cards ──
+		// ── the basics ──
 		{
 			id: 'welcome', chapter: 'The basics', title: 'Guards of Atlantis II',
 			blocks: [
@@ -259,7 +259,38 @@ export function learnSteps(): Step[] {
 			],
 			scene: { ...all(), cards: [{ hero: 'wasp', card: shock }], cardSize: 'big', anno: CARD_ANNO }
 		},
-		// ── a first turn, played out ──
+		// ── the board ──
+		{
+			id: 'map', chapter: 'The board', title: 'Seven zones',
+			blocks: [
+				{ p: 'The island is split into seven zones. Each team has a {{throne}} at its end. Minions only ever fight in the **middle** or on one of the two **beaches**. The two **jungles** are paths for heroes.' },
+				{ keys: ZONES.map((z) => ({ color: z.color, label: z.label, note: z.note, area: zoneArea(z.z, '#ffd75e', 0.55) })) } // one strong highlight, whatever the zone's own colour
+			],
+			scene: { pieces: startHeroes, zone: null }
+		},
+		{
+			id: 'zone', chapter: 'The board', title: 'The battle zone',
+			blocks: [
+				{ p: 'The minions always stand in one area: the {{battle zone}}. It starts in the middle of the island.' },
+				{ p: 'There are three kinds, told apart by the pips round their rim: **melee** (6 pips), **ranged** (4) and **heavy** (8).' },
+				{ p: 'Your team’s minions turn **one way**, the enemy’s the **other**. That is also how you tell a minion from the empty {{spawn point}} under it.' }
+			],
+			scene: all()
+		},
+		{
+			id: 'push', chapter: 'The board', title: 'Pushing the lane',
+			blocks: [
+				{ p: 'When a team has **no minions left** in the battle zone, the other team {{pushes|push}}. It can happen at any moment.' },
+				{ list: [
+					'One {{wave counter|wave}} is removed.',
+					'The battle zone moves one step **towards the losing team’s** {{throne}}.',
+					'Every minion leaves the board and a fresh wave appears in the new battle zone.'
+				] },
+				{ p: 'Here the Titans pushed: the fight has moved onto the Atlanteans’ beach, one step from their throne.' }
+			],
+			scene: scenePush()
+		},
+		// ── a first turn ──
 		{
 			id: 'turn', chapter: 'A first turn', title: 'Everyone plays a card',
 			blocks: [
@@ -269,7 +300,19 @@ export function learnSteps(): Step[] {
 					'They **resolve** one at a time, the highest {{initiative}} first. Here Wasp goes first with 10.'
 				] },
 				{ p: 'That is one {{turn}}. Four turns make a {{round}}, and something special happens at the end of each round (you’ll see it soon).' },
-				{ tip: 'Two cards with the same number? The {{tie-breaker coin}} decides. The details are in the Reference chapter.' }
+				{ tip: 'Two cards with the same initiative? The {{tie-breaker coin}} decides: see the next page.' }
+			],
+			scene: sceneOrder()
+		},
+		{
+			id: 'ties', chapter: 'A first turn', title: 'Ties',
+			blocks: [
+				{ p: 'Two cards with the same {{initiative}}:' },
+				{ list: [
+					'**Against an enemy:** the team holding the {{tie-breaker coin}} goes first, then the coin flips to the other team.',
+					'**With a teammate:** you two choose who goes first. The coin doesn’t flip.'
+				] },
+				{ p: 'Here Xargatha and Brogan both have 7 and the Titans hold the coin, so Xargatha goes first.' }
 			],
 			scene: sceneOrder()
 		},
@@ -289,29 +332,6 @@ export function learnSteps(): Step[] {
 				{ p: 'The heavy minion has a silver shield: it is {{immune}} while any other minion of its team is still in the fight.' }
 			],
 			scene: sceneAttackMinion()
-		},
-		// ── the minions and the lane ──
-		{
-			id: 'zone', chapter: 'The lane', title: 'The battle zone',
-			blocks: [
-				{ p: 'The minions always stand in one area: the {{battle zone}}. It starts in the middle of the island.' },
-				{ p: 'There are three kinds, told apart by the pips round their rim: **melee** (6 pips), **ranged** (4) and **heavy** (8).' },
-				{ p: 'Your team’s minions turn **one way**, the enemy’s the **other**. That is also how you tell a minion from the empty {{spawn point}} under it.' }
-			],
-			scene: all()
-		},
-		{
-			id: 'push', chapter: 'The lane', title: 'Pushing the lane',
-			blocks: [
-				{ p: 'When a team has **no minions left** in the battle zone, the other team {{pushes|push}}. It can happen at any moment.' },
-				{ list: [
-					'One {{wave counter|wave}} is removed.',
-					'The battle zone moves one step **towards the losing team’s** {{throne}}.',
-					'Every minion leaves the board and a fresh wave appears in the new battle zone.'
-				] },
-				{ p: 'Here the Titans pushed: the fight has moved onto the Atlanteans’ beach, one step from their throne.' }
-			],
-			scene: scenePush()
 		},
 		// ── fighting heroes ──
 		{
@@ -353,7 +373,7 @@ export function learnSteps(): Step[] {
 			],
 			scene: sceneDefeat()
 		},
-		// ── the end of a round ──
+		// ── end of a round ──
 		{
 			id: 'battle', chapter: 'End of a round', title: 'The minion battle',
 			blocks: [
@@ -376,7 +396,7 @@ export function learnSteps(): Step[] {
 			],
 			scene: sceneLevel()
 		},
-		// ── winning, and the first game ──
+		// ── winning ──
 		{
 			id: 'win', chapter: 'Winning', title: 'Three ways to win',
 			blocks: [
@@ -399,19 +419,11 @@ export function learnSteps(): Step[] {
 					'**Talk with your team before the cards are revealed.** Afterwards, you’re on your own.',
 					'Turn 1: your **green** card can {{fast travel}} you straight into the fight.'
 				] },
-				{ tip: 'Next, if you want them: the zones, ties, setup and other rules. Then the game’s screen, on a computer and on a phone.' }
+				{ tip: 'Next, if you want them: fast travel, moving other units, setup and other rules. Then the game’s screen, on a computer and on a phone.' }
 			],
 			scene: all()
 		},
-		// ── reference: the details ──
-		{
-			id: 'map', chapter: 'Reference', title: 'Seven zones',
-			blocks: [
-				{ p: 'The island is split into seven zones. Each team has a {{throne}} at its end. Minions only ever fight in the **middle** or on one of the two **beaches**. The two **jungles** are paths for heroes.' },
-				{ keys: ZONES.map((z) => ({ color: z.color, label: z.label, note: z.note, area: zoneArea(z.z, '#ffd75e', 0.55) })) } // one strong highlight, whatever the zone's own colour
-			],
-			scene: { pieces: startHeroes, zone: null }
-		},
+		// ── reference ──
 		{
 			id: 'fast', chapter: 'Reference', title: 'Fast travel',
 			blocks: [
@@ -435,18 +447,6 @@ export function learnSteps(): Step[] {
 				{ tip: 'In the app anyone can move any piece by hand, so you carry out these effects yourself. Only an immune heavy minion is locked.' }
 			],
 			scene: sceneOthers()
-		},
-		{
-			id: 'ties', chapter: 'Reference', title: 'Ties',
-			blocks: [
-				{ p: 'Two cards with the same {{initiative}}:' },
-				{ list: [
-					'**Against an enemy:** the team holding the {{tie-breaker coin}} goes first, then the coin flips to the other team.',
-					'**With a teammate:** you two choose who goes first. The coin doesn’t flip.'
-				] },
-				{ p: 'Here Xargatha and Brogan both have 7 and the Titans hold the coin, so Xargatha goes first.' }
-			],
-			scene: sceneOrder()
 		},
 		{
 			id: 'setup', chapter: 'Reference', title: 'Setting up',
