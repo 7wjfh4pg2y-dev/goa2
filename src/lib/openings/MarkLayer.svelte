@@ -42,8 +42,9 @@
 		const p = { x: a.x + ux * size * 0.55, y: a.y + uy * size * 0.55 }, q = { x: b.x - ux * size * 0.8, y: b.y - uy * size * 0.8 };
 		const hl = size * 0.42, hw = size * 0.3, tip = { x: q.x + ux * hl * 0.6, y: q.y + uy * hl * 0.6 };
 		const head = `${tip.x.toFixed(1)},${tip.y.toFixed(1)} ${(q.x - ux * hl * 0.4 - uy * hw).toFixed(1)},${(q.y - uy * hl * 0.4 + ux * hw).toFixed(1)} ${(q.x - ux * hl * 0.4 + uy * hw).toFixed(1)},${(q.y - uy * hl * 0.4 - ux * hw).toFixed(1)}`;
-		// the sword sits ON the target's ring, on the attacker's side, so every attack shows it (adjacent ones too)
-		const m = { x: b.x - ux * size * 0.8, y: b.y - uy * size * 0.8 };
+		// the sword sits on the target's ring at its SIDE (off the strike line and the target, 2026-11-19 the user: it
+		// covered everything), the blade pointing away from the hero, along the strike
+		const m = { x: b.x - uy * size * 0.86, y: b.y + ux * size * 0.86 };
 		return { d: `M${p.x.toFixed(1)} ${p.y.toFixed(1)}L${q.x.toFixed(1)} ${q.y.toFixed(1)}`, head, m, ang: (Math.atan2(dy, dx) * 180) / Math.PI + 90, short: len < size * 2.2 };
 	}
 
@@ -74,7 +75,7 @@
 	// whichever way the board faces. `s` = the scale against the mark's own size.
 	type Slot = { x: number; y: number; s: number };
 	// chips are drawn CK × bigger than before when they have the space to themselves (2026-11-19, the user: hard to see)
-	const CK = 1.7;
+	const CK = 2.2;
 	const NATURAL = (m: Mark) => (m.kind === 'step' ? 0.36 * CK : m.kind === 'token' ? (m.token === 'double' ? 0.5 : 0.8) : m.kind === 'unit' ? (m.hero ? 0.66 : 0.5) : 0.36);
 	const ORDER: Record<string, number> = { unit: 0, token: 1, step: 2 };
 	$: slots = (() => {
@@ -92,8 +93,8 @@
 			if (!n) continue;
 			if (n === 1 && !occ) { out[list[0].id] = { ...c, s: 1 }; continue; }
 			// round the rim of a piece: up to six places from the top right, clockwise; else a circle filling the space
-			const rr = occ ? 0.64 : n === 2 ? 0.42 : Math.min(0.52, 0.36 + 0.035 * n);
-			const r = occ ? 0.3 : Math.min(0.44, rr * Math.sin(Math.PI / n) * 0.94, 0.82 - rr); // stays inside the space
+			const rr = occ ? 0.7 : n === 2 ? 0.46 : Math.min(0.52, 0.36 + 0.035 * n);
+			const r = occ ? 0.44 : Math.min(0.52, rr * Math.sin(Math.PI / n) * 0.98, 0.98 - rr); // stays inside the space
 			const step = occ ? (2 * Math.PI) / Math.max(6, n) : (2 * Math.PI) / n;
 			const a0 = occ ? -Math.PI / 3 : n === 2 ? Math.PI : -Math.PI / 2 + (n % 2 ? 0 : Math.PI / n);
 			list.forEach((m, i) => {
@@ -214,7 +215,7 @@
 	{/each}
 	{#each strikes as x, i (i)}
 		{@const g = strikeGeo(x.from, x.to)}
-		{@const br = size * 0.42}
+		{@const br = size * 0.27}
 		<g opacity={sfade(x)} pointer-events="none">
 			<path d={g.d} fill="none" stroke="#0b0e14" stroke-opacity=".7" stroke-width={size * 0.32} stroke-linecap="round" />
 			<path d={g.d} fill="none" stroke="#ef4135" stroke-width={size * 0.19} stroke-linecap="round" stroke-dasharray={x.alt ? `${size * 0.3} ${size * 0.18}` : undefined} />
@@ -222,7 +223,7 @@
 				<!-- the sword: a red disc at the strike's middle, the blade pointing at the target -->
 				<circle cx={g.m.x} cy={g.m.y} r={br * 1.08} fill="#0b0e14" fill-opacity=".55" />
 				<circle cx={g.m.x} cy={g.m.y} r={br} fill="#c62828" stroke="#fff" stroke-width={br * 0.13} />
-				<g transform="rotate({g.ang - 180} {g.m.x} {g.m.y})" fill="#fff" stroke="none">
+				<g transform="rotate({g.ang} {g.m.x} {g.m.y})" fill="#fff" stroke="none">
 					<polygon points="{g.m.x},{g.m.y - br * 0.72} {g.m.x + br * 0.13},{g.m.y - br * 0.52} {g.m.x + br * 0.13},{g.m.y + br * 0.22} {g.m.x - br * 0.13},{g.m.y + br * 0.22} {g.m.x - br * 0.13},{g.m.y - br * 0.52}" />
 					<rect x={g.m.x - br * 0.42} y={g.m.y + br * 0.2} width={br * 0.84} height={br * 0.13} rx={br * 0.05} />
 					<rect x={g.m.x - br * 0.07} y={g.m.y + br * 0.3} width={br * 0.14} height={br * 0.3} />
