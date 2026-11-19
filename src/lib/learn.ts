@@ -42,15 +42,15 @@ export const GLOSSARY: Record<string, string> = {
 	hero: 'The piece you control. Every player has one hero, with its own deck of cards.',
 	minion: 'The small soldiers of each team. They stand in the battle zone and never move on their own.',
 	heavy: 'The big minion: worth 4 coins, and immune while its team has other minions in the battle zone.',
-	turn: 'Everyone plays one card face down, then the cards are turned over and act one at a time.',
+	turn: 'Everyone plays one card face down, then the cards are revealed and resolve one at a time.',
 	round: 'Four turns. At the end of a round come the minion battle and levelling up.',
 	initiative: 'The number in a card’s top left corner. The highest acts first.',
 	primary: 'The card’s big action, along its bottom: an attack, a move, a skill or a defence. The card’s text belongs to it.',
-	secondary: 'The small icons down a card’s left side: a plain move or a defence, used instead of the main action.',
+	secondary: 'The small icons down a card’s left side: a plain move or a defence, used instead of the primary action.',
 	'tie-breaker coin': 'Decides who goes first when two enemy cards have the same initiative. It flips after each tie it settles.',
 	range: 'How far away an attack’s target may be, counted in spaces. Range 1 = a space right next to you.',
 	radius: 'An area round your hero: every space up to that many spaces away.',
-	skill: 'A main action that isn’t an attack, a move or a defence. Do what the card says.',
+	skill: 'A primary action that isn’t an attack, a move or a defence. Do what the card says.',
 	coins: 'Earned by defeating minions and heroes. At the end of each round they pay for levels.',
 	immune: 'Can’t be attacked, defeated or moved for now.',
 	'battle zone': 'The zone where the minions stand and fight. It starts in the middle and moves when a team pushes.',
@@ -119,14 +119,14 @@ const tier1 = (h: string, color: string) => cardsOf(h).find((c) => c.level === 1
 const startHand = (h: string): LearnCard[] => startingHand(h).map((i) => ({ hero: h, card: cardsOf(h)[i] }))
 
 // the parts of a card face (measured on a rendered card: initiative banner top left, name bar + tier coin along the
-// top, the backup icons down the left banner, the main action bar near the foot, its reach on the right, the text box)
+// top, the secondary action icons down the left banner, the primary action bar near the foot, its reach on the right, the text box)
 const CARD_ANNO: Anno[] = [
 	{ n: 1, label: 'Initiative', box: [0.01, 0.005, 0.215, 0.125], side: 'l', at: 0.065 },
 	{ n: 2, label: 'Name and tier', box: [0.21, 0.025, 0.975, 0.125], side: 'r', at: 0.075 },
-	{ n: 3, label: 'Backup actions', box: [0.045, 0.265, 0.185, 0.49], side: 'l', at: 0.38 },
-	{ n: 4, label: 'Main action', box: [0.02, 0.66, 0.75, 0.78], side: 'l', at: 0.72 },
-	{ n: 5, label: 'Reach', box: [0.76, 0.66, 0.985, 0.78], side: 'r', at: 0.72 },
-	{ n: 6, label: 'What it does', box: [0.05, 0.775, 0.95, 0.94], side: 'r', at: 0.86, low: true }
+	{ n: 3, label: 'Secondary actions', box: [0.045, 0.265, 0.185, 0.49], side: 'l', at: 0.38 },
+	{ n: 4, label: 'Primary action', box: [0.02, 0.66, 0.75, 0.78], side: 'l', at: 0.72 },
+	{ n: 5, label: 'Range / radius', box: [0.76, 0.66, 0.985, 0.78], side: 'r', at: 0.72 },
+	{ n: 6, label: 'Card text', box: [0.05, 0.775, 0.95, 0.94], side: 'r', at: 0.86, low: true }
 ]
 
 // ── scenes ──
@@ -248,14 +248,14 @@ export function learnSteps(): Step[] {
 			id: 'card', chapter: 'The basics', title: 'Reading a card',
 			blocks: [
 				{ list: [
-					`**1 · {{Initiative|initiative}}:** the higher it is, the sooner the card acts. This one: **${shock.initiative}**.`,
+					`**1 · {{Initiative|initiative}}:** the higher it is, the sooner the card resolves. This one: **${shock.initiative}**.`,
 					`**2 · Name and {{tier}}:** “${shock.name}”; the **I** in the corner makes it a Tier I card.`,
-					`**3 · {{Backup actions|secondary}}:** defend with **${shock.secondaryDefense}**, or move **${shock.secondaryMovement}** spaces.`,
-					`**4 · {{Main action|primary}}:** this one attacks for **${shock.primaryValue}**.`,
-					`**5 · Reach:** how far the main action reaches: here a {{${shock.modifier === 'RANGE' ? 'range' : 'radius'}}} of **${shock.modifierValue ?? 1}**.`,
-					'**6 · What it does:** the card’s text, part of the main action.'
+					`**3 · {{Secondary actions|secondary}}:** defend with **${shock.secondaryDefense}**, or move **${shock.secondaryMovement}** spaces.`,
+					`**4 · {{Primary action|primary}}:** this one attacks for **${shock.primaryValue}**.`,
+					`**5 · Range / radius:** how far the primary action reaches: here a {{${shock.modifier === 'RANGE' ? 'range' : 'radius'}}} of **${shock.modifierValue ?? 1}**.`,
+					'**6 · Card text:** part of the primary action.'
 				] },
-				{ p: 'When your card acts you do **one** thing: the main action **or** one backup action.' }
+				{ p: 'When your card **resolves** you do **one** thing: the primary action **or** one secondary action.' }
 			],
 			scene: { ...all(), cards: [{ hero: 'wasp', card: shock }], cardSize: 'big', anno: CARD_ANNO }
 		},
@@ -265,8 +265,8 @@ export function learnSteps(): Step[] {
 			blocks: [
 				{ list: [
 					'Everyone picks a card and plays it **face down**, all at the same time.',
-					'The cards are turned over together.',
-					'They act **one at a time**, the highest {{initiative}} first. Here Wasp goes first with 10.'
+					'The cards are **revealed** together.',
+					'They **resolve** one at a time, the highest {{initiative}} first. Here Wasp goes first with 10.'
 				] },
 				{ p: 'That is one {{turn}}. Four turns make a {{round}}, and something special happens at the end of each round (you’ll see it soon).' },
 				{ tip: 'Two cards with the same number? The {{tie-breaker coin}} decides. The details are in the Reference chapter.' }
@@ -285,7 +285,7 @@ export function learnSteps(): Step[] {
 			id: 'minions', chapter: 'A first turn', title: 'Wasp defeats a minion',
 			blocks: [
 				{ p: 'Next turn Wasp attacks. Her card’s {{range}} says how far it reaches: **range 1** means a space right next to her.' },
-				{ p: 'An attack on a minion **always** defeats it. Wasp earns {{coins}}: **2** for an ordinary minion, **4** for a big {{heavy}} one. Coins are how you get stronger later.' },
+				{ p: 'An attack on a minion **always** defeats it. Wasp earns {{coins}}: **2** for a melee or ranged minion, **4** for a {{heavy}} one. Coins are how you get stronger later.' },
 				{ p: 'The heavy minion has a silver shield: it is {{immune}} while any other minion of its team is still in the fight.' }
 			],
 			scene: sceneAttackMinion()
@@ -295,7 +295,7 @@ export function learnSteps(): Step[] {
 			id: 'zone', chapter: 'The lane', title: 'The battle zone',
 			blocks: [
 				{ p: 'The minions always stand in one area: the {{battle zone}}. It starts in the middle of the island.' },
-				{ p: 'There are three kinds, told apart by the dots round their rim: **melee** (6 dots), **ranged** (4) and **heavy** (8).' },
+				{ p: 'There are three kinds, told apart by the pips round their rim: **melee** (6 pips), **ranged** (4) and **heavy** (8).' },
 				{ p: 'Your team’s minions turn **one way**, the enemy’s the **other**. That is also how you tell a minion from the empty {{spawn point}} under it.' }
 			],
 			scene: all()
@@ -305,7 +305,7 @@ export function learnSteps(): Step[] {
 			blocks: [
 				{ p: 'When a team has **no minions left** in the battle zone, the other team {{pushes|push}}. It can happen at any moment.' },
 				{ list: [
-					'One {{wave counter|wave}} is taken off.',
+					'One {{wave counter|wave}} is removed.',
 					'The battle zone moves one step **towards the losing team’s** {{throne}}.',
 					'Every minion leaves the board and a fresh wave appears in the new battle zone.'
 				] },
@@ -317,7 +317,7 @@ export function learnSteps(): Step[] {
 		{
 			id: 'heroes', chapter: 'Fighting heroes', title: 'Attacking a hero',
 			blocks: [
-				{ p: 'Attacking a hero is different: they can {{block}} it by throwing away (discarding) a card whose **defence** is at least the attack.' },
+				{ p: 'Attacking a hero is different: they can {{block}} it by **discarding** a card whose **defence** is at least the attack.' },
 				{ list: [
 					'The attack: the card’s value, **+1** for each attack {{item}} the attacker has.',
 					'**+1** for each of the attacker’s melee or heavy minions **next to** the defender, and each of their ranged minions **within 2**.',
@@ -332,11 +332,11 @@ export function learnSteps(): Step[] {
 			id: 'reach', chapter: 'Fighting heroes', title: 'Range, radius and skills',
 			blocks: [
 				{ list: [
-					'{{Range}} **N:** you may pick one target up to N spaces away. Count the spaces; nothing blocks the view.',
+					'{{Range}} **N:** you may pick one target up to N spaces away. Count the spaces; there is no line of sight.',
 					'{{Radius}} **N:** the card affects every space up to N spaces from you.',
-					'{{Skill}}: a main action that isn’t an attack, a move or a defence. Just do what the card says.'
+					'{{Skill}}: a primary action that isn’t an attack, a move or a defence. Just do what the card says.'
 				] },
-				{ p: '**“Discard a card, or be defeated”** is not an attack, so no defence helps. The target throws away any card; with none left, they are defeated.' }
+				{ p: '**“Discard a card, or be defeated”** is not an attack, so no defence helps. The target discards any card; with none left, they are defeated.' }
 			],
 			scene: { ...sceneMovement(), areas: [{ hex: sceneMovement().areas![0].hex, r: 2, color: C.violet }] }
 		},
@@ -347,7 +347,7 @@ export function learnSteps(): Step[] {
 				{ list: [
 					'Their team loses {{Life}}: 1 at levels 1–3, 2 at levels 4–6, 3 at levels 7–8.',
 					'The attacker earns **coins equal to the defeated hero’s level**; each of the attacker’s teammates earns as much as the Life lost.',
-					'**Next turn**, when their card comes up, they come back on a spawn point in their throne and then play the card.'
+					'**Next turn**, when their card comes up, they **respawn** on a spawn point in their throne and then resolve the card.'
 				] },
 				{ tip: 'Defeats cost your whole team, so a hero in trouble is worth protecting.' }
 			],
@@ -357,8 +357,8 @@ export function learnSteps(): Step[] {
 		{
 			id: 'battle', chapter: 'End of a round', title: 'The minion battle',
 			blocks: [
-				{ p: 'After the fourth turn, count each team’s minions in the battle zone. The team with **fewer** takes off minions until both sides are even.' },
-				{ p: 'Here the Titans have 6 and the Atlanteans 4, so the Atlanteans take off 2 more. A tie takes off nothing. If a team runs out, the other team pushes.' }
+				{ p: 'After the fourth turn, count each team’s minions in the battle zone. The team with **fewer** removes minions until both sides are even.' },
+				{ p: 'Here the Titans have 6 and the Atlanteans 4, so the Atlanteans remove 2. A tie removes nothing. If a team runs out, the other team pushes.' }
 			],
 			scene: sceneBattle()
 		},
@@ -371,7 +371,7 @@ export function learnSteps(): Step[] {
 					'Pick a colour: its card goes back to your deck and you get both cards of that colour one {{tier}} higher. One goes into your hand; the other becomes an {{item}}: **+1** to one of your numbers for the rest of the game.',
 					'All three colours reach Tier II before any goes to Tier III.',
 					'At **level 8** your {{Ultimate}} switches on for the rest of the game.',
-					'Couldn’t afford a level? Take a **free coin** instead.'
+					'Couldn’t afford a level? Take a **pity coin** instead.'
 				] }
 			],
 			scene: sceneLevel()
@@ -383,7 +383,7 @@ export function learnSteps(): Step[] {
 				{ list: [
 					'**Push into their throne.** Win a push while the battle zone is right next to the enemy {{throne}}.',
 					'**Run them out of Life.** Every enemy hero you defeat costs their team {{Life}}. A team with none left loses.',
-					'**Win the final push.** Each push takes off a {{wave counter|wave}}. Whoever pushes when the last one goes wins.'
+					'**Win the final push.** Each push removes a {{wave counter|wave}}. Whoever pushes when the last one goes wins.'
 				] }
 			],
 			scene: { ...all(), areas: [zoneArea('Orange Base', C.or), zoneArea('Blue Base', C.ti)] }
@@ -393,10 +393,10 @@ export function learnSteps(): Step[] {
 			blocks: [
 				{ p: 'Five things to remember:' },
 				{ list: [
-					'Each turn, play **one** card face down. The highest number acts first.',
+					'Each turn, play **one** card face down. The highest initiative resolves first.',
 					'Defeat minions for **coins**; coins buy **levels** at the end of each round.',
 					'Every hero your team loses costs **Life**. Stay near your minions and your teammates.',
-					'**Talk with your team before the cards are turned over.** Afterwards, you’re on your own.',
+					'**Talk with your team before the cards are revealed.** Afterwards, you’re on your own.',
 					'Turn 1: your **green** card can {{fast travel}} you straight into the fight.'
 				] },
 				{ tip: 'Next, if you want them: the zones, ties, setup and other rules. Then the game’s screen, on a computer and on a phone.' }
@@ -465,7 +465,7 @@ export function learnSteps(): Step[] {
 			id: 'rules', chapter: 'Reference', title: 'Other rules',
 			blocks: [
 				{ list: [
-					'**Nothing blocks the view:** you can target through heroes, minions, terrain and tokens.',
+					'**No line of sight:** you can target through heroes, minions, terrain and tokens.',
 					'You can’t defend on your own turn, only in answer to an attack.',
 					'An attack can be swapped for a **clear**: remove any tokens next to you (none of the card’s text happens).',
 					'**Hold:** do nothing with your card.',
