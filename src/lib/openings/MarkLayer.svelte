@@ -11,7 +11,7 @@
 	import KitToken from '$lib/board/KitToken.svelte';
 	import { outlineLoops, loopsPath } from '$lib/board/hexgeo';
 	import { COMPANIONS } from '$lib/tokens';
-	import { CARD_HEX, MARK_HEX, OPENING_MAP, spawnDirs, chipColors, type Mark, type Side, type StepMark } from '$lib/openings';
+	import { CARD_HEX, MARK_HEX, OPENING_MAP, spawnDirs, chipColors, type CardColor, type Mark, type Side, type StepMark } from '$lib/openings';
 
 	export let marks: Mark[] = [];
 	export let layer: 'under' | 'over' = 'over';
@@ -28,6 +28,10 @@
 	export let picked: string | null = null;
 	/** spaces a board piece stands on (the wave's minions, the hero): marks there sit round its rim, small (E / A units count too) */
 	export let occupied: Set<string> = new Set();
+	/** the Whole-round view: the hero's walk turn by turn (openings.ts routeOf), drawn as arrows in each chip's card colour */
+	export let route: { from: string; to: string; turn: number; color: CardColor }[] = [];
+	/** show a crossed-swords badge on chips where the hero acts from where it stands (an attack) */
+	export let strikes = false;
 
 	const col = (c: string) => MARK_HEX[c] ?? c;
 	const other = (s: Side): Side => (s === 'orange' ? 'blue' : 'orange');
@@ -55,7 +59,9 @@
 	// hero) they sit round its rim. Laid out ON SCREEN (turned back by the board's rotation), so the fan reads the same
 	// whichever way the board faces. `s` = the scale against the mark's own size.
 	type Slot = { x: number; y: number; s: number };
-	const NATURAL = (m: Mark) => (m.kind === 'step' ? 0.36 : m.kind === 'token' ? (m.token === 'double' ? 0.5 : 0.8) : m.kind === 'unit' ? (m.hero ? 0.66 : 0.5) : 0.36);
+	// chips are drawn CK × bigger than before when they have the space to themselves (2026-11-19, the user: hard to see)
+	const CK = 1.7;
+	const NATURAL = (m: Mark) => (m.kind === 'step' ? 0.36 * CK : m.kind === 'token' ? (m.token === 'double' ? 0.5 : 0.8) : m.kind === 'unit' ? (m.hero ? 0.66 : 0.5) : 0.36);
 	const ORDER: Record<string, number> = { unit: 0, token: 1, step: 2 };
 	$: slots = (() => {
 		const by: Record<string, Mark[]> = {};
@@ -73,7 +79,7 @@
 			if (n === 1 && !occ) { out[list[0].id] = { ...c, s: 1 }; continue; }
 			// round the rim of a piece: up to six places from the top right, clockwise; else a circle filling the space
 			const rr = occ ? 0.64 : n === 2 ? 0.42 : Math.min(0.52, 0.36 + 0.035 * n);
-			const r = occ ? 0.23 : Math.min(0.36, rr * Math.sin(Math.PI / n) * 0.94, 0.82 - rr); // stays inside the space
+			const r = occ ? 0.3 : Math.min(0.44, rr * Math.sin(Math.PI / n) * 0.94, 0.82 - rr); // stays inside the space
 			const step = occ ? (2 * Math.PI) / Math.max(6, n) : (2 * Math.PI) / n;
 			const a0 = occ ? -Math.PI / 3 : n === 2 ? Math.PI : -Math.PI / 2 + (n % 2 ? 0 : Math.PI / n);
 			list.forEach((m, i) => {
@@ -99,7 +105,7 @@
 		const ux = dx / len, uy = dy / len, s0 = size * (both ? 0.52 : 0.42), s1 = size * 0.52;
 		const p = { x: a.x + ux * s0, y: a.y + uy * s0 }, q = { x: b.x - ux * s1, y: b.y - uy * s1 };
 		const bend = Math.min(len * 0.16, size * 0.9), c = { x: (p.x + q.x) / 2 - uy * bend, y: (p.y + q.y) / 2 + ux * bend };
-		const tx = q.x - c.x, ty = q.y - c.y, tl = Math.hypot(tx, ty) || 1, hx = tx / tl, hy = ty / tl, hl = size * 0.36, hw = size * 0.24;
+		const tx = q.x - c.x, ty = q.y - c.y, tl = Math.hypot(tx, ty) || 1, hx = tx / tl, hy = ty / tl, hl = size * 0.5, hw = size * 0.34;
 		const tip = { x: q.x + hx * hl * 0.55, y: q.y + hy * hl * 0.55 };
 		const head = `${tip.x.toFixed(1)},${tip.y.toFixed(1)} ${(q.x - hx * hl * 0.45 - hy * hw).toFixed(1)},${(q.y - hy * hl * 0.45 + hx * hw).toFixed(1)} ${(q.x - hx * hl * 0.45 + hy * hw).toFixed(1)},${(q.y - hy * hl * 0.45 - hx * hw).toFixed(1)}`;
 		// the head at the start (a swap): the same shape, along the curve's first tangent
@@ -151,21 +157,32 @@
 			{#if picked === m.id}<circle cx={c.x} cy={c.y} r={size * 0.88} fill="none" stroke="#fde047" stroke-width={size * 0.05} stroke-dasharray="{size * 0.2} {size * 0.15}" />{/if}
 		{/if}
 	{/each}
+	{#each route as r, i (i)}
+		{#if r.from !== r.to}
+			{@const g = arrowGeo(r.from, r.to)}
+			<g pointer-events="none">
+				<path d={g.d} fill="none" stroke="#0b0e14" stroke-opacity=".65" stroke-width={size * 0.27} stroke-linecap="round" />
+				<polygon points={g.head} fill="#0b0e14" fill-opacity=".65" stroke="#0b0e14" stroke-opacity=".65" stroke-width={size * 0.08} stroke-linejoin="round" />
+				<path d={g.d} fill="none" stroke={CARD_HEX[r.color]} stroke-width={size * 0.17} stroke-linecap="round" stroke-dasharray="{size * 0.34} {size * 0.16}" />
+				<polygon points={g.head} fill={CARD_HEX[r.color]} />
+			</g>
+		{/if}
+	{/each}
 	{#each arrows as m (m.id)}
 		{#if m.kind === 'arrow' && m.from && m.to && m.from !== m.to && m.head === 'none'}
 			{@const d = lineGeo(m.from, m.to)}
 			<g opacity={fade(m)} pointer-events="none">
-				<path {d} fill="none" stroke="#0b0e14" stroke-opacity=".6" stroke-width={size * 0.17} stroke-linecap="round" />
-				<path {d} fill="none" stroke={col(m.color)} stroke-width={size * 0.1} stroke-linecap="round" stroke-dasharray={m.alt ? `${size * 0.26} ${size * 0.18}` : undefined} />
+				<path {d} fill="none" stroke="#0b0e14" stroke-opacity=".6" stroke-width={size * 0.25} stroke-linecap="round" />
+				<path {d} fill="none" stroke={col(m.color)} stroke-width={size * 0.16} stroke-linecap="round" stroke-dasharray={m.alt ? `${size * 0.26} ${size * 0.18}` : undefined} />
 				{#if picked === m.id}<path {d} fill="none" stroke="#fde047" stroke-width={size * 0.04} stroke-dasharray="{size * 0.15} {size * 0.12}" />{/if}
 			</g>
 		{:else if m.kind === 'arrow' && m.from && m.to && m.from !== m.to}
 			{@const g = arrowGeo(m.from, m.to, m.head === 'both')}
 			<g opacity={fade(m)} pointer-events="none">
 				{#if m.head === 'both'}<polygon points={g.tail} fill="#0b0e14" fill-opacity=".6" stroke="#0b0e14" stroke-opacity=".6" stroke-width={size * 0.08} stroke-linejoin="round" />{/if}
-				<path d={g.d} fill="none" stroke="#0b0e14" stroke-opacity=".6" stroke-width={size * 0.19} stroke-linecap="round" />
+				<path d={g.d} fill="none" stroke="#0b0e14" stroke-opacity=".6" stroke-width={size * 0.27} stroke-linecap="round" />
 				<polygon points={g.head} fill="#0b0e14" fill-opacity=".6" stroke="#0b0e14" stroke-opacity=".6" stroke-width={size * 0.08} stroke-linejoin="round" />
-				<path d={g.d} fill="none" stroke={col(m.color)} stroke-width={size * 0.11} stroke-linecap="round" stroke-dasharray={m.alt ? `${size * 0.26} ${size * 0.18}` : undefined} />
+				<path d={g.d} fill="none" stroke={col(m.color)} stroke-width={size * 0.17} stroke-linecap="round" stroke-dasharray={m.alt ? `${size * 0.26} ${size * 0.18}` : undefined} />
 				<polygon points={g.head} fill={col(m.color)} />
 				{#if m.head === 'both'}<polygon points={g.tail} fill={col(m.color)} />{/if}
 				{#if picked === m.id}<path d={g.d} fill="none" stroke="#fde047" stroke-width={size * 0.04} stroke-dasharray="{size * 0.15} {size * 0.12}" />{/if}
@@ -211,7 +228,7 @@
 	{#each steps as m (m.id)}
 		{@const sl = slotOf(m, at(m.hex))}
 		{@const c = { x: sl.x, y: sl.y }}
-		{@const z = size * sl.s}
+		{@const z = size * sl.s * CK}
 		{@const now = step > 0 && m.turn === step}
 		<g opacity={fade(m)} pointer-events="none" transform={up(c.x, c.y)}>
 			{#if now && !m.alt}<circle cx={c.x} cy={c.y} r={z * 0.5} fill="none" stroke="#fff" stroke-opacity=".85" stroke-width={z * 0.06} />{/if}
@@ -225,6 +242,19 @@
 			{:else}
 				<circle cx={c.x} cy={c.y} r={z * 0.36} fill={CARD_HEX[m.color]} stroke="#fff" stroke-opacity=".9" stroke-width={z * 0.045} stroke-dasharray={m.stay ? `${z * 0.1} ${z * 0.07}` : undefined} />
 				<text x={c.x} y={c.y} dy=".36em" text-anchor="middle" font-size={z * (label(m).length > 2 ? 0.26 : 0.32)} fill={chipInk(m.color)} class="t chip">{label(m)}</text>
+			{/if}
+			{#if strikes && m.stay}
+				<!-- an attack from where the hero stands: crossed swords on a red disc at the chip's upper right -->
+				{@const bx = c.x + z * 0.32}
+				{@const by = c.y - z * 0.32}
+				{@const br = Math.max(z * 0.24, size * 0.24)}
+				<circle cx={bx} cy={by} r={br} fill="#c0392b" stroke="#fff" stroke-width={br * 0.16} />
+				{#each [45, -45] as a (a)}
+					<g transform="rotate({a} {bx} {by})">
+						<line x1={bx} y1={by - br * 0.62} x2={bx} y2={by + br * 0.44} stroke="#fff" stroke-width={br * 0.2} stroke-linecap="round" />
+						<line x1={bx - br * 0.28} y1={by + br * 0.3} x2={bx + br * 0.28} y2={by + br * 0.3} stroke="#fff" stroke-width={br * 0.16} stroke-linecap="round" />
+					</g>
+				{/each}
 			{/if}
 			{#if picked === m.id}<circle cx={c.x} cy={c.y} r={z * 0.5} fill="none" stroke="#fde047" stroke-width={z * 0.05} stroke-dasharray="{z * 0.16} {z * 0.12}" />{/if}
 		</g>

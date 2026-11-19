@@ -129,6 +129,20 @@ export function heroHexAt(op: Opening, step: number): string {
 	}
 	return op.start
 }
+/** the Whole-round view's movement arrows (2026-11-19, the user): the hero's walk turn by turn — from the start (or
+ *  where it last stood) to each plain turn chip, in turn order; alternatives and "stays" (it acts from where it
+ *  stands) make no move. `color` = the chip's card. */
+export function routeOf(op: Opening): { from: string; to: string; turn: number; color: CardColor }[] {
+	const chips = op.marks.filter((m): m is StepMark => m.kind === 'step' && m.turn > 0 && !m.alt && !m.stay)
+		.map((m, i) => ({ m, i })).sort((a, b) => a.m.turn - b.m.turn || a.i - b.i).map((x) => x.m)
+	const out: { from: string; to: string; turn: number; color: CardColor }[] = []
+	let at = op.start
+	for (const c of chips) {
+		if (at && c.hex !== at) out.push({ from: at, to: c.hex, turn: c.turn, color: c.color })
+		at = c.hex
+	}
+	return out
+}
 /** the spaces whose minion is gone by this step (rings marked "taken") */
 export const takenAt = (op: Opening, step: number): Set<string> =>
 	new Set(op.marks.filter((m): m is RingMark => m.kind === 'ring' && !!m.taken && (step <= 0 || m.turn <= step)).map((m) => m.hex))

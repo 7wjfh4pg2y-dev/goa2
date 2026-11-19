@@ -4,7 +4,7 @@
 	// bottom like in the game (`turned` = view it from the far edge instead). The builder makes it interactive.
 	import BoardCanvas from '$lib/BoardCanvas.svelte';
 	import MarkLayer from './MarkLayer.svelte';
-	import { OPENING_MAP, openingWave, heroHexAt, marksAt, takenAt, islandBox, type Opening } from '$lib/openings';
+	import { OPENING_MAP, openingWave, heroHexAt, marksAt, takenAt, islandBox, routeOf, type Opening } from '$lib/openings';
 
 	export let op: Opening;
 	export let step = 0;
@@ -33,6 +33,8 @@
 	];
 	$: occupied = new Set(pieces.map((x) => x.hex));
 	$: shown = [...marksAt(op, step), ...extra];
+	// the Whole round (step 0) outside the builder: the hero's walk as arrows + crossed swords on its attacks (2026-11-19)
+	$: route = step === 0 && !placing ? routeOf(op) : [];
 	$: rotation = (op.side === 'orange' ? 180 : 0) + (turned ? 180 : 0);
 
 	export const reset = () => board?.reset();
@@ -52,5 +54,5 @@
 <BoardCanvas bind:this={board} map={OPENING_MAP} look="island" {rotation} {interactive} {placing} {pieces} {inset} {effects} sea={effects} rims={effects} wisps={false}
 	activeZone="Center" onHex={onHex} onMovePiece={onMovePiece} onCancelPlace={() => {}}>
 	{#snippet under(c)}<MarkLayer layer="under" marks={shown} {step} {occupied} size={c.size} at={c.at} rot={c.rot} side={op.side} hero={op.hero} {picked} uid="{uid}u" />{/snippet}
-	{#snippet over(c)}<MarkLayer layer="over" marks={shown} {step} {occupied} size={c.size} at={c.at} rot={c.rot} side={op.side} hero={op.hero} {picked} uid="{uid}o" />{/snippet}
+	{#snippet over(c)}<MarkLayer layer="over" marks={shown} {step} {occupied} size={c.size} at={c.at} rot={c.rot} side={op.side} hero={op.hero} {picked} {route} strikes uid="{uid}o" />{/snippet}
 </BoardCanvas>
