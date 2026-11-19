@@ -84,6 +84,19 @@
 	let board: OpeningBoard | null = null;
 	/** The openings panel's type as large as it fits: --fk steps 1.4 → 1.15 until nothing scrolls; still too long → the panel WIDENS
 	 *  (the golden rule: make room) up to half the window, and only then the type goes down to 0.9. Phones scroll the page: one size. */
+	// beta: the stars + role chips stay on ONE line — the chips shrink (--rk, 1 → 0.62) until the row fits (2026-11-19)
+	function oneLine(el: HTMLElement, p: { on: boolean; key: string }) {
+		let on = p.on;
+		const fit = () => {
+			if (!on) { el.style.removeProperty('--rk'); return; }
+			let k = 1;
+			el.style.setProperty('--rk', '1');
+			while (k > 0.62 && el.scrollWidth > el.clientWidth + 1) { k -= 0.04; el.style.setProperty('--rk', k.toFixed(2)); }
+		};
+		const ro = new ResizeObserver(fit); ro.observe(el);
+		fit();
+		return { update(q: { on: boolean; key: string }) { on = q.on; fit(); }, destroy() { ro.disconnect(); } };
+	}
 	function fitType(el: HTMLElement, _dep: unknown) {
 		let raf = 0;
 		const page = el.closest('.hpage') as HTMLElement | null;
@@ -225,7 +238,7 @@
 						<div class="id">
 				<div class="nmrow"><img class="logo" src={heroLogo(h.id)} alt="" />
 				<h1 class="name">{h.name} <span>{h.title}</span></h1></div>
-				<div class="meta">
+				<div class="meta" use:oneLine={{ on: beta, key: h.id }}>
 					<span class="stars" title="Complexity {h.stars}">{#each Array(h.stars) as _, k (k)}<img src={starIcon()} alt="★" />{/each}</span>
 					<span class="sep"></span>
 					{#each h.traits as t (t)}<span class="role">{#if traitIcon(t as Trait)}<img src={traitIcon(t as Trait)} alt="" />{/if}{TRAIT_LABELS[t]}</span>{/each}
@@ -381,6 +394,10 @@
 	.sep { width: 1px; height: 18px; background: var(--brass-line); margin: 0 3px; }
 	.role { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px 3px 5px; border-radius: 999px; font-size: 13px; color: var(--ink-2); background: rgba(4, 14, 26, 0.6); border: 1px solid var(--hair); }
 	.role img { width: 18px; height: 18px; }
+	.beta .id .meta { flex-wrap: nowrap; gap: calc(7px * var(--rk, 1)); min-width: 0; }
+	.beta .id .meta .role { flex: none; white-space: nowrap; font-size: calc(13px * var(--rk, 1)); padding: calc(3px * var(--rk, 1)) calc(10px * var(--rk, 1)) calc(3px * var(--rk, 1)) calc(5px * var(--rk, 1)); gap: calc(5px * var(--rk, 1)); }
+	.beta .id .meta .role img { width: calc(18px * var(--rk, 1)); height: calc(18px * var(--rk, 1)); }
+	.beta .id .meta .stars { flex: none; }
 	.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 22px; margin-top: 6px; max-width: 520px; }
 	.st { display: grid; grid-template-columns: 22px 86px 1fr; align-items: center; gap: 8px; font-size: 14px; color: var(--ink-2); }
 	.st img { width: 20px; height: 20px; }
