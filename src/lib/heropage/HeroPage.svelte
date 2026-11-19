@@ -28,6 +28,9 @@
 	export let status: 'loading' | 'ready' | 'missing' | 'error' = 'loading';
 	export let gm = false;
 	export let tab: 'overview' | 'openings' = 'overview';
+	/** the live /heroes (2026-11-19, the user): Openings and the builder hidden until they're good enough */
+	export let noOpenings = false;
+	$: if (noOpenings && tab !== 'overview') tab = 'overview';
 	export let onHero: (id: string) => void = () => {};
 	/** matchups from the game records (null = none yet → the guide's hand-written lists) */
 	export let record: HeroMatchups | null = null;
@@ -221,11 +224,11 @@
 		<label class="pick"><span class="sr">Hero</span>
 			<select value={h.id} on:change={(e) => onHero(e.currentTarget.value)}>{#each HEROES_ALPHA as x (x.id)}<option value={x.id}>{x.name}</option>{/each}</select>
 		</label>
-		<nav class="tabs">
+		{#if !noOpenings}<nav class="tabs">
 			<button class:on={tab === 'overview'} on:click={() => (tab = 'overview')}>Overview</button>
 			<button class:on={tab === 'openings'} on:click={() => (tab = 'openings')}>Openings{#if openings.length}<i>{openings.length}</i>{/if}</button>
-		</nav>
-		{#if gm}<a class="build" href="{base}/opening-builder?hero={h.id}{op && tab === 'openings' ? `&id=${op.id}` : ''}"><Icon name="flag" /> Opening builder</a>{/if}
+		</nav>{/if}
+		{#if gm && !noOpenings}<a class="build" href="{base}/opening-builder?hero={h.id}{op && tab === 'openings' ? `&id=${op.id}` : ''}"><Icon name="flag" /> Opening builder</a>{/if}
 	</header>
 
 	<!-- ───── stage (the big area) ───── -->

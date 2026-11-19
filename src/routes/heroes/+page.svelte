@@ -1,11 +1,8 @@
 <script lang="ts">
-	// Heroes (work in progress; GMs only until it's done, then it moves to Learn to play): one page per hero —
-	// Overview (art, stats, the guide, the starting hand) and Openings (built in the opening builder).
-	// ?hero=id&tab=openings&op=id
+	// Heroes (everyone, since 2026-11-19 — the beta page went live): one page per hero — art, stats, the guide, the
+	// starting hand, matchups and our record. Openings + the opening builder stay off here until they're good enough
+	// (/heroes-beta keeps them for GMs). ?hero=id
 	import { onMount } from 'svelte';
-	import { base } from '$app/paths';
-	import { role } from '$lib/role';
-	import Icon from '$lib/ui/Icon.svelte';
 	import { HEROES_ALPHA } from '$lib/heroes';
 	import HeroPage from '$lib/heropage/HeroPage.svelte';
 	import { loadOpenings } from '$lib/openings/store';
@@ -14,13 +11,17 @@
 	import { buildLeague, useAliases, leagueOf, gameOfReport, rowOfSelect, LEAGUE_SELECT, type GameRowIn, type LeagueGame, type League } from '$lib/league';
 	import { REPORT_TABLE, reportOfRow, type Report } from '$lib/reports';
 	import { loadAliases, resolveAliases } from '$lib/aliases';
-	import { heroMatchups } from '$lib/hallstats';
+	import { heroMatchupsAll } from '$lib/hallstats';
 
-	// Matchups from the records: every online game plus the table games (the Hall's Total), read once.
+	// Matchups from the records: every online game plus the table games (the Hall's Total) — read on opening, again
+	// whenever the tab comes back into view and every 5 minutes, so a finished match shows without a reload.
 	let league: League | null = null;
 	let leagueAsked = false;
+	let leagueBusy = false;
 	async function loadLeague() {
 		leagueAsked = true;
+		if (leagueBusy) return;
+		leagueBusy = true;
 		try {
 			const got: GameRowIn[] = [];
 			for (let from = 0; ; from += 1000) {
@@ -37,10 +38,10 @@
 			useAliases(resolveAliases((await loadAliases()).rows)); // the GM tools' merged names
 			const legacy = table.map((r) => { try { return gameOfReport(r); } catch { return null; } }).filter((g): g is LeagueGame => !!g);
 			league = leagueOf([...buildLeague(got).games, ...legacy]);
-		} catch { league = null; }
+		} catch { /* keep what we had */ } finally { leagueBusy = false; }
 	}
-	$: if (ready && $role === 'admin' && !leagueAsked) void loadLeague();
-	$: record = heroMatchups(league, heroId);
+	$: if (ready && !leagueAsked) void loadLeague();
+	$: record = heroMatchupsAll(league, heroId);
 	$: localHero = league?.heroes.find((x) => x.hero === heroId) ?? null;
 
 	let heroId = 'arien'; // the default hero (first alphabetically)
@@ -59,31 +60,24 @@
 		guide = r.guides[id] ?? null;
 		status = r.status;
 	}
-	$: if (ready && $role === 'admin' && heroId !== loadedFor) void load(heroId);
+	$: if (ready && heroId !== loadedFor) void load(heroId);
 	function sync() { try { const q = new URL(location.href); q.searchParams.set('hero', heroId); q.searchParams.set('tab', tab); history.replaceState(history.state, '', q); } catch { /* ignore */ } }
 	$: if (ready) { heroId; tab; sync(); }
 	onMount(() => {
 		const q = new URLSearchParams(location.search);
 		const h = q.get('hero');
 		if (h && HEROES_ALPHA.some((x) => x.id === h)) heroId = h;
-		if (q.get('tab') === 'openings') tab = 'openings';
 		ready = true;
+		const again = () => { if (leagueAsked && document.visibilityState === 'visible') void loadLeague(); };
+		const t = setInterval(again, 5 * 60 * 1000);
+		document.addEventListener('visibilitychange', again);
+		return () => { clearInterval(t); document.removeEventListener('visibilitychange', again); };
 	});
 </script>
 
 <svelte:head><title>GoA2 · Heroes</title></svelte:head>
 
-{#if $role !== 'admin'}
-	<div class="hp tide">
-		<section class="panel lock"><h1 class="t-h1">Heroes</h1><p class="t-body c-muted">Coming soon.</p><a class="btn btn-ghost" href={base + '/'}><Icon name="back" /> Back</a></section>
-	</div>
-{:else if ready}
-	<HeroPage {heroId} bind:tab {openings} {guide} {status} {record} local={localHero} gm onHero={(id) => (heroId = id)} />
+{#if ready}
+	<HeroPage {heroId} bind:tab {openings} {guide} {status} {record} local={localHero} gm beta noOpenings onHero={(id) => (heroId = id)} />
 {/if}
 
-<style>
-	.hp { position: fixed; inset: 0; color: var(--ink); }
-	.lock { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(460px, 92vw); display: flex; flex-direction: column; gap: 12px; }
-	.lock h1 { margin: 0; color: var(--brass-hi); }
-	.lock .btn { align-self: flex-start; }
-</style>

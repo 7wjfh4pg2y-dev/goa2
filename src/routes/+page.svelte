@@ -948,6 +948,11 @@
 									<span class="choice-txt"><span class="t-h2">Tutorial</span><span class="t-body c-muted">Rules for a first game</span></span>
 									<span class="choice-go"><Icon name="go" /></span>
 								</a>
+								<a class="choice card a" href={base + '/heroes'}>
+									<span class="choice-ic"><Icon name="user" /></span>
+									<span class="choice-txt"><span class="t-h2">Heroes</span><span class="t-body c-muted">Guides & matchups</span></span>
+									<span class="choice-go"><Icon name="go" /></span>
+								</a>
 							</div>
 							<div class="row"><button class="btn btn-ghost on-art" on:click={() => (mode = 'menu')}><Icon name="back" /> Back</button></div>
 						</div>
