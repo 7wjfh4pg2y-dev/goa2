@@ -175,20 +175,41 @@ function sceneMovement(): Scene {
 	const path = walkToward(d, card('wasp', 'Shock').secondaryMovement ?? 4, '13_9', pieces)
 	return { pieces, zone: 'Center', areas: [{ hex: d, r: card('wasp', 'Shock').secondaryMovement ?? 4, color: HERO_COLOR.wasp, alpha: 0.32 }], arrows: [{ path, kind: 'move', color: HERO_COLOR.wasp, ghost: true }] }
 }
-function sceneFastTravel(): Scene {
-	const at = nearFree('Blue Beach', '13_14', wave)
-	const pieces = [...wave, hero('wasp', at, 'blue')]
+/** the zones whose OPEN spaces meet `z`'s (a wall of rocks between two zones means they don't touch) */
+function touchingZones(z: string): string[] {
+	const out = new Set<string>()
+	for (const h of zoneHexes(z)) for (const n of nbrs(h)) if (zones[n] && zones[n] !== z) out.add(zones[n])
+	return [...out].sort()
+}
+/** a free open space near the middle of a zone */
+function zoneMid(z: string, ps: ScenePiece[]): string {
+	const t = taken(ps), hs = zoneHexes(z)
+	const cx = hs.reduce((n, h) => n + hexCube(h)[0], 0) / hs.length, cz = hs.reduce((n, h) => n + hexCube(h)[2], 0) / hs.length
+	const off = (h: string) => Math.abs(hexCube(h)[0] - cx) + Math.abs(hexCube(h)[2] - cz)
+	return hs.filter((h) => !t.has(h)).sort((a, b) => off(a) - off(b) || a.localeCompare(b))[0]
+}
+/** fast travel from `at`: every zone touching its zone with no enemy in it = green + a jump arrow to its middle,
+ *  every other zone red (the hero's own zone is left plain) */
+function fastScene(at: string, pieces: ScenePiece[], battle: string): Scene {
 	const enemyIn = (z: string) => pieces.some((p) => p.team === 'orange' && zones[p.hex] === z)
 	const here = zones[at]
-	const touching = new Set<string>()
-	for (const h of zoneHexes(here)) for (const n of nbrs(h)) if (zones[n] && zones[n] !== here) touching.add(zones[n])
-	const areas: Area[] = [zoneArea(here, C.green)]
-	for (const z of touching) areas.push(zoneArea(z, enemyIn(z) ? C.red : C.green))
-	// the jump: to a free space in a green zone, a good way off (fast travel ignores the distance)
-	const t = taken(pieces)
-	const land = [...touching].filter((z) => !enemyIn(z) && z !== here).flatMap(zoneHexes).filter((h) => !t.has(h))
-		.sort((a, b) => Math.abs(dist(a, at) - 6) - Math.abs(dist(b, at) - 6) || a.localeCompare(b))[0] ?? null
-	return { pieces, zone: 'Center', areas, arrows: land ? [{ path: [at, land], kind: 'jump', color: C.green, ghost: true }] : [] }
+	const ok = touchingZones(here).filter((z) => !enemyIn(z))
+	const areas: Area[] = ZONES.filter((x) => x.z !== here).map((x) => zoneArea(x.z, ok.includes(x.z) ? C.green : C.red, ok.includes(x.z) ? 0.42 : 0.3))
+	const arrows: Arrow[] = ok.map((z) => ({ path: [at, zoneMid(z, pieces)], kind: 'jump', color: C.green, ghost: true }))
+	return { pieces, zone: battle, areas, arrows }
+}
+/** from a Titan spawn point: the Titan beach and the Titan jungle */
+function sceneFastTravel(): Scene {
+	const at = blueSpawn[1] ?? blueSpawn[0]
+	return fastScene(at, [...wave, hero('wasp', at, 'blue')], 'Center')
+}
+/** from the Titan beach, the battle zone pushed to the Atlantean beach: the throne and the middle — the Atlantean
+ *  jungle is walled off by rocks */
+const pushedWave = (): ScenePiece[] => Object.values(spawnWave(LEARN_MAP, 'Orange Beach', {}, 'learn').minions).map((m) => minion(m.id, m.hex, m.team as 'orange' | 'blue', m.role ?? 'melee'))
+function sceneFastBeach(): Scene {
+	const w = pushedWave()
+	const at = nearFree('Blue Beach', '13_8', w)
+	return fastScene(at, [...w, hero('wasp', at, 'blue')], 'Orange Beach')
 }
 function sceneAttackMinion(): Scene {
 	const target = minionsOf('orange', 'melee')[0]
@@ -490,11 +511,22 @@ export function learnSteps(): Step[] {
 		{
 			id: 'fast', chapter: 'Reference', title: 'Fast travel',
 			blocks: [
-				{ p: 'Instead of moving normally, a move can {{fast travel}}: ignore the number and jump to any space in your zone or in a zone next to it.' },
-				{ p: 'Allowed only when **neither** zone has an enemy hero or minion in it. Here Wasp can fast travel to the **green** zones, but not into the **red** one: enemy minions are standing there.' },
-				{ p: 'Fast travel skips the card’s text.' }
+				{ p: 'Instead of moving normally, a move can {{fast travel}}: ignore the number and jump to any empty space in a zone next to yours.' },
+				{ p: 'Allowed only when **neither** zone has an enemy hero or minion in it. Fast travel skips the card’s text.' },
+				{ p: 'Wasp starts on a Titan {{spawn point}}. Two zones touch the Titan throne: the **Titan beach** and the **Titan jungle**. No enemies are there, so she can fast travel to either (**green**).' },
+				{ p: 'Every other zone is out of reach (**red**): they don’t touch hers.' }
 			],
 			scene: sceneFastTravel()
+		},
+		{
+			id: 'fast-beach', chapter: 'Reference', title: 'Fast travel from the beach',
+			blocks: [
+				{ p: 'Later in the game: the Titans pushed, so the {{battle zone}} is now the Atlantean beach. Wasp stands on the Titan beach.' },
+				{ p: 'From here she can fast travel to the **Titan throne** or the **middle** (**green**): they touch the beach and no enemy stands in them.' },
+				{ p: 'The **Atlantean jungle** looks close, but a wall of rocks runs between it and the beach. Zones only count as next to each other where their open spaces meet, so it’s **red**.' },
+				{ tip: 'Zones next to yours change as you move: check again from wherever you stand.' }
+			],
+			scene: sceneFastBeach()
 		},
 		{
 			id: 'others', chapter: 'Reference', title: 'Moving other units',
