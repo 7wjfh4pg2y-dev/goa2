@@ -317,7 +317,7 @@
 	.t-gone .cw { opacity: 0.45; filter: grayscale(1); }
 	.t-hand figcaption { border-color: rgba(53, 208, 122, 0.6); }
 	.t-item figcaption { border-color: var(--brass-line); color: var(--brass-hi); }
-	.ord { position: absolute; top: -12px; left: -8px; z-index: 1; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; font-size: 16px; color: var(--ink-dark); background: linear-gradient(180deg, var(--brass-hi), var(--brass)); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5); }
+	.ord { position: absolute; top: -12px; right: -8px; z-index: 1; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; font-size: 16px; color: var(--ink-dark); background: linear-gradient(180deg, var(--brass-hi), var(--brass)); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5); }
 
 	/* desktop: the top bar + the text panel under it */
 	.learn .bar { position: absolute; z-index: 2; left: 16px; right: 16px; top: 16px; height: 64px; display: flex; align-items: center; gap: 16px; padding: 0 16px; overflow: hidden; }
@@ -358,6 +358,6 @@
 	.phone .cards.big .lc { width: 30vw; max-width: 30vw; }
 	.phone .cards.anno .lc { width: min(46vw, 24vh); max-width: none; }
 	.phone .lc figcaption { font-size: 10.5px; padding: 1px 6px; }
-	.phone .ord { width: 22px; height: 22px; font-size: 13px; top: -8px; left: -4px; }
+	.phone .ord { width: 22px; height: 22px; font-size: 13px; top: -8px; right: -4px; }
 	@media (prefers-reduced-motion: reduce) { .in, .lc { animation: none; } }
 </style>
