@@ -24,7 +24,11 @@ export type LearnCard = { hero: string; card: HeroCardJson; tag?: string; short?
 /** a labelled box on the big card (the card-reading step): `box` = [x0, y0, x1, y1] as fractions of the card face,
  *  the label sits on the card's left / right at height `at` (fraction), joined to the box by an arrow */
 export type Anno = { n: number; label: string; box: [number, number, number, number]; side: 'l' | 'r'; at: number; low?: boolean }
-export type Scene = { pieces: ScenePiece[]; zone: string | null; areas?: Area[]; badges?: Badge[]; cards?: LearnCard[]; cardSize?: 'big' | 'row'; anno?: Anno[]; hud?: 'desktop' | 'phone'; pills?: boolean; close?: boolean }
+/** an arrow on the board: `path` = the spaces it runs through (first = where it starts); kind = how it looks —
+ *  move (the hero's colour, along the path), attack (red, straight), push (violet), jump (dashed: fast travel /
+ *  respawn), zone (a broad team-colour arrow: the battle zone moving); `ghost` = a dashed ring where it ends */
+export type Arrow = { path: string[]; kind: 'move' | 'attack' | 'push' | 'jump' | 'zone'; color?: string; ghost?: boolean }
+export type Scene = { pieces: ScenePiece[]; zone: string | null; areas?: Area[]; badges?: Badge[]; cards?: LearnCard[]; cardSize?: 'big' | 'row'; anno?: Anno[]; arrows?: Arrow[]; tie?: 'orange' | 'blue'; hud?: 'desktop' | 'phone'; pills?: boolean; close?: boolean }
 /** one numbered marker on the HUD picture: `sel` = a CSS selector inside the tour's box */
 export type Spot = { label: string; note: string; sel: string }
 export type Block =
@@ -96,6 +100,41 @@ function nearFree(zone: string, to: string, ps: ScenePiece[], minD = 0): string 
 	const t = taken(ps)
 	return zoneHexes(zone).filter((h) => !t.has(h) && dist(h, to) >= minD).sort((a, b) => dist(a, to) - dist(b, to) || a.localeCompare(b))[0]
 }
+/** the shortest walk of empty spaces from `from` (blocked by `ps`), as a list of spaces (null when there is none) */
+function walk(from: string, to: string, ps: ScenePiece[]): string[] | null {
+	const t = taken(ps); t.delete(from); t.delete(to)
+	const prev = new Map<string, string>([[from, '']])
+	const q = [from]
+	while (q.length) {
+		const h = q.shift()!
+		if (h === to) break
+		for (const n of nbrs(h)) if (!prev.has(n) && !t.has(n)) { prev.set(n, h); q.push(n) }
+	}
+	if (!prev.has(to)) return null
+	const out = [to]
+	while (out[0] !== from) out.unshift(prev.get(out[0])!)
+	return out
+}
+/** where `n` steps of walking from `from` can get, as near `toward` as possible (ties by id), and the path there */
+function walkToward(from: string, n: number, toward: string, ps: ScenePiece[]): string[] {
+	const t = taken(ps)
+	const ends = Object.keys(cells).filter((h) => open(h) && !t.has(h) && dist(h, from) === n).sort((a, b) => dist(a, toward) - dist(b, toward) || a.localeCompare(b))
+	for (const e of ends) { const w = walk(from, e, ps); if (w && w.length === n + 1) return w }
+	return [from]
+}
+/** a step `k` spaces straight on from `a` through `b` (the push direction), or null when it leaves the board */
+function straight(a: string, b: string, k: number): string[] {
+	const A = hexCube(a), B = hexCube(b), d = [B[0] - A[0], B[1] - A[1], B[2] - A[2]]
+	const out: string[] = [b]
+	const all = Object.keys(cells)
+	for (let i = 1; i <= k; i++) {
+		const want = [B[0] + d[0] * i, B[1] + d[1] * i, B[2] + d[2] * i]
+		const h = all.find((c) => { const C = hexCube(c); return C[0] === want[0] && C[1] === want[1] && C[2] === want[2] })
+		if (!h || !open(h)) break
+		out.push(h)
+	}
+	return out
+}
 const minionsOf = (team: string, role?: string) => wave.filter((m) => m.team === team && (!role || m.role === role))
 
 // ── colours ──
@@ -132,7 +171,9 @@ const CARD_ANNO: Anno[] = [
 // ── scenes ──
 function sceneMovement(): Scene {
 	const d = nearFree('Center', '9_12', wave)
-	return { pieces: [...wave, hero('wasp', d, 'blue')], zone: 'Center', areas: [{ hex: d, r: card('wasp', 'Shock').secondaryMovement ?? 4, color: HERO_COLOR.wasp }] }
+	const pieces = [...wave, hero('wasp', d, 'blue')]
+	const path = walkToward(d, card('wasp', 'Shock').secondaryMovement ?? 4, '13_9', pieces)
+	return { pieces, zone: 'Center', areas: [{ hex: d, r: card('wasp', 'Shock').secondaryMovement ?? 4, color: HERO_COLOR.wasp }], arrows: [{ path, kind: 'move', color: HERO_COLOR.wasp, ghost: true }] }
 }
 function sceneFastTravel(): Scene {
 	const at = nearFree('Blue Beach', '13_14', wave)
@@ -143,13 +184,17 @@ function sceneFastTravel(): Scene {
 	for (const h of zoneHexes(here)) for (const n of nbrs(h)) if (zones[n] && zones[n] !== here) touching.add(zones[n])
 	const areas: Area[] = [zoneArea(here, C.green)]
 	for (const z of touching) areas.push(zoneArea(z, enemyIn(z) ? C.red : C.green))
-	return { pieces, zone: 'Center', areas }
+	// the jump: to a free space in a green zone, a good way off (fast travel ignores the distance)
+	const t = taken(pieces)
+	const land = [...touching].filter((z) => !enemyIn(z) && z !== here).flatMap(zoneHexes).filter((h) => !t.has(h))
+		.sort((a, b) => Math.abs(dist(a, at) - 6) - Math.abs(dist(b, at) - 6) || a.localeCompare(b))[0] ?? null
+	return { pieces, zone: 'Center', areas, arrows: land ? [{ path: [at, land], kind: 'jump', color: C.green, ghost: true }] : [] }
 }
 function sceneAttackMinion(): Scene {
 	const target = minionsOf('orange', 'melee')[0]
 	const d = nearFree('Center', target.hex, wave)
 	const pieces = [...wave.map((m) => (m.team === 'orange' && m.role === 'heavy' ? { ...m, immune: true } : m)), hero('wasp', d, 'blue')]
-	return { pieces, zone: 'Center', areas: [{ hex: d, r: 1, color: HERO_COLOR.wasp }] }
+	return { pieces, zone: 'Center', areas: [{ hex: d, r: 1, color: HERO_COLOR.wasp }], arrows: [{ path: [d, target.hex], kind: 'attack' }] }
 }
 /** Arien (the defender) in the open middle, ringed by the minions that change the fight */
 function attackSetup() {
@@ -171,11 +216,11 @@ function attackSetup() {
 function sceneAttackHero(): Scene {
 	const { pieces } = attackSetup()
 	const badges: Badge[] = [{ id: 'bm', text: '−1', tone: 'down' }, { id: 'br', text: '−1', tone: 'down' }, { id: 'om', text: '+1', tone: 'up' }, { id: 'h_arien', text: '−1', tone: 'down', total: true }]
-	return { pieces, zone: 'Center', badges, areas: [{ hex: pieces[1].hex, r: 1, color: HERO_COLOR.wasp }] }
+	return { pieces, zone: 'Center', badges, areas: [{ hex: pieces[1].hex, r: 1, color: HERO_COLOR.wasp }], arrows: [{ path: [pieces[1].hex, pieces[0].hex], kind: 'attack' }] }
 }
 function sceneDefeat(): Scene {
-	const { pieces } = attackSetup()
-	return { pieces: pieces.filter((p) => p.id !== 'h_arien'), zone: 'Center', areas: [{ hex: orangeSpawn[0], r: 0, color: C.or, hexes: orangeSpawn }] }
+	const { mid, pieces } = attackSetup()
+	return { pieces: pieces.filter((p) => p.id !== 'h_arien'), zone: 'Center', areas: [{ hex: orangeSpawn[0], r: 0, color: C.or, hexes: orangeSpawn }], arrows: [{ path: [mid, orangeSpawn[1] ?? orangeSpawn[0]], kind: 'jump', color: C.or, ghost: true }] }
 }
 function sceneBattle(): Scene {
 	const gone = minionsOf('orange', 'melee').slice(0, 2).map((m) => m.id)
@@ -183,7 +228,13 @@ function sceneBattle(): Scene {
 }
 function scenePush(): Scene {
 	const next = Object.values(spawnWave(LEARN_MAP, 'Orange Beach', {}, 'learn').minions).map((m) => minion(m.id, m.hex, m.team as 'orange' | 'blue', m.role ?? 'melee'))
-	return { pieces: next, zone: 'Orange Beach', areas: [zoneArea('Orange Beach', C.ti)] }
+	// the space nearest a zone's middle
+	const mid = (z: string) => {
+		const hs = zoneHexes(z), cx = hs.reduce((n, h) => n + hexCube(h)[0], 0) / hs.length, cz = hs.reduce((n, h) => n + hexCube(h)[2], 0) / hs.length
+		const off = (h: string) => Math.abs(hexCube(h)[0] - cx) + Math.abs(hexCube(h)[2] - cz)
+		return [...hs].sort((a, b) => off(a) - off(b) || a.localeCompare(b))[0]
+	}
+	return { pieces: next, zone: 'Orange Beach', areas: [zoneArea('Orange Beach', C.ti)], arrows: [{ path: [mid('Center'), mid('Orange Beach')], kind: 'zone', color: C.ti }] }
 }
 function sceneOrder(): Scene {
 	// Wasp 10 · Arien 9 · then Xargatha and Brogan tie on 7: the Titans hold the coin, so Xargatha goes first
@@ -192,6 +243,12 @@ function sceneOrder(): Scene {
 		.filter((x) => x.card)
 		.map((x, i, all) => { const tie = all.some((y) => y !== x && y.card.initiative === x.card.initiative) ? ' · tie' : ''; return { ...x, order: i + 1, tag: `Initiative ${x.card.initiative}${tie}`, short: `${x.card.initiative}${tie}` } })
 	return { pieces: [...wave, ...startHeroes], zone: 'Center', cards: order, cardSize: 'row' }
+}
+/** the two tied cards (Xargatha · Brogan on 7) with the tie-breaker coin between them, held by the Titans */
+function sceneTie(): Scene {
+	const o = sceneOrder()
+	const tied = (o.cards ?? []).filter((c) => (o.cards ?? []).some((d) => d !== c && d.card.initiative === c.card.initiative))
+	return { ...o, tie: 'blue', cards: tied.map((c, i) => ({ ...c, order: i + 1, tag: i === 0 ? 'Titans hold the coin · goes first' : 'Goes second', short: i === 0 ? '1st' : '2nd' })) }
 }
 function sceneLevel(): Scene {
 	const old = card('wasp', 'Shock'), a = card('wasp', 'Electrocute'), b = card('wasp', 'Charged Boomerang')
@@ -216,9 +273,15 @@ function hudPieces(): ScenePiece[] {
 const hudScene = (hud: 'desktop' | 'phone', pills = false): Scene => ({ pieces: hudPieces(), zone: 'Center', hud, pills })
 function sceneOthers(): Scene {
 	// Wasp pushes the Atlantean melee minion next to her two spaces straight back
-	const target = minionsOf('orange', 'melee')[0]
-	const d = nearFree('Center', target.hex, wave)
-	return { pieces: [...wave, hero('wasp', d, 'blue')], zone: 'Center', areas: [{ hex: target.hex, r: 0, color: C.violet, hexes: [target.hex] }, { hex: d, r: 0, color: HERO_COLOR.wasp, hexes: [d] }] }
+	// (from a side with two clear spaces behind the minion, so the push shows its full 2)
+	const t = taken(wave)
+	const clear = (path: string[]) => path.length === 3 && path.slice(1).every((h) => !t.has(h))
+	let target = minionsOf('orange', 'melee')[0], d = nearFree('Center', target.hex, wave)
+	for (const m of minionsOf('orange')) {
+		const side = nbrs(m.hex).filter((h) => !t.has(h)).sort().find((h) => clear(straight(h, m.hex, 2)))
+		if (side) { target = m; d = side; break }
+	}
+	return { pieces: [...wave, hero('wasp', d, 'blue')], zone: 'Center', areas: [{ hex: target.hex, r: 0, color: C.violet, hexes: [target.hex] }, { hex: d, r: 0, color: HERO_COLOR.wasp, hexes: [d] }], arrows: [{ path: straight(d, target.hex, 2), kind: 'push', color: C.violet, ghost: true }] }
 }
 
 export function learnSteps(): Step[] {
@@ -312,9 +375,9 @@ export function learnSteps(): Step[] {
 					'**Against an enemy:** the team holding the {{tie-breaker coin}} goes first, then the coin flips to the other team.',
 					'**With a teammate:** you two choose who goes first. The coin doesn’t flip.'
 				] },
-				{ p: 'Here Xargatha and Brogan both have 7 and the Titans hold the coin, so Xargatha goes first.' }
+				{ p: 'Here Xargatha and Brogan both have **7**. The Titans hold the coin, so Xargatha goes first; then the coin flips to the Atlanteans, ready for the next tie.' }
 			],
-			scene: sceneOrder()
+			scene: sceneTie()
 		},
 		{
 			id: 'move', chapter: 'A first turn', title: 'Wasp moves',
@@ -358,7 +421,7 @@ export function learnSteps(): Step[] {
 				] },
 				{ p: '**“Discard a card, or be defeated”** is not an attack, so no defence helps. The target discards any card; with none left, they are defeated.' }
 			],
-			scene: { ...sceneMovement(), areas: [{ hex: sceneMovement().areas![0].hex, r: 2, color: C.violet }] }
+			scene: { ...sceneMovement(), arrows: [], areas: [{ hex: sceneMovement().areas![0].hex, r: 2, color: C.violet }] }
 		},
 		{
 			id: 'defeat', chapter: 'Fighting heroes', title: 'A hero is defeated',

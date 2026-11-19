@@ -9,6 +9,7 @@
 	import Icon from '$lib/ui/Icon.svelte';
 	import { learnSteps, LEARN_MAP, GLOSSARY, type Spot } from '$lib/learn';
 	import HudTour from '$lib/learn/HudTour.svelte';
+	import LearnArrows from '$lib/learn/LearnArrows.svelte';
 	import { throneHex } from '$lib/match';
 
 	const steps = learnSteps();
@@ -30,6 +31,9 @@
 	let spotPick = -1;
 	// the card-reading step: the part under the pointer (its label and box light together)
 	let annoOn = 0;
+	// the tie-breaker coin's two faces (the HUD's art)
+	const hudArt = import.meta.glob('$lib/images/hud/tiebreaker_*.webp', { eager: true, import: 'default' }) as Record<string, string>;
+	const tieArt = (t: 'orange' | 'blue') => Object.entries(hudArt).find(([k]) => k.endsWith(`tiebreaker_${t}.webp`))?.[1] ?? '';
 	$: spotBlock = step.blocks.find((b) => 'spots' in b) as { spots: Spot[] } | undefined;
 	$: spots = spotBlock?.spots ?? [];
 	const thrones = (['orange', 'blue'] as const).map((t) => ({ hex: throneHex(LEARN_MAP, t), team: t })).filter((t): t is { hex: string; team: 'orange' | 'blue' } => !!t.hex);
@@ -126,12 +130,23 @@
 			</div>
 		{:else if ready}
 			<BoardCanvas bind:this={board} map={LEARN_MAP} look="island" pieces={scene.pieces} {thrones} glowZone={scene.zone} activeZone={scene.zone}
-				{areas} badges={scene.badges ?? []} {inset} />
+				{areas} badges={scene.badges ?? []} {inset}>
+				<!-- the battle zone's move lies under the pieces (its new wave stands on it); the rest above them -->
+				{#snippet under(c)}<LearnArrows arrows={(scene.arrows ?? []).filter((x) => x.kind === 'zone')} at={c.at} size={c.size} />{/snippet}
+				{#snippet over(c)}<LearnArrows arrows={(scene.arrows ?? []).filter((x) => x.kind !== 'zone')} at={c.at} size={c.size} />{/snippet}
+			</BoardCanvas>
 		{/if}
 		{#if scene.cards}
 			{#key step.id}
 				<div class="cards" class:big={scene.cardSize === 'big'} class:anno={!!scene.anno} style="--n:{scene.cards.length}">
 					{#each scene.cards as c, k (k)}
+						{#if scene.tie && k === 1}
+							<!-- the tie-breaker coin: the holder's face, then it flips to the other team after their card -->
+							<figure class="tiec" class:o={scene.tie === 'orange'}>
+								<span class="coin"><img class="f a" src={tieArt(scene.tie)} alt="" /><img class="f b" src={tieArt(scene.tie === 'blue' ? 'orange' : 'blue')} alt="" /></span>
+								<figcaption><b>=</b> Tie-breaker coin</figcaption>
+							</figure>
+						{/if}
 						<figure class="lc t-{c.tone ?? 'plain'}" style="--d:{k * 70}ms">
 							{#if c.order}<span class="ord">{c.order}</span>{/if}
 							<div class="cbox">
@@ -271,6 +286,18 @@
 	.cw { width: 100%; aspect-ratio: 1192 / 1664; border-radius: 6%; overflow: hidden; box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55); }
 	.cw :global(.cardface) { width: 100%; height: 100%; display: block; }
 	.cbox { position: relative; width: 100%; }
+	/* the tie step: the coin between the two tied cards, flipping from the holder's face to the other team's */
+	.tiec { margin: 0 0 34px; display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; animation: deal 0.35s ease-out backwards; }
+	.tiec .coin { position: relative; width: clamp(64px, 9vh, 96px); aspect-ratio: 1; perspective: 400px; }
+	.tiec .f { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; border-radius: 50%; backface-visibility: hidden; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.55); }
+	.tiec .a { animation: coinA 4.8s ease-in-out infinite; }
+	.tiec .b { animation: coinB 4.8s ease-in-out infinite; }
+	@keyframes coinA { 0%, 45% { transform: rotateY(0); } 55%, 95% { transform: rotateY(180deg); } 100% { transform: rotateY(360deg); } }
+	@keyframes coinB { 0%, 45% { transform: rotateY(-180deg); } 55%, 95% { transform: rotateY(0); } 100% { transform: rotateY(180deg); } }
+	.tiec figcaption { padding: 2px 10px; border-radius: 999px; font-size: 13px; color: var(--brass-hi); background: rgba(6, 14, 26, 0.85); border: 1px solid var(--brass-line); white-space: nowrap; }
+	.tiec figcaption b { font-weight: inherit; margin-right: 4px; color: var(--ink); }
+	.phone .tiec { margin-bottom: 18px; } .phone .tiec .coin { width: 46px; } .phone .tiec figcaption { font-size: 10.5px; padding: 1px 6px; }
+	@media (prefers-reduced-motion: reduce) { .tiec .a, .tiec .b { animation: none; } .tiec .b { transform: rotateY(180deg); } }
 	/* the card-reading step: the card larger, its parts boxed and labelled either side */
 	.cards.anno .lc { width: min(300px, 38vh); max-width: 300px; }
 	.annosvg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
