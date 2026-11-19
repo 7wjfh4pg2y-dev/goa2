@@ -1,8 +1,10 @@
 // How to play: the illustrated walkthrough (/learn). Each step = a short text + a board SCENE drawn on the
 // real map (pieces, lit zones, coloured areas, defence badges) and, for the card steps, real cards.
-// The order follows a teaching script for a first game (setup → winning → the map → a turn → moving →
-// attacking → end of round → other rules → tips); the rules match the app's engine (tested in learn.test.ts:
-// every scene's pieces stand on real, open, distinct hexes).
+// The order teaches by playing (2026-11-19, after a first-timer got lost in the old rules-first order): the basics →
+// one turn played out → the minions and the lane → fighting heroes → the end of a round → winning + a first-game
+// summary → an optional Reference chapter (zones, fast travel, moving others, ties, setup, other rules) → the HUD.
+// Game words are glossary terms ({{term}}, GLOSSARY) the page explains on hover / tap. The rules match the app's
+// engine (tested in learn.test.ts: every scene's pieces stand on real, open, distinct hexes).
 import M from './maps/forgotten_island.json'
 import type { GameMap } from './maps'
 import { zoneTable, hexCube, cubeDist } from './zones'
@@ -31,6 +33,42 @@ export type Block =
 	| { spots: Spot[] }
 export type Step = { id: string; chapter: string; title: string; blocks: Block[]; scene: Scene }
 
+/** The tutorial's glossary: a step's text marks a term as {{term}} or {{shown words|term}}; the page underlines it and
+ *  shows the definition on hover / tap. Keys are lower case. */
+export const GLOSSARY: Record<string, string> = {
+	hero: 'The piece you control. Every player has one hero, with its own deck of cards.',
+	minion: 'The small soldiers of each team. They stand in the battle zone and never move on their own.',
+	heavy: 'The big minion: worth 4 coins, and immune while its team has other minions in the battle zone.',
+	turn: 'Everyone plays one card face down, then the cards are turned over and act one at a time.',
+	round: 'Four turns. At the end of a round come the minion battle and levelling up.',
+	initiative: 'The number in a card’s top left corner. The highest acts first.',
+	primary: 'The card’s big action, along its bottom: an attack, a move, a skill or a defence. The card’s text belongs to it.',
+	secondary: 'The small icons down a card’s left side: a plain move or a defence, used instead of the main action.',
+	'tie-breaker coin': 'Decides who goes first when two enemy cards have the same initiative. It flips after each tie it settles.',
+	range: 'How far away an attack’s target may be, counted in spaces. Range 1 = a space right next to you.',
+	radius: 'An area round your hero: every space up to that many spaces away.',
+	skill: 'A main action that isn’t an attack, a move or a defence. Do what the card says.',
+	coins: 'Earned by defeating minions and heroes. At the end of each round they pay for levels.',
+	immune: 'Can’t be attacked, defeated or moved for now.',
+	'battle zone': 'The zone where the minions stand and fight. It starts in the middle and moves when a team pushes.',
+	'spawn point': 'A marked space where a minion or a hero comes onto the board.',
+	push: 'When one team has no minions left in the battle zone, the other team pushes: the fight moves one zone towards the losing team’s throne.',
+	wave: 'A fresh group of minions. Each push uses up one wave counter; when the last goes, that push wins the game.',
+	throne: 'Each team’s home zone, at its end of the island. Heroes start and come back there. A push into it wins the game.',
+	block: 'Stop an attack by discarding a card whose defence is at least the attack’s value.',
+	life: 'Each team’s Life counters. A defeated hero costs their team Life; a team with none left loses.',
+	level: 'Spend coins at the end of a round to get stronger: better cards, items, and at level 8 your Ultimate.',
+	tier: 'How strong a coloured card is: Tier I to start, then Tier II and Tier III as you level up.',
+	item: 'The card you didn’t pick when levelling up, kept upside down as a permanent +1 to one of your numbers.',
+	ultimate: 'Your hero’s special power, switched on for good when you reach level 8.',
+	'fast travel': 'Instead of a normal move: jump to any space in your zone or a zone next to it, if no enemy is in either.',
+	token: 'A piece a card puts on a space (a tree, a mine…). It blocks like an obstacle.',
+	marker: 'A piece a card puts on a hero (Poison, Bounty…). It rides along with them.'
+}
+/** Every {{…}} term in a text: [shown words, glossary key]. */
+export function glossTerms(t: string): [string, string][] {
+	return [...t.matchAll(/\{\{([^}|]+)(?:\|([^}]+))?\}\}/g)].map((m) => [m[1], (m[2] ?? m[1]).toLowerCase()])
+}
 // ── the map ──
 const cells = LEARN_MAP.cells ?? {}
 const zones = zoneTable(LEARN_MAP)
@@ -172,110 +210,202 @@ function sceneOthers(): Scene {
 export function learnSteps(): Step[] {
 	const shock = card('wasp', 'Shock')
 	return [
+		// ── the basics: what's going on, and your cards ──
 		{
-			id: 'welcome', chapter: 'Welcome', title: 'Guards of Atlantis II',
+			id: 'welcome', chapter: 'The basics', title: 'Guards of Atlantis II',
 			blocks: [
-				{ p: 'A team game: every player controls one hero. Two teams, the **Atlanteans** and the **Titans**, fight over one lane of minions.' },
-				{ p: 'This walkthrough uses the first-game heroes: **Wasp** and **Xargatha** (Titans) against **Arien** and **Brogan** (Atlanteans). In 3 v 3 add Tigerclaw to the Titans and Sabina to the Atlanteans.' },
-				{ tip: 'Use the arrow keys, or Back / Next. Pan and zoom the board as you like.' }
+				{ p: 'Two teams fight over an island: the **Atlanteans** and the **Titans**. Every player controls one {{hero}}.' },
+				{ p: 'In the middle of the island stand both teams’ {{minions|minion}}: small soldiers that don’t move on their own. Beat the enemy’s minions and you drive the fight towards their home.' },
+				{ p: 'In this walkthrough you play the Titans, **Wasp** and **Xargatha**, against **Arien** and **Brogan**.' },
+				{ tip: 'Use the arrow keys, or Back / Next. Words with a dotted line under them explain themselves: hover or tap them.' }
 			],
 			scene: all()
 		},
 		{
-			id: 'win', chapter: 'Welcome', title: 'Three ways to win',
+			id: 'hand', chapter: 'The basics', title: 'Your cards',
+			blocks: [
+				{ p: 'You play with cards. You start with **five** in your hand, and each {{turn}} you play **one** of them.' },
+				{ p: 'A card tells your hero what to do this turn: move, attack, defend, or something special to that hero.' },
+				{ p: 'Two of them are your basic cards (**gold** and **silver**); the other three are **red**, **blue** and **green**. Stronger cards of those colours come later, when you {{level up|level}}.' }
+			],
+			scene: { ...all(), cards: startHand('wasp'), cardSize: 'row' }
+		},
+		{
+			id: 'card', chapter: 'The basics', title: 'Reading a card',
 			blocks: [
 				{ list: [
-					'**Push into their throne.** Win a lane push while the battle zone is right next to the enemy throne.',
-					'**Run them out of Life.** Every enemy hero you defeat costs their team Life counters. A team with none left loses.',
-					'**Win the final push.** Each push removes a wave counter. Whoever pushes when the last one goes wins.'
+					`**The number in the top left** is the card’s {{initiative}}: the higher it is, the sooner it acts. This one: **${shock.initiative}**.`,
+					`**The big action along the bottom** is the card’s {{main action|primary}}: this one attacks for **${shock.primaryValue}**. The card’s text belongs to it.`,
+					`**The small icons down the left** are {{backup actions|secondary}}: move **${shock.secondaryMovement}** spaces, or defend with **${shock.secondaryDefense}**.`
+				] },
+				{ p: 'When your card acts you do **one** thing: the main action **or** one backup action.' }
+			],
+			scene: { ...all(), cards: [{ hero: 'wasp', card: shock }], cardSize: 'big' }
+		},
+		// ── a first turn, played out ──
+		{
+			id: 'turn', chapter: 'A first turn', title: 'Everyone plays a card',
+			blocks: [
+				{ list: [
+					'Everyone picks a card and plays it **face down**, all at the same time.',
+					'The cards are turned over together.',
+					'They act **one at a time**, the highest {{initiative}} first. Here Wasp goes first with 10.'
+				] },
+				{ p: 'That is one {{turn}}. Four turns make a {{round}}, and something special happens at the end of each round (you’ll see it soon).' },
+				{ tip: 'Two cards with the same number? The {{tie-breaker coin}} decides. The details are in the Reference chapter.' }
+			],
+			scene: sceneOrder()
+		},
+		{
+			id: 'move', chapter: 'A first turn', title: 'Wasp moves',
+			blocks: [
+				{ p: 'Wasp uses her card’s move: **up to 4** spaces. The ring shows how far that reaches.' },
+				{ p: 'You can’t move **through** anything: heroes, minions, rocks and water all block the way.' }
+			],
+			scene: sceneMovement()
+		},
+		{
+			id: 'minions', chapter: 'A first turn', title: 'Wasp defeats a minion',
+			blocks: [
+				{ p: 'Next turn Wasp attacks. Her card’s {{range}} says how far it reaches: **range 1** means a space right next to her.' },
+				{ p: 'An attack on a minion **always** defeats it. Wasp earns {{coins}}: **2** for an ordinary minion, **4** for a big {{heavy}} one. Coins are how you get stronger later.' },
+				{ p: 'The heavy minion has a silver shield: it is {{immune}} while any other minion of its team is still in the fight.' }
+			],
+			scene: sceneAttackMinion()
+		},
+		// ── the minions and the lane ──
+		{
+			id: 'zone', chapter: 'The lane', title: 'The battle zone',
+			blocks: [
+				{ p: 'The minions always stand in one area: the {{battle zone}}. It starts in the middle of the island.' },
+				{ p: 'There are three kinds, told apart by the dots round their rim: **melee** (6 dots), **ranged** (4) and **heavy** (8).' },
+				{ p: 'Your team’s minions turn **one way**, the enemy’s the **other**. That is also how you tell a minion from the empty {{spawn point}} under it.' }
+			],
+			scene: all()
+		},
+		{
+			id: 'push', chapter: 'The lane', title: 'Pushing the lane',
+			blocks: [
+				{ p: 'When a team has **no minions left** in the battle zone, the other team {{pushes|push}}. It can happen at any moment.' },
+				{ list: [
+					'One {{wave counter|wave}} is taken off.',
+					'The battle zone moves one step **towards the losing team’s** {{throne}}.',
+					'Every minion leaves the board and a fresh wave appears in the new battle zone.'
+				] },
+				{ p: 'Here the Titans pushed: the fight has moved onto the Atlanteans’ beach, one step from their throne.' }
+			],
+			scene: scenePush()
+		},
+		// ── fighting heroes ──
+		{
+			id: 'heroes', chapter: 'Fighting heroes', title: 'Attacking a hero',
+			blocks: [
+				{ p: 'Attacking a hero is different: they can {{block}} it by throwing away (discarding) a card whose **defence** is at least the attack.' },
+				{ list: [
+					'The attack: the card’s value, **+1** for each attack {{item}} the attacker has.',
+					'**+1** for each of the attacker’s melee or heavy minions **next to** the defender, and each of their ranged minions **within 2**.',
+					'**−1** for each of the defender’s own melee or heavy minions next to them, and **−1** for each defence item.',
+					'Other heroes nearby change nothing.'
+				] },
+				{ tip: 'The shields show this for Arien: two Titan minions count against him, one Atlantean minion helps. The app shows the same shields in every attack.' }
+			],
+			scene: sceneAttackHero()
+		},
+		{
+			id: 'reach', chapter: 'Fighting heroes', title: 'Range, radius and skills',
+			blocks: [
+				{ list: [
+					'{{Range}} **N:** you may pick one target up to N spaces away. Count the spaces; nothing blocks the view.',
+					'{{Radius}} **N:** the card affects every space up to N spaces from you.',
+					'{{Skill}}: a main action that isn’t an attack, a move or a defence. Just do what the card says.'
+				] },
+				{ p: '**“Discard a card, or be defeated”** is not an attack, so no defence helps. The target throws away any card; with none left, they are defeated.' }
+			],
+			scene: { ...sceneMovement(), areas: [{ hex: sceneMovement().areas![0].hex, r: 2, color: C.violet }] }
+		},
+		{
+			id: 'defeat', chapter: 'Fighting heroes', title: 'A hero is defeated',
+			blocks: [
+				{ p: 'Not blocked? The hero is **defeated** and leaves the board for now.' },
+				{ list: [
+					'Their team loses {{Life}}: 1 at levels 1–3, 2 at levels 4–6, 3 at levels 7–8.',
+					'The attacker earns **coins equal to the defeated hero’s level**; each of the attacker’s teammates earns as much as the Life lost.',
+					'**Next turn**, when their card comes up, they come back on a spawn point in their throne and then play the card.'
+				] },
+				{ tip: 'Defeats cost your whole team, so a hero in trouble is worth protecting.' }
+			],
+			scene: sceneDefeat()
+		},
+		// ── the end of a round ──
+		{
+			id: 'battle', chapter: 'End of a round', title: 'The minion battle',
+			blocks: [
+				{ p: 'After the fourth turn, count each team’s minions in the battle zone. The team with **fewer** takes off minions until both sides are even.' },
+				{ p: 'Here the Titans have 6 and the Atlanteans 4, so the Atlanteans take off 2 more. A tie takes off nothing. If a team runs out, the other team pushes.' }
+			],
+			scene: sceneBattle()
+		},
+		{
+			id: 'level', chapter: 'End of a round', title: 'Levelling up',
+			blocks: [
+				{ p: 'Everyone takes back the cards they played (a hand of five again). Then spend your {{coins}} to {{level up|level}}: if you can afford it you **must**, as many times as you can pay for.' },
+				{ list: [
+					'A level costs **coins equal to your current level**.',
+					'Pick a colour: its card goes back to your deck and you get both cards of that colour one {{tier}} higher. One goes into your hand; the other becomes an {{item}}: **+1** to one of your numbers for the rest of the game.',
+					'All three colours reach Tier II before any goes to Tier III.',
+					'At **level 8** your {{Ultimate}} switches on for the rest of the game.',
+					'Couldn’t afford a level? Take a **free coin** instead.'
+				] }
+			],
+			scene: sceneLevel()
+		},
+		// ── winning, and the first game ──
+		{
+			id: 'win', chapter: 'Winning', title: 'Three ways to win',
+			blocks: [
+				{ list: [
+					'**Push into their throne.** Win a push while the battle zone is right next to the enemy {{throne}}.',
+					'**Run them out of Life.** Every enemy hero you defeat costs their team {{Life}}. A team with none left loses.',
+					'**Win the final push.** Each push takes off a {{wave counter|wave}}. Whoever pushes when the last one goes wins.'
 				] }
 			],
 			scene: { ...all(), areas: [zoneArea('Orange Base', C.or), zoneArea('Blue Base', C.ti)] }
 		},
 		{
-			id: 'map', chapter: 'The board', title: 'Seven zones',
+			id: 'first-game', chapter: 'Winning', title: 'Your first game',
 			blocks: [
-				{ p: 'The island is split into seven zones. Each team has a **throne** zone at its end. Minions only ever fight in the **middle** or on one of the two **beaches**. The two **jungles** are paths for heroes.' },
+				{ p: 'Five things to remember:' },
+				{ list: [
+					'Each turn, play **one** card face down. The highest number acts first.',
+					'Defeat minions for **coins**; coins buy **levels** at the end of each round.',
+					'Every hero your team loses costs **Life**. Stay near your minions and your teammates.',
+					'**Talk with your team before the cards are turned over.** Afterwards, you’re on your own.',
+					'Turn 1: your **green** card can {{fast travel}} you straight into the fight.'
+				] },
+				{ tip: 'Next, if you want them: the zones, ties, setup and other rules. Then the game’s screen, on a computer and on a phone.' }
+			],
+			scene: all()
+		},
+		// ── reference: the details ──
+		{
+			id: 'map', chapter: 'Reference', title: 'Seven zones',
+			blocks: [
+				{ p: 'The island is split into seven zones. Each team has a {{throne}} at its end. Minions only ever fight in the **middle** or on one of the two **beaches**. The two **jungles** are paths for heroes.' },
 				{ keys: ZONES.map((z) => ({ color: z.color, label: z.label, note: z.note, area: zoneArea(z.z, '#ffd75e', 0.55) })) } // one strong highlight, whatever the zone's own colour
 			],
 			scene: { pieces: startHeroes, zone: null }
 		},
 		{
-			id: 'zone', chapter: 'The board', title: 'The battle zone',
+			id: 'fast', chapter: 'Reference', title: 'Fast travel',
 			blocks: [
-				{ p: 'The zone with the minions in it is the **battle zone**. It starts in the middle and moves one zone at a time as the teams push.' },
-				{ p: 'Three kinds of minion, told apart by the pips on their rim: **melee** (6 pips), **ranged** (4) and **heavy** (8).' },
-				{ p: 'Your team’s minions turn **one way**, the enemy’s the **other**. That is also how you tell a minion from the empty spawn point under it.' }
-			],
-			scene: all()
-		},
-		{
-			id: 'setup', chapter: 'Setup', title: 'Setting up',
-			blocks: [
-				{ table: [['', '2 v 2', '3 v 3'], ['Short game', '3 waves · 4 Life', '3 waves · 5 Life'], ['Long game', '5 waves · 6 Life', '5 waves · 8 Life']] },
-				{ list: [
-					'Toss the **tie-breaker coin**. It decides ties all game.',
-					'Each hero starts at **level 1** on one of the spawn points in their own throne.',
-					'A wave of minions stands on the spawn points of the middle zone.'
-				] },
-				{ tip: 'The app sets all of this up for you. Each player places their hero at the start.' }
-			],
-			scene: { ...all(), areas: [{ hex: blueSpawn[0], r: 0, color: C.ti, hexes: blueSpawn }, { hex: orangeSpawn[0], r: 0, color: C.or, hexes: orangeSpawn }] }
-		},
-		{
-			id: 'hand', chapter: 'Your cards', title: 'Your starting hand',
-			blocks: [
-				{ p: 'Every hero has a deck of 18 cards. You start with **five**: the two basic cards (**gold** and **silver**) and your three **Tier I** cards (**red**, **blue** and **green**).' },
-				{ p: 'The rest wait in your deck until you level up.' }
-			],
-			scene: { ...all(), cards: startHand('wasp'), cardSize: 'row' }
-		},
-		{
-			id: 'card', chapter: 'Your cards', title: 'Reading a card',
-			blocks: [
-				{ list: [
-					`**Initiative** (top left): who goes first. This card: **${shock.initiative}**.`,
-					`**Primary action** (along the bottom): this card attacks for **${shock.primaryValue}**. Any text on the card belongs to the primary action.`,
-					`**Secondary actions** (down the left): a plain move of **${shock.secondaryMovement}** or a defence of **${shock.secondaryDefense}**.`
-				] },
-				{ p: 'When your card resolves you do **either** the primary action **or** one secondary action. There are four kinds: attack, skill, movement and defence.' }
-			],
-			scene: { ...all(), cards: [{ hero: 'wasp', card: shock }], cardSize: 'big' }
-		},
-		{
-			id: 'turn', chapter: 'A turn', title: 'Playing a turn',
-			blocks: [
-				{ p: 'A game is played in **rounds** of **four turns**.' },
-				{ list: [
-					'Everyone picks a card from their hand and plays it **face down**, all at once.',
-					'The cards are revealed together.',
-					'They resolve **one at a time**, the highest initiative first.'
-				] },
-				{ p: '**Ties:** against an enemy, the team holding the tie-breaker goes first, then the coin flips to the other side. Here Xargatha and Brogan both have 7 and the Titans hold the coin, so Xargatha goes first. Tied with a teammate, you two choose (no flip).' },
-				{ p: 'Once your card has resolved it stays face up in this turn’s slot. If you have no cards left you pass.' }
-			],
-			scene: sceneOrder()
-		},
-		{
-			id: 'move', chapter: 'Moving', title: 'Movement',
-			blocks: [
-				{ p: 'A movement action moves your hero **up to** the number on the boot. Wasp’s Shock moves 4: the ring shows how far that reaches.' },
-				{ p: 'You can’t move **through** obstacles: heroes, minions, terrain and tokens all block. Water counts as terrain.' },
-				{ p: 'If the boot is the card’s **primary** action, you move **and** do what the card says.' }
-			],
-			scene: sceneMovement()
-		},
-		{
-			id: 'fast', chapter: 'Moving', title: 'Fast travel',
-			blocks: [
-				{ p: 'Instead of moving normally, a movement action can **fast travel**: ignore the number and jump to any space in your zone or in a zone next to it.' },
+				{ p: 'Instead of moving normally, a move can {{fast travel}}: ignore the number and jump to any space in your zone or in a zone next to it.' },
 				{ p: 'Allowed only when **neither** zone has an enemy hero or minion in it. Here Wasp can fast travel to the **green** zones, but not into the **red** one: enemy minions are standing there.' },
 				{ p: 'Fast travel skips the card’s text.' }
 			],
 			scene: sceneFastTravel()
 		},
 		{
-			id: 'others', chapter: 'Moving', title: 'Moving other units',
+			id: 'others', chapter: 'Reference', title: 'Moving other units',
 			blocks: [
 				{ p: 'Many cards move **other** heroes, minions or tokens. The words matter:' },
 				{ list: [
@@ -290,118 +420,46 @@ export function learnSteps(): Step[] {
 			scene: sceneOthers()
 		},
 		{
-			id: 'minions', chapter: 'Fighting', title: 'Attacking minions',
+			id: 'ties', chapter: 'Reference', title: 'Ties',
 			blocks: [
-				{ p: 'The sword shows the attack value; a range or radius icon shows how far it reaches. **Range 1** = a space next to you.' },
-				{ p: 'Any attack on a minion **defeats it**, whatever the strength. You earn **2 coins** for a melee or ranged minion and **4** for a heavy.' },
-				{ p: 'A **heavy** minion is immune (the silver shield) while any other minion of its team is still in the battle zone.' }
-			],
-			scene: sceneAttackMinion()
-		},
-		{
-			id: 'heroes', chapter: 'Fighting', title: 'Attacking a hero',
-			blocks: [
-				{ p: 'An attacked hero may **block** by discarding a card whose **defence** is at least the attack’s strength. Some defences carry a **!** and block anything if their condition is met.' },
+				{ p: 'Two cards with the same {{initiative}}:' },
 				{ list: [
-					'The card’s attack value, **+1 per attack item** the attacker has.',
-					'**+1** for each of the attacker’s melee or heavy minions **next to** the defender, and each of their ranged minions **within 2**.',
-					'**−1** for each of the defender’s own melee or heavy minions next to them (their ranged minions don’t help), and **−1 per defence item**.',
-					'Heroes nearby change nothing.'
+					'**Against an enemy:** the team holding the {{tie-breaker coin}} goes first, then the coin flips to the other team.',
+					'**With a teammate:** you two choose who goes first. The coin doesn’t flip.'
 				] },
-				{ tip: 'The shields show this for Arien: two Titan minions count against him, one Atlantean melee helps. The app shows the same shields during every attack.' }
+				{ p: 'Here Xargatha and Brogan both have 7 and the Titans hold the coin, so Xargatha goes first.' }
 			],
-			scene: sceneAttackHero()
+			scene: sceneOrder()
 		},
 		{
-			id: 'reach', chapter: 'Fighting', title: 'Range, radius and skills',
+			id: 'setup', chapter: 'Reference', title: 'Setting up',
 			blocks: [
+				{ table: [['', '2 v 2', '3 v 3'], ['Short game', '3 waves · 4 Life', '3 waves · 5 Life'], ['Long game', '5 waves · 6 Life', '5 waves · 8 Life']] },
 				{ list: [
-					'**Range N:** you may target one unit up to N spaces away. Count spaces, not a line of sight.',
-					'**Radius N:** the card affects every space up to N spaces from you.',
-					'**Skill:** a primary action that isn’t an attack, a move or a defence. Just do what the card says.'
+					'Toss the {{tie-breaker coin}}. It decides ties all game.',
+					'Each hero starts at **level 1** on one of the {{spawn points|spawn point}} in their own throne.',
+					'A wave of minions stands on the spawn points of the middle zone.'
 				] },
-				{ p: '**“Discard a card, or be defeated”** is not an attack: no defence helps. The target must discard any card from their hand. With no card to discard, they are defeated, and the hero who forced it gets the usual rewards.' },
-				{ tip: 'The radius tool on your dashboard draws a ring round your hero, so you can see who a card reaches.' }
+				{ tip: 'The app sets all of this up for you. Each player places their hero at the start.' }
 			],
-			scene: { ...sceneMovement(), areas: [{ hex: sceneMovement().areas![0].hex, r: 2, color: C.violet }] }
+			scene: { ...all(), areas: [{ hex: blueSpawn[0], r: 0, color: C.ti, hexes: blueSpawn }, { hex: orangeSpawn[0], r: 0, color: C.or, hexes: orangeSpawn }] }
 		},
 		{
-			id: 'defeat', chapter: 'Fighting', title: 'A hero is defeated',
-			blocks: [
-				{ p: 'Not blocked (or not able to)? The hero is **defeated** and leaves the board.' },
-				{ list: [
-					'Their team loses **Life**: 1 at levels 1–3, 2 at levels 4–6, 3 at levels 7–8.',
-					'The attacker earns **coins equal to the defeated hero’s level**, and each of the attacker’s teammates earns the same amount as the Life lost.',
-					'An unresolved card goes to its slot unused. Their lasting effects end, and markers on them come off. Their tokens stay.',
-					'**Next turn**, when their card comes up, they return on a spawn point in their throne and then resolve the card.'
-				] }
-			],
-			scene: sceneDefeat()
-		},
-		{
-			id: 'battle', chapter: 'End of a round', title: 'The minion battle',
-			blocks: [
-				{ p: 'After the fourth turn, count each team’s minions in the battle zone. The team with **fewer** removes minions until they are even.' },
-				{ p: 'Here the Titans have 6 and the Atlanteans 4, so the Atlanteans remove 2 more. A tie removes nothing.' }
-			],
-			scene: sceneBattle()
-		},
-		{
-			id: 'push', chapter: 'End of a round', title: 'Pushing the lane',
-			blocks: [
-				{ p: 'The moment a team’s **last** minion in the battle zone is gone (always the heavy, thanks to its immunity), the other team **pushes**. This can happen mid-turn.' },
-				{ list: [
-					'A wave counter is removed.',
-					'The battle zone moves one zone **towards the losing team’s throne**.',
-					'Every minion is cleared off the board and a fresh wave spawns in the new battle zone.'
-				] },
-				{ p: 'A token on a spawn point is removed first. If a hero or another obstacle is on the spawn point, the minion’s team picks the nearest empty space instead.' }
-			],
-			scene: scenePush()
-		},
-		{
-			id: 'level', chapter: 'End of a round', title: 'Levelling up',
-			blocks: [
-				{ p: 'Everyone takes back their played and discarded cards (a hand of five again). Then, if you can afford it, you **must** level up, as many times as you can pay for.' },
-				{ list: [
-					'A level costs **coins equal to your current level**.',
-					'Return one coloured card to your deck. Take the two cards of that colour one tier higher: one goes into your hand, the other becomes an **item**, a lasting +1 to one stat (attack, defence, initiative, movement, range or radius) for the rest of the game.',
-					'All three colours reach **Tier II** before any goes to Tier III.',
-					'At **level 8** your **Ultimate** switches on for the rest of the game.',
-					'Couldn’t afford a level this round? Take a **pity coin** (no level this round even if you now could).',
-						'This round’s pick can still be swapped for its twin until the next round starts.'
-				] }
-			],
-			scene: sceneLevel()
-		},
-		{
-			id: 'rules', chapter: 'Good to know', title: 'Other rules',
+			id: 'rules', chapter: 'Reference', title: 'Other rules',
 			blocks: [
 				{ list: [
-					'**No line of sight:** you can target through heroes, minions, terrain and tokens.',
+					'**Nothing blocks the view:** you can target through heroes, minions, terrain and tokens.',
 					'You can’t defend on your own turn, only in answer to an attack.',
 					'An attack can be swapped for a **clear**: remove any tokens next to you (none of the card’s text happens).',
 					'**Hold:** do nothing with your card.',
 					'“This turn / Next turn / This round” effects last that long. The app lights the card while it runs.',
-					'A minion pushed out of the battle zone walks straight back to the nearest empty space of it.',
-					'**Tokens** (trees, mines, zombies…) sit on spaces and block like obstacles. **Markers** (Poison, Bounty) ride on a hero. Both leave at the end of the round unless the card says otherwise. A defeated hero’s tokens stay.',
+					'{{Tokens|token}} (trees, mines, zombies…) sit on spaces and block like obstacles. {{Markers|marker}} (Poison, Bounty) ride on a hero. Both leave at the end of the round unless the card says otherwise. A defeated hero’s tokens stay.',
+					'When a hero is defeated, their unplayed card stays in its slot unused, their lasting effects end and markers on them come off.',
+					'This round’s level-up pick can be swapped for its twin until the next round starts.',
 					'Pushes go in a straight line, and units that can’t move can still be pushed.',
 					'If you can’t do something a card says, stop there.',
 					'You can’t attack your own team’s heroes or minions.'
 				] }
-			],
-			scene: all()
-		},
-		{
-			id: 'tips', chapter: 'Good to know', title: 'Team talk & first tips',
-			blocks: [
-				{ p: '**Plan out loud, before the reveal.** While cards are face down you may talk openly with your team (the other team can hear). Once the cards are face up, you’re on your own.' },
-				{ list: [
-					'Turn 1: use your **green** card to fast travel to the action.',
-					'Try to defeat a minion in the first round.',
-					'After the reveal, read everyone’s cards, especially **red** and **gold**.'
-				] },
-				{ tip: 'That’s the rules. Next: the game’s screen, on a computer and on a phone.' }
 			],
 			scene: all()
 		},

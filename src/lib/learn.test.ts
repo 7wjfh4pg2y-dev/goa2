@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { learnSteps, LEARN_MAP } from './learn'
+import { learnSteps, LEARN_MAP, GLOSSARY, glossTerms } from './learn'
 import { zoneTable } from './zones'
 
 describe('how to play (learn.ts)', () => {
@@ -49,5 +49,17 @@ describe('how to play (learn.ts)', () => {
 			}
 		}
 		expect(steps[steps.length - 1].scene.hud).toBe('phone')
+	})
+	it('every glossary word in the texts has a definition, and the rules come before the reference', () => {
+		const texts = steps.flatMap((s) => s.blocks.flatMap((b) => ('p' in b ? [b.p] : 'list' in b ? b.list : 'tip' in b ? [b.tip] : [])))
+		const used = texts.flatMap(glossTerms)
+		expect(used.length).toBeGreaterThan(20)
+		for (const [, key] of used) expect(GLOSSARY[key], key).toBeTruthy()
+		for (const t of texts) expect(t.replace(/\{\{[^}]*\}\}/g, ''), t).not.toMatch(/\{\{|\}\}/)
+		const at = (id: string) => steps.findIndex((s) => s.id === id)
+		expect(at('turn')).toBeLessThan(at('zone'))
+		expect(at('push')).toBeLessThan(at('win'))
+		expect(at('first-game')).toBeLessThan(at('map'))
+		expect(at('rules')).toBeLessThan(at('hud-screen'))
 	})
 })

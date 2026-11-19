@@ -7,7 +7,7 @@
 	import BoardCanvas from '$lib/BoardCanvas.svelte';
 	import Card from '$lib/cards/Card.svelte';
 	import Icon from '$lib/ui/Icon.svelte';
-	import { learnSteps, LEARN_MAP, type Spot } from '$lib/learn';
+	import { learnSteps, LEARN_MAP, GLOSSARY, type Spot } from '$lib/learn';
 	import HudTour from '$lib/learn/HudTour.svelte';
 	import { throneHex } from '$lib/match';
 
@@ -49,8 +49,31 @@
 	}
 	// **bold** in the step texts (they're ours, not user input)
 	// … and the team names in their team's colour, wherever they appear
+	// … {{term}} / {{words|term}} = a glossary word: underlined, its meaning on hover / tap (the .gtip below)
 	const md = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+		.replace(/\{\{([^}|]+)(?:\|([^}]+))?\}\}/g, (_m, words: string, key?: string) => `<dfn class="gl" tabindex="0" data-k="${(key ?? words).toLowerCase().replace(/"/g, '')}">${words}</dfn>`)
 		.replace(/\b(Atlanteans?)\b/g, '<span class="tm o">$1</span>').replace(/\b(Titans?)\b/g, '<span class="tm b">$1</span>');
+	// the glossary tip: follows the word under the pointer; a tap (or Enter) pins it until the next tap elsewhere
+	let tip: { title: string; text: string; x: number; y: number; below: boolean } | null = null;
+	let tipPinned = false;
+	function glOf(e: Event): HTMLElement | null { return (e.target as HTMLElement | null)?.closest?.('.gl') ?? null; }
+	function showTip(el: HTMLElement) {
+		const k = el.dataset.k ?? '', text = GLOSSARY[k];
+		if (!text) return;
+		const r = el.getBoundingClientRect();
+		const half = Math.min(150, (w - 16) / 2);
+		tip = { title: k.charAt(0).toUpperCase() + k.slice(1), text, x: Math.max(8 + half, Math.min(w - 8 - half, r.left + r.width / 2)), y: r.top < 150 ? r.bottom + 8 : r.top - 8, below: r.top < 150 };
+	}
+	function hideTip() { tip = null; tipPinned = false; }
+	function glOver(e: MouseEvent) { const el = glOf(e); if (el && !tipPinned) showTip(el); }
+	function glOut(e: MouseEvent) { if (glOf(e) && !tipPinned) tip = null; }
+	function glClick(e: MouseEvent) {
+		const el = glOf(e);
+		if (!el) { if (tipPinned) hideTip(); return; }
+		showTip(el); tipPinned = true;
+	}
+	function glKey(e: KeyboardEvent) { const el = glOf(e); if (el && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); showTip(el); tipPinned = true; } }
+	$: if (step) hideTip();
 	// keep the current chapter chip in view (the phone's chip row scrolls)
 	$: if (ready && step) tick().then(() => document.querySelector('.learn .chap .on')?.scrollIntoView({ inline: 'center', block: 'nearest' }));
 	function key(e: KeyboardEvent) {
@@ -64,7 +87,7 @@
 </script>
 
 <svelte:head><title>GoA2 · How to play</title></svelte:head>
-<svelte:window bind:innerWidth={w} bind:innerHeight={h} on:keydown={key} />
+<svelte:window bind:innerWidth={w} bind:innerHeight={h} on:keydown={(e) => { if (e.key === 'Escape') hideTip(); key(e); }} on:click={(e) => { if (tipPinned && !glOf(e)) hideTip(); }} />
 
 {#snippet chapNav()}
 	<nav class="chap" aria-label="Chapters">
@@ -127,7 +150,8 @@
 			</header>
 			<div class="prog"><i style="transform: scaleX({(i + 1) / steps.length})"></i></div>
 		{/if}
-		<div class="txt" bind:this={textEl}>
+		<!-- svelte-ignore a11y-mouse-events-have-key-events a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+		<div class="txt" bind:this={textEl} on:mouseover={glOver} on:mouseout={glOut} on:click={glClick} on:keydown={glKey} on:focusin={(e) => { const el = glOf(e); if (el && !tipPinned) showTip(el); }} on:focusout={() => { if (!tipPinned) tip = null; }} on:scroll={hideTip}>
 			{#key step.id}
 				<div class="in">
 					{#if !phone}<span class="t-label kick">{step.chapter}{#if inChap.length > 1}<em>{chapPos} / {inChap.length}</em>{/if}</span>{/if}
@@ -159,6 +183,7 @@
 		</footer>
 	</section>
 </div>
+{#if tip}<div class="gtip" class:below={tip.below} style="left:{tip.x}px; top:{tip.y}px" role="tooltip"><b>{tip.title}</b>{tip.text}</div>{/if}
 
 <style>
 	.learn { position: fixed; inset: 0; overflow: hidden; color: var(--ink); }
@@ -184,6 +209,12 @@
 	.txt li::before { content: ''; position: absolute; left: 2px; top: 0.62em; width: 6px; height: 6px; border-radius: 1px; transform: rotate(45deg); background: var(--brass); }
 	.txt :global(b) { color: var(--ink); font-weight: inherit; }
 	.txt :global(.tm.o) { color: #ff9a45; }
+	.txt :global(dfn.gl) { font-style: normal; text-decoration: underline dotted rgba(243, 196, 84, 0.75); text-decoration-thickness: 1.5px; text-underline-offset: 3px; cursor: help; border-radius: 3px; outline: none; }
+	.txt :global(dfn.gl:hover), .txt :global(dfn.gl:focus-visible) { background: rgba(243, 196, 84, 0.14); }
+	.gtip { position: fixed; z-index: 90; width: max-content; max-width: min(300px, calc(100vw - 16px)); transform: translate(-50%, -100%); padding: 9px 12px; border-radius: 10px;
+		background: #0b1424; border: 1px solid var(--brass-line, rgba(243, 196, 84, 0.45)); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5); color: var(--ink-2, #c9d3e3); font-size: 14px; line-height: 1.4; pointer-events: none; }
+	.gtip.below { transform: translate(-50%, 0); }
+	.gtip b { display: block; margin-bottom: 2px; color: var(--brass-hi, #f3c454); font-weight: inherit; }
 	.txt :global(.tm.b) { color: #5ea6ff; }
 	.tip { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--brass-line); background: var(--brass-faint); }
 	.keys { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; margin: 4px 0 12px; }
