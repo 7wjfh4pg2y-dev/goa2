@@ -9,7 +9,7 @@
 	// earlier turns faded (later ones are already filtered out by the caller).
 	import HeroToken from '$lib/board/HeroToken.svelte';
 	import KitToken from '$lib/board/KitToken.svelte';
-	import { outlineLoops, loopsPath } from '$lib/board/hexgeo';
+	import { outlineLoops, loopsPath, withObstacles } from '$lib/board/hexgeo';
 	import { COMPANIONS } from '$lib/tokens';
 	import { CARD_HEX, MARK_HEX, OPENING_MAP, spawnDirs, chipColors, type CardColor, type Mark, type Side, type StepMark } from '$lib/openings';
 
@@ -30,8 +30,22 @@
 	export let occupied: Set<string> = new Set();
 	/** the Whole-round view: the hero's walk turn by turn (openings.ts routeOf), drawn as arrows in each chip's card colour */
 	export let route: { from: string; to: string; turn: number; color: CardColor }[] = [];
-	/** show a crossed-swords badge on chips where the hero acts from where it stands (an attack) */
-	export let strikes = false;
+	/** the attacks (openings.ts strikesOf): a strike line from the hero to each ringed target, a sword on it */
+	export let strikes: { from: string; to: string; turn: number; alt: boolean }[] = [];
+	/** a sword badge on a "stays" chip whose turn has no ringed target (an attack with no strike line to show it) */
+	export let swords = false;
+	$: struck = new Set(strikes.map((x) => x.turn));
+	const sfade = (x: { turn: number; alt: boolean }) => (step > 0 && x.turn < step ? 0.5 : 1) * (x.alt ? 0.5 : 1);
+	// a strike: from the hero's edge to the target ring's edge, the sword at its middle pointing at the target
+	function strikeGeo(from: string, to: string) {
+		const a = at(from), b = at(to), dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1, ux = dx / len, uy = dy / len;
+		const p = { x: a.x + ux * size * 0.55, y: a.y + uy * size * 0.55 }, q = { x: b.x - ux * size * 0.8, y: b.y - uy * size * 0.8 };
+		const hl = size * 0.42, hw = size * 0.3, tip = { x: q.x + ux * hl * 0.6, y: q.y + uy * hl * 0.6 };
+		const head = `${tip.x.toFixed(1)},${tip.y.toFixed(1)} ${(q.x - ux * hl * 0.4 - uy * hw).toFixed(1)},${(q.y - uy * hl * 0.4 + ux * hw).toFixed(1)} ${(q.x - ux * hl * 0.4 + uy * hw).toFixed(1)},${(q.y - uy * hl * 0.4 - ux * hw).toFixed(1)}`;
+		// the sword sits ON the target's ring, on the attacker's side, so every attack shows it (adjacent ones too)
+		const m = { x: b.x - ux * size * 0.8, y: b.y - uy * size * 0.8 };
+		return { d: `M${p.x.toFixed(1)} ${p.y.toFixed(1)}L${q.x.toFixed(1)} ${q.y.toFixed(1)}`, head, m, ang: (Math.atan2(dy, dx) * 180) / Math.PI + 90, short: len < size * 2.2 };
+	}
 
 	const col = (c: string) => MARK_HEX[c] ?? c;
 	const other = (s: Side): Side => (s === 'orange' ? 'blue' : 'orange');
@@ -127,10 +141,11 @@
 {#if layer === 'under'}
 	{#each areas as m (m.id)}
 		{#if m.kind === 'area' && m.hexes.length}
+			{@const hx = [...withObstacles(m.hexes, OPENING_MAP.cells ?? {})]}
 			<g opacity={fade(m)} pointer-events="none">
-				{#if m.style !== 'outline'}{#each m.hexes as h (h)}<polygon points={hexPts(at(h), size * 0.98)} fill={col(m.color)} fill-opacity={m.color === 'white' ? 0.42 : 0.32} />{/each}{/if}
-				{#if m.style !== 'fill'}<path d={loopsPath(outlineLoops(m.hexes, size), 0.25)} fill="none" stroke={col(m.color)} stroke-width={size * 0.09} stroke-linejoin="round" stroke-opacity=".95" />{/if}
-				{#if picked === m.id}<path d={loopsPath(outlineLoops(m.hexes, size), 0.25)} fill="none" stroke="#fde047" stroke-width={size * 0.05} stroke-dasharray="{size * 0.2} {size * 0.15}" />{/if}
+				{#if m.style !== 'outline'}{#each hx as h (h)}<polygon points={hexPts(at(h), size * 0.98)} fill={col(m.color)} fill-opacity={m.color === 'white' ? 0.42 : 0.32} />{/each}{/if}
+				{#if m.style !== 'fill'}<path d={loopsPath(outlineLoops(hx, size), 0.25)} fill="none" stroke={col(m.color)} stroke-width={size * 0.09} stroke-linejoin="round" stroke-opacity=".95" />{/if}
+				{#if picked === m.id}<path d={loopsPath(outlineLoops(hx, size), 0.25)} fill="none" stroke="#fde047" stroke-width={size * 0.05} stroke-dasharray="{size * 0.2} {size * 0.15}" />{/if}
 			</g>
 		{/if}
 	{/each}
@@ -139,9 +154,17 @@
 		{#if m.kind === 'ring'}
 			{@const c = ringAt(m)}
 			{@const w = c.r / (size * 0.8)}
+			{@const k = Math.max(0.5, w)}
 			<g opacity={fade(m)} pointer-events="none">
-				<circle cx={c.x} cy={c.y} r={c.r} fill="none" stroke="#0b0e14" stroke-opacity=".7" stroke-width={size * 0.2 * Math.max(0.5, w)} />
-				<circle cx={c.x} cy={c.y} r={c.r} fill="none" stroke={col(m.color)} stroke-width={size * 0.12 * Math.max(0.5, w)} stroke-dasharray={m.alt ? `${size * 0.3 * w} ${size * 0.18 * w}` : undefined} />
+				<!-- a target reticle (2026-11-19, the user: rings = what the hero attacks): ring + four ticks pointing in -->
+				<circle cx={c.x} cy={c.y} r={c.r} fill="none" stroke="#0b0e14" stroke-opacity=".7" stroke-width={size * 0.24 * k} />
+				{#each [0, 90, 180, 270] as a (a)}
+					<line x1={c.x + Math.cos((a * Math.PI) / 180) * c.r * 0.66} y1={c.y + Math.sin((a * Math.PI) / 180) * c.r * 0.66} x2={c.x + Math.cos((a * Math.PI) / 180) * c.r * 1.22} y2={c.y + Math.sin((a * Math.PI) / 180) * c.r * 1.22} stroke="#0b0e14" stroke-opacity=".7" stroke-width={size * 0.2 * k} stroke-linecap="round" />
+				{/each}
+				<circle cx={c.x} cy={c.y} r={c.r} fill="none" stroke={col(m.color)} stroke-width={size * 0.13 * k} stroke-dasharray={m.alt ? `${size * 0.3 * w} ${size * 0.18 * w}` : undefined} />
+				{#each [0, 90, 180, 270] as a (a)}
+					<line x1={c.x + Math.cos((a * Math.PI) / 180) * c.r * 0.66} y1={c.y + Math.sin((a * Math.PI) / 180) * c.r * 0.66} x2={c.x + Math.cos((a * Math.PI) / 180) * c.r * 1.22} y2={c.y + Math.sin((a * Math.PI) / 180) * c.r * 1.22} stroke={col(m.color)} stroke-width={size * 0.11 * k} stroke-linecap="round" />
+				{/each}
 				{#if picked === m.id}<circle cx={c.x} cy={c.y} r={c.r + size * 0.18} fill="none" stroke="#fde047" stroke-width={size * 0.05} stroke-dasharray="{size * 0.2} {size * 0.15}" />{/if}
 			</g>
 		{/if}
@@ -188,6 +211,25 @@
 				{#if picked === m.id}<path d={g.d} fill="none" stroke="#fde047" stroke-width={size * 0.04} stroke-dasharray="{size * 0.15} {size * 0.12}" />{/if}
 			</g>
 		{/if}
+	{/each}
+	{#each strikes as x, i (i)}
+		{@const g = strikeGeo(x.from, x.to)}
+		{@const br = size * 0.42}
+		<g opacity={sfade(x)} pointer-events="none">
+			<path d={g.d} fill="none" stroke="#0b0e14" stroke-opacity=".7" stroke-width={size * 0.32} stroke-linecap="round" />
+			<path d={g.d} fill="none" stroke="#ef4135" stroke-width={size * 0.19} stroke-linecap="round" stroke-dasharray={x.alt ? `${size * 0.3} ${size * 0.18}` : undefined} />
+			{#if true}
+				<!-- the sword: a red disc at the strike's middle, the blade pointing at the target -->
+				<circle cx={g.m.x} cy={g.m.y} r={br * 1.08} fill="#0b0e14" fill-opacity=".55" />
+				<circle cx={g.m.x} cy={g.m.y} r={br} fill="#c62828" stroke="#fff" stroke-width={br * 0.13} />
+				<g transform="rotate({g.ang - 180} {g.m.x} {g.m.y})" fill="#fff" stroke="none">
+					<polygon points="{g.m.x},{g.m.y - br * 0.72} {g.m.x + br * 0.13},{g.m.y - br * 0.52} {g.m.x + br * 0.13},{g.m.y + br * 0.22} {g.m.x - br * 0.13},{g.m.y + br * 0.22} {g.m.x - br * 0.13},{g.m.y - br * 0.52}" />
+					<rect x={g.m.x - br * 0.42} y={g.m.y + br * 0.2} width={br * 0.84} height={br * 0.13} rx={br * 0.05} />
+					<rect x={g.m.x - br * 0.07} y={g.m.y + br * 0.3} width={br * 0.14} height={br * 0.3} />
+					<circle cx={g.m.x} cy={g.m.y + br * 0.66} r={br * 0.1} />
+				</g>
+			{/if}
+		</g>
 	{/each}
 	{#each things as m (m.id)}
 		{@const c0 = at(m.kind === 'unit' || m.kind === 'token' || m.kind === 'label' ? m.hex : '')}
@@ -243,7 +285,7 @@
 				<circle cx={c.x} cy={c.y} r={z * 0.36} fill={CARD_HEX[m.color]} stroke="#fff" stroke-opacity=".9" stroke-width={z * 0.045} stroke-dasharray={m.stay ? `${z * 0.1} ${z * 0.07}` : undefined} />
 				<text x={c.x} y={c.y} dy=".36em" text-anchor="middle" font-size={z * (label(m).length > 2 ? 0.26 : 0.32)} fill={chipInk(m.color)} class="t chip">{label(m)}</text>
 			{/if}
-			{#if strikes && m.stay}
+			{#if swords && m.stay && !struck.has(m.turn)}
 				<!-- an attack from where the hero stands: crossed swords on a red disc at the chip's upper right -->
 				{@const bx = c.x + z * 0.32}
 				{@const by = c.y - z * 0.32}

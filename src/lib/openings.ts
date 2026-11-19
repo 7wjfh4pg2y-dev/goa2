@@ -143,6 +143,14 @@ export function routeOf(op: Opening): { from: string; to: string; turn: number; 
 	}
 	return out
 }
+/** the attacks (2026-11-19, the user: rings mark what the hero attacks): one strike per ring with a turn, from where
+ *  the hero stands that turn (heroHexAt) to the ringed space; `alt` = an alternative route's ring. Up to `step`
+ *  (0 = the whole round). */
+export function strikesOf(op: Opening, step = 0): { from: string; to: string; turn: number; alt: boolean }[] {
+	return op.marks.filter((m): m is RingMark => m.kind === 'ring' && m.turn > 0 && (step <= 0 || m.turn <= step))
+		.map((m) => ({ from: heroHexAt(op, m.turn), to: m.hex, turn: m.turn, alt: !!m.alt }))
+		.filter((x) => x.from && x.from !== x.to)
+}
 /** the spaces whose minion is gone by this step (rings marked "taken") */
 export const takenAt = (op: Opening, step: number): Set<string> =>
 	new Set(op.marks.filter((m): m is RingMark => m.kind === 'ring' && !!m.taken && (step <= 0 || m.turn <= step)).map((m) => m.hex))

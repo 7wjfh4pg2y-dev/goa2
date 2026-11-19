@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { hexCenter, hexCorner, hexNeighbour, hexNeighbours, hexHash, outlineLoops, smoothPath, borderPath, SQRT3 } from './hexgeo'
+import { hexCenter, hexCorner, hexNeighbour, hexNeighbours, hexHash, outlineLoops, smoothPath, borderPath, withObstacles, SQRT3 } from './hexgeo'
 import { hexCube, cubeDist } from '../zones'
 import map from '../maps/forgotten_island.json'
 
@@ -65,5 +65,13 @@ describe('hex geometry', () => {
 		const mean = vals.reduce((a, b) => a + b, 0) / vals.length
 		expect(mean).toBeGreaterThan(0.4)
 		expect(mean).toBeLessThan(0.6)
+	})
+
+	it('an area takes in a rock with 3+ neighbours inside it, never one on its edge', () => {
+		const cells = map.cells as Record<string, string>
+		const rock = Object.keys(cells).find((id) => cells[id] === 'terrain' && hexNeighbours(id).every((n) => cells[n] && cells[n] !== 'terrain'))!
+		const ring = hexNeighbours(rock)
+		expect(withObstacles(ring, cells).has(rock)).toBe(true)
+		expect(withObstacles(ring.slice(0, 2), cells).has(rock)).toBe(false)
 	})
 })

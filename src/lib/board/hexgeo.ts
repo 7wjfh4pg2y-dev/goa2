@@ -122,3 +122,17 @@ export function borderPath(ids: Iterable<string>, groupOf: (id: string) => strin
 	}
 	return d
 }
+
+/** a shaded area takes in the obstacles inside it (2026-11-19, the user: like the printed game, a radius covers rocks
+ *  too): every `terrain` cell with 3 or more neighbours already in the area joins it. Hand-painted areas (openings,
+ *  zone highlights) skip the rocks, so this closes those holes; radius areas already have them. */
+export function withObstacles(ids: Iterable<string>, cells: Record<string, string>): Set<string> {
+	const set = new Set(ids)
+	const add: string[] = []
+	for (const id in cells) {
+		if (cells[id] !== 'terrain' || set.has(id)) continue
+		if (hexNeighbours(id).filter((n) => set.has(n)).length >= 3) add.push(id)
+	}
+	for (const id of add) set.add(id)
+	return set
+}

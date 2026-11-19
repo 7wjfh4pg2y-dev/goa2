@@ -173,7 +173,7 @@ function sceneMovement(): Scene {
 	const d = nearFree('Center', '9_12', wave)
 	const pieces = [...wave, hero('wasp', d, 'blue')]
 	const path = walkToward(d, card('wasp', 'Shock').secondaryMovement ?? 4, '13_9', pieces)
-	return { pieces, zone: 'Center', areas: [{ hex: d, r: card('wasp', 'Shock').secondaryMovement ?? 4, color: HERO_COLOR.wasp }], arrows: [{ path, kind: 'move', color: HERO_COLOR.wasp, ghost: true }] }
+	return { pieces, zone: 'Center', areas: [{ hex: d, r: card('wasp', 'Shock').secondaryMovement ?? 4, color: HERO_COLOR.wasp, alpha: 0.32 }], arrows: [{ path, kind: 'move', color: HERO_COLOR.wasp, ghost: true }] }
 }
 function sceneFastTravel(): Scene {
 	const at = nearFree('Blue Beach', '13_14', wave)
@@ -194,7 +194,7 @@ function sceneAttackMinion(): Scene {
 	const target = minionsOf('orange', 'melee')[0]
 	const d = nearFree('Center', target.hex, wave)
 	const pieces = [...wave.map((m) => (m.team === 'orange' && m.role === 'heavy' ? { ...m, immune: true } : m)), hero('wasp', d, 'blue')]
-	return { pieces, zone: 'Center', areas: [{ hex: d, r: 1, color: HERO_COLOR.wasp }], arrows: [{ path: [d, target.hex], kind: 'attack' }] }
+	return { pieces, zone: 'Center', areas: [{ hex: d, r: 1, color: HERO_COLOR.wasp, alpha: 0.32 }], arrows: [{ path: [d, target.hex], kind: 'attack' }] }
 }
 /** Arien (the defender) in the open middle, ringed by the minions that change the fight */
 function attackSetup() {
@@ -216,7 +216,7 @@ function attackSetup() {
 function sceneAttackHero(): Scene {
 	const { pieces } = attackSetup()
 	const badges: Badge[] = [{ id: 'bm', text: '−1', tone: 'down' }, { id: 'br', text: '−1', tone: 'down' }, { id: 'om', text: '+1', tone: 'up' }, { id: 'h_arien', text: '−1', tone: 'down', total: true }]
-	return { pieces, zone: 'Center', badges, areas: [{ hex: pieces[1].hex, r: 1, color: HERO_COLOR.wasp }], arrows: [{ path: [pieces[1].hex, pieces[0].hex], kind: 'attack' }] }
+	return { pieces, zone: 'Center', badges, areas: [{ hex: pieces[1].hex, r: 1, color: HERO_COLOR.wasp, alpha: 0.32 }], arrows: [{ path: [pieces[1].hex, pieces[0].hex], kind: 'attack' }] }
 }
 function sceneDefeat(): Scene {
 	const { mid, pieces } = attackSetup()
@@ -421,7 +421,7 @@ export function learnSteps(): Step[] {
 				] },
 				{ p: '**“Discard a card, or be defeated”** is not an attack, so no defence helps. The target discards any card; with none left, they are defeated.' }
 			],
-			scene: { ...sceneMovement(), arrows: [], areas: [{ hex: sceneMovement().areas![0].hex, r: 2, color: C.violet }] }
+			scene: { ...sceneMovement(), arrows: [], areas: [{ hex: sceneMovement().areas![0].hex, r: 2, color: C.violet, alpha: 0.32 }] }
 		},
 		{
 			id: 'defeat', chapter: 'Fighting heroes', title: 'A hero is defeated',

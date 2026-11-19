@@ -16,7 +16,7 @@
 	import InkHero from '$lib/board/InkHero.svelte';
 	import InkKit from '$lib/board/InkKit.svelte';
 	import { tokenImg } from '$lib/board/tokenArt';
-	import { outlineLoops, loopsPath } from '$lib/board/hexgeo';
+	import { withObstacles, outlineLoops, loopsPath } from '$lib/board/hexgeo';
 	import { zoneTable } from '$lib/zones';
 
 	// A reusable renderer for a painted hex map (the "3D" board). Supports
@@ -717,7 +717,7 @@
 	const DIRS: Array<[number, number, number]> = [[1, 0, 0], [0, 1, 60], [-1, 1, 120], [-1, 0, 180], [0, -1, 240], [1, -1, 300]];
 	const axialId = (q: number, r: number) => `${q + (r - (r & 1)) / 2}_${r}`;
 	$: areaShapes = areas.map((a) => {
-		const inside = a.hexes ? new Set(a.hexes) : new Set(hexes.filter((h) => hexDist(h.id, a.hex) <= a.r).map((h) => h.id));
+		const inside = a.hexes ? withObstacles(a.hexes, cells) : new Set(hexes.filter((h) => hexDist(h.id, a.hex) <= a.r).map((h) => h.id));
 		const edges: string[] = [];
 		for (const id of inside) {
 			const { x: q, z: r } = toCube(id); const c = centerOf(id);

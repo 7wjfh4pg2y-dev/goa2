@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { OPENING_MAP, twinTable, twinHex, onSide, blankOpening, heroHexAt, marksAt, takenAt, spawnsOf, openingWave, openingOfRow, rowOfOpening, turnCards, applyTool, routeOf, markLabel, type Opening, type ToolOpts } from './openings'
+import { OPENING_MAP, twinTable, twinHex, onSide, blankOpening, heroHexAt, marksAt, takenAt, spawnsOf, openingWave, openingOfRow, rowOfOpening, turnCards, applyTool, routeOf, strikesOf, markLabel, type Opening, type ToolOpts } from './openings'
 
 describe('openings', () => {
 	it('the board is point-symmetric: every space has a twin of the matching kind for the other side', () => {
@@ -45,6 +45,17 @@ describe('openings', () => {
 		] }
 		expect(routeOf(op)).toEqual([{ from: 'S', to: 'A', turn: 1, color: 'green' }, { from: 'A', to: 'C', turn: 3, color: 'blue' }])
 		expect(routeOf({ ...op, start: '' })).toEqual([{ from: 'A', to: 'C', turn: 3, color: 'blue' }])
+	})
+
+	it('strikes: each ringed target is hit from where the hero stands that turn', () => {
+		const op: Opening = { ...blankOpening('brogan'), start: 'S', marks: [
+			{ id: '1', kind: 'step', hex: 'A', turn: 1, color: 'green' },
+			{ id: '2', kind: 'ring', hex: 'M', turn: 1, color: 'red' },
+			{ id: '3', kind: 'ring', hex: 'N', turn: 3, color: 'red', alt: true },
+			{ id: '4', kind: 'ring', hex: 'Z', turn: 0, color: 'red' }
+		] }
+		expect(strikesOf(op)).toEqual([{ from: 'A', to: 'M', turn: 1, alt: false }, { from: 'A', to: 'N', turn: 3, alt: true }])
+		expect(strikesOf(op, 2)).toEqual([{ from: 'A', to: 'M', turn: 1, alt: false }])
 	})
 
 	it('turn by turn: marks up to the turn, the hero on its latest plain chip, taken minions', () => {
