@@ -44,13 +44,13 @@ export type Step = { id: string; chapter: string; title: string; blocks: Block[]
  *  shows the definition on hover / tap. Keys are lower case. */
 export const GLOSSARY: Record<string, string> = {
 	hero: 'The piece you control. Every player has one hero, with its own deck of cards.',
-	minion: 'The small soldiers of each team. They stand in the battle zone and never move on their own.',
+	minion: 'The small soldiers of each team. They stand in the battle zone and never move on their own. They don’t attack heroes, but they change a nearby hero’s defense.',
 	heavy: 'The big minion: worth 4 coins, and immune while its team has other minions in the battle zone.',
 	turn: 'Everyone plays one card face down, then the cards are revealed and resolve one at a time.',
 	round: 'Four turns. At the end of a round come the minion battle and levelling up.',
 	initiative: 'The number in a card’s top left corner. The highest acts first.',
 	primary: 'The card’s big action, along its bottom: an attack, a move, a skill or a defence. The card’s text belongs to it.',
-	secondary: 'The small icons down a card’s left side: a plain move or a defence, used instead of the primary action.',
+	secondary: 'The small icons down a card’s left side (a plain Movement or Defense value), plus Hold, Fast Travel and Clear, which have no icon. A Defense action is only ever performed by discarding the card when you are attacked.',
 	'tie-breaker coin': 'Decides who goes first when two enemy cards have the same initiative. It flips after each tie it settles.',
 	range: 'How far away an attack’s target may be, counted in spaces. Range 1 = a space right next to you.',
 	radius: 'An area round your hero: every space up to that many spaces away.',
@@ -62,13 +62,14 @@ export const GLOSSARY: Record<string, string> = {
 	push: 'When one team has no minions left in the battle zone, the other team pushes: the fight moves one zone towards the losing team’s throne.',
 	wave: 'A fresh group of minions. Each push uses up one wave counter; when the last goes, that push wins the game.',
 	throne: 'Each team’s home zone, at its end of the island. Heroes start and come back there. A push into it wins the game.',
-	block: 'Stop an attack by discarding a card whose defence is at least the attack’s value.',
+	defend: 'When a hero is attacked, they may discard one card from their hand to perform its Defense action. If the defense total is equal to or higher than the attack total, the attack fails.',
+	block: 'A Defense card with an exclamation mark: if you fulfil the Block condition in its text, you defend successfully whatever the attack value.',
 	life: 'Each team’s Life counters. A defeated hero costs their team Life; a team with none left loses.',
 	level: 'Spend coins at the end of a round to get stronger: better cards, items, and at level 8 your Ultimate.',
 	tier: 'How strong a coloured card is: Tier I to start, then Tier II and Tier III as you level up.',
-	item: 'The card you didn’t pick when levelling up, kept upside down as a permanent +1 to one of your numbers.',
+	item: 'When you level up, the card you don’t take into your hand is tucked under your hero dashboard: +1 to one of your values for the rest of the game.',
 	ultimate: 'Your hero’s special power, switched on for good when you reach level 8.',
-	'fast travel': 'Instead of a normal move: jump to any space in your zone or a zone next to it, if no enemy is in either.',
+	'fast travel': 'Instead of your entire Movement action: move to any space in your own zone or an adjacent zone (zones that share a border), if there are no enemy heroes or minions in the zone you leave or the zone you go to.',
 	token: 'A piece a card puts on a space (a tree, a mine…). It blocks like an obstacle.',
 	marker: 'A piece a card puts on a hero (Poison, Bounty…). It rides along with them.'
 }
@@ -175,10 +176,10 @@ function sceneMovement(): Scene {
 	const path = walkToward(d, card('wasp', 'Shock').secondaryMovement ?? 4, '13_9', pieces)
 	return { pieces, zone: 'Center', areas: [{ hex: d, r: card('wasp', 'Shock').secondaryMovement ?? 4, color: HERO_COLOR.wasp, alpha: 0.32 }], arrows: [{ path, kind: 'move', color: HERO_COLOR.wasp, ghost: true }] }
 }
-/** the zones whose OPEN spaces meet `z`'s (a wall of rocks between two zones means they don't touch) */
+/** the zones adjacent to `z`: they share a border (rulebook p.11; tokens and units don't change adjacency) */
 function touchingZones(z: string): string[] {
 	const out = new Set<string>()
-	for (const h of zoneHexes(z)) for (const n of nbrs(h)) if (zones[n] && zones[n] !== z) out.add(zones[n])
+	for (const h of Object.keys(cells).filter((c) => zones[c] === z)) for (const n of hexNeighbours(h)) if (cells[n] && zones[n] && zones[n] !== z) out.add(zones[n])
 	return [...out].sort()
 }
 /** a free open space near the middle of a zone */
@@ -189,12 +190,13 @@ function zoneMid(z: string, ps: ScenePiece[]): string {
 	return hs.filter((h) => !t.has(h)).sort((a, b) => off(a) - off(b) || a.localeCompare(b))[0]
 }
 /** fast travel from `at`: every zone touching its zone with no enemy in it = green + a jump arrow to its middle,
- *  every other zone red (the hero's own zone is left plain) */
+ *  the hero's own zone green too (they may fast travel within it), every other zone red */
 function fastScene(at: string, pieces: ScenePiece[], battle: string): Scene {
 	const enemyIn = (z: string) => pieces.some((p) => p.team === 'orange' && zones[p.hex] === z)
 	const here = zones[at]
 	const ok = touchingZones(here).filter((z) => !enemyIn(z))
-	const areas: Area[] = ZONES.filter((x) => x.z !== here).map((x) => zoneArea(x.z, ok.includes(x.z) ? C.green : C.red, ok.includes(x.z) ? 0.42 : 0.3))
+	const go = (z: string) => ok.includes(z) || (z === here && !enemyIn(z)) // the rulebook: your own zone or an adjacent one
+	const areas: Area[] = ZONES.map((x) => zoneArea(x.z, go(x.z) ? C.green : C.red, go(x.z) ? 0.42 : 0.3))
 	const arrows: Arrow[] = ok.map((z) => ({ path: [at, zoneMid(z, pieces)], kind: 'jump', color: C.green, ghost: true }))
 	return { pieces, zone: battle, areas, arrows }
 }
@@ -314,6 +316,7 @@ export function learnSteps(): Step[] {
 			blocks: [
 				{ p: 'Two teams fight over an island: the **Atlanteans** and the **Titans**. Every player controls one {{hero}}.' },
 				{ p: 'In the middle of the island stand both teams’ {{minions|minion}}: small soldiers that don’t move on their own. Beat the enemy’s minions and you drive the fight towards their home.' },
+				{ p: 'You win by pushing the lane into the enemy {{throne}}, by making the enemy team spend its last {{Life|life}} counter, or by winning the last push. All three are explained on the way.' },
 				{ p: 'In this walkthrough you play the Titans, **Wasp** and **Xargatha**, against **Arien** and **Brogan**.' },
 				{ tip: 'Use the arrow keys, or Back / Next. Words with a dotted line under them explain themselves: hover or tap them.' }
 			],
@@ -323,6 +326,7 @@ export function learnSteps(): Step[] {
 			id: 'hand', chapter: 'The basics', title: 'Your cards',
 			blocks: [
 				{ p: 'You play with cards. You start with **five** in your hand, and each {{turn}} you play **one** of them.' },
+				{ p: 'A played card stays out of your hand until the round ends (four turns). Then you retrieve all your cards to use again.' },
 				{ p: 'A card tells your hero what to do this turn: move, attack, defend, or something special to that hero.' },
 				{ p: 'Two of them are your basic cards (**gold** and **silver**); the other three are **red**, **blue** and **green**. Stronger cards of those colours come later, when you {{level up|level}}.' }
 			],
@@ -334,12 +338,12 @@ export function learnSteps(): Step[] {
 				{ list: [
 					`**1 · {{Initiative|initiative}}:** the higher it is, the sooner the card resolves. This one: **${shock.initiative}**.`,
 					`**2 · Name and {{tier}}:** “${shock.name}”; the **I** in the corner makes it a Tier I card.`,
-					`**3 · {{Secondary actions|secondary}}:** defend with **${shock.secondaryDefense}**, or move **${shock.secondaryMovement}** spaces.`,
+					`**3 · {{Secondary actions|secondary}}:** move **${shock.secondaryMovement}** spaces, or a Defense value of **${shock.secondaryDefense}**: used only when you discard this card from your hand because you are attacked.`,
 					`**4 · {{Primary action|primary}}:** this one attacks for **${shock.primaryValue}**.`,
 					`**5 · Range / radius:** how far the primary action reaches: here a {{${shock.modifier === 'RANGE' ? 'range' : 'radius'}}} of **${shock.modifierValue ?? 1}**.`,
 					'**6 · Card text:** part of the primary action.'
 				] },
-				{ p: 'When your card **resolves** you do **one** thing: the primary action **or** one secondary action.' }
+				{ p: 'When your card **resolves** you perform **one** action: the primary action **or** one secondary action. You may also Hold: do nothing.' }
 			],
 			scene: { ...all(), cards: [{ hero: 'wasp', card: shock }], cardSize: 'big', anno: CARD_ANNO }
 		},
@@ -381,7 +385,7 @@ export function learnSteps(): Step[] {
 				{ p: 'Two cards with the same {{initiative}}:' },
 				{ list: [
 					'**Against an enemy:** the team holding the {{tie-breaker coin}} goes first, then the coin flips to the other team.',
-					'**With a teammate:** you two choose who goes first. The coin doesn’t flip.'
+					'**With a teammate:** you two decide who goes first, without discussing strategy. The coin doesn’t flip.'
 				] },
 				{ p: 'Here Xargatha and Brogan both have **7**. The Titans hold the coin, so Xargatha goes first; then the coin flips to the Atlanteans, ready for the next tie.' }
 			],
@@ -400,7 +404,7 @@ export function learnSteps(): Step[] {
 			blocks: [
 				{ p: 'Next turn Wasp attacks. Her card’s {{range}} says how far it reaches: **range 1** means a space right next to her.' },
 				{ p: 'An attack on a minion **always** defeats it. Wasp earns {{coins}}: **2** for a melee or ranged minion, **4** for a {{heavy}} one. Coins are how you get stronger later.' },
-				{ p: 'The heavy minion has a silver shield: it is {{immune}} while any other minion of its team is still in the fight.' }
+				{ p: 'The heavy minion has a silver shield: it is {{immune}} while any other minion of its team is still in the battle zone.' }
 			],
 			scene: sceneAttackMinion()
 		},
@@ -408,14 +412,13 @@ export function learnSteps(): Step[] {
 		{
 			id: 'heroes', chapter: 'Fighting heroes', title: 'Attacking a hero',
 			blocks: [
-				{ p: 'Attacking a hero is different: they can {{block}} it by **discarding** a card whose **defence** is at least the attack.' },
+				{ p: 'A hero may {{defend}} by discarding **one** card from their hand.' },
 				{ list: [
-					'The attack: the card’s value, **+1** for each attack {{item}} the attacker has.',
-					'**+1** for each of the attacker’s melee or heavy minions **next to** the defender, and each of their ranged minions **within 2**.',
-					'**−1** for each of the defender’s own melee or heavy minions next to them, and **−1** for each defence item.',
-					'Other heroes nearby change nothing.'
+					'**Attack total:** the card’s attack value, **+1** per Attack {{item}}, plus any card text bonus.',
+					'**Defense total:** the discarded card’s Defense value, **+1** per Defense item, plus minion defense modifiers: **−1** per adjacent enemy melee or heavy minion, **−1** per enemy ranged minion within 2, **+1** per adjacent friendly melee or heavy minion.',
+					'Defense total **equal or higher**: the attack fails. Otherwise the hero is defeated.'
 				] },
-				{ tip: 'The shields show this for Arien: two Titan minions count against him, one Atlantean minion helps. The app shows the same shields in every attack.' }
+				{ tip: 'The shields show Arien’s modifiers. A discarded card stays in the discard pile until the round ends, so every defense costs a card you could have played.' }
 			],
 			scene: sceneAttackHero()
 		},
@@ -434,11 +437,11 @@ export function learnSteps(): Step[] {
 		{
 			id: 'defeat', chapter: 'Fighting heroes', title: 'A hero is defeated',
 			blocks: [
-				{ p: 'Not blocked? The hero is **defeated** and leaves the board for now.' },
+				{ p: 'The attack wasn’t defended? The hero is **defeated** and leaves the board for now.' },
 				{ list: [
-					'Their team loses {{Life}}: 1 at levels 1–3, 2 at levels 4–6, 3 at levels 7–8.',
-					'The attacker earns **coins equal to the defeated hero’s level**; each of the attacker’s teammates earns as much as the Life lost.',
-					'**Next turn**, when their card comes up, they **respawn** on a spawn point in their throne and then resolve the card.'
+					'Their team spends {{Life}} counters equal to the hero’s **lowest card tier**: 1 while any card is Tier I (levels 1–3), 2 at Tier II (levels 4–6), 3 at Tier III (levels 7–8).',
+					'The attacker earns **coins equal to the defeated hero’s level**; each of the attacker’s teammates earns **assist coins** equal to that same lowest card tier.',
+					'Their card for this turn is resolved without an action. Next turn, when their card comes up, they may **respawn** on an empty spawn point in their throne before performing its action.'
 				] },
 				{ tip: 'Defeats cost your whole team, so a hero in trouble is worth protecting.' }
 			],
@@ -458,10 +461,11 @@ export function learnSteps(): Step[] {
 			blocks: [
 				{ p: 'When a team has **no minions left** in the battle zone, the other team {{pushes|push}}. It can happen at any moment: a hero defeats the last one during a turn, or the minion battle removes it.' },
 				{ list: [
-					'One {{wave counter|wave}} is removed.',
+					'One {{wave counter|wave}} is flipped face down.',
 					'The battle zone moves one step **towards the losing team’s** {{throne}}.',
-					'Every minion leaves the board and a fresh wave appears in the new battle zone.'
+					'All minions in the old battle zone are removed, and a minion respawns on each spawn point of the new battle zone.'
 				] },
+				{ p: 'Only defeating or removing the last minion pushes the lane, never moving, pushing or swapping one.' },
 				{ p: 'Here the Titans pushed: the fight has moved onto the Atlanteans’ beach, one step from their throne.' }
 			],
 			scene: scenePush()
@@ -472,10 +476,10 @@ export function learnSteps(): Step[] {
 				{ p: 'Everyone takes back the cards they played (a hand of five again). Then spend your {{coins}} to {{level up|level}}: if you can afford it you **must**, as many times as you can pay for.' },
 				{ list: [
 					'A level costs **coins equal to your current level**.',
-					'Pick a colour: its card goes back to your deck and you get both cards of that colour one {{tier}} higher. One goes into your hand; the other becomes an {{item}}: **+1** to one of your numbers for the rest of the game.',
+					'Choose a non-basic card in your hand with the lowest {{tier}} and return it to your deck (the cards you aren’t using). Take the two cards of the same colour one tier higher: one goes into your hand, the other is tucked under your dashboard as an {{item}}: **+1** to one of your values for the rest of the game.',
 					'All three colours reach Tier II before any goes to Tier III.',
-					'At **level 8** your {{Ultimate}} switches on for the rest of the game.',
-					'Couldn’t afford a level? Take a **pity coin** instead.'
+					'Once all your cards are Tier III, your next level up (level 8) unlocks your {{Ultimate}} instead.',
+					'Didn’t level up this round? Collect a **pity coin**.'
 				] }
 			],
 			scene: sceneLevel()
@@ -485,9 +489,9 @@ export function learnSteps(): Step[] {
 			id: 'win', chapter: 'Winning', title: 'Three ways to win',
 			blocks: [
 				{ list: [
-					'**Push into their throne.** Win a push while the battle zone is right next to the enemy {{throne}}.',
-					'**Run them out of Life.** Every enemy hero you defeat costs their team {{Life}}. A team with none left loses.',
-					'**Win the final push.** Each push removes a {{wave counter|wave}}. Whoever pushes when the last one goes wins.'
+					'**Push the lane into their throne.** If a push makes the enemy {{throne}} itself the new battle zone, the team that won the push wins.',
+					'**Run them out of Life.** Every enemy hero you defeat costs their team {{Life}} counters. The team that spends its last one loses.',
+					'**Win the last push.** Each push flips a {{wave counter|wave}}. When the last one is flipped, the team that won that push wins.'
 				] }
 			],
 			scene: { ...all(), areas: [zoneArea('Orange Base', C.or), zoneArea('Blue Base', C.ti)] }
@@ -500,8 +504,8 @@ export function learnSteps(): Step[] {
 					'Each turn, play **one** card face down. The highest initiative resolves first.',
 					'Defeat minions for **coins**; coins buy **levels** at the end of each round.',
 					'Every hero your team loses costs **Life**. Stay near your minions and your teammates.',
-					'**Talk with your team before the cards are revealed.** Afterwards, you’re on your own.',
-					'Turn 1: your **green** card can {{fast travel}} you straight into the fight.'
+					'**Talk with your team between turns, out loud** (the other team may hear). Once the cards are revealed, strategy talk stops.',
+					'From your throne, a Movement action can {{fast travel}} you to a zone next to it, as long as no enemies are there.'
 				] },
 				{ tip: 'Next, if you want them: fast travel, moving other units, setup and other rules. Then the game’s screen, on a computer and on a phone.' }
 			],
@@ -511,10 +515,10 @@ export function learnSteps(): Step[] {
 		{
 			id: 'fast', chapter: 'Reference', title: 'Fast travel',
 			blocks: [
-				{ p: 'Instead of moving normally, a move can {{fast travel}}: ignore the number and jump to any empty space in a zone next to yours.' },
-				{ p: 'Allowed only when **neither** zone has an enemy hero or minion in it. Fast travel skips the card’s text.' },
-				{ p: 'Wasp starts on a Titan {{spawn point}}. Two zones touch the Titan throne: the **Titan beach** and the **Titan jungle**. No enemies are there, so she can fast travel to either (**green**).' },
-				{ p: 'Every other zone is out of reach (**red**): they don’t touch hers.' }
+				{ p: 'Instead of your entire Movement action, you may {{fast travel}}: move to any space in your own zone or an **adjacent** zone (one that shares a border with yours), whatever the movement value. You don’t need a path of empty spaces.' },
+				{ p: 'Allowed only when there are **no enemy heroes or minions** in the zone you leave or the zone you go to. The card text is not applied.' },
+				{ p: 'Wasp starts on a Titan {{spawn point}}. Two zones share a border with the Titan throne: the **Titan beach** and the **Titan jungle**. No enemies are there, so she can fast travel to either (**green**), or anywhere in her own zone.' },
+				{ p: 'Every other zone is out of reach (**red**): they aren’t adjacent to hers.' }
 			],
 			scene: sceneFastTravel()
 		},
@@ -522,8 +526,8 @@ export function learnSteps(): Step[] {
 			id: 'fast-beach', chapter: 'Reference', title: 'Fast travel from the beach',
 			blocks: [
 				{ p: 'Later in the game: the Titans pushed, so the {{battle zone}} is now the Atlantean beach. Wasp stands on the Titan beach.' },
-				{ p: 'From here she can fast travel to the **Titan throne** or the **middle** (**green**): they touch the beach and no enemy stands in them.' },
-				{ p: 'The **Atlantean jungle** looks close, but a wall of rocks runs between it and the beach. Zones only count as next to each other where their open spaces meet, so it’s **red**.' },
+				{ p: 'From here she can fast travel to the **Titan throne** or the **middle** (**green**): they share a border with the beach and no enemy stands in them.' },
+				{ p: 'The **Atlantean jungle** looks close, but it doesn’t share a border with the Titan beach: rocks lie between them. Only zones that share a border are adjacent, so it’s **red**.' },
 				{ tip: 'Zones next to yours change as you move: check again from wherever you stand.' }
 			],
 			scene: sceneFastBeach()
@@ -546,7 +550,7 @@ export function learnSteps(): Step[] {
 		{
 			id: 'setup', chapter: 'Reference', title: 'Setting up',
 			blocks: [
-				{ table: [['', '2 v 2', '3 v 3'], ['Short game', '3 waves · 4 Life', '3 waves · 5 Life'], ['Long game', '5 waves · 6 Life', '5 waves · 8 Life']] },
+				{ table: [['', '2 v 2', '3 v 3'], ['Quick game', '3 waves · 4 Life', '3 waves · 5 Life'], ['Long game', '5 waves · 6 Life', '5 waves · 8 Life']] },
 				{ list: [
 					'Toss the {{tie-breaker coin}}. It decides ties all game.',
 					'Each hero starts at **level 1** on one of the {{spawn points|spawn point}} in their own throne.',
@@ -562,7 +566,7 @@ export function learnSteps(): Step[] {
 				{ list: [
 					'**No line of sight:** you can target through heroes, minions, terrain and tokens.',
 					'You can’t defend on your own turn, only in answer to an attack.',
-					'An attack can be swapped for a **clear**: remove any tokens next to you (none of the card’s text happens).',
+					'**Clear:** instead of your entire Attack action, remove any number of tokens adjacent to you.',
 					'**Hold:** do nothing with your card.',
 					'“This turn / Next turn / This round” effects last that long. The app lights the card while it runs.',
 					'{{Tokens|token}} (trees, mines, zombies…) sit on spaces and block like obstacles. {{Markers|marker}} (Poison, Bounty) ride on a hero. Both leave at the end of the round unless the card says otherwise. A defeated hero’s tokens stay.',
