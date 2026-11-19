@@ -1,5 +1,5 @@
 <script lang="ts" context="module">
-	export type NkSplashKind = 'laugh' | 'steal' | 'swap' | 'doubt' | 'crack'
+	export type NkSplashKind = 'laugh' | 'steal' | 'swap' | 'doubt' | 'crack' | 'discard'
 </script>
 
 <script lang="ts">
@@ -15,6 +15,7 @@
 		swap: { kicker: 'Diabolical Laughter', title: 'I twist your fate!', sub: 'NebKher swaps your cards' },
 		doubt: { kicker: 'Imbue Doubt', title: 'Doubt your choices!', sub: 'Discard a {x} card' },
 		crack: { kicker: 'Crack in Reality', title: 'Reality bends to me!', sub: 'The board splits in two' },
+		discard: { kicker: "NebKher's doubt", title: 'Discard now!', sub: 'Discard a {x} card, if able' },
 	}
 	const GEM: Record<string, string> = { Gold: '#e8bd52', Silver: '#c9d2dc', Red: '#d6453a', Blue: '#3b7fe0', Green: '#41ae59' }
 
@@ -31,8 +32,8 @@
 		return ms
 	}
 	$: c = kind ? COPY[kind] : null
-	$: sub = c ? (kind === 'laugh' && ult ? 'Discard a card — or be defeated!' : c.sub.replace('{x}', detail || (kind === 'doubt' ? 'Red' : 'your spell'))) : ''
-	$: gem = kind === 'doubt' ? GEM[detail || 'Red'] ?? null : null
+	$: sub = c ? (kind === 'laugh' && ult ? 'Discard a card — or be defeated!' : c.sub.replace('{x}', detail || (kind === 'doubt' || kind === 'discard' ? 'Red' : 'your spell'))) : ''
+	$: gem = kind === 'doubt' || kind === 'discard' ? GEM[detail || 'Red'] ?? null : null
 </script>
 
 {#if kind && c}

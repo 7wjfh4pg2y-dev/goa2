@@ -538,6 +538,14 @@
 			if (n.kind === 'swap' && $boardPrefs.tkSwap && n.from != null && n.card != null) tkToast?.play(deck[n.from]?.name ?? '', deck[n.card]?.name ?? '');
 		}
 	}
+	// Imbue Doubt dealt: the hero who must discard gets the toast the moment the cards are revealed (the ring alone was
+	// easy to miss; 2026-11-19), once per forced entry, never on joining
+	let dbSeen = $ms.forced?.[clientId]?.color ? $ms.forced[clientId].at : 0;
+	$: myDoubt = $ms.forced?.[clientId]?.color ? $ms.forced[clientId] : null;
+	let dbShow: string | null = null; // the colour waiting for the reveal curtain (or deck) to close
+	$: if (myDoubt && myDoubt.at !== dbSeen) { dbSeen = myDoubt.at; if (Math.abs(Date.now() - myDoubt.at) < 10000) dbShow = myDoubt.color!; }
+	$: if (!myDoubt) dbShow = null;
+	$: if (dbShow && !deckCovered) { const c = dbShow; dbShow = null; setTimeout(() => nkSplash?.play('discard', c[0] + c.slice(1).toLowerCase(), false, 4500)); }
 	function playNk(n: NonNullable<typeof nkNews>) {
 		nkSeen = n.id;
 		if (Math.abs(Date.now() - n.at) > 10000) return;
