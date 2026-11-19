@@ -361,19 +361,6 @@ export function learnSteps(): Step[] {
 			],
 			scene: all()
 		},
-		{
-			id: 'push', chapter: 'The board', title: 'Pushing the lane',
-			blocks: [
-				{ p: 'When a team has **no minions left** in the battle zone, the other team {{pushes|push}}. It can happen at any moment.' },
-				{ list: [
-					'One {{wave counter|wave}} is removed.',
-					'The battle zone moves one step **towards the losing team’s** {{throne}}.',
-					'Every minion leaves the board and a fresh wave appears in the new battle zone.'
-				] },
-				{ p: 'Here the Titans pushed: the fight has moved onto the Atlanteans’ beach, one step from their throne.' }
-			],
-			scene: scenePush()
-		},
 		// ── a first turn ──
 		{
 			id: 'turn', chapter: 'A first turn', title: 'Everyone plays a card',
@@ -465,6 +452,19 @@ export function learnSteps(): Step[] {
 				{ p: 'Here the Titans have 6 and the Atlanteans 4, so the Atlanteans remove 2. A tie removes nothing. If a team runs out, the other team pushes.' }
 			],
 			scene: sceneBattle()
+		},
+		{
+			id: 'push', chapter: 'End of a round', title: 'Pushing the lane',
+			blocks: [
+				{ p: 'When a team has **no minions left** in the battle zone, the other team {{pushes|push}}. It can happen at any moment: a hero defeats the last one during a turn, or the minion battle removes it.' },
+				{ list: [
+					'One {{wave counter|wave}} is removed.',
+					'The battle zone moves one step **towards the losing team’s** {{throne}}.',
+					'Every minion leaves the board and a fresh wave appears in the new battle zone.'
+				] },
+				{ p: 'Here the Titans pushed: the fight has moved onto the Atlanteans’ beach, one step from their throne.' }
+			],
+			scene: scenePush()
 		},
 		{
 			id: 'level', chapter: 'End of a round', title: 'Levelling up',
