@@ -187,6 +187,29 @@ export function preloadArt(heroIds: string[]) {
 	for (const h of heroIds) for (const k in cardArt) if (k.startsWith(`./images/cards/${h}/`)) { const i = new Image(); i.src = cardArt[k] }
 }
 
+/** Download (into the browser's cache) the art of just these cards, a few at a time, in order — the hero page warms
+ *  every hero's starting hand this way. Re-queuing moves nothing already loaded. */
+const artQueue: string[] = []
+const artSeen = new Set<string>()
+let artBusy = 0
+function artPump() {
+	while (artBusy < 4 && artQueue.length) {
+		const u = artQueue.shift()!
+		artBusy++
+		void loadImg(u).finally(() => { artBusy--; artPump() })
+	}
+}
+export function preloadCardArt(list: { hero: string; cards: HeroCardJson[] }[]) {
+	if (typeof document === 'undefined') return
+	void ready()
+	void preloadImages()
+	for (const { hero, cards } of list) for (const c of cards) {
+		const u = cardArt[`./images/cards/${hero}/${backgroundSlug(c, null)}.webp`]
+		if (u && !artSeen.has(u)) { artSeen.add(u); artQueue.push(u) }
+	}
+	artPump()
+}
+
 /** Paint every card of a deck up front, one at a time (yielding between cards so
  *  animations stay smooth). `onProgress(done, total)` after each card. */
 export async function prewarm(heroId: string, cards: HeroCardJson[], onProgress?: (done: number, total: number) => void) {

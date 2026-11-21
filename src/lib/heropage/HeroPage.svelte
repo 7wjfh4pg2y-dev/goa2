@@ -17,6 +17,7 @@
 	import { startingHand } from '$lib/cards/cardstate';
 	import RuneMark from '$lib/hud2/RuneMark.svelte';
 	import { splashReady, warmSplashes } from '$lib/warmArt';
+	import { preloadCardArt, prewarm } from '$lib/cards/render';
 	import { onSide, turnCards, CARD_HEX, LANES, SIZES, MINION_PREFS, GUIDE_TAGS, type Opening, type HeroGuide, type Side } from '$lib/openings';
 	import { guideFor } from './guide';
 	import type { HeroMatchups, Matchup } from '$lib/hallstats';
@@ -169,7 +170,17 @@
 		const w = 100 / c.length;
 		return `linear-gradient(90deg, ${c.map((x, i) => `${CARD_HEX[x as keyof typeof CARD_HEX]} ${(i * w).toFixed(1)}% ${((i + 1) * w).toFixed(1)}%`).join(', ')})`;
 	};
-	onMount(() => { void tick(); });
+	onMount(() => {
+		void tick();
+		// 2026-11-21 (the user): load every hero's painting and starting hand up front, nearest heroes first, so
+		// switching heroes never waits; the hands of the ‹ › neighbours are painted ahead too (see below)
+		const at = HEROES_ALPHA.findIndex((x) => x.id === h.id), n = HEROES_ALPHA.length
+		const near = HEROES_ALPHA.map((_, k) => HEROES_ALPHA[(at + (k % 2 ? (k + 1) / 2 : n - k / 2)) % n].id) // current, next, prev, next+1…
+		warmSplashes(near)
+		preloadCardArt(near.map((id) => ({ hero: id, cards: startingHand(id).map((i) => heroCards(id)[i]).filter(Boolean) })))
+	});
+	const handOf = (id: string) => startingHand(id).map((i) => heroCards(id)[i]).filter(Boolean)
+	$: if (typeof document !== 'undefined') { void prewarm(nextHero.id, handOf(nextHero.id)); void prewarm(prevHero.id, handOf(prevHero.id)) }
 	/* a box whose text runs on: `more` while there is text below (the bottom edge fades; the scrollbar stays hidden) */
 	function more(node: HTMLElement) {
 		const set = () => node.classList.toggle('more', node.scrollTop + node.clientHeight < node.scrollHeight - 2);
