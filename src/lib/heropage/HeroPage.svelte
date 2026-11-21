@@ -16,6 +16,7 @@
 	import { heroCards } from '$lib/cards/deck';
 	import { startingHand } from '$lib/cards/cardstate';
 	import RuneMark from '$lib/hud2/RuneMark.svelte';
+	import { splashReady, warmSplashes } from '$lib/warmArt';
 	import { onSide, turnCards, CARD_HEX, LANES, SIZES, MINION_PREFS, GUIDE_TAGS, type Opening, type HeroGuide, type Side } from '$lib/openings';
 	import { guideFor } from './guide';
 	import type { HeroMatchups, Matchup } from '$lib/hallstats';
@@ -64,6 +65,17 @@
 	// beta: the overview sits on the art's left, so these paintings are mirrored to keep the hero clear of it (2026-11-19, the user)
 	const FLIP_ART = new Set(['bain', 'emmitt', 'mortimer', 'mrak', 'rowenna', 'silverarrow', 'tali', 'tigerclaw', 'trinkets', 'ursafar', 'wasp', 'whisper', 'widget']);
 	$: face = splashFace(h.id);
+	// the painting on show changes only once the next one is decoded, its flip and framing WITH it (2026-11-21, the
+	// user: switching heroes flipped the old painting for a moment before the new one arrived)
+	type Shown = { id: string; src: string; flip: boolean; pos: string }
+	const shownOf = (id: string): Shown => { const f = splashFace(id); return { id, src: heroSplash(id), flip: beta && FLIP_ART.has(id), pos: `${Math.round(f[0] * 100)}% ${Math.round(f[1] * 100)}%` } }
+	let shown: Shown | null = null
+	$: showArt(h.id)
+	function showArt(id: string) {
+		if (!shown) shown = shownOf(id) // first paint: no wait
+		if (shown.id === id) return
+		splashReady(id).then(() => { if (h.id === id) shown = shownOf(id) })
+	}
 	$: cards = heroCards(h.id);
 	$: hand = startingHand(h.id);
 	$: g = guideFor(h.id, guide);
@@ -137,6 +149,7 @@
 	}
 	$: prevHero = HEROES_ALPHA[(HEROES_ALPHA.findIndex((x) => x.id === h.id) + HEROES_ALPHA.length - 1) % HEROES_ALPHA.length];
 	$: nextHero = HEROES_ALPHA[(HEROES_ALPHA.findIndex((x) => x.id === h.id) + 1) % HEROES_ALPHA.length];
+	$: warmSplashes([nextHero.id, prevHero.id]) // the ‹ › neighbours are ready before they're asked for
 	function key(e: KeyboardEvent) {
 		if (beta && tab === 'overview' && !(e.target as HTMLElement)?.closest?.('input, textarea, select')) {
 			if (e.key === 'ArrowRight') stepHero(1);
@@ -234,7 +247,7 @@
 	<!-- ───── stage (the big area) ───── -->
 	<section class="stage">
 		{#if tab === 'overview'}
-			<img class="art" class:flip={beta && FLIP_ART.has(h.id)} src={heroSplash(h.id)} alt="" style="object-position: {Math.round(face[0] * 100)}% {Math.round(face[1] * 100)}%" />
+			{#if shown}<img class="art" class:flip={shown.flip} src={shown.src} alt="" style="object-position: {shown.pos}" />{/if}
 			<div class="shade"></div>
 			{#if beta}
 				<button class="hnav l" on:click={() => stepHero(-1)} aria-label="Previous hero: {prevHero.name}" title="{prevHero.name} (←)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg></button>

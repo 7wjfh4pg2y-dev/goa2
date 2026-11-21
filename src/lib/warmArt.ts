@@ -5,19 +5,29 @@
 import { heroSplash } from './heroes'
 
 const kept = new Map<string, HTMLImageElement>()
+const done = new Map<string, Promise<void>>()
 let queue: string[] = []
 let busy = 0
 const AT_ONCE = 3
 
 function load(id: string): Promise<void> {
-	if (typeof Image === 'undefined' || kept.has(id)) return Promise.resolve()
+	if (typeof Image === 'undefined') return Promise.resolve()
+	if (kept.has(id)) return done.get(id) ?? Promise.resolve()
 	const src = heroSplash(id)
 	if (!src) return Promise.resolve()
 	const im = new Image()
 	im.decoding = 'async'
 	im.src = src
 	kept.set(id, im)
-	return (im.decode?.() ?? Promise.resolve()).catch(() => {})
+	const p = (im.decode?.() ?? Promise.resolve()).catch(() => {})
+	done.set(id, p)
+	return p
+}
+/** resolves once this painting is downloaded and decoded (loads it now if it isn't yet) */
+export function splashReady(id: string): Promise<void> {
+	if (typeof Image === 'undefined') return Promise.resolve()
+	if (!kept.has(id)) { queue = queue.filter((q) => q !== id); return load(id) }
+	return done.get(id) ?? Promise.resolve()
 }
 function pump() {
 	while (busy < AT_ONCE && queue.length) {
