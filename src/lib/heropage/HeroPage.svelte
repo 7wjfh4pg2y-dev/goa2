@@ -115,6 +115,22 @@
 		fit();
 		return { update(q: { on: boolean; key: string }) { on = q.on; fit(); }, destroy() { ro.disconnect(); } };
 	}
+	// beta: the overview box ends where the longest line above it ends (the role chips or the stat pips) — 2026-11-24
+	function alignGuide(el: HTMLElement, p: { on: boolean; key: string }) {
+		let on = p.on, raf = 0;
+		const fit = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => {
+			const gd = el.querySelector('.guide.onart') as HTMLElement | null;
+			if (!gd) return;
+			if (!on || innerWidth <= 1100) { gd.style.removeProperty('width'); return; } // ≤ 1100 the box also holds the strengths: full width
+			const x0 = el.getBoundingClientRect().left;
+			let r = 0;
+			for (const q of el.querySelectorAll('.meta > *, .stats .pips')) r = Math.max(r, q.getBoundingClientRect().right - x0);
+			gd.style.width = r > 0 ? `${Math.ceil(r)}px` : '';
+		}); };
+		const ro = new ResizeObserver(fit); ro.observe(el);
+		fit();
+		return { update(q: { on: boolean; key: string }) { on = q.on; fit(); }, destroy() { ro.disconnect(); cancelAnimationFrame(raf); } };
+	}
 	function fitType(el: HTMLElement, _dep: unknown) {
 		let raf = 0;
 		const page = el.closest('.hpage') as HTMLElement | null;
@@ -264,12 +280,13 @@
 				<button class="hnav l" on:click={() => stepHero(-1)} aria-label="Previous hero: {prevHero.name}" title="{prevHero.name} (←)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg></button>
 				<button class="hnav r" on:click={() => stepHero(1)} aria-label="Next hero: {nextHero.name}" title="{nextHero.name} (→)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" /></svg></button>
 			{/if}
-						<div class="id">
+			{#if beta}<span class="stars corner" title="Complexity {h.stars}">{#each Array(h.stars) as _, k (k)}<img src={starIcon()} alt="★" />{/each}</span>{/if}
+			<div class="id" use:alignGuide={{ on: beta, key: h.id }}>
 				<div class="nmrow"><img class="logo" src={heroLogo(h.id)} alt="" />
 				<h1 class="name">{h.name} <span>{h.title}</span></h1></div>
 				<div class="meta" use:oneLine={{ on: beta, key: h.id }}>
-					<span class="stars" title="Complexity {h.stars}">{#each Array(h.stars) as _, k (k)}<img src={starIcon()} alt="★" />{/each}</span>
-					<span class="sep"></span>
+					{#if !beta}<span class="stars" title="Complexity {h.stars}">{#each Array(h.stars) as _, k (k)}<img src={starIcon()} alt="★" />{/each}</span>
+					<span class="sep"></span>{/if}
 					{#each h.traits as t (t)}<span class="role">{#if traitIcon(t as Trait)}<img src={traitIcon(t as Trait)} alt="" />{/if}{TRAIT_LABELS[t]}</span>{/each}
 				</div>
 				<div class="stats">
@@ -428,6 +445,11 @@
 	.beta .id .meta .role { flex: none; white-space: nowrap; font-size: calc(13px * var(--rk, 1)); padding: calc(3px * var(--rk, 1)) calc(10px * var(--rk, 1)) calc(3px * var(--rk, 1)) calc(5px * var(--rk, 1)); gap: calc(5px * var(--rk, 1)); }
 	.beta .id .meta .role img { width: calc(18px * var(--rk, 1)); height: calc(18px * var(--rk, 1)); }
 	.beta .id .meta .stars { flex: none; }
+	.beta .id .meta { width: max-content; max-width: 100%; }
+	/* the complexity stars in the painting's top right corner */
+	.stars.corner { position: absolute; top: 18px; right: 22px; z-index: 2; gap: 4px; padding: 6px 10px; border-radius: 999px; background: rgba(3, 10, 20, 0.6); border: 1px solid var(--hair); }
+	.stars.corner img { width: 22px; height: 22px; }
+	@media (max-width: 760px) { .stars.corner { top: 14px; right: 58px; padding: 4px 8px; } .stars.corner img { width: 18px; height: 18px; } }
 	.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 22px; margin-top: 6px; max-width: 520px; }
 	.st { display: grid; grid-template-columns: 22px 86px 1fr; align-items: center; gap: 8px; font-size: 14px; color: var(--ink-2); }
 	.st img { width: 20px; height: 20px; }
@@ -628,11 +650,11 @@
 	.beta .swart li.good::before { background: #35d07a; }
 	.beta .swart li.bad::before { background: #ef5a4b; }
 	.beta .stage .id { width: min(760px, calc(100% - var(--sww) - 66px - 66px - 20px)); }
-	.beta .stage { --sww: clamp(240px, 24%, 340px); }
+	.beta .stage { --sww: clamp(330px, 32%, 420px); }
 	/* wide: strengths / weaknesses in their own panel on the art's right; narrow: back under the overview, full width */
 	@media (min-width: 1101px) { .beta .guide.onart .sw { display: none; } }
 	@media (max-width: 1100px) and (min-width: 761px) { .beta .swart { display: none; } .beta .stage .id { width: calc(100% - 132px); } }
-	@media (max-width: 1280px) and (min-width: 761px) { .beta .stage { --sww: clamp(200px, 27%, 260px); } .beta .swart li { font-size: 14px; } }
+	@media (max-width: 1280px) and (min-width: 761px) { .beta .stage { --sww: clamp(290px, 31%, 340px); } .beta .swart li { font-size: 14px; } }
 	/* too narrow for two stats a row (the pips shrank to slivers): one column, the pips a fixed width */
 	@container (max-width: 520px) { .beta .stats { grid-template-columns: max-content; gap: 3px 0; } .beta .stats .st { grid-template-columns: 22px 92px 170px; } }
 	.beta .stage .id { container-type: inline-size; }
