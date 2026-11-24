@@ -53,7 +53,7 @@
 	type StatView = { wr: number | null; impact: number | null; ci: [number, number, number] | null; won: number[] };
 	$: view = (src === 'global' && gl
 		? { wr: globalWin(gl), impact: gl.impact, ci: gl.ate, won: gl.won }
-		: { wr: hasLocal && local ? (100 * local.wins) / local.games : null, impact: local?.impact ?? null, ci: null, won: local ? [local.byType.throne.wins, local.byType.final.wins, local.byType.life.wins] : [0, 0, 0] }) as StatView;
+		: { wr: hasLocal && local ? (100 * local.wins) / local.games : null, impact: local?.impact ?? null, ci: null, won: local ? [local.byType.throne.wins, local.byType.final.wins, local.byType.life.wins, local.byType.other.wins] : [0, 0, 0, 0] }) as StatView;
 	const glTip = (v: GlobalVs) => `${heroById(v[0])?.name ?? v[0]} — ${v[1]}% win rate (global)`;
 	$: muRows = (muSrc === 'global' && gl
 		? [['Strong against', gl.beats], ['Struggles against', gl.countered], ['Best with', gl.mates]].map(([label, vs]) => ({ label, faces: (vs as GlobalVs[]).map((v) => ({ id: v[0], tip: glTip(v) })) }))
@@ -249,8 +249,8 @@
 				</div>
 				<div class="gcell wide">
 					<div class="gl2"><span>Victory types</span><small>% of wins</small></div>
-					<div class="gstk" class:none={!wonN} title="Wins by win type">{#each [0, 1, 2] as k (k)}{#if view.won[k]}<i class="w{k}" style="flex:{view.won[k]}">{wp[k]}%</i>{/if}{/each}</div>
-					<div class="gleg"><span><i class="w0"></i>♛ Throne</span><span><i class="w1"></i>⚑ Final push</span><span><i class="w2"></i>☠ Life</span></div>
+					<div class="gstk" class:none={!wonN} title="Wins by win type">{#each view.won as n, k (k)}{#if n}<i class="w{k}" style="flex:{n}" title={k === 3 ? 'Other wins: Wave Push, Forfeit or not noted (table games)' : ''}>{wp[k]}%</i>{/if}{/each}</div>
+					<div class="gleg"><span><i class="w0"></i>♛ Throne</span><span><i class="w1"></i>⚑ Final push</span><span><i class="w2"></i>☠ Life</span>{#if view.won[3]}<span title="Wave Push, Forfeit or not noted (table games)"><i class="w3"></i>Other</span>{/if}</div>
 				</div>
 			</div>
 		</div>
@@ -490,6 +490,7 @@
 	.gstk .w0, .gleg .w0 { background: #c99512; }
 	.gstk .w1, .gleg .w1 { background: #3a7fe0; }
 	.gstk .w2, .gleg .w2 { background: #d9434e; }
+	.gstk .w3, .gleg .w3 { background: #6f7a8c; }
 	.gstk.none, .gsplit.none { background: rgba(255, 255, 255, 0.08); }
 	.gleg { display: flex; justify-content: space-between; gap: 6px; font-size: 11px; color: var(--ink-3); }
 	.gleg span { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
