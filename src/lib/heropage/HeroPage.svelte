@@ -200,10 +200,10 @@
 		<div class="gbody" use:more>
 		<div class="over">{#each g.overview.split(/\n+/).filter(Boolean) as para, k (k)}<p class:auto={g.auto.overview}>{para}</p>{/each}</div>
 		{#if g.funFact?.trim()}<p class="fun"><b>Fun fact</b> {g.funFact}</p>{/if}
+		</div>
 		<div class="sw">
 			<div><h3>Strengths</h3><ul>{#each g.strengths as x, k (k)}<li class="good">{x}</li>{/each}</ul></div>
 			<div><h3>Weaknesses</h3><ul>{#each g.weaknesses as x, k (k)}<li class="bad">{x}</li>{/each}</ul></div>
-		</div>
 		</div>
 	</div>
 {/snippet}
@@ -286,10 +286,10 @@
 				{@render guideBlock('onart')}
 			</div>
 			{#if beta && (g.strengths.length || g.weaknesses.length)}
-				<div class="swart"><div class="gbody" use:more>
+				<div class="swart">
 					<div><h3>Strengths</h3><ul>{#each g.strengths as x, k (k)}<li class="good">{x}</li>{/each}</ul></div>
 					<div><h3>Weaknesses</h3><ul>{#each g.weaknesses as x, k (k)}<li class="bad">{x}</li>{/each}</ul></div>
-				</div></div>
+				</div>
 			{/if}
 		{:else if op}
 			{#key op.id}
@@ -621,7 +621,7 @@
 	.hnav.r { right: 10px; }
 	.hnav:hover { color: var(--ink-dark); background: linear-gradient(180deg, var(--brass-hi), var(--brass)); border-color: var(--brass-hi); }
 	.beta .swart { position: absolute; right: 66px; bottom: 20px; width: var(--sww); display: flex; flex-direction: column; gap: 12px;
-		padding: 14px 16px; border-radius: 12px; background: rgba(3, 10, 20, 0.72); border: 1px solid var(--hair); max-height: calc(100% - 130px); overflow-y: auto; scrollbar-width: thin; }
+		padding: 14px 16px; border-radius: 12px; background: rgba(3, 10, 20, 0.72); border: 1px solid var(--hair); }
 	.beta .swart ul { margin: 6px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 5px; }
 	.beta .swart li { font-size: 15px; padding-left: 14px; position: relative; }
 	.beta .swart li::before { content: ''; position: absolute; left: 0; top: 0.5em; width: 7px; height: 7px; border-radius: 50%; }
@@ -653,11 +653,11 @@
 		.beta .stage { --dh: clamp(120px, calc(100vh - 776px), 210px); }
 		@media (max-height: 860px) { .beta .stage { --dh: clamp(112px, 19vh, 150px); } }
 		.beta .guide.onart { flex: 0 0 var(--dh); min-height: 0; overflow: hidden; }
-		.beta .swart { height: var(--dh); max-height: none; overflow: hidden; }
-		.beta .guide.onart .gbody, .beta .swart .gbody { display: flex; flex-direction: column; gap: 6px; flex: 1; min-height: 0;
+		.beta .guide.onart .gbody { display: flex; flex-direction: column; gap: 6px; flex: 1; min-height: 0;
 			overflow-y: auto; scrollbar-width: none; overscroll-behavior: contain; }
-		.beta .swart .gbody { gap: 12px; height: 100%; }
-		.beta .guide.onart .gbody::-webkit-scrollbar, .beta .swart .gbody::-webkit-scrollbar { display: none; }
+		.beta .guide.onart .gbody::-webkit-scrollbar { display: none; }
+		/* ≤ 1100 wide the strengths / weaknesses sit under the overview, outside its scrolling box: always in view */
+		@media (max-width: 1100px) { .beta .guide.onart { flex: 0 0 auto; } .beta .guide.onart .gbody { flex: 0 0 calc(var(--dh) - 44px); } }
 		.beta .gbody:global(.more) { mask-image: linear-gradient(to bottom, #000 calc(100% - 26px), transparent); -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 26px), transparent); }
 	}
 	@media (min-width: 761px) {

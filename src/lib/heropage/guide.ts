@@ -3,6 +3,7 @@
 // neutral: no tier, win rate or pick rate).
 import { heroById, TRAIT_LABELS, type Trait } from '../heroes'
 import { blankGuide, type HeroGuide } from '../openings'
+import { HERO_SW, MAX_SW } from './strengths'
 
 const STRENGTH: Record<Trait, string> = {
 	damager: 'Big hits', disabler: 'Locks enemies down', durable: 'Hard to bring down', farming: 'Earns coins fast', healer: 'Keeps allies alive',
@@ -22,8 +23,8 @@ export function guideFor(hero: string, written: HeroGuide | null): HeroGuide & {
 	return {
 		...g,
 		overview: g.overview.trim() || play,
-		strengths: g.strengths.length ? g.strengths : (h?.traits ?? []).slice(0, 4).map((t) => STRENGTH[t]),
-		weaknesses: g.weaknesses.length ? g.weaknesses : lows.length ? lows : ['No single weak spot'],
+		strengths: (g.strengths.length ? g.strengths : HERO_SW[hero]?.s ?? (h?.traits ?? []).map((t) => STRENGTH[t])).slice(0, MAX_SW),
+		weaknesses: (g.weaknesses.length ? g.weaknesses : HERO_SW[hero]?.w ?? (lows.length ? lows : ['No single weak spot'])).slice(0, MAX_SW),
 		auto: { overview: !g.overview.trim(), strengths: !g.strengths.length, weaknesses: !g.weaknesses.length }
 	}
 }
