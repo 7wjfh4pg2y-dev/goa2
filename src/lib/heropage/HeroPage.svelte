@@ -250,7 +250,7 @@
 				<div class="gcell wide">
 					<div class="gl2"><span>Victory types</span><small>% of wins</small></div>
 					<div class="gstk" class:none={!wonN} title="Wins by win type">{#each view.won as n, k (k)}{#if n}<i class="w{k}" style="flex:{n}" title={k === 3 ? 'Forfeit: the enemy team gave up (Wave Push / Forfeit)' : ''}>{wp[k]}%</i>{/if}{/each}</div>
-					<div class="gleg"><span><i class="w0"></i>♛ Throne</span><span><i class="w1"></i>⚑ Final push</span><span><i class="w2"></i>☠ Life</span>{#if view.won[3]}<span title="The enemy team gave up (Wave Push / Forfeit)"><i class="w3"></i>⚐ Forfeit</span>{/if}</div>
+					<div class="gleg"><span><i class="w0"></i>♛ Throne</span><span><i class="w1"></i>⚑ Final push</span><span><i class="w2"></i>☠ Life</span><span title="The enemy team gave up (Wave Push / Forfeit)"><i class="w3"></i>⚐ Forfeit</span></div>
 				</div>
 			</div>
 		</div>

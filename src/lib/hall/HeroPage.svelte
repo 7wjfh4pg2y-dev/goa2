@@ -191,7 +191,7 @@
 			<div class="types">
 				{#each [...WIN_TYPES, 'other' as const] as t (t)}
 					{#if h.byType[t].games}
-						<div class="ty"><span>{t === 'other' ? 'Other / table' : WIN_LABEL[t]}</span><span class="bar"><i style="--v:{h.byType[t].games / Math.max(1, typeTotal)}"></i></span><b>{h.byType[t].wins}–{h.byType[t].games - h.byType[t].wins}</b></div>
+						<div class="ty"><span>{WIN_LABEL[t]}</span><span class="bar"><i style="--v:{h.byType[t].games / Math.max(1, typeTotal)}"></i></span><b>{h.byType[t].wins}–{h.byType[t].games - h.byType[t].wins}</b></div>
 					{/if}
 				{/each}
 			</div>

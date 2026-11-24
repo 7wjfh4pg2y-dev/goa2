@@ -254,7 +254,7 @@
 			{/if}
 			<div class="sub sp">How they won</div>
 			<div class="types">
-				{#each WIN_TYPES as t (t)}
+				{#each [...WIN_TYPES, 'other' as const] as t (t)}
 					{#if p.byType[t].games}<div class="ty"><span>{WIN_LABEL[t]}</span><span class="bar gr"><i style="--v:{p.byType[t].wins / Math.max(1, p.wins)}"></i></span><b>{p.byType[t].wins}</b></div>{/if}
 				{/each}
 			</div>

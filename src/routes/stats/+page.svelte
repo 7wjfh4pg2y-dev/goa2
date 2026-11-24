@@ -371,7 +371,7 @@
 						<div class="ch">How games end</div>
 						<div class="ends">
 							{#each (['throne', 'final', 'life', 'other'] as const) as t (t)}
-								{#if ov.byType[t]}<div class="end"><span>{t === 'other' ? 'Other / table' : WIN_LABEL[t]}</span><span class="bar"><i style="--v:{ov.byType[t] / Math.max(1, ov.games)}"></i></span><b>{ov.byType[t]}</b></div>{/if}
+								{#if ov.byType[t]}<div class="end"><span>{WIN_LABEL[t]}</span><span class="bar"><i style="--v:{ov.byType[t] / Math.max(1, ov.games)}"></i></span><b>{ov.byType[t]}</b></div>{/if}
 							{/each}
 						</div>
 						<div class="sub sp2">Records held</div>

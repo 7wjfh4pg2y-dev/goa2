@@ -35,7 +35,7 @@ export type GameRowIn = {
 
 export type WinType = 'throne' | 'final' | 'life' | 'other'
 export const WIN_TYPES: WinType[] = ['throne', 'final', 'life']
-export const WIN_LABEL: Record<WinType, string> = { throne: 'Throne', final: 'Final push', life: 'Life', other: 'Other' }
+export const WIN_LABEL: Record<WinType, string> = { throne: 'Throne', final: 'Final push', life: 'Life', other: 'Forfeit' }
 export const winType = (reason: string | null | undefined): WinType =>
 	/throne/i.test(reason ?? '') ? 'throne' : /final push/i.test(reason ?? '') ? 'final' : /life/i.test(reason ?? '') ? 'life' : 'other'
 
