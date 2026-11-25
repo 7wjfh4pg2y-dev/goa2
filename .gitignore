@@ -20,3 +20,6 @@ vite.config.ts.timestamp-*
 
 # the user's reference material, kept locally: the minion 3D models (35 MB) that tools/minion_art.py reads, and photos of their physical board
 /references/
+
+# sprite engine build output (tools/sprites/build.mjs)
+/tools/sprites/out/
