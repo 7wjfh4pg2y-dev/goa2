@@ -912,9 +912,13 @@
 									<span class="choice-ic"><Icon name="pen" /></span>
 									<span class="choice-txt"><span class="t-h2">Map editor</span><span class="t-body c-muted">Maps & zones</span></span>
 								</a>
-								<a class="choice card a gmwide" href={base + '/heroes-beta'}>
+								<a class="choice card a gmwide half" href={base + '/heroes-beta'}>
 									<span class="choice-ic"><Icon name="user" /></span>
-									<span class="choice-txt"><span class="t-h2">Heroes beta</span><span class="t-body c-muted">The next hero pages</span></span>
+									<span class="choice-txt"><span class="t-h2">Heroes beta</span></span>
+								</a>
+								<a class="choice card a gmwide half" href={base + '/studio'}>
+									<span class="choice-ic"><Icon name="film" /></span>
+									<span class="choice-txt"><span class="t-h2">Animation studio</span></span>
 								</a>
 							</div>
 							<button class="btn btn-ghost on-art signout" on:click={() => { signOut(); goHome(); }}><Icon name="lock" /> Sign out</button>
@@ -1274,6 +1278,8 @@
 	.choices.gmgrid :global(.choice-ic) { width: 36px; height: 36px; flex: none; font-size: 20px; }
 	.choices.gmgrid :global(.choice-ic svg) { width: 1em; height: 1em; }
 	.choices.gmgrid :global(.choice.gmwide) { grid-column: 1 / -1; height: 52px; flex-direction: row; gap: 10px; }
+	.choices.gmgrid :global(.choice.gmwide.half) { grid-column: auto; }
+	.choices.gmgrid :global(.choice.gmwide.half .t-h2) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 	.choices.gmgrid :global(.choice.gmwide .choice-ic) { width: 30px; height: 30px; font-size: 16px; }
 	.choices.gmgrid :global(.choice.gmwide .choice-txt) { flex-direction: row; align-items: baseline; gap: 10px; }
 	.choices.gmgrid :global(.choice-txt) { align-items: flex-start; min-width: 0; max-width: 100%; }

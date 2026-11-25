@@ -101,3 +101,24 @@ describe('parts', () => {
 		expect(skipped(F, {}, 'gear')).toBe(false);
 	});
 });
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const fs: any = await import(/* @vite-ignore */ 'node:' + 'fs');
+describe('animation studio library (static/anim, written by tools/sprites/studio.mjs)', () => {
+	const dir = new URL('../../static/anim/', import.meta.url);
+	const lib = JSON.parse(fs.readFileSync(new URL('library.json', dir), 'utf8'));
+	it('every sheet exists and every step points at a real frame', () => {
+		expect(lib.entries.length).toBeGreaterThan(10);
+		for (const e of lib.entries) {
+			for (const s of Object.values(e.sheets) as { src: string; n: number }[]) expect(fs.existsSync(new URL(s.src, dir)), s.src).toBe(true);
+			for (const c of e.clips) for (const st of c.steps) {
+				expect(e.sheets[st.s], `${e.id}/${c.id}`).toBeTruthy();
+				expect(st.f).toBeLessThan(e.sheets[st.s].n);
+				expect(st.d).toBeGreaterThan(0);
+			}
+		}
+	});
+	it('heroes carry the shared animation set', () => {
+		for (const e of lib.entries.filter((x: { kind: string }) => x.kind === 'hero')) expect(e.clips.filter((c: { raw?: boolean }) => !c.raw).map((c: { id: string }) => c.id)).toEqual(['idle', 'run', 'attack', 'jump', 'hit', 'defeat']);
+	});
+});

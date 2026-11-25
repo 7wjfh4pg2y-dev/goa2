@@ -23,3 +23,7 @@ Needs ImageMagick (`convert`, `identify`).
 Same cell / baseline / facing / animation set / timings for every hero; light from the upper-left; flat 3-tone ramps per material, no anti-aliasing; Hit flashes white, Defeat flashes red; added parts never flicker (≤ 1 px against their landmark between frames). We recolour, segment and add — never redraw the pack's poses.
 
 Silverarrow (`heroes/silverarrow.mjs`) is the reference: the engine must keep rebuilding her approved sheets pixel-identical.
+
+## Animation studio
+
+`node tools/sprites/studio.mjs [--reels <folder of GIFs>]` rebuilds the GM page **/studio**'s library: `static/anim/library.json` + sheets (every hero built here, the base packs' strips, and CraftPix preview GIFs cut to their stage, background cleared, packed into frame grids). Run it after adding a hero or a pack; without `--reels` the reels already in the library are kept (the GIFs aren't in the repo). The folder is `anim`, not `studio`: a folder and a page of the same name can 404.
