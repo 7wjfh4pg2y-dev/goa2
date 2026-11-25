@@ -8,7 +8,7 @@
 // the master into its own small canvas at the size it's shown (a ~1 ms drawImage).
 // A small LRU bounds memory; `prewarm` paints a whole deck up front (used on the
 // matchup splash, like a loading screen).
-import { images, importCardImage, loadImages, preloadImages, takeMissing, updateCanvas } from './card_painter'
+import { images, importCardImage, loadImages, preloadImages, setBlankValues, takeMissing, updateCanvas } from './card_painter'
 import { Color, Item, Modifier, Type, ValueSign } from './states'
 import { backgroundSlug, heroStat, type HeroCardJson } from './deck'
 
@@ -52,8 +52,8 @@ async function art(heroId: string, slug: string): Promise<CanvasImageSource | un
 	return img ? crop(img) : undefined
 }
 
-export function cardKey(heroId: string, card: HeroCardJson, extraSlotIndex: number | null, showNumbers: boolean): string {
-	return `${heroId}|${backgroundSlug(card, extraSlotIndex)}|${card.name ?? ''}|${showNumbers ? 1 : 0}`
+export function cardKey(heroId: string, card: HeroCardJson, extraSlotIndex: number | null, showNumbers: boolean, blank = false): string {
+	return `${heroId}|${backgroundSlug(card, extraSlotIndex)}|${card.name ?? ''}|${showNumbers ? 1 : 0}${blank ? '|blank' : ''}`
 }
 
 export type Master = ImageBitmap | HTMLCanvasElement
@@ -66,7 +66,7 @@ const SMALL = typeof matchMedia === 'function' && matchMedia('(max-width: 760px)
 const SCALE = SMALL ? 0.75 : 1
 const release = (c: unknown) => { if (c instanceof HTMLCanvasElement) c.width = c.height = 0 }
 
-async function paint(heroId: string, card: HeroCardJson, extraSlotIndex: number | null, showNumbers: boolean): Promise<Master> {
+async function paint(heroId: string, card: HeroCardJson, extraSlotIndex: number | null, showNumbers: boolean, blank = false): Promise<Master> {
 	// frame parts + fonts, the ::emoji:: this card's text uses, and its art
 	const emoji = [...(card.description ?? '').matchAll(/::([a-z_]+)::/g)].map((m) => m[1])
 	const [, , bg] = await Promise.all([ready(), loadImages(emoji), art(heroId, backgroundSlug(card, extraSlotIndex))])
@@ -77,7 +77,8 @@ async function paint(heroId: string, card: HeroCardJson, extraSlotIndex: number 
 	if (!ctx) throw new Error('no 2d context')
 	// paint, and if any frame part wasn't downloaded yet, fetch just those and paint again
 	for (let pass = 0; ; pass++) {
-		updateCanvas(
+		setBlankValues(blank)
+		try { updateCanvas(
 			cv, ctx, [], bg,
 			(card.color as Color) ?? Color.GOLD,
 			card.handicapped ?? false, card.extra ?? false,
@@ -97,7 +98,7 @@ async function paint(heroId: string, card: HeroCardJson, extraSlotIndex: number 
 			0, 0, 0, 0, 0, 0,
 			showNumbers,
 			heroStat(heroId, 0), heroStat(heroId, 1), heroStat(heroId, 2), heroStat(heroId, 3)
-		)
+		) } finally { setBlankValues(false) }
 		const need = takeMissing()
 		if (!need.length) break
 		if (pass >= 3) { release(bg); release(cv); throw new Error('card parts missing: ' + need.join(', ')) }
@@ -132,15 +133,15 @@ const masters = new Map<string, Promise<Master>>()
 const settled = new Map<string, Master>() // the painted ones, to check them after the tab comes back
 
 /** The full-resolution master for a card face, painted on first request and shared after that. */
-export function cardMaster(heroId: string, card: HeroCardJson, extraSlotIndex: number | null = null, showNumbers = true): Promise<Master> {
-	const k = cardKey(heroId, card, extraSlotIndex, showNumbers)
+export function cardMaster(heroId: string, card: HeroCardJson, extraSlotIndex: number | null = null, showNumbers = true, blank = false): Promise<Master> {
+	const k = cardKey(heroId, card, extraSlotIndex, showNumbers, blank)
 	let p = masters.get(k)
 	if (p) {
 		masters.delete(k) // bump to most recent
 		masters.set(k, p)
 		return p
 	}
-	p = paint(heroId, card, extraSlotIndex, showNumbers)
+	p = paint(heroId, card, extraSlotIndex, showNumbers, blank)
 	masters.set(k, p)
 	p.then((m) => settled.set(k, m), () => masters.delete(k)) // a failed paint: a later request retries
 	while (masters.size > MAX_MASTERS) { const old = masters.keys().next().value as string; masters.delete(old); settled.delete(old) }
@@ -212,12 +213,12 @@ export function preloadCardArt(list: { hero: string; cards: HeroCardJson[] }[]) 
 
 /** Paint every card of a deck up front, one at a time (yielding between cards so
  *  animations stay smooth). `onProgress(done, total)` after each card. */
-export async function prewarm(heroId: string, cards: HeroCardJson[], onProgress?: (done: number, total: number) => void) {
+export async function prewarm(heroId: string, cards: HeroCardJson[], onProgress?: (done: number, total: number) => void, blank = false) {
 	if (typeof document === 'undefined') return
 	let done = 0
 	onProgress?.(0, cards.length)
 	for (const c of cards) {
-		try { await cardMaster(heroId, c) } catch { /* painted again on demand */ }
+		try { await cardMaster(heroId, c, null, true, blank) } catch { /* painted again on demand */ }
 		onProgress?.(++done, cards.length)
 		await new Promise((r) => setTimeout(r, 0))
 	}

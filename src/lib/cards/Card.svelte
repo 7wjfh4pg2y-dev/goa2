@@ -12,19 +12,21 @@
 	export let card: HeroCardJson;
 	export let extraSlotIndex: number | null = null;
 	export let showNumbers = true;
+	/** paint the face without its printed values (the heroes page) */
+	export let noNumbers = false;
 
 	let canvas: HTMLCanvasElement;
 	let master: Master | null = null;
 	let loading = '';
 	let drawn = ''; // `${key}@${width}` last drawn, so resizes don't redraw needlessly
-	$: key = card ? cardKey(heroId, card, extraSlotIndex, showNumbers) : '';
+	$: key = card ? cardKey(heroId, card, extraSlotIndex, showNumbers, noNumbers) : '';
 	// keep showing the previous face until the new one is ready (no blank flash when swiping)
 	$: if (browser && card && key && key !== loading) load(key, heroId, card, extraSlotIndex, showNumbers);
 	let tries = 0, retryT: ReturnType<typeof setTimeout> | null = null;
 	async function load(k: string, h: string, c: HeroCardJson, x: number | null, n: boolean) {
 		loading = k;
 		try {
-			const m = await cardMaster(h, c, x, n);
+			const m = await cardMaster(h, c, x, n, noNumbers);
 			if (k !== key) return;
 			master = m;
 			drawn = '';

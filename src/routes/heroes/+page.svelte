@@ -12,6 +12,21 @@
 	import { REPORT_TABLE, reportOfRow, type Report } from '$lib/reports';
 	import { loadAliases, resolveAliases } from '$lib/aliases';
 	import { heroMatchupsAll } from '$lib/hallstats';
+	import { base } from '$app/paths';
+	import { goBack } from '$lib/nav';
+	import { browseRooms, type RoomInfo } from '$lib/lobby';
+
+	// LOCKED while any game is on (2026-11-25, the user: no looking up cards mid-game). The public room directory
+	// (lobby.ts) says where every room is; a room in hero select or a game closes this page for everyone, live. If the
+	// directory never answers (offline), the page opens after LOCK_WAIT_MS rather than staying shut.
+	const LOCK_WAIT_MS = 6000;
+	let rooms: RoomInfo[] = [];
+	let heard = false;
+	let waited = false;
+	$: busy = rooms.filter((r) => r.started || r.phase === 'draft' || r.phase === 'game');
+	$: locked = busy.length > 0;
+	$: checking = !heard && !waited;
+	const where = (r: RoomInfo) => (r.phase === 'draft' ? 'Hero select' : r.round ? `Round ${r.round}` : 'In progress');
 
 	// Matchups from the records: every online game plus the table games (the Hall's Total) — read on opening, again
 	// whenever the tab comes back into view and every 5 minutes, so a finished match shows without a reload.
@@ -68,16 +83,46 @@
 		const h = q.get('hero');
 		if (h && HEROES_ALPHA.some((x) => x.id === h)) heroId = h;
 		ready = true;
+		const dir = browseRooms((l) => { rooms = l; heard = true; });
+		const wait = setTimeout(() => (waited = true), LOCK_WAIT_MS);
 		const again = () => { if (leagueAsked && document.visibilityState === 'visible') void loadLeague(); };
 		const t = setInterval(again, 5 * 60 * 1000);
 		document.addEventListener('visibilitychange', again);
-		return () => { clearInterval(t); document.removeEventListener('visibilitychange', again); };
+		return () => { clearInterval(t); clearTimeout(wait); dir.leave(); document.removeEventListener('visibilitychange', again); };
 	});
 </script>
 
 <svelte:head><title>GoA2 · Heroes</title></svelte:head>
 
-{#if ready}
+{#if ready && (checking || locked)}
+	<div class="lock">
+		<div class="box">
+			{#if checking}
+				<p class="k">Heroes</p>
+				<h1>Checking for games…</h1>
+			{:else}
+				<p class="k">Heroes · closed for now</p>
+				<h1>A game is on</h1>
+				<p>The hero pages open again once {busy.length === 1 ? 'it ends' : 'they all end'}.</p>
+				<ul>{#each busy as r (r.room)}<li><b>{r.room}</b><span>{where(r)} · {r.count} player{r.count === 1 ? '' : 's'}</span></li>{/each}</ul>
+			{/if}
+			<a class="bk" href={base + '/?at=learn'} on:click|preventDefault={() => goBack('learn')}>← Back</a>
+		</div>
+	</div>
+{:else if ready}
 	<HeroPage {heroId} bind:tab {openings} {guide} {status} {record} local={localHero} gm beta noOpenings onHero={(id) => (heroId = id)} />
 {/if}
 
+
+<style>
+	.lock { position: fixed; inset: 0; display: grid; place-items: center; background: #0c1220; color: #e9e2cf; padding: 16px; }
+	.box { width: min(420px, 100%); text-align: center; border: 1px solid rgba(201, 162, 90, 0.4); border-radius: 12px; background: rgba(18, 27, 45, 0.92); padding: 28px 22px 22px; }
+	.k { margin: 0; font-size: 13px; letter-spacing: 0.14em; text-transform: uppercase; color: #c9a25a; }
+	h1 { margin: 8px 0 10px; font-size: 30px; font-weight: normal; }
+	p { margin: 0 0 14px; color: #b9b2a0; }
+	ul { list-style: none; margin: 0 0 18px; padding: 0; display: grid; gap: 6px; }
+	li { display: flex; justify-content: space-between; gap: 10px; padding: 8px 12px; border-radius: 8px; background: rgba(255, 255, 255, 0.05); }
+	li span { color: #b9b2a0; }
+	.bk { display: inline-block; margin-top: 4px; padding: 9px 18px; border-radius: 999px; border: 1px solid rgba(201, 162, 90, 0.5); color: #e9c98a; text-decoration: none; }
+	.bk:hover { background: rgba(201, 162, 90, 0.12); }
+</style>

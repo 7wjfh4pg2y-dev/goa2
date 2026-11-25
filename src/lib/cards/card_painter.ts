@@ -1159,6 +1159,11 @@ function addSecondaryValue(context: CanvasRenderingContext2D, value: number, x: 
 	}
 }
 
+// The heroes page paints faces WITHOUT the printed values (2026-11-25, the user: no peeking at numbers while
+// games are on): any value / sign is laid out as usual but not drawn. Set only around one paint (render.ts).
+let blankValues = false
+export function setBlankValues(on: boolean) { blankValues = on }
+
 function addSquishedOutlinedText(
   context: CanvasRenderingContext2D,
   text: string,
@@ -1195,6 +1200,7 @@ function addSquishedOutlinedText(
   }
   tempContext.fillText(text, 200, 200)
   tempContext.fillStyle = "black"
+	if (blankValues && text !== '!') return showNumbers ? tempContext.measureText(text).width * squishness : fontSize * 0.4
 
 	if (!showNumbers) {
 		const tempCanvas2 = document.createElement('canvas')

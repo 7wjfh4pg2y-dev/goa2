@@ -196,7 +196,7 @@
 		preloadCardArt(near.map((id) => ({ hero: id, cards: startingHand(id).map((i) => heroCards(id)[i]).filter(Boolean) })))
 	});
 	const handOf = (id: string) => startingHand(id).map((i) => heroCards(id)[i]).filter(Boolean)
-	$: if (typeof document !== 'undefined') { void prewarm(nextHero.id, handOf(nextHero.id)); void prewarm(prevHero.id, handOf(prevHero.id)) }
+	$: if (typeof document !== 'undefined') { void prewarm(nextHero.id, handOf(nextHero.id), undefined, true); void prewarm(prevHero.id, handOf(prevHero.id), undefined, true) }
 	/* a box whose text runs on: `more` while there is text below (the bottom edge fades; the scrollbar stays hidden) */
 	function more(node: HTMLElement) {
 		const set = () => node.classList.toggle('more', node.scrollTop + node.clientHeight < node.scrollHeight - 2);
@@ -338,7 +338,7 @@
 	<aside class="side">
 		{#if tab === 'overview'}
 			<div class="prev">
-				{#if shownCard != null && cards[shownCard]}<div class="pcard"><Card heroId={h.id} card={cards[shownCard]} /></div>{/if}
+				{#if shownCard != null && cards[shownCard]}<div class="pcard"><Card heroId={h.id} card={cards[shownCard]} noNumbers /></div>{/if}
 			</div>
 		{:else if op}
 			<!-- one opening at a time: ‹ › on the panel's sides; title · details · the cards turn by turn (the big board on the left shows the plan) -->
@@ -383,7 +383,7 @@
 				<div class="col hand">
 					<h3>Starting hand</h3>
 					<div class="spread">
-						{#each hand as i (i)}<button class="hc" class:on={shownCard === i} on:click={() => (preview = i)} aria-label={cards[i]?.name}><Card heroId={h.id} card={cards[i]} /></button>{/each}
+						{#each hand as i (i)}<button class="hc" class:on={shownCard === i} on:click={() => (preview = i)} aria-label={cards[i]?.name}><Card heroId={h.id} card={cards[i]} noNumbers /></button>{/each}
 					</div>
 				</div>
 				<div class="col mu">
