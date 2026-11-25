@@ -2,7 +2,8 @@
 	// GM tools → ANIMATION STUDIO: every sprite animation we have, in one player. The library (static/anim/library.json,
 	// written by tools/sprites/studio.mjs) holds the GoA2 heroes built by the sprite engine (the shared animation set:
 	// Idle · Run · Attack · Jump · Hit · Defeat, plus their raw strips), the ten base packs (one clip per strip) and the
-	// CraftPix preview reels (one clip per reel). A clip = steps {s: sheet, f: frame, d: length in frames at the clip's
+	// CraftPix preview reels (one clip per reel), and those reels cut into characters and their actions (kind 'unique' =
+	// a pack's own characters, 'general' = the generic prototype figures and effects; cuts in tools/sprites/reels.json). A clip = steps {s: sheet, f: frame, d: length in frames at the clip's
 	// fps, kx: knockback px, flash: true white | n red, air: in the jump arc (H = its height)}. GMs only (role.ts).
 	import { onMount, onDestroy } from 'svelte';
 	import { base } from '$app/paths';
@@ -13,9 +14,9 @@
 	type Step = { s: string; f: number; d: number; kx?: number; flash?: boolean | number; air?: number };
 	type Clip = { id: string; name: string; fps: number; loop: boolean; H?: number; raw?: boolean; steps: Step[] };
 	type Sheet = { src: string; fw: number; fh: number; n: number; cols: number };
-	type Entry = { id: string; kind: 'hero' | 'pack' | 'reel'; name: string; sub: string; blurb?: string; credit?: string; chips?: [string, string][]; px?: number; ax: number; ay: number; bodyH: number; sheets: Record<string, Sheet>; clips: Clip[] };
+	type Entry = { id: string; kind: 'hero' | 'unique' | 'general' | 'pack' | 'reel'; name: string; sub: string; blurb?: string; credit?: string; chips?: [string, string][]; px?: number; ax: number; ay: number; bodyH: number; sheets: Record<string, Sheet>; clips: Clip[] };
 
-	const GROUPS: [Entry['kind'], string][] = [['hero', 'GoA2 heroes'], ['pack', 'Base packs'], ['reel', 'Preview reels']];
+	const GROUPS: [Entry['kind'], string][] = [['hero', 'GoA2 heroes'], ['unique', 'Characters'], ['general', 'General'], ['pack', 'Base packs'], ['reel', 'Whole reels']];
 	const BGS = [['dark', 'Night'], ['light', 'Day'], ['check', 'Checker'], ['grass', 'Grass']] as const;
 	const SPEEDS = [0.25, 0.5, 1, 2];
 	const ZOOMS = [0, 1, 2, 3, 4, 6, 8]; // 0 = fit
@@ -116,12 +117,12 @@
 		ctx.clearRect(0, 0, W, Ht); ctx.imageSmoothingEnabled = false;
 		const e = entry, c = clip, cur = c.steps[i], sh = e.sheets[cur.s], im = imgs[cur.s];
 		if (!sh || !im) return;
-		const reel = e.kind === 'reel', px = e.px || 1;
+		const reel = e.kind === 'reel' || e.kind === 'unique' || e.kind === 'general', px = e.px || 1;
 		// the view: a character-sized box for heroes / packs (every one the same height on screen), the frame for reels
 		const vw = reel ? sh.fw + 8 : e.bodyH * 2.7, vh = reel ? sh.fh + 8 : e.bodyH * 1.75 + Math.max(0, ...e.clips.map((x) => x.H || 0));
 		const fit = Math.max(1, Math.floor(Math.min(W / vw, Ht / vh) * 0.94));
 		const s = zoom ? Math.max(0.5, (zoom * dpr) / px) : fit;
-		const groundY = reel ? Math.round(Ht / 2 + ((sh.fh - 8) * s) / 2) : Math.round(Ht * 0.74);
+		const groundY = reel ? Math.round(Ht / 2 + (sh.fh / 2 - (sh.fh - e.ay)) * s) : Math.round(Ht * 0.74);
 		const up = Math.round(liftAt(c, i, t, c.fps * speed));
 		if (cur.flash && t < 0.03 && !shook) { const p = cur.flash === true ? 1 : +cur.flash; shake = p; shook = true; burst(e, p); }
 		if (!cur.flash) shook = false;
@@ -180,7 +181,7 @@
 			const st = clip?.steps[k]; if (!st) return;
 			const sh = e.sheets[st.s], im = imgs[st.s]; if (!sh || !im) return;
 			// heroes / packs: the box round the character; reels: the whole frame
-			const reel = e.kind === 'reel';
+			const reel = e.kind === 'reel' || e.kind === 'unique' || e.kind === 'general';
 			const bw = reel ? sh.fw : Math.min(sh.fw, Math.round(e.bodyH * 2.2)), bh = reel ? sh.fh : Math.min(sh.fh, Math.round(e.bodyH * 1.5));
 			const bx = reel ? 0 : Math.max(0, Math.min(sh.fw - bw, Math.round(e.ax - bw / 2))), by = reel ? 0 : Math.max(0, Math.min(sh.fh - bh, e.ay - bh + 2));
 			c.width = bw; c.height = bh;
@@ -235,7 +236,7 @@
 								{#each rows as e (e.id)}
 									<button class="row" class:on={entry?.id === e.id} on:click={() => choose(e)}>
 										<span class="nm">{e.name}</span>
-										<span class="sb">{e.kind === 'reel' ? e.sub.replace('Preview reel · ', '') : `${e.clips.length} animations`}</span>
+										<span class="sb">{e.kind === 'reel' ? e.sub.replace('Preview reel · ', '') : `${e.clips.length}`}</span>
 									</button>
 								{/each}
 							{/if}
@@ -296,7 +297,7 @@
 						{#if entry.blurb}<p class="blurb">{entry.blurb}</p>{/if}
 						<div class="foot">
 							{#each Object.entries(entry.sheets) as [k, sh]}
-								{#if clip?.steps.some((x) => x.s === k)}<a class="dl" href={`${base}/anim/${sh.src}`} download>Sheet: {k} · {sh.n} × {sh.fw}×{sh.fh}</a>{/if}
+								{#if clip?.steps.some((x) => x.s === k)}<a class="dl" href={`${base}/anim/${sh.src}`} download>Sprite sheet{k === "f" || k === "reel" ? "" : ": " + k} · {sh.n} frames · {sh.fw}×{sh.fh}</a>{/if}
 							{/each}
 							<span class="keys">Space play · ← → frame · ↑ ↓ animation · F flip · O onion</span>
 						</div>

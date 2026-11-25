@@ -1,0 +1,2591 @@
+{
+ "orc-character-sprite-sheets-pixel-art": {
+  "group": "unique",
+  "chars": [
+   "Orc Brute",
+   "Orc Huntress",
+   "Orc Warrior"
+  ],
+  "acts": [
+   [
+    "Idle",
+    0,
+    6
+   ],
+   [
+    "Walk",
+    7,
+    14
+   ],
+   [
+    "Run",
+    15,
+    22
+   ],
+   [
+    "Run attack",
+    23,
+    27
+   ],
+   [
+    "Attack",
+    28,
+    31
+   ],
+   [
+    "Jump attack",
+    32,
+    37
+   ],
+   [
+    "Crouch",
+    38,
+    40
+   ],
+   [
+    "Attack 2",
+    41,
+    47
+   ],
+   [
+    "Attack 3",
+    48,
+    53
+   ],
+   [
+    "Hurt",
+    54,
+    58
+   ],
+   [
+    "Death",
+    59,
+    61
+   ]
+  ]
+ },
+ "dwarf-2d-pixel-art-sprite-pack": {
+  "group": "unique",
+  "chars": [
+   "Dwarf Smith",
+   "Dwarf Miner",
+   {
+    "name": "Dwarf Guard",
+    "lane": 2,
+    "acts": [
+     [
+      "Idle",
+      0,
+      10
+     ],
+     [
+      "Walk",
+      11,
+      20
+     ],
+     [
+      "Run",
+      21,
+      30
+     ],
+     [
+      "Jump",
+      31,
+      37
+     ],
+     [
+      "Attack",
+      38,
+      45
+     ],
+     [
+      "Attack 2",
+      46,
+      48
+     ],
+     [
+      "Block",
+      49,
+      53
+     ],
+     [
+      "Hurt",
+      54,
+      58
+     ],
+     [
+      "Death",
+      59,
+      61
+     ]
+    ]
+   }
+  ],
+  "acts": [
+   [
+    "Idle",
+    0,
+    11
+   ],
+   [
+    "Walk",
+    12,
+    21
+   ],
+   [
+    "Run",
+    22,
+    27
+   ],
+   [
+    "Run attack",
+    28,
+    31
+   ],
+   [
+    "Jump",
+    32,
+    41
+   ],
+   [
+    "Attack",
+    42,
+    47
+   ],
+   [
+    "Attack 2",
+    48,
+    57
+   ],
+   [
+    "Attack 3",
+    58,
+    62
+   ],
+   [
+    "Hurt",
+    63,
+    66
+   ],
+   [
+    "Death",
+    67,
+    71
+   ]
+  ]
+ },
+ "free-2d-pixel-prototype-character-pack-2-1": {
+  "group": "general",
+  "chars": [
+   "Prototype Monk"
+  ],
+  "acts": [
+   [
+    "Punch",
+    0,
+    3
+   ],
+   [
+    "Punch 2",
+    4,
+    7
+   ],
+   [
+    "Kick",
+    8,
+    12
+   ],
+   [
+    "Flying kick",
+    13,
+    19
+   ],
+   [
+    "Chi palm",
+    20,
+    27
+   ],
+   [
+    "Uppercut",
+    28,
+    35
+   ],
+   [
+    "Push",
+    36,
+    44
+   ],
+   [
+    "Walk",
+    45,
+    55
+   ],
+   [
+    "Jump",
+    56,
+    63
+   ],
+   [
+    "Idle",
+    64,
+    71
+   ],
+   [
+    "Hurt",
+    72,
+    75
+   ],
+   [
+    "Death",
+    76,
+    81
+   ],
+   [
+    "Energy blast",
+    82,
+    92
+   ],
+   [
+    "Lightning call",
+    93,
+    98
+   ],
+   [
+    "Cast",
+    99,
+    104
+   ],
+   [
+    "Ice pillar",
+    105,
+    114
+   ],
+   [
+    "Ground fire",
+    115,
+    124
+   ],
+   [
+    "Ground lightning",
+    125,
+    136
+   ],
+   [
+    "Ice shards",
+    137,
+    146
+   ],
+   [
+    "Fireball",
+    147,
+    157
+   ],
+   [
+    "Explosion",
+    158,
+    167
+   ]
+  ]
+ },
+ "free-gorgon-pixel-art-character-sprite-sheets": {
+  "group": "unique",
+  "chars": [
+   {
+    "name": "Gorgon (violet)",
+    "acts": [
+     [
+      "Idle",
+      0,
+      11
+     ],
+     [
+      "Walk",
+      12,
+      24
+     ],
+     [
+      "Run",
+      25,
+      31
+     ],
+     [
+      "Lunge",
+      32,
+      47
+     ],
+     [
+      "Gaze",
+      48,
+      52
+     ],
+     [
+      "Tail whip",
+      53,
+      59
+     ],
+     [
+      "Bite",
+      60,
+      68
+     ],
+     [
+      "Hurt",
+      69,
+      72
+     ],
+     [
+      "Death",
+      73,
+      75
+     ]
+    ]
+   },
+   {
+    "name": "Gorgon (green)",
+    "same": 0,
+    "off": 76
+   },
+   {
+    "name": "Gorgon (pale)",
+    "same": 0,
+    "off": 152
+   }
+  ]
+ },
+ "free-knight-character-sprites-pixel-art": {
+  "group": "unique",
+  "chars": [
+   "Knight"
+  ],
+  "acts": [
+   [
+    "Idle",
+    0,
+    5
+   ],
+   [
+    "Walk",
+    6,
+    11
+   ],
+   [
+    "Run",
+    12,
+    17
+   ],
+   [
+    "Attack",
+    18,
+    23
+   ],
+   [
+    "Attack 2",
+    24,
+    27
+   ],
+   [
+    "Attack 3",
+    28,
+    31
+   ],
+   [
+    "Shield bash",
+    32,
+    35
+   ],
+   [
+    "Thrust",
+    36,
+    37
+   ],
+   [
+    "Defend",
+    38,
+    42
+   ],
+   [
+    "Hurt",
+    43,
+    44
+   ],
+   [
+    "Jump",
+    45,
+    47
+   ],
+   [
+    "Run attack",
+    48,
+    50
+   ],
+   [
+    "Death",
+    51,
+    55
+   ]
+  ]
+ },
+ "free-minotaur-sprite-sheet-pixel-art-pack2": {
+  "group": "unique",
+  "chars": [
+   {
+    "name": "Minotaur",
+    "lane": 0,
+    "at": 0,
+    "acts": [
+     [
+      "Idle",
+      0,
+      9
+     ],
+     [
+      "Walk",
+      10,
+      21
+     ],
+     [
+      "Attack",
+      22,
+      26
+     ],
+     [
+      "Hurt",
+      27,
+      29
+     ],
+     [
+      "Death",
+      30,
+      34
+     ]
+    ]
+   },
+   {
+    "name": "Minotaur Brute",
+    "lane": 1,
+    "at": 0,
+    "same": 0,
+    "off": 0
+   },
+   {
+    "name": "Minotaur Shaman",
+    "lane": 0,
+    "at": 40,
+    "acts": [
+     [
+      "Idle",
+      35,
+      44
+     ],
+     [
+      "Walk",
+      45,
+      56
+     ],
+     [
+      "Attack",
+      57,
+      60
+     ],
+     [
+      "Hurt",
+      61,
+      64
+     ],
+     [
+      "Death",
+      65,
+      68
+     ]
+    ]
+   }
+  ]
+ },
+ "free-necromancer-pixel-art-prototype-character-sprites": {
+  "group": "general",
+  "chars": [
+   {
+    "name": "Prototype Necromancer",
+    "acts": [
+     [
+      "Idle",
+      0,
+      5
+     ],
+     [
+      "Summon",
+      12,
+      20
+     ],
+     [
+      "Spirit wave",
+      44,
+      50
+     ],
+     [
+      "Vine whip",
+      51,
+      59
+     ],
+     [
+      "Charge",
+      60,
+      65
+     ],
+     [
+      "Bolt",
+      66,
+      78
+     ]
+    ]
+   },
+   {
+    "name": "Summoned Spirit",
+    "acts": [
+     [
+      "Rise",
+      21,
+      26
+     ],
+     [
+      "Move",
+      27,
+      31
+     ],
+     [
+      "Attack",
+      32,
+      35
+     ],
+     [
+      "Hurt",
+      36,
+      38
+     ],
+     [
+      "Death",
+      39,
+      43
+     ]
+    ]
+   }
+  ]
+ },
+ "free-ninja-sprite-sheets-pixel-art": {
+  "group": "unique",
+  "chars": [
+   "Straw-hat Ninja",
+   "Kunoichi",
+   "Ronin"
+  ],
+  "acts": [
+   [
+    "Idle",
+    0,
+    5
+   ],
+   [
+    "Walk",
+    6,
+    13
+   ],
+   [
+    "Run",
+    14,
+    19
+   ],
+   [
+    "Disguise",
+    20,
+    34
+   ],
+   [
+    "Attack",
+    35,
+    44
+   ],
+   [
+    "Jump",
+    45,
+    52
+   ],
+   [
+    "Hurt",
+    53,
+    56
+   ],
+   [
+    "Death",
+    57,
+    62
+   ]
+  ]
+ },
+ "free-pixel-prototype-character-sprites-for-shooter": {
+  "group": "general",
+  "chars": [
+   "Prototype Rifleman"
+  ],
+  "acts": [
+   [
+    "Idle",
+    0,
+    5
+   ],
+   [
+    "Walk",
+    6,
+    17
+   ],
+   [
+    "Run",
+    18,
+    29
+   ],
+   [
+    "Shoot",
+    30,
+    34
+   ],
+   [
+    "Shoot high",
+    35,
+    39
+   ],
+   [
+    "Crouch shoot",
+    40,
+    44
+   ],
+   [
+    "Prone shoot",
+    45,
+    49
+   ],
+   [
+    "At ease",
+    50,
+    61
+   ],
+   [
+    "Crouch idle",
+    62,
+    73
+   ],
+   [
+    "Prone idle",
+    74,
+    81
+   ],
+   [
+    "Rifle butt",
+    82,
+    85
+   ],
+   [
+    "Shoot 2",
+    86,
+    89
+   ],
+   [
+    "Roll",
+    90,
+    97
+   ],
+   [
+    "Get up",
+    98,
+    99
+   ],
+   [
+    "Crouch shoot 2",
+    100,
+    104
+   ],
+   [
+    "Shoot 3",
+    105,
+    110
+   ],
+   [
+    "Hurt",
+    111,
+    114
+   ],
+   [
+    "Death",
+    115,
+    119
+   ]
+  ]
+ },
+ "free-samurai-pixel-art-sprite-sheets": {
+  "group": "unique",
+  "chars": [
+   "Samurai",
+   {
+    "name": "Ashigaru Archer",
+    "lane": 1,
+    "acts": [
+     [
+      "Idle",
+      0,
+      8
+     ],
+     [
+      "Combat idle",
+      9,
+      16
+     ],
+     [
+      "Run",
+      17,
+      24
+     ],
+     [
+      "Bow shot",
+      25,
+      38
+     ],
+     [
+      "Attack",
+      39,
+      48
+     ],
+     [
+      "Attack 2",
+      49,
+      54
+     ],
+     [
+      "Jump",
+      55,
+      63
+     ],
+     [
+      "Hurt",
+      64,
+      66
+     ],
+     [
+      "Death",
+      67,
+      71
+     ]
+    ]
+   },
+   {
+    "name": "Banner Samurai",
+    "x": [
+     365,
+     600
+    ],
+    "acts": [
+     [
+      "Idle",
+      0,
+      13
+     ],
+     [
+      "Run",
+      14,
+      21
+     ],
+     [
+      "Attack",
+      22,
+      29
+     ],
+     [
+      "Attack 2",
+      30,
+      35
+     ],
+     [
+      "Attack 3",
+      36,
+      43
+     ],
+     [
+      "Crouch",
+      44,
+      45
+     ],
+     [
+      "Spin slash",
+      46,
+      48
+     ],
+     [
+      "Hurt",
+      49,
+      50
+     ],
+     [
+      "Death",
+      51,
+      55
+     ]
+    ]
+   }
+  ],
+  "acts": [
+   [
+    "Idle",
+    0,
+    14
+   ],
+   [
+    "Run",
+    15,
+    22
+   ],
+   [
+    "Attack",
+    23,
+    30
+   ],
+   [
+    "Attack 2",
+    31,
+    37
+   ],
+   [
+    "Defend",
+    38,
+    43
+   ],
+   [
+    "Jump",
+    44,
+    49
+   ],
+   [
+    "Hurt",
+    50,
+    53
+   ],
+   [
+    "Death",
+    54,
+    59
+   ]
+  ]
+ },
+ "free-soldier-sprite-sheets-pixel-art": {
+  "group": "unique",
+  "chars": [
+   "Soldier",
+   {
+    "name": "Gas Grenadier",
+    "lane": 1,
+    "acts": [
+     [
+      "Idle",
+      0,
+      8
+     ],
+     [
+      "Walk",
+      9,
+      16
+     ],
+     [
+      "Run",
+      17,
+      24
+     ],
+     [
+      "Shoot",
+      25,
+      28
+     ],
+     [
+      "Crouch shoot",
+      29,
+      33
+     ],
+     [
+      "Gas grenade",
+      34,
+      57
+     ],
+     [
+      "Shoot 2",
+      58,
+      61
+     ],
+     [
+      "Hurt",
+      62,
+      66
+     ],
+     [
+      "Death",
+      67,
+      71
+     ]
+    ]
+   },
+   {
+    "name": "Rifleman",
+    "lane": 2,
+    "acts": [
+     [
+      "Idle",
+      0,
+      6
+     ],
+     [
+      "Walk",
+      7,
+      14
+     ],
+     [
+      "Run",
+      15,
+      22
+     ],
+     [
+      "Shoot",
+      23,
+      26
+     ],
+     [
+      "Shoot 2",
+      27,
+      30
+     ],
+     [
+      "Reload",
+      31,
+      42
+     ],
+     [
+      "Grenade throw",
+      43,
+      60
+     ],
+     [
+      "Melee",
+      61,
+      63
+     ],
+     [
+      "Hurt",
+      64,
+      69
+     ],
+     [
+      "Death",
+      70,
+      72
+     ]
+    ]
+   },
+   {
+    "name": "Grenade & smoke",
+    "lane": 0,
+    "at": 0,
+    "group": "general",
+    "acts": [
+     [
+      "Grenade & smoke",
+      45,
+      67
+     ]
+    ]
+   }
+  ],
+  "acts": [
+   [
+    "Idle",
+    0,
+    6
+   ],
+   [
+    "Walk",
+    7,
+    14
+   ],
+   [
+    "Run",
+    15,
+    20
+   ],
+   [
+    "Shoot",
+    21,
+    24
+   ],
+   [
+    "Crouch shoot",
+    25,
+    28
+   ],
+   [
+    "Grenade throw",
+    29,
+    44
+   ],
+   [
+    "Aim",
+    68,
+    72
+   ],
+   [
+    "Hurt",
+    73,
+    78
+   ],
+   [
+    "Death",
+    79,
+    81
+   ]
+  ]
+ },
+ "free-werewolf-sprite-sheets-pixel-art": {
+  "group": "unique",
+  "chars": [
+   "Werewolf"
+  ],
+  "acts": [
+   [
+    "Idle",
+    0,
+    7
+   ],
+   [
+    "Walk",
+    8,
+    18
+   ],
+   [
+    "Run",
+    19,
+    27
+   ],
+   [
+    "Run attack",
+    28,
+    34
+   ],
+   [
+    "Jump",
+    35,
+    45
+   ],
+   [
+    "Attack",
+    46,
+    53
+   ],
+   [
+    "Attack 2",
+    54,
+    60
+   ],
+   [
+    "Death",
+    61,
+    64
+   ]
+  ]
+ },
+ "free-wizard-sprite-sheets-pixel-art": {
+  "group": "unique",
+  "chars": [
+   "Fire Wizard",
+   "Dark Wizard",
+   {
+    "name": "Light Wizard",
+    "lane": 2,
+    "acts": [
+     [
+      "Idle",
+      0,
+      6
+     ],
+     [
+      "Walk",
+      7,
+      13
+     ],
+     [
+      "Run",
+      14,
+      21
+     ],
+     [
+      "Light orb",
+      22,
+      35
+     ],
+     [
+      "Light beam",
+      36,
+      48
+     ],
+     [
+      "Light sword",
+      49,
+      62
+     ],
+     [
+      "Crouch",
+      63,
+      64
+     ],
+     [
+      "Jump",
+      65,
+      69
+     ],
+     [
+      "Death",
+      70,
+      72
+     ]
+    ]
+   }
+  ],
+  "acts": [
+   [
+    "Idle",
+    0,
+    6
+   ],
+   [
+    "Walk",
+    7,
+    13
+   ],
+   [
+    "Run",
+    14,
+    21
+   ],
+   [
+    "Attack",
+    22,
+    25
+   ],
+   [
+    "Attack 2",
+    26,
+    29
+   ],
+   [
+    "Fireball",
+    30,
+    49
+   ],
+   [
+    "Flame jet",
+    50,
+    64
+   ],
+   [
+    "Hurt",
+    65,
+    67
+   ],
+   [
+    "Jump",
+    68,
+    72
+   ],
+   [
+    "Crouch",
+    73,
+    76
+   ],
+   [
+    "Death",
+    77,
+    83
+   ]
+  ]
+ },
+ "free-yokai-pixel-art-character-sprites": {
+  "group": "unique",
+  "chars": [
+   {
+    "name": "Kitsune",
+    "acts": [
+     [
+      "Idle",
+      0,
+      13
+     ],
+     [
+      "Walk",
+      14,
+      25
+     ],
+     [
+      "Jump",
+      26,
+      33
+     ],
+     [
+      "Turn",
+      34,
+      37
+     ],
+     [
+      "Tail splash",
+      38,
+      43
+     ],
+     [
+      "Fox fire",
+      44,
+      62
+     ],
+     [
+      "Spirit blast",
+      63,
+      80
+     ],
+     [
+      "Death",
+      81,
+      98
+     ]
+    ]
+   },
+   {
+    "name": "Karasu Tengu",
+    "acts": [
+     [
+      "Idle",
+      99,
+      104
+     ],
+     [
+      "Walk",
+      105,
+      112
+     ],
+     [
+      "Run",
+      113,
+      120
+     ],
+     [
+      "Fly",
+      121,
+      135
+     ],
+     [
+      "Draw sword",
+      136,
+      143
+     ],
+     [
+      "Attack",
+      144,
+      153
+     ],
+     [
+      "Hurt",
+      154,
+      157
+     ],
+     [
+      "Death",
+      158,
+      162
+     ]
+    ]
+   },
+   {
+    "name": "Konoha Tengu",
+    "same": 1,
+    "off": 64
+   }
+  ]
+ },
+ "gladiator-sprite-sheets-pixel-art-set": {
+  "group": "unique",
+  "chars": [
+   "Gladiator",
+   {
+    "name": "Hoplite",
+    "lane": 1,
+    "acts": [
+     [
+      "Idle",
+      0,
+      6
+     ],
+     [
+      "Taunt",
+      7,
+      16
+     ],
+     [
+      "Walk",
+      17,
+      26
+     ],
+     [
+      "Run",
+      27,
+      36
+     ],
+     [
+      "Jump",
+      37,
+      47
+     ],
+     [
+      "Attack",
+      48,
+      56
+     ],
+     [
+      "Defend",
+      57,
+      60
+     ],
+     [
+      "Hurt",
+      61,
+      64
+     ],
+     [
+      "Death",
+      65,
+      69
+     ]
+    ]
+   },
+   {
+    "name": "Spartan",
+    "lane": 2,
+    "acts": [
+     [
+      "Idle",
+      0,
+      6
+     ],
+     [
+      "Taunt",
+      7,
+      16
+     ],
+     [
+      "Walk",
+      17,
+      26
+     ],
+     [
+      "Run",
+      27,
+      36
+     ],
+     [
+      "Jump",
+      37,
+      47
+     ],
+     [
+      "Attack",
+      48,
+      56
+     ],
+     [
+      "Defend",
+      57,
+      60
+     ],
+     [
+      "Hurt",
+      61,
+      64
+     ],
+     [
+      "Death",
+      65,
+      69
+     ]
+    ]
+   }
+  ],
+  "acts": [
+   [
+    "Idle",
+    0,
+    6
+   ],
+   [
+    "Taunt",
+    7,
+    12
+   ],
+   [
+    "Walk",
+    13,
+    23
+   ],
+   [
+    "Run",
+    24,
+    32
+   ],
+   [
+    "Jump",
+    33,
+    40
+   ],
+   [
+    "Attack",
+    41,
+    48
+   ],
+   [
+    "Attack 2",
+    49,
+    54
+   ],
+   [
+    "Defend",
+    55,
+    59
+   ],
+   [
+    "Hurt",
+    60,
+    61
+   ],
+   [
+    "Death",
+    62,
+    64
+   ]
+  ]
+ },
+ "pet-pixel-art-character-sprite-sheets": {
+  "group": "unique",
+  "chars": [
+   "Baby Dragon",
+   {
+    "name": "Lizard",
+    "lane": 1,
+    "acts": [
+     [
+      "Idle",
+      0,
+      6
+     ],
+     [
+      "Walk",
+      7,
+      14
+     ],
+     [
+      "Crouch",
+      15,
+      18
+     ],
+     [
+      "Spit",
+      19,
+      29
+     ],
+     [
+      "Hurt",
+      30,
+      31
+     ],
+     [
+      "Spit stream",
+      32,
+      39
+     ],
+     [
+      "Death",
+      40,
+      44
+     ]
+    ]
+   },
+   {
+    "name": "Cat",
+    "lane": 2,
+    "acts": [
+     [
+      "Idle",
+      0,
+      6
+     ],
+     [
+      "Walk",
+      7,
+      18
+     ],
+     [
+      "Pounce",
+      19,
+      23
+     ],
+     [
+      "Hurt",
+      24,
+      27
+     ],
+     [
+      "Death",
+      28,
+      33
+     ]
+    ]
+   }
+  ],
+  "acts": [
+   [
+    "Idle",
+    0,
+    8
+   ],
+   [
+    "Walk",
+    9,
+    17
+   ],
+   [
+    "Spit fire",
+    18,
+    33
+   ],
+   [
+    "Fly",
+    34,
+    37
+   ],
+   [
+    "Fire breath",
+    38,
+    43
+   ],
+   [
+    "Hurt",
+    44,
+    47
+   ],
+   [
+    "Death",
+    48,
+    51
+   ]
+  ]
+ },
+ "pixel-art-prototype-character-sprites-8pack": {
+  "group": "general",
+  "chars": [
+   "Prototype Trooper"
+  ],
+  "acts": [
+   [
+    "Idle",
+    0,
+    4
+   ],
+   [
+    "Walk",
+    5,
+    16
+   ],
+   [
+    "Run",
+    17,
+    28
+   ],
+   [
+    "Crouch",
+    29,
+    31
+   ],
+   [
+    "Crouch walk",
+    32,
+    38
+   ],
+   [
+    "Shoot",
+    39,
+    48
+   ],
+   [
+    "Crouch shoot",
+    49,
+    53
+   ],
+   [
+    "Reload",
+    54,
+    61
+   ],
+   [
+    "Crouch reload",
+    62,
+    68
+   ],
+   [
+    "Rifle butt",
+    69,
+    76
+   ],
+   [
+    "Shoot 2",
+    77,
+    80
+   ],
+   [
+    "Throw",
+    81,
+    84
+   ],
+   [
+    "Roll",
+    85,
+    91
+   ],
+   [
+    "Get up",
+    92,
+    94
+   ],
+   [
+    "Crouch shoot 2",
+    95,
+    99
+   ],
+   [
+    "Shoot 3",
+    100,
+    105
+   ],
+   [
+    "Hurt",
+    106,
+    109
+   ],
+   [
+    "Death",
+    110,
+    114
+   ]
+  ]
+ },
+ "pixel-art-prototype-medieval-character-pack-6": {
+  "group": "general",
+  "chars": [
+   "Prototype Spearman"
+  ],
+  "acts": [
+   [
+    "Idle",
+    0,
+    5
+   ],
+   [
+    "Walk",
+    6,
+    17
+   ],
+   [
+    "Run",
+    18,
+    29
+   ],
+   [
+    "Combat idle",
+    30,
+    37
+   ],
+   [
+    "Thrust",
+    38,
+    43
+   ],
+   [
+    "Thrust 2",
+    44,
+    49
+   ],
+   [
+    "Overhead",
+    50,
+    55
+   ],
+   [
+    "Punch",
+    56,
+    59
+   ],
+   [
+    "Sweep",
+    60,
+    66
+   ],
+   [
+    "Jump",
+    67,
+    78
+   ],
+   [
+    "Crouch",
+    79,
+    83
+   ],
+   [
+    "Pole vault",
+    84,
+    90
+   ],
+   [
+    "Swing",
+    91,
+    95
+   ],
+   [
+    "Roll",
+    96,
+    102
+   ],
+   [
+    "Lunge",
+    103,
+    112
+   ],
+   [
+    "Fire charge",
+    113,
+    129
+   ],
+   [
+    "Fire thrust",
+    130,
+    140
+   ],
+   [
+    "Fire spin",
+    141,
+    147
+   ],
+   [
+    "Hurt",
+    148,
+    151
+   ],
+   [
+    "Death",
+    152,
+    156
+   ]
+  ]
+ },
+ "pixel-dark-elf-queen-animated-sprite-pack": {
+  "group": "unique",
+  "chars": [
+   {
+    "name": "Dark Elf Queen",
+    "lane": 0,
+    "at": 48,
+    "acts": [
+     [
+      "Idle",
+      0,
+      6
+     ],
+     [
+      "Walk",
+      7,
+      18
+     ],
+     [
+      "Summon",
+      19,
+      43
+     ],
+     [
+      "Kick",
+      48,
+      56
+     ],
+     [
+      "Blood blade",
+      79,
+      97
+     ],
+     [
+      "Hurt",
+      98,
+      101
+     ],
+     [
+      "Death",
+      102,
+      106
+     ]
+    ]
+   },
+   {
+    "name": "Shadow Thrall",
+    "lane": 1,
+    "at": 48,
+    "acts": [
+     [
+      "Rise",
+      22,
+      43
+     ],
+     [
+      "Idle",
+      44,
+      59
+     ],
+     [
+      "Walk",
+      60,
+      71
+     ],
+     [
+      "Attack",
+      72,
+      79
+     ],
+     [
+      "Hurt",
+      80,
+      88
+     ],
+     [
+      "Death",
+      89,
+      95
+     ]
+    ]
+   }
+  ]
+ },
+ "pixel-prototype-medieval-character-sprites-pack-5": {
+  "group": "general",
+  "chars": [
+   "Prototype Swordsman"
+  ],
+  "acts": [
+   [
+    "Idle",
+    0,
+    5
+   ],
+   [
+    "Walk",
+    6,
+    17
+   ],
+   [
+    "Run",
+    18,
+    29
+   ],
+   [
+    "Combat idle",
+    30,
+    35
+   ],
+   [
+    "Slash",
+    36,
+    40
+   ],
+   [
+    "Slash 2",
+    41,
+    46
+   ],
+   [
+    "Block",
+    47,
+    55
+   ],
+   [
+    "Thrust",
+    56,
+    60
+   ],
+   [
+    "Shield bash",
+    61,
+    63
+   ],
+   [
+    "Jump",
+    64,
+    73
+   ],
+   [
+    "Crouch",
+    74,
+    77
+   ],
+   [
+    "Air slash",
+    78,
+    83
+   ],
+   [
+    "Low slash",
+    84,
+    85
+   ],
+   [
+    "Punch",
+    86,
+    89
+   ],
+   [
+    "Roll",
+    90,
+    96
+   ],
+   [
+    "Overhead",
+    97,
+    99
+   ],
+   [
+    "Combo",
+    100,
+    107
+   ],
+   [
+    "Fire charge",
+    108,
+    119
+   ],
+   [
+    "Fire combo",
+    120,
+    130
+   ],
+   [
+    "Fire thrust",
+    131,
+    135
+   ],
+   [
+    "Hurt",
+    136,
+    139
+   ],
+   [
+    "Death",
+    140,
+    144
+   ]
+  ]
+ },
+ "priest-pixel-art-character-sprite-sheets-pack": {
+  "group": "unique",
+  "chars": [
+   "Bishop",
+   "Nun",
+   "Cleric"
+  ],
+  "acts": [
+   [
+    "Idle",
+    0,
+    15
+   ],
+   [
+    "Bless",
+    16,
+    35
+   ],
+   [
+    "Walk",
+    36,
+    47
+   ],
+   [
+    "Attack",
+    48,
+    55
+   ]
+  ]
+ },
+ "prototype-archer-pixel-sprite-sheet": {
+  "group": "general",
+  "chars": [
+   "Prototype Archer"
+  ],
+  "acts": [
+   [
+    "Idle",
+    0,
+    5
+   ],
+   [
+    "Walk",
+    12,
+    23
+   ],
+   [
+    "Run",
+    36,
+    47
+   ],
+   [
+    "Draw",
+    60,
+    73
+   ],
+   [
+    "Shoot",
+    74,
+    82
+   ],
+   [
+    "Jump",
+    83,
+    95
+   ],
+   [
+    "Crouch",
+    96,
+    99
+   ],
+   [
+    "Crouch shoot",
+    100,
+    103
+   ],
+   [
+    "Death",
+    104,
+    108
+   ]
+  ]
+ },
+ "prototype-gunslinger-sprite-sheet-pixel-art-pack": {
+  "group": "general",
+  "chars": [
+   "Prototype Gunslinger"
+  ],
+  "acts": [
+   [
+    "Idle",
+    0,
+    5
+   ],
+   [
+    "Walk",
+    12,
+    23
+   ],
+   [
+    "Run",
+    36,
+    47
+   ],
+   [
+    "Draw",
+    60,
+    65
+   ],
+   [
+    "Shoot",
+    66,
+    69
+   ],
+   [
+    "Reload",
+    70,
+    78
+   ],
+   [
+    "Jump",
+    79,
+    91
+   ],
+   [
+    "Crouch",
+    92,
+    95
+   ],
+   [
+    "Crouch shoot",
+    96,
+    99
+   ],
+   [
+    "Hurt",
+    100,
+    103
+   ],
+   [
+    "Death",
+    104,
+    108
+   ]
+  ]
+ },
+ "prototype-pixel-hero-free-sprite-pack-3-1": {
+  "group": "general",
+  "chars": [
+   "Prototype Mage"
+  ],
+  "acts": [
+   [
+    "Teleport in",
+    0,
+    16
+   ],
+   [
+    "Idle",
+    17,
+    23
+   ],
+   [
+    "Force push",
+    24,
+    28
+   ],
+   [
+    "Wind ring",
+    29,
+    35
+   ],
+   [
+    "Ice wave",
+    36,
+    47
+   ],
+   [
+    "Summon clone",
+    48,
+    54
+   ],
+   [
+    "Wind blast",
+    55,
+    67
+   ],
+   [
+    "Idle 2",
+    68,
+    72
+   ],
+   [
+    "Sword rain",
+    73,
+    81
+   ],
+   [
+    "Bomb",
+    82,
+    91
+   ],
+   [
+    "Hurt",
+    92,
+    97
+   ],
+   [
+    "Death",
+    98,
+    107
+   ],
+   [
+    "Get up",
+    108,
+    110
+   ],
+   [
+    "Heal",
+    111,
+    118
+   ],
+   [
+    "Drink potion",
+    119,
+    126
+   ],
+   [
+    "Ice burst",
+    127,
+    131
+   ],
+   [
+    "Power up",
+    132,
+    137
+   ],
+   [
+    "Fireball",
+    138,
+    145
+   ],
+   [
+    "Level up",
+    146,
+    157
+   ],
+   [
+    "Punch",
+    158,
+    170
+   ],
+   [
+    "Magic shot",
+    171,
+    179
+   ],
+   [
+    "Blessing",
+    180,
+    189
+   ]
+  ]
+ },
+ "prototype-saber-fighter-pixel-sprite-sheet": {
+  "group": "general",
+  "chars": [
+   "Prototype Swordfighter"
+  ],
+  "acts": [
+   [
+    "Idle",
+    0,
+    5
+   ],
+   [
+    "Walk",
+    12,
+    23
+   ],
+   [
+    "Run",
+    36,
+    47
+   ],
+   [
+    "Combat idle",
+    60,
+    65
+   ],
+   [
+    "Slash",
+    66,
+    69
+   ],
+   [
+    "Slash 2",
+    70,
+    73
+   ],
+   [
+    "Spin slash",
+    74,
+    82
+   ],
+   [
+    "Lunge",
+    83,
+    88
+   ],
+   [
+    "Sheathed idle",
+    89,
+    91
+   ],
+   [
+    "Jump",
+    92,
+    101
+   ],
+   [
+    "Crouch",
+    102,
+    105
+   ],
+   [
+    "Air slash",
+    106,
+    110
+   ],
+   [
+    "Low slash",
+    111,
+    113
+   ],
+   [
+    "Quick slash",
+    114,
+    120
+   ],
+   [
+    "Roll",
+    121,
+    127
+   ],
+   [
+    "Combo",
+    128,
+    137
+   ],
+   [
+    "Charge",
+    138,
+    143
+   ],
+   [
+    "Sparkle slash",
+    144,
+    149
+   ],
+   [
+    "Big combo",
+    150,
+    161
+   ],
+   [
+    "Dash slash",
+    162,
+    165
+   ],
+   [
+    "Hurt",
+    166,
+    170
+   ],
+   [
+    "Death",
+    171,
+    175
+   ]
+  ]
+ },
+ "soldier-character-sprite-sheets-pixel-art-pack": {
+  "group": "unique",
+  "chars": [
+   "Commando",
+   "Commando (SMG)",
+   "Commando (rifle)"
+  ],
+  "acts": [
+   [
+    "Climb",
+    0,
+    5
+   ],
+   [
+    "Jump",
+    6,
+    11
+   ],
+   [
+    "Roll",
+    12,
+    17
+   ],
+   [
+    "Signal",
+    18,
+    25
+   ],
+   [
+    "Punch",
+    26,
+    31
+   ],
+   [
+    "Go prone",
+    32,
+    38
+   ],
+   [
+    "Run & shoot",
+    39,
+    43
+   ],
+   [
+    "Crouch",
+    44,
+    45
+   ],
+   [
+    "Aim",
+    46,
+    47
+   ],
+   [
+    "Kneel",
+    48,
+    49
+   ],
+   [
+    "Sleep",
+    50,
+    55
+   ]
+  ]
+ },
+ "witch-pixel-character-sprite-sheets-pack": {
+  "group": "unique",
+  "chars": [
+   "Witch",
+   {
+    "name": "Shadow Witch",
+    "lane": 1,
+    "acts": [
+     [
+      "Idle",
+      0,
+      12
+     ],
+     [
+      "Walk",
+      13,
+      22
+     ],
+     [
+      "Run",
+      23,
+      31
+     ],
+     [
+      "Jump",
+      36,
+      43
+     ],
+     [
+      "Attack",
+      44,
+      54
+     ],
+     [
+      "Spell",
+      55,
+      67
+     ],
+     [
+      "Vanish",
+      68,
+      73
+     ],
+     [
+      "Hurt",
+      74,
+      77
+     ],
+     [
+      "Death",
+      78,
+      83
+     ]
+    ]
+   },
+   {
+    "name": "Elf Druid",
+    "lane": 2,
+    "acts": [
+     [
+      "Idle",
+      0,
+      12
+     ],
+     [
+      "Walk",
+      13,
+      22
+     ],
+     [
+      "Run",
+      23,
+      31
+     ],
+     [
+      "Jump",
+      36,
+      43
+     ],
+     [
+      "Attack",
+      44,
+      54
+     ],
+     [
+      "Spell",
+      55,
+      75
+     ],
+     [
+      "Vanish",
+      76,
+      79
+     ],
+     [
+      "Hurt",
+      80,
+      83
+     ],
+     [
+      "Death",
+      84,
+      87
+     ]
+    ]
+   }
+  ],
+  "acts": [
+   [
+    "Idle",
+    0,
+    12
+   ],
+   [
+    "Walk",
+    13,
+    22
+   ],
+   [
+    "Run",
+    23,
+    31
+   ],
+   [
+    "Jump",
+    36,
+    43
+   ],
+   [
+    "Attack",
+    44,
+    54
+   ],
+   [
+    "Spell",
+    55,
+    66
+   ],
+   [
+    "Hurt",
+    67,
+    72
+   ],
+   [
+    "Death",
+    73,
+    80
+   ]
+  ]
+ }
+}

@@ -14,6 +14,7 @@ import { execFileSync } from 'child_process';
 import { ROOT, buildHero, loadBase } from './lib/engine.mjs';
 import { loadPng, savePng, blank } from './lib/pixels.mjs';
 import { compose, bodyOf } from './lib/anims.mjs';
+import { splitReel } from './lib/reelsplit.mjs';
 
 const OUT = path.resolve(ROOT, '..', '..', 'static', 'anim');
 const LIB = path.join(OUT, 'library.json');
@@ -159,6 +160,31 @@ if (reelDir) {
 		console.log(`reel ${id}: ${n} frames ${fw}×${fh} px${px} ${Math.round(fs.statSync(out).size / 1024)} KB`);
 	}
 } else entries.push(...old.entries.filter((e) => e.kind === 'reel'));
+
+// 4 · the reels cut into characters and their actions (tools/sprites/reels.json) ------------------------------------
+const SPEC = JSON.parse(fs.readFileSync(path.join(ROOT, 'reels.json'), 'utf8'));
+fs.rmSync(path.join(OUT, 'chars'), { recursive: true, force: true });
+for (const r of entries.filter((e) => e.kind === 'reel')) {
+	const key = r.id.replace(/^reel-/, ''), spec = SPEC[key];
+	if (!spec) { console.log(`no cuts for ${key}`); continue; }
+	const sh = r.sheets.reel, img = loadPng(path.join(OUT, sh.src)), delays = r.clips[0].steps.map((s) => s.d);
+	const used = new Set();
+	for (const c of splitReel(img, sh, delays, spec)) {
+		let slug = c.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+		while (used.has(slug)) slug += '-x';
+		used.add(slug);
+		const out = path.join(OUT, 'chars', key, slug + '.png');
+		fs.mkdirSync(path.dirname(out), { recursive: true });
+		savePng(c.img, out); squeeze(out);
+		entries.push({
+			id: `char-${key}-${slug}`, kind: c.group === 'general' ? 'general' : 'unique', name: c.name, sub: `${c.clips.length} actions · from ${r.name}`, credit: r.credit, px: r.px,
+			ax: c.ax, ay: c.ay, bodyH: c.bodyH,
+			sheets: { f: { src: rel(out), fw: c.fw, fh: c.fh, n: c.n, cols: c.cols } },
+			clips: c.clips
+		});
+	}
+	console.log(`cut ${key}: ${spec.chars.length} characters`);
+}
 
 fs.mkdirSync(OUT, { recursive: true });
 fs.writeFileSync(LIB, JSON.stringify({ v: 1, entries }));

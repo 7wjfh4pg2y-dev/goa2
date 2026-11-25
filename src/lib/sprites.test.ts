@@ -118,6 +118,12 @@ describe('animation studio library (static/anim, written by tools/sprites/studio
 			}
 		}
 	});
+	it('the reels are cut into characters, unique and general, every action named once', () => {
+		const ch = lib.entries.filter((e: { kind: string }) => e.kind === 'unique' || e.kind === 'general');
+		expect(ch.length).toBeGreaterThan(50);
+		expect(ch.some((e: { kind: string }) => e.kind === 'general')).toBe(true);
+		for (const e of ch) { const ids = e.clips.map((c: { id: string }) => c.id); expect(new Set(ids).size, e.id).toBe(ids.length); }
+	});
 	it('heroes carry the shared animation set', () => {
 		for (const e of lib.entries.filter((x: { kind: string }) => x.kind === 'hero')) expect(e.clips.filter((c: { raw?: boolean }) => !c.raw).map((c: { id: string }) => c.id)).toEqual(['idle', 'run', 'attack', 'jump', 'hit', 'defeat']);
 	});
