@@ -11,7 +11,7 @@
 	import { role } from '$lib/role';
 	import Icon from '$lib/ui/Icon.svelte';
 
-	type Step = { s: string; f: number; d: number; kx?: number; flash?: boolean | number; air?: number; guard?: boolean; wx?: number; wy?: number };
+	type Step = { s: string; f: number; d: number; off?: boolean; kx?: number; flash?: boolean | number; air?: number; guard?: boolean; wx?: number; wy?: number };
 	type Clip = { id: string; name: string; fps: number; loop: boolean; H?: number; raw?: boolean; steps: Step[] };
 	type Sheet = { src: string; fw: number; fh: number; n: number; cols: number };
 	type Entry = { id: string; kind: 'hero' | 'unique' | 'general' | 'pack' | 'reel'; name: string; sub: string; blurb?: string; credit?: string; chips?: [string, string][]; px?: number; glow?: string; ax: number; ay: number; bodyH: number; scale?: number; sheets: Record<string, Sheet>; clips: Clip[] };
@@ -36,6 +36,12 @@
 	let raf = 0, last = 0;
 	let fpsShown = 0;
 
+	// FRAME EDITS (the user, 2026-11-26): any clip's steps can be switched off, reordered, duplicated, deleted and held
+	// longer / shorter. Kept per browser in localStorage (`goa2-studio-edit:<entry>:<clip>`), laid over the library's
+	// clip; Reset drops them, Copy steps hands the edited list over (paste it to Claude to make it the real one).
+	let editing = false, edited = new Set<string>(), copied = false, dragFrom = -1, dragOver = -1;
+	const ekey = (e: Entry, c: Clip) => `edit:${e.id}:${c.id}`;
+	const clean = (st: Step[]) => st.map((x) => ({ ...x }));
 	const P = (k: string) => { try { return localStorage.getItem('goa2-studio-' + k); } catch { return null; } };
 	const S = (k: string, v: string) => { try { localStorage.setItem('goa2-studio-' + k, v); } catch { /* ignore */ } };
 
@@ -48,6 +54,7 @@
 			const r = await fetch(`${base}/anim/library.json`);
 			entries = (await r.json()).entries;
 		} catch { failed = true; return; }
+		editing = P('editing') === '1';
 		const want = new URLSearchParams(location.search).get('e') || P('entry');
 		bg = (P('bg') as typeof bg) || 'dark';
 		await choose(entries.find((e) => e.id === want) ?? entries[0], new URLSearchParams(location.search).get('c') || P('clip'));
@@ -60,6 +67,7 @@
 	async function choose(e: Entry | undefined, clipId?: string | null) {
 		if (!e) return;
 		entry = e; ready = false; S('entry', e.id);
+		edited = new Set(e.clips.filter((c) => P(ekey(e, c))).map((c) => c.id));
 		const got = await Promise.all(Object.entries(e.sheets).map(async ([k, s]) => [k, await load(s.src).catch(() => null)] as const));
 		if (entry !== e) return;
 		imgs = Object.fromEntries(got.filter(([, v]) => v)) as Record<string, HTMLImageElement>;
@@ -67,7 +75,9 @@
 		pickClip(e.clips.find((c) => c.id === clipId) ?? e.clips[0]);
 	}
 	function pickClip(c: Clip) {
-		clip = c; i = 0; t = 0; done = false; playing = true; sparks = []; shake = 0; S('clip', c.id);
+		let steps = clean(c.steps);
+		if (entry) try { const v = JSON.parse(P(ekey(entry, c)) || 'null'); if (Array.isArray(v) && v.length) steps = v; } catch { /* ignore */ }
+		clip = { ...c, steps }; i = 0; t = 0; done = false; playing = true; sparks = []; shake = 0; S('clip', c.id);
 		requestAnimationFrame(drawStrip);
 	}
 	function stepBy(d: number) {
@@ -75,6 +85,35 @@
 		const n = clip.steps.length;
 		playing = false; done = false; i = (i + d + n) % n; t = 0;
 	}
+	const onCount = (c: Clip) => c.steps.filter((x) => !x.off).length;
+	/** the original library clip of the open one */
+	const orig = () => entry?.clips.find((c) => c.id === clip?.id);
+	function commit(steps: Step[], sel = i) {
+		if (!clip || !entry) return;
+		clip = { ...clip, steps };
+		i = Math.max(0, Math.min(steps.length - 1, sel)); t = 0; done = false;
+		const o = orig(), k = ekey(entry, clip);
+		if (o && JSON.stringify(clean(o.steps)) === JSON.stringify(steps)) { try { localStorage.removeItem('goa2-studio-' + k); } catch { /* ignore */ } edited.delete(clip.id); }
+		else { S(k, JSON.stringify(steps)); edited.add(clip.id); }
+		edited = edited;
+		requestAnimationFrame(drawStrip);
+	}
+	const ed = {
+		toggle: (k: number) => { if (!clip) return; const st = clean(clip.steps); st[k].off = !st[k].off; if (!st[k].off) delete st[k].off; commit(st, k); },
+		move: (k: number, to: number) => { if (!clip || to < 0 || to >= clip.steps.length || to === k) return; const st = clean(clip.steps); const [x] = st.splice(k, 1); st.splice(to, 0, x); commit(st, to); },
+		dup: (k: number) => { if (!clip) return; const st = clean(clip.steps); st.splice(k + 1, 0, { ...st[k] }); commit(st, k + 1); },
+		del: (k: number) => { if (!clip || clip.steps.length < 2) return; const st = clean(clip.steps); st.splice(k, 1); commit(st, Math.min(k, st.length - 1)); },
+		hold: (k: number, by: number) => { if (!clip) return; const st = clean(clip.steps); st[k].d = Math.max(1, Math.min(30, st[k].d + by)); commit(st, k); },
+		reset: () => { const o = orig(); if (o) commit(clean(o.steps), 0); }
+	};
+	function setEditing(v: boolean) { editing = v; S('editing', v ? '1' : '0'); requestAnimationFrame(drawStrip); }
+	async function copySteps() {
+		if (!clip || !entry) return;
+		const txt = JSON.stringify({ entry: entry.id, clip: clip.id, steps: clip.steps.filter((x) => !x.off).map(({ off, ...x }) => x) });
+		try { await navigator.clipboard.writeText(txt); } catch { const ta = document.createElement('textarea'); ta.value = txt; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); } catch { /* ignore */ } ta.remove(); }
+		copied = true; setTimeout(() => (copied = false), 1600);
+	}
+	function onDrop(k: number) { if (dragFrom >= 0) ed.move(dragFrom, k); dragFrom = dragOver = -1; }
 	function toggle() { if (done) { done = false; i = 0; } playing = !playing; }
 	function setBg(b: typeof bg) { bg = b; S('bg', b); }
 
@@ -82,7 +121,7 @@
 	function liftAt(c: Clip, k: number, tt: number, fps: number) {
 		if (!c.H || !c.steps[k]?.air) return 0;
 		let total = 0, before = 0;
-		c.steps.forEach((s, j) => { if (s.air) { total += s.d; if (j < k) before += s.d; } });
+		c.steps.forEach((s, j) => { if (s.air && !s.off) { total += s.d; if (j < k) before += s.d; } });
 		const p = Math.min(1, (before + Math.min(tt * fps, c.steps[k].d)) / total);
 		return c.H * 4 * p * (1 - p);
 	}
@@ -93,14 +132,18 @@
 		raf = requestAnimationFrame(tick);
 	}
 	function advance(dt: number) {
-		if (!clip || !playing || done) return;
+		if (!clip || !playing || done || !onCount(clip)) return;
 		const st = clip.steps, fps = clip.fps * speed;
+		// switched-off frames are skipped
+		const first = st.findIndex((x) => !x.off), lastOn = st.length - 1 - [...st].reverse().findIndex((x) => !x.off);
+		if (st[i]?.off) { i = first; t = 0; }
 		t += dt;
 		while (t >= st[i].d / fps) {
-			t -= st[i].d / fps; i++;
+			t -= st[i].d / fps;
+			do i++; while (i < st.length && st[i].off);
 			if (i >= st.length) {
-				if (clip.loop) i = 0;
-				else { i = st.length - 1; done = true; t = 0; const c = clip; setTimeout(() => { if (clip === c && done && playing) { i = 0; done = false; } }, 1800); return; }
+				if (clip.loop) i = first;
+				else { i = lastOn; done = true; t = 0; const c = clip; setTimeout(() => { if (clip === c && done && playing) { i = first; done = false; } }, 1800); return; }
 			}
 		}
 	}
@@ -148,7 +191,7 @@
 			ctx.save(); ctx.globalAlpha = alpha; mirror(); ctx.drawImage(ii, sx, sy, sw, shh, ox, oy, sw * s, shh * s); ctx.restore();
 		};
 		if (onion && c.steps.length > 1) { const n = c.steps.length; drawStep(c.steps[(i - 1 + n) % n], 0.22); drawStep(c.steps[(i + 1) % n], 0.12); }
-		drawStep(cur, 1);
+		drawStep(cur, cur.off ? 0.35 : 1);
 		if (cur.flash && off) { // the hit: the silhouette flashes (white = hit, red = the killing blow), fading over the step
 			const f = Math.max(0, 1 - (t * c.fps * speed) / cur.d), o = off.getContext('2d');
 			const [sx, sy, sw, shh] = frameRect(sh, cur.f);
@@ -231,11 +274,20 @@
 		else if (k === 'arrowright') stepBy(1);
 		else if (k === 'arrowup' || k === 'arrowdown') {
 			ev.preventDefault();
-			const cs = entry.clips, j = cs.indexOf(clip);
+			const cs = entry.clips, j = cs.findIndex((c) => c.id === clip?.id);
 			pickClip(cs[(j + (k === 'arrowdown' ? 1 : -1) + cs.length) % cs.length]);
 		} else if (k === 'f') flip = !flip;
 		else if (k === 'o') onion = !onion;
 		else if (k === 'g') ground = !ground;
+		else if (editing && !ev.ctrlKey && !ev.metaKey) { // frame edits on the picked frame
+			if (k === 'e') ed.toggle(i);
+			else if (k === 'd') ed.dup(i);
+			else if (k === 'delete' || k === 'backspace') { ev.preventDefault(); ed.del(i); }
+			else if (k === '[' || k === ',') ed.move(i, i - 1);
+			else if (k === ']' || k === '.') ed.move(i, i + 1);
+			else if (k === '-') ed.hold(i, -1);
+			else if (k === '+' || k === '=') ed.hold(i, 1);
+		}
 	}
 </script>
 
@@ -286,7 +338,7 @@
 						</div>
 						<div class="clips" role="tablist">
 							{#each entry.clips as c (c.id)}
-								<button role="tab" class="cb" class:raw={c.raw} aria-selected={clip?.id === c.id} on:click={() => pickClip(c)}>{c.name}<small>{c.steps.length}</small></button>
+								<button role="tab" class="cb" class:raw={c.raw} class:ed={edited.has(c.id)} aria-selected={clip?.id === c.id} on:click={() => pickClip(c)} title={edited.has(c.id) ? 'Edited on this browser' : ''}>{c.name}<small>{clip?.id === c.id ? onCount(clip) : c.steps.length}</small></button>
 							{/each}
 						</div>
 						<div class="stage bg-{bg}">
@@ -312,15 +364,44 @@
 								<button class="sg" aria-pressed={onion} on:click={() => (onion = !onion)} title="Onion skin (O)">Onion</button>
 								<button class="sg" aria-pressed={ground} on:click={() => (ground = !ground)} title="Ground line (G)">Ground</button>
 							</div>
+							<div class="grp">
+								<button class="sg" aria-pressed={editing} on:click={() => setEditing(!editing)} title="Edit frames">Edit frames</button>
+							</div>
 							<div class="grp" aria-label="Background">
 								{#each BGS as [k, n]}<button class="sw bg-{k}" aria-pressed={bg === k} on:click={() => setBg(k)} title={n} aria-label={n}></button>{/each}
 							</div>
 						</div>
-						<div class="strip" bind:this={strip}>
+						{#if editing && clip}
+							<div class="edbar">
+								<span class="et">Editing <b>{clip.name}</b> · {onCount(clip)} of {clip.steps.length} frames on{edited.has(clip.id) ? ' · edited' : ''}</span>
+								<span class="ek">Drag to reorder · E on/off · D duplicate · Del delete · [ ] move · − + hold</span>
+								<button class="sg" on:click={copySteps} title="Copy the edited steps (JSON) — paste them to Claude to keep them">{copied ? 'Copied' : 'Copy steps'}</button>
+								<button class="sg rs" disabled={!edited.has(clip.id)} on:click={ed.reset} title="Back to the library's version">Reset</button>
+							</div>
+						{/if}
+						<div class="strip" role="list" class:editing bind:this={strip}>
 							{#each shaped as st, k}
-								<button class="fb" class:on={k === i} class:fx={st.flash} on:click={() => { i = k; t = 0; playing = false; done = false; }} title={`${st.s} ${st.f + 1}${st.d > 1 ? ` · held ${st.d}` : ''}`}>
-									<canvas></canvas><span>{k + 1}</span>
-								</button>
+								<div class="fi" role="listitem" class:off={st.off} class:over={editing && dragOver === k && dragFrom !== k} draggable={editing}
+									on:dragstart={(ev) => { dragFrom = k; ev.dataTransfer?.setData('text/plain', String(k)); }}
+									on:dragover|preventDefault={() => (dragOver = k)} on:dragleave={() => { if (dragOver === k) dragOver = -1; }}
+									on:drop|preventDefault={() => onDrop(k)} on:dragend={() => (dragFrom = dragOver = -1)}>
+									<button class="fb" class:on={k === i} class:fx={st.flash} on:click={() => { i = k; t = 0; playing = false; done = false; }} title={`${st.s} ${st.f + 1}${st.d > 1 ? ` · held ${st.d}` : ''}${st.off ? ' · off' : ''}`}>
+										<canvas></canvas><span>{k + 1}{st.d > 1 ? ` ×${st.d}` : ''}</span>
+									</button>
+									{#if editing}
+										<div class="fe">
+											<button on:click={() => ed.toggle(k)} title={st.off ? 'Switch on (E)' : 'Switch off (E)'} aria-label={st.off ? 'Switch on' : 'Switch off'}>{st.off ? '○' : '●'}</button>
+											<button on:click={() => ed.move(k, k - 1)} disabled={k === 0} title="Move left ([)" aria-label="Move left">‹</button>
+											<button on:click={() => ed.move(k, k + 1)} disabled={k === shaped.length - 1} title="Move right (])" aria-label="Move right">›</button>
+										</div>
+										<div class="fe">
+											<button on:click={() => ed.hold(k, -1)} disabled={st.d <= 1} title="Shorter (−)" aria-label="Shorter">−</button>
+											<button on:click={() => ed.hold(k, 1)} title="Hold longer (+)" aria-label="Hold longer">+</button>
+											<button on:click={() => ed.dup(k)} title="Duplicate (D)" aria-label="Duplicate">⧉</button>
+											<button class="x" on:click={() => ed.del(k)} disabled={shaped.length < 2} title="Delete (Del)" aria-label="Delete">✕</button>
+										</div>
+									{/if}
+								</div>
 							{/each}
 						</div>
 						{#if entry.blurb}<p class="blurb">{entry.blurb}</p>{/if}
@@ -394,6 +475,20 @@
 	.fb span { font-size: 11px; color: var(--muted, #9fb0c8); font-variant-numeric: tabular-nums; }
 	.fb.on { border-color: var(--brass, #c9a25a); background: rgba(201, 162, 90, 0.18); }
 	.fb.fx span { color: #ff8a6a; }
+	.fi { flex: none; display: flex; flex-direction: column; align-items: stretch; gap: 3px; border-radius: 7px; }
+	.strip.editing .fi { cursor: grab; }
+	.fi.off .fb { opacity: 0.35; border-style: dashed; }
+	.fi.over { outline: 2px solid var(--brass, #c9a25a); outline-offset: 1px; }
+	.fe { display: flex; gap: 2px; justify-content: center; }
+	.fe button { flex: 1; min-width: 20px; height: 22px; padding: 0; font: inherit; font-size: 13px; line-height: 1; color: var(--ink); background: #0a1b2e; border: 1px solid var(--hair); border-radius: 5px; cursor: pointer; }
+	.fe button:hover:not(:disabled) { border-color: var(--brass, #c9a25a); }
+	.fe button:disabled { opacity: 0.3; cursor: default; }
+	.fe .x { color: #ff8a6a; }
+	.edbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 6px 10px; border: 1px solid rgba(201, 162, 90, 0.4); border-radius: 8px; background: rgba(201, 162, 90, 0.07); font-size: 13px; }
+	.edbar .et b { color: var(--brass-hi, #e7c983); font-weight: 400; }
+	.edbar .ek { color: var(--muted, #9fb0c8); margin-right: auto; }
+	.edbar .sg:disabled { opacity: 0.4; cursor: default; }
+	.cb.ed::after { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--brass-hi, #e7c983); align-self: center; }
 	.blurb { margin: 0; font-size: 14px; color: var(--muted, #9fb0c8); }
 	.foot { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: 13px; }
 	.dl { color: var(--brass-hi, #e7c983); text-decoration: none; }
