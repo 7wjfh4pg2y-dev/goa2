@@ -14,10 +14,11 @@ export const REEL = [['idle', 2], ['run', 2], ['jump', 1], ['run', 1], ['attack'
 const range = (s, n) => Array.from({ length: n }, (_, f) => ({ s, f, d: 1 }));
 
 /**
- * frames = {idle, run, attack, jump, fall, hit, death (+ posed phit / pdeath / pdefend)} frame counts; attack = the base pack's {holds, release};
+ * frames = {idle, run, attack, jump, fall, hit, death (+ posed phit / pdeath)} frame counts; guard = the pack's
+ * guard pose {sheet, lead, frames} (Defend); attack = the base pack's {holds, release};
  * charH = the character's standing height in sprite px. Returns the animation list the viewer plays.
  */
-export function compose(frames, attack, charH, names = {}) {
+export function compose(frames, attack, charH, names = {}, guard = null) {
 	const idleN = frames.idle;
 	const idle = (f, d = 1) => ({ s: 'idle', f: Math.min(f, idleN - 1), d });
 	const out = [];
@@ -30,12 +31,12 @@ export function compose(frames, attack, charH, names = {}) {
 	});
 	// Defend (no pack has block frames, so it is composed): stance → BRACE in the first hit pose, the ward up, a small
 	// shove back (no flash: nothing got through) → recover through the back of the idle
-	if (frames.pdefend) { // a posed Defend (lib/pose.mjs): the free hand comes up, the ward stands on the held frames
-		const n = frames.pdefend, back = [];
+	if (guard && frames[guard.sheet]) { // the pack's own guard pose (base.mjs `guard`): lead in → hold with the ward up → back out
+		const back = [], g = (f, d, kx) => ({ s: guard.sheet, f, d, guard: true, ...(kx ? { kx } : {}) }), lead = guard.lead || [], [g1, g2 = g1] = guard.frames;
 		for (let f = Math.floor(idleN * 0.6); f < idleN; f++) back.push(idle(f, f === idleN - 1 ? 3 : 1));
 		out.push({
 			id: 'defend', name: 'Defend', fps: FPS.defend, loop: true,
-			steps: [idle(0, 1), ...range('pdefend', n).map((x, i) => (i === 0 || i === n - 1 ? { ...x, d: 1 } : { ...x, d: 2, guard: true, ...(i === 2 ? { kx: -1 } : i === 3 ? { kx: -2 } : i === 4 ? { kx: -1 } : {}) })), ...back]
+			steps: [idle(0, 1), ...lead.map((f) => ({ s: guard.sheet, f, d: 1 })), g(g1, 2, -1), g(g2, 4, -2), g(g1, 2, -1), ...[...lead].reverse().map((f) => ({ s: guard.sheet, f, d: 1 })), ...back]
 		});
 	} else if (frames.hit) {
 		const back = [];

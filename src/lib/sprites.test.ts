@@ -7,7 +7,7 @@ const tool = (name: string): Promise<any> => import(/* @vite-ignore */ new URL(`
 const { compose, liftAt, bodyOf, FPS } = await tool('anims');
 const { frameOf, blank, hex } = await tool('pixels');
 const { PASSES, skipped } = await tool('parts');
-const { pose, POSES } = await tool('pose');
+const { pose, handAt, POSES } = await tool('pose');
 
 const tag = (a: { steps: { s: string; f: number; d: number; kx?: number; flash?: boolean | number }[] }) =>
 	a.steps.map((s) => `${s.s[0]}${s.f}x${s.d}${s.kx ? 'k' + s.kx : ''}${s.flash ? '!' + s.flash : ''}`).join(' ');
@@ -50,19 +50,19 @@ describe('shared animations', () => {
 		expect(peak).toBeLessThanOrEqual(24);
 	});
 
-	it('uses posed Hit / Death / Defend frames when the pack has them', () => {
-		const P = compose({ idle: 10, run: 8, attack: 7, jump: 3, fall: 3, hit: 3, death: 7, phit: 3, pdeath: 7, pdefend: 7 }, { holds: [] }, 45);
+	it('uses posed Hit / Death frames and the pack\'s own guard pose for Defend', () => {
+		const P = compose({ idle: 10, run: 8, attack: 7, attack1: 7, jump: 3, fall: 3, hit: 3, death: 7, phit: 3, pdeath: 7 }, { holds: [] }, 45, {}, { sheet: 'attack1', lead: [0], frames: [1, 2] });
 		const get = (id: string) => P.find((a: { id: string }) => a.id === id);
 		expect(tag(get('hit'))).toBe('i0x2 i1x1 p0x2k-3!true p1x2k-2 p2x2k-1 i4x1 i5x1 i6x1 i7x1 i8x1 i9x3');
 		expect(get('hit').steps[2].s).toBe('phit');
 		const def = get('defend');
-		expect(def.steps.filter((x: { guard?: boolean }) => x.guard).map((x: { f: number }) => x.f)).toEqual([1, 2, 3, 4, 5]);
-		expect(def.steps.every((x: { s: string }) => x.s === 'idle' || x.s === 'pdefend')).toBe(true);
+		expect(tag(def)).toBe('i0x1 a0x1 a1x2k-1 a2x4k-2 a1x2k-1 a0x1 i6x1 i7x1 i8x1 i9x3');
+		expect(def.steps.filter((x: { guard?: boolean }) => x.guard).map((x: { f: number }) => x.f)).toEqual([1, 2, 1]);
 		const d = get('defeat');
 		expect(d.steps.some((x: { s: string }) => x.s === 'phit' || x.s === 'hit')).toBe(false); // the posed death carries the blow
 		expect(d.steps[2]).toMatchObject({ s: 'pdeath', f: 0, flash: 1.7 });
 		expect(d.steps.at(-1)).toMatchObject({ s: 'pdeath', f: 6, d: 7 });
-		expect(Object.keys(POSES)).toEqual(['phit', 'pdeath', 'pdefend']);
+		expect(Object.keys(POSES)).toEqual(['phit', 'pdeath']);
 	});
 
 	it('measures the body from the idle boxes', () => {
@@ -82,21 +82,25 @@ describe('pose stage', () => {
 	for (let y = 12; y <= 22; y++) for (let x = 18; x <= 19; x++) fill(x, y, C.leather);
 	const kAt = (x: number, y: number) => keys.get(y * W + x) ?? -1;
 	const rig = { ARM: new Set([C.leather]), HIP: new Set([C.buckle]), NECK: new Set([C.collar]), knee: 6 };
-	const shade = [[1, 1, 1], [2, 2, 2], [3, 3, 3]];
 	const a = (img: { d: Uint8Array }, x: number, y: number) => img.d[(y * W + x) * 4 + 3];
 
-	it('leans the body above the belt, whips the head, keeps the legs planted and redraws the free arm', () => {
-		const r = pose({ w: W, h: Hh, d }, kAt, foot, rig, { lean: -2, head: -1, crouch: 0, arm: [90, 170], palm: true }, shade).cell;
-		expect(a(r, 18, 22)).toBe(0); // the old hanging arm is gone
-		expect(a(r, 10, 4) && a(r, 13, 4) ? 0 : 1).toBe(1); // the head moved back
-		expect(a(r, 8, 4)).toBe(255);
+	it('leans the body above the belt, whips the head, keeps the legs planted; the free arm rides along whole', () => {
+		const r = pose({ w: W, h: Hh, d }, kAt, foot, rig, { lean: -2, head: -1, crouch: 0 });
+		expect(a(r, 8, 4)).toBe(255); // the head moved back past the body's old edge
 		for (let y = 21; y < Hh; y++) for (let x = 0; x < 17; x++) expect(a(r, x, y)).toBe(d[(y * W + x) * 4 + 3]); // legs untouched
-		let fwd = 0; for (let y = 0; y < 20; y++) for (let x = 20; x < W; x++) if (a(r, x, y)) fwd++;
-		expect(fwd).toBeGreaterThan(4); // the arm now reaches forward, up in front of the body
+		// the arm (11 rows, 2 wide) moved as one piece by its shoulder row's shift: nothing drawn, nothing lost
+		let n = 0; for (let y = 0; y < Hh; y++) for (let x = 15; x < W; x++) if (a(r, x, y)) n++;
+		expect(n).toBe(22);
+		expect(a(r, 17, 22) && a(r, 18, 22)).toBeTruthy();
+		expect(a(r, 19, 22)).toBe(0);
+	});
+
+	it('finds the free hand at the forward tip of the free arm', () => {
+		expect(handAt({ w: W, h: Hh, d }, kAt, foot, rig)).toEqual([20, 12]);
 	});
 
 	it('a crouch takes rows out above the knee and drops everything over it', () => {
-		const r = pose({ w: W, h: Hh, d }, kAt, foot, rig, { lean: 0, head: 0, crouch: 2, arm: null }, shade).cell;
+		const r = pose({ w: W, h: Hh, d }, kAt, foot, rig, { lean: 0, head: 0, crouch: 2 });
 		expect(a(r, 12, 3)).toBe(0);
 		expect(a(r, 12, 5)).toBe(255);
 		expect(a(r, 12, 37)).toBe(255);

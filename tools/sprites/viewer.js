@@ -17,7 +17,7 @@
 		}
 		({ img, orig, proj } = loaded.get(H.id));
 		body = bodyOf(H.sheets.idle.bbox, H.foot);
-		ANIMS = compose(Object.fromEntries(Object.entries(H.sheets).map(([s, v]) => [s, v.frames])), H.attack, body.h, { attack: H.attack?.name });
+		ANIMS = compose(Object.fromEntries(Object.entries(H.sheets).map(([s, v]) => [s, v.frames])), H.attack, body.h, { attack: H.attack?.name }, H.guard);
 		off.width = off.height = H.cell;
 		nock = findNock();
 		$('#htitle').textContent = H.name;
@@ -124,7 +124,7 @@
 			}
 			if (cur.guard) { // Defend: a pixel ward in the hero's own colour in front of them, swelling in
 				const k = Math.min(1, (ui.t * ui.fps) / cur.d + 0.35), wc = wardCanvas(body.h, H.glow || '#9fd8ff');
-				const palm = H.sheets[cur.s]?.palm?.[cur.f]; // posed Defend: in front of the raised palm
+				const palm = H.sheets[cur.s]?.palm?.[cur.f]; // Defend: in front of the guard pose's free hand
 				const wx = palm ? palm[0] : Math.round(body.cx + body.h * 0.12), wy = Math.round((palm ? palm[1] : H.foot - body.h * 0.5) - (wc.height - 1) / 2);
 				ctx.save(); ctx.globalAlpha = k; mirror(); ctx.drawImage(wc, ox + wx * s, oy + wy * s, wc.width * s, wc.height * s); ctx.restore();
 			}

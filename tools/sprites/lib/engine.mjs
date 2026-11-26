@@ -5,7 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { loadPng, savePng, blank, frameOf, K, key, hex } from './pixels.mjs';
 import { PASSES } from './parts.mjs';
-import { buildPoses } from './pose.mjs';
+import { buildPoses, handsOf } from './pose.mjs';
 import { bodyOf } from './anims.mjs';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -64,10 +64,12 @@ export async function buildHero(heroId, outDir) {
 		outs[sheet] = r.img; srcs[sheet] = src;
 	}
 	// the pose stage (lib/pose.mjs): new Hit / Death / Defend frames for packs with a rig
+	// Defend's guard pose = the pack's own drawing of the free hand thrust out (base.mjs `guard`); the ward stands at that hand
+	if (B.guard && man.sheets[B.guard.sheet]) { man.guard = B.guard; man.sheets[B.guard.sheet].palm = handsOf(B, outs, srcs, B.guard.sheet, B.guard.frames); }
 	const charH = bodyOf(man.sheets.idle.bbox, B.foot).h;
 	for (const [name, g] of Object.entries(buildPoses(B, H, outs, srcs, charH))) {
 		savePng(g.img, path.join(outDir, name + '.png'));
-		man.sheets[name] = { frames: g.frames, bbox: [], palm: g.palm, gen: true };
+		man.sheets[name] = { frames: g.frames, bbox: [], gen: true };
 	}
 	for (const [id, file] of Object.entries(B.projectiles || {})) {
 		const img = buildProjectile(clearBg(loadPng(path.join(ROOT, 'bases', B.id, file)), B), H);

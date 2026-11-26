@@ -36,12 +36,14 @@ Silverarrow (`heroes/silverarrow.mjs`) is the reference: the engine must keep re
 
 `node tools/sprites/studio.mjs [--reels <folder of GIFs>]` rebuilds the GM page **/studio**'s library: `static/anim/library.json` + sheets (every hero built here, the base packs' strips, and CraftPix preview GIFs cut to their stage, background cleared, packed into frame grids). Run it after adding a hero or a pack; without `--reels` the reels already in the library are kept (the GIFs aren't in the repo). The folder is `anim`, not `studio`: a folder and a page of the same name can 404.
 
-## Pose stage (`lib/pose.mjs`)
-A pack with a `rig` in its base.mjs gets NEW frames built from the hero's finished frames, at the pack's own pixel
-scale: `phit` (Hit), `pdeath` (Death, the first frames; the pack's collapse after) and `pdefend` (Defend: the free hand
-raised palm-out, the ward anchored at the palm). A pose = upper-body lean (rows above the belt, 1-px steps), a head
-whip, a crouch (rows out above the knee) and the free arm erased + redrawn at two angles in the pack's own two shades.
-`compose` uses the posed sheets when they exist. Poses live in `POSES` — tune them there, for every rigged pack.
+## Pose stage (`lib/pose.mjs`) and the guard pose
+NOTHING is drawn by code: no generated strokes or limbs (a redrawn arm was tried and turned down, 2026-11-26).
+- A pack with a `rig` in base.mjs gets `phit` / `pdeath`: the pack's own hit / death frames with the upper body leaning
+  (rows above the belt, whole-pixel steps), the head whipping and a crouch (rows out above the knee); the free arm rides
+  the torso as one rigid piece. Poses live in `POSES`.
+- Defend uses the pack artist's own drawing of a guard: base.mjs `guard: {sheet, lead, frames}` (Fantasy Warrior:
+  Attack1's wind-up, free hand thrust out); the ward stands at that hand (`handsOf` → the sheet's `palm`).
+- A new limb position must come from a pack drawing (this pack, or a library character of the same scale and style).
 
 ## Size
 Every hero shows at about the same height in the studio / viewer (whole-pixel zoom nearest that height). A hero spec's

@@ -23,6 +23,9 @@ export default {
 	// the pose stage (lib/pose.mjs): the free front arm is the leather patch right of the belt; the belt (buckle row)
 	// is where the lean starts, the fur collar where the head starts; crouches take rows out 6 above the foot
 	rig: { arm: 'leather', hip: 'buckle', neck: 'collar', knee: 6 },
+	// Defend: Attack1's wind-up = the artist's own pose of the free hand thrust out, sword drawn back (lead-in frame 0,
+	// held on 1–2); the shared Defend plays it with the ward at that hand
+	guard: { sheet: 'attack1', lead: [0], frames: [1, 2] },
 	attack: { holds: [0, 1, 0, 1, 0, 1, 1], release: null },
 	// source colours by material, light → dark
 	materials: {

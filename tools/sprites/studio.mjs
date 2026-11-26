@@ -45,7 +45,7 @@ function boxes(img, fw, n) {
 	}
 	return out;
 }
-// where the Defend ward stands: in front of the raised palm (posed frames), else the renderer's default
+// where the Defend ward stands: in front of the free hand of the pack's guard pose, else the renderer's default
 const wardAt = (man, st) => { const p = man.sheets[st.s]?.palm?.[st.f]; return p ? { wx: p[0], wy: p[1] } : {}; };
 const median = (a) => { const s = [...a].sort((x, y) => x - y); return s[s.length >> 1]; };
 
@@ -57,7 +57,7 @@ for (const id of fs.readdirSync(path.join(ROOT, 'heroes')).filter((f) => f.endsW
 	fs.rmSync(path.join(dir, 'manifest.json'), { force: true });
 	for (const p of Object.keys(man.projectiles)) fs.rmSync(path.join(dir, p + '.png'), { force: true });
 	const body = bodyOf(man.sheets.idle.bbox, man.foot);
-	const anims = compose(Object.fromEntries(Object.entries(man.sheets).map(([s, v]) => [s, v.frames])), man.attack, body.h, { attack: B.attackName });
+	const anims = compose(Object.fromEntries(Object.entries(man.sheets).map(([s, v]) => [s, v.frames])), man.attack, body.h, { attack: B.attackName }, man.guard);
 	const sheets = {};
 	for (const [s, v] of Object.entries(man.sheets)) { squeeze(path.join(dir, s + '.png')); sheets[s] = { src: rel(path.join(dir, s + '.png')), fw: man.cell, fh: man.cell, n: v.frames, cols: v.frames }; }
 	const clips = anims.map((a) => ({ id: a.id, name: a.name, fps: a.fps, loop: a.loop, H: a.H || 0, steps: a.steps.map((st) => ({ s: st.s, f: st.f, d: st.d, ...(st.kx ? { kx: st.kx } : {}), ...(st.flash ? { flash: st.flash } : {}), ...(st.air ? { air: 1 } : {}), ...(st.guard ? { guard: true, ...wardAt(man, st) } : {}) })) }));
