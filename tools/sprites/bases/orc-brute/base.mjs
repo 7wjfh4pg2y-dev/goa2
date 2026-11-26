@@ -23,7 +23,9 @@ export default {
 		death: 'Death.png'
 	},
 	attackName: 'Attack',
-	attack: { holds: [1, 0, 0, 1, 0, 3], release: null },
+	// the attack = a run-up into a leaping two-handed strike (the user, 2026-11-26): Run → the Jump attack's wind-up and
+	// raise → Attack 3's lunge (the weapon brought down two-handed by the hero's `regrip`) → back to the stance
+	attack: { holds: [1, 0, 0, 1, 0, 3], release: null, seq: [['run', 0, 1], ['run', 1, 1], ['run', 2, 1], ['run', 3, 1], ['run', 4, 1], ['run', 5, 1], ['attack', 0, 1], ['attack', 1, 1], ['attack', 3, 2], ['attack3', 5, 5], ['idle', 0, 2]] },
 	// Defend: the artist's crouch (hunched, braced) — a shield-bearer puts the shield in front of it (hero `shield` front)
 	guard: { sheet: 'crouch', lead: [0], frames: [1, 2] },
 	materials: {

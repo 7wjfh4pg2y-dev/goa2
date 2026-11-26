@@ -33,7 +33,7 @@ export function buildStrip(src, B, H, sheet) {
 		let x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1;
 		for (let y = 0; y < src.h; y++) for (let x = f * cw; x < f * cw + cw; x++) if (out.d[(y * src.w + x) * 4 + 3]) { x0 = Math.min(x0, x - f * cw); x1 = Math.max(x1, x - f * cw); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
 		bbox.push([x0, y0, x1, y1]);
-		lm.push({ eye: F.lm.eye && [F.lm.eye[0] - f * cw, F.lm.eye[1]], tie: F.lm.tie && [F.lm.tie[0] - f * cw, F.lm.tie[1]], shoulder: F.lm.shoulder && [F.lm.shoulder.left - f * cw, F.lm.shoulder.top] });
+		lm.push({ eye: F.lm.eye && [F.lm.eye[0] - f * cw, F.lm.eye[1]], tie: F.lm.tie && [F.lm.tie[0] - f * cw, F.lm.tie[1]], shoulder: F.lm.shoulder && [F.lm.shoulder.left - f * cw, F.lm.shoulder.top], ...(F.lm.arm ? { arm: Object.fromEntries(['S', 'elbow', 'hand'].filter((k) => F.lm.arm[k]).map((k) => [k, [Math.round(F.lm.arm[k][0] - f * cw), Math.round(F.lm.arm[k][1])]])) } : {}), ...(F.lm.bracers ? { br: F.lm.bracers.map((b) => [Math.round(b.c[0] - f * cw), Math.round(b.c[1]), b.px.length]) } : {}), ...(F.lm.axe ? { axe: [F.lm.axe.base[0] - f * cw, F.lm.axe.base[1]] } : {}) });
 	}
 	return { img: out, frames: n, bbox, lm };
 }

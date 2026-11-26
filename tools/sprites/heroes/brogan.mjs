@@ -34,11 +34,13 @@ export default {
 		['beard', { from: 2, depth: 5, back: 5, fwd: 3, light: 300, mid: 220, also: ['#fff1c0'], colors: { hi: '#e0703a', mid: '#c8471d', dk: '#9a3315' } }],
 		['wraps', { material: 'wraps', legs: 22, bracer: '#c87630', greave: '#c87630', shaft: '#57312b' }],
 		['axe', { head: ['#d1b18a', '#7f6756'], part: 'axe-brogan', anchor: [15, 15], axis: [1, 0], side: 1, stub: 3 }],
+		['regrip', { part: 'axe-brogan-long', anchor: [1, 15.5], axis: [1, 0], outline: '#020203', grips: { attack3: { 5: [[65, 76], [81, 93]] } } }],
 		['cuirass', { head: [8, 8], chest: [-5, 18], neck: 7, half: 11, bottom: 5, belt: 7, ramp: ['#8a5a3a', '#6e4429', '#5a3720', '#462a18', '#341f12'], collar: ['#d8c39a', '#9b8060'], bronze: ['#e6aa49', '#a8732a'], iron: ['#b9c2cf', '#7f8794', '#4b515d'], outline: '#020203', studs: [[3, 22], [8, 23], [13, 22], [6, 18], [11, 18], [16, 18], [3, 14], [8, 14], [13, 14], [6, 10], [11, 10], [16, 10]], edge: [22, 18, 14, 10] }],
 		['furboots', { len: 14, bulk: 2, fur: ['#6b4628', '#4c2f1a', '#34200f', '#211309'], sole: ['#5a3a26', '#3a2418'], outline: '#020203' }],
-		['shield', { part: 'shield-spartan', arm: ['idle', 'attack2', 'attack1'], front: ['crouch'] }],
-		['shoulderplate', { part: 'brogan-pauldron', head: [8, 8], row: 9, scan: 26, dx: 0, top: 3, face: 8, low: 11, back: 3 }],
-		['follow', { part: 'brogan-head', origin: [31, 24], file: 'Idle.png', box: [44, 18, 64, 44], eye: [55, 33], head: [8, 8], reach: 8 }]
+		['armrig', { head: [8, 8], row: 9, scan: 26, sx: 6, reach: 3, clear: 14 }],
+		['shoulderplate', { part: 'brogan-pauldron', pin: [6, 6] }],
+		['follow', { part: 'brogan-head', origin: [31, 24], file: 'Idle.png', box: [44, 18, 64, 44], eye: [55, 33], head: [8, 8], reach: 8 }],
+		['shield', { part: 'shield-spartan', grip: [0, 0] }]
 	],
 	chips: [['Flame ponytail', '#c8471d'], ['Red beard', '#a83a1a'], ['Spiked leather', '#6e4429'], ['Iron pauldron', '#7f8794'], ['Fur boots', '#4c2f1a'], ['Crimson kilt', '#87102a'], ['Spartan shield', '#e6aa49'], ['Double axe', '#444563']],
 	blurb: 'The elf barbarian on the Orc Brute’s frame: a full head of flame-red hair in a thick ponytail, a red beard, a spiked leather cuirass and iron pauldron, dark fur boots, the Spartan’s shield and a curved double axe.'

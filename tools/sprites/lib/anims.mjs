@@ -24,9 +24,12 @@ export function compose(frames, attack, charH, names = {}, guard = null, combo =
 	const out = [];
 	out.push({ id: 'idle', name: 'Idle', fps: FPS.idle, loop: true, steps: range('idle', idleN) });
 	if (frames.run) out.push({ id: 'run', name: 'Movement', fps: FPS.run, loop: true, steps: range('run', frames.run) });
+	// attack.seq (base.mjs) = a whole move built from several of the pack's strips ([sheet, frame, length] steps — e.g.
+	// a run-up into a strike); else the attack strip with its holds
+	const seq = attack?.seq && attack.seq.every(([s, f]) => frames[s] > f) ? attack.seq.map(([s, f, d]) => ({ s, f, d })) : null;
 	out.push({
 		id: 'attack', name: names.attack || 'Attack', fps: FPS.attack, loop: true,
-		steps: range('attack', frames.attack).map((x, i) => ({ ...x, d: 1 + ((attack?.holds || [])[i] || 0) })),
+		steps: seq || range('attack', frames.attack).map((x, i) => ({ ...x, d: 1 + ((attack?.holds || [])[i] || 0) })),
 		loose: attack?.release ?? null
 	});
 	// Defend (no pack has block frames, so it is composed): stance → BRACE in the first hit pose, the ward up, a small

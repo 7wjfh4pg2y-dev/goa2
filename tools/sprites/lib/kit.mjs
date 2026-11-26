@@ -101,22 +101,59 @@ export const KIT = {
 	},
 
 	/**
+	 * ARM RIG for the shield arm (landmarks only, nothing drawn): the shoulder S = the body's back edge at the shoulder
+	 * row (p.row below the eye) + p.sx; the forearm = the arm's wrap (a bracer from `wraps`, not the axe hand's), its
+	 * long axis by PCA; the end nearer S = the elbow, the other end + p.reach along the axis = the hand. Angles are
+	 * kept against idle frame 0 (H._rig), so parts hung on the arm turn by how far the arm turned.
+	 */
+	armrig(F, B, H, p) {
+		const eye = F.lm.eye || (F.lm.head && [F.lm.head[0] + p.head[0], F.lm.head[1] + p.head[1]]);
+		if (!eye) return;
+		const row = eye[1] + p.row;
+		let bx = -1;
+		for (let x = Math.max(F.x0, eye[0] - p.scan); x < eye[0]; x++) if (F.kAt(x, row) >= 0) { bx = x; break; }
+		if (bx < 0) return;
+		const S = [bx + p.sx, row], ax = F.lm.axe?.base;
+		// the axe hand = the bracer nearest the axe head's base (only that one: with both hands on the haft the other is the shield hand)
+		// the belt shares the wraps colour: a wide patch at the kilt's top edge is the belt, not a forearm
+		const KILT = mat(B, 'kilt'); let ky = -1;
+		for (let y = 0; y < F.ch && ky < 0; y++) for (let x = F.x0; x < F.x0 + F.cw; x++) if (KILT.has(F.kAt(x, y))) { ky = y; break; }
+		const all = (F.lm.bracers || []).filter((b) => !(ky >= 0 && b.w >= 6 && b.w > b.h * 1.4 && Math.abs(b.y1 - ky) <= 4)), dAx = (b) => (ax ? Math.hypot(b.c[0] - ax[0], b.c[1] - ax[1]) : 1e9);
+		const axeHand = ax && all.length ? all.reduce((a, b) => (dAx(b) < dAx(a) ? b : a)) : null;
+		const br = all.filter((b) => b !== axeHand || dAx(b) > (p.clear ?? 14));
+		const rig = { S };
+		if (br.length) {
+			const last = F.strip.handAt, d = (c) => Math.hypot(c.c[0] - last[0], c.c[1] - last[1]);
+			const b = br.reduce((a, c) => ((last ? d(c) < d(a) : c.c[0] < a.c[0]) ? c : a));
+			if (!last || d(b) <= (p.jump ?? 16)) {
+				const [mx, my] = b.c; let sxx = 0, syy = 0, sxy = 0;
+				for (const [x, y] of b.px) { sxx += (x - mx) ** 2; syy += (y - my) ** 2; sxy += (x - mx) * (y - my); }
+				const th = 0.5 * Math.atan2(2 * sxy, sxx - syy), ux = Math.cos(th), uy = Math.sin(th);
+				let lo = 1e9, hi = -1e9; for (const [x, y] of b.px) { const t = (x - mx) * ux + (y - my) * uy; lo = Math.min(lo, t); hi = Math.max(hi, t); }
+				let e1 = [mx + ux * lo, my + uy * lo], e2 = [mx + ux * hi, my + uy * hi];
+				if (Math.hypot(e1[0] - S[0], e1[1] - S[1]) > Math.hypot(e2[0] - S[0], e2[1] - S[1])) [e1, e2] = [e2, e1];
+				const dl = Math.hypot(e2[0] - e1[0], e2[1] - e1[1]) || 1, dh = [(e2[0] - e1[0]) / dl, (e2[1] - e1[1]) / dl];
+				rig.elbow = e1; rig.hand = [e2[0] + dh[0] * p.reach, e2[1] + dh[1] * p.reach];
+				rig.a = Math.atan2(dh[1], dh[0]); rig.u = Math.atan2(e1[1] - S[1], e1[0] - S[0]);
+				F.strip.handAt = b.c;
+			}
+		}
+		if (F.anim === 'idle' && F.f === 0 && rig.hand) H._rig = { a: rig.a, u: rig.u };
+		F.lm.arm = rig;
+	},
+
+	/**
 	 * A shoulder plate (part) on the back of the shoulders: its left edge on the body's back edge at the shoulder row
 	 * (p.row below the eye; the pack's own pixels, so the shield doesn't count), its top p.top below the eye. Drawn
 	 * before the head, so the beard hangs over it.
 	 */
 	shoulderplate(F, B, H, p) {
 		if (skipped(F, H, 'gear')) return;
-		const eye = F.lm.eye || (F.lm.head && [F.lm.head[0] + p.head[0], F.lm.head[1] + p.head[1]]);
-		if (!eye) return;
-		const y = eye[1] + p.row;
-		let bx = -1;
-		for (let x = Math.max(F.x0, eye[0] - p.scan); x < eye[0]; x++) if (F.kAt(x, y) >= 0) { bx = x; break; }
-		if (bx < 0) return;
+		const rig = F.lm.arm; if (!rig) return;
+		const turn = rig.u != null && H._rig ? rig.u - H._rig.u : 0;
 		const P = part(p.part), AX = F.masks.axe;
-		// where the body is turned side-on the shoulder sits under the face: drop the plate below the beard there
-		const over = bx + p.dx + P.img.w - (eye[0] - p.face), top = over > 0 ? p.low : p.top;
-		place(F, P, [0, 0], [bx + p.dx - (over > 0 ? Math.min(p.back ?? 3, over) : 0), eye[1] + top], 0, false, null, false, (x, yy) => AX?.has(F.q(x, yy)));
+		const done = place(F, P, p.pin, [Math.round(rig.S[0]), Math.round(rig.S[1])], turn * (p.follow ?? 1), false, null, false, (x, y) => AX?.has(F.q(x, y)));
+		F.masks.plate = new Set(done.map(([x, y]) => F.q(x, y)));
 	},
 
 	/**
@@ -150,6 +187,34 @@ export const KIT = {
 		const done = place(F, P, [cx - p.origin[0], cy - p.origin[1]], [best.x, best.y], best.a, false, null, false, (x, y) => AX?.has(F.q(x, y)));
 		for (const [x, y] of done) { const i = F.at(x, y); if (F.out.d[i] === 255 && F.out.d[i + 1] === 0 && F.out.d[i + 2] === 255) F.out.d[i + 3] = 0; }
 		(F.lm.follow ||= {})[p.part] = { x: best.x - F.x0, y: best.y, deg: Math.round(best.a * 180 / Math.PI), fit: +(best.n / T.length).toFixed(2) };
+	},
+
+	/**
+	 * REGRIP: frames where the pack's figure swings the weapon two-handed but its own weapon doesn't show (the orc's
+	 * spear trails behind him): p.grips[sheet][frame] = [back hand, front hand] (frame px, read off the pack's
+	 * drawing). The old shaft behind the back hand goes, and the long-hafted part (p.part, butt at p.anchor, haft
+	 * along p.axis) is laid from the back hand through the front hand; the front fist stays in front of the haft.
+	 */
+	regrip(F, B, H, p) {
+		const g = p.grips?.[F.anim]?.[F.f];
+		if (!g) return;
+		const [[bx, by], [fx, fy]] = g.map(([x, y]) => [x + F.x0, y]);
+		// the old shaft (thin wraps patches) behind the back hand, and its outline, off
+		for (const b of F.lm.shafts || []) for (const [x, y] of b.px) if (x < bx - 1) {
+			F.out.d[F.at(x, y) + 3] = 0;
+			for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+				const nx = x + dx, ny = y + dy, k = F.kAt(nx, ny);
+				if (nx >= bx - 1 || k !== K(p.outline)) continue;
+				let body = false; for (let ey = -1; ey <= 1 && !body; ey++) for (let ex = -1; ex <= 1 && !body; ex++) { const kk = F.kAt(nx + ex, ny + ey); if (kk >= 0 && kk !== K(p.outline) && !b.px.some(([sx, sy]) => sx === nx + ex && sy === ny + ey)) body = true; }
+				if (!body) F.out.d[F.at(nx, ny) + 3] = 0;
+			}
+		}
+		const P = part(p.part), [ax, ay] = p.axis, ang = Math.atan2(fy - by, fx - bx) - Math.atan2(ay, ax);
+		const SKIN = mat(B, 'skin'), WR = mat(B, 'wraps');
+		const fist = (x, y) => (SKIN.has(F.kAt(x, y)) || WR.has(F.kAt(x, y))) && Math.hypot(x - fx, y - fy) <= (p.fist ?? 3);
+		const done = place(F, P, p.anchor, [bx, by], ang, false, null, false, fist);
+		F.masks.axe = new Set(done.map(([x, y]) => F.q(x, y)));
+		F.lm.axe = { base: [fx, fy], dir: [Math.cos(ang), Math.sin(ang)] };
 	},
 
 	/**
@@ -346,35 +411,19 @@ export const KIT = {
 	 * packs face right); frames with no bracer keep the offset the strip last saw from the belt.
 	 */
 	shield(F, B, H, p) {
-		const P = part(p.part), ax = F.lm.axe?.base, KILT = mat(B, p.waist || 'kilt');
-		// the waist: the back of the body (−x) on the kilt's top rows — every frame has it, so the shield never jumps
-		let ky = -1;
-		for (let y = 0; y < F.ch && ky < 0; y++) for (let x = F.x0; x < F.x0 + F.cw; x++) if (KILT.has(F.kAt(x, y))) { ky = y; break; }
-		let bx = 1e9;
-		if (ky >= 0) for (let y = ky; y <= ky + 2; y++) for (let x = F.x0; x < F.x0 + F.cw; x++) if (F.kAt(x, y) >= 0) { bx = Math.min(bx, x); break; }
-		const waist = ky >= 0 && bx < 1e9 ? [bx, ky] : null;
-		const home = (H._shield ||= {}), arm = (p.arm || []).includes(F.anim);
-		// the weapon hand's bracer doesn't count (both hands on the haft)
-		const br = (F.lm.bracers || []).filter((b) => !ax || Math.hypot(b.c[0] - ax[0], b.c[1] - ax[1]) > (p.clear ?? 14));
-		let at = null;
-		if (arm && br.length) {
-			// on the free forearm: the bracer nearest last frame's shield (the strip's first frame: the one furthest back)
-			const last = F.strip.shAt, d = (c) => Math.hypot(c.c[0] - last[0], c.c[1] - last[1]);
-			const b = br.reduce((a, c) => ((last ? d(c) < d(a) : c.c[0] < a.c[0]) ? c : a));
-			if (!last || d(b) <= (p.jump ?? 12)) at = [b.c[0] + (p.dx ?? 0), b.c[1] + (p.dy ?? 0)];
-			if (at && waist && F.anim === 'idle' && F.f === 0) home.off = [at[0] - waist[0], at[1] - waist[1]];
+		const P = part(p.part), rig = F.lm.arm, AX = F.masks.axe, skip = (x, y) => AX?.has(F.q(x, y));
+		if (rig?.hand) {
+			const turn = H._rig ? rig.a - H._rig.a : 0, c = Math.cos(turn), s = Math.sin(turn), [ox, oy] = p.grip || [0, 0];
+			const at = [Math.round(rig.hand[0] + c * ox - s * oy), Math.round(rig.hand[1] + s * ox + c * oy)];
+			place(F, P, [P.img.w / 2, P.img.h / 2], at, turn, false, null, false, skip);
+			F.strip.shAt = at; F.strip.shOff = rig.S ? [at[0] - rig.S[0], at[1] - rig.S[1]] : F.strip.shOff; F.lm.shield = at;
+			return;
 		}
-		// braced in FRONT (the Defend crouch): the shield at the front of the chest, just above the waist
-		if (!at && waist && (p.front || []).includes(F.anim)) {
-			const SKIN = mat(B, 'skin'); let fx = -1;
-			for (let y = Math.max(0, waist[1] - 8); y < waist[1]; y++) for (let x = F.x0; x < F.x0 + F.cw; x++) if (SKIN.has(F.kAt(x, y))) fx = Math.max(fx, x);
-			if (fx >= 0) at = [fx + (p.fo?.[0] ?? -4), waist[1] + (p.fo?.[1] ?? -2)];
-		}
-		// strapped on: rides the waist at the offset the idle showed
-		if (!at && waist) { const o = home.off || p.off || [4, 2]; at = [waist[0] + o[0], waist[1] + o[1]]; }
-		if (!at) return;
-		at = [Math.round(at[0]), Math.round(at[1])];
-		place(F, P, [P.img.w / 2, P.img.h / 2], at);
-		F.strip.shAt = at; F.lm.shield = at;
+		// the arm is hidden (behind the body): the shield stays where the shoulder last carried it
+		const S = rig?.S, o = F.strip.shOff || p.off || [-9, 21];
+		if (!S) return;
+		const at = [Math.round(S[0] + o[0]), Math.round(S[1] + o[1])];
+		place(F, P, [P.img.w / 2, P.img.h / 2], at, 0, false, null, false, skip);
+		F.lm.shield = at;
 	}
 };
