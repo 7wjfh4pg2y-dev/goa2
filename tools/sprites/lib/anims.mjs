@@ -77,6 +77,8 @@ export function compose(frames, attack, charH, names = {}, guard = null, combo =
 	if (combo && combo.sheets.every((s) => frames[s])) {
 		const steps = [idle(0, 1)];
 		combo.sheets.forEach((s, k) => steps.push(...range(s, frames[s]).map((x, i, a) => ({ ...x, d: i === a.length - 1 && k === combo.sheets.length - 1 ? 9 : 1 }))));
+		// then back to the stance — through the pack's own recovery frames when it names some (base.mjs combo.recover)
+		for (const [s, f, d] of combo.recover || []) if (frames[s] > f) steps.push({ s, f, d });
 		steps.push(idle(1, 3));
 		out.push({ id: 'combo', name: combo.name || 'Combo', fps: FPS.attack, loop: true, steps });
 	}

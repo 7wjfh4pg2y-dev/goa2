@@ -27,7 +27,9 @@ export default {
 	// held on 1–2); the shared Defend plays it with the ward at that hand
 	guard: { sheet: 'attack1', lead: [0], frames: [1, 2] },
 	// an extra clip: the three attacks chained into one combo (the user, 2026-11-26)
-	combo: { name: 'Finisher', sheets: ['attack1', 'attack', 'attack3'] },
+	// recover = the way back to the stance after the last hit: Attack1's wind-up played backwards (wide braced
+	// stance → standing, sword low) — the pack's own drawings, no new pixels
+	combo: { name: 'Finisher', sheets: ['attack1', 'attack', 'attack3'], recover: [['attack1', 2, 2], ['attack1', 1, 2], ['attack1', 0, 2]] },
 	attack: { holds: [0, 1, 0, 1, 0, 1, 1], release: null },
 	// source colours by material, light → dark
 	materials: {

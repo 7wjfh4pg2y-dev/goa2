@@ -74,6 +74,10 @@ describe('shared animations', () => {
 		expect(f.steps.filter((x: { s: string }) => x.s !== 'idle').length).toBe(22);
 		expect(f.steps.at(-2)).toMatchObject({ s: 'attack3', f: 7, d: 9 });
 		expect(f.steps.slice(1, -2).every((x: { d: number }) => x.d === 1)).toBe(true); // no beat between the hits
+		// a recovery back to the stance, from the pack's own frames
+		const R = compose({ idle: 10, run: 8, attack: 7, attack1: 7, attack3: 8, jump: 3, fall: 3, hit: 3, death: 7 }, { holds: [] }, 45, {}, null, { name: 'Finisher', sheets: ['attack1', 'attack', 'attack3'], recover: [['attack1', 2, 2], ['attack1', 1, 2], ['attack1', 0, 2]] });
+		const r = R.find((a: { id: string }) => a.id === 'combo');
+		expect(tag(r).split(' ').slice(-5).join(' ')).toBe('a7x9 a2x2 a1x2 a0x2 i1x3');
 	});
 
 	it('measures the body from the idle boxes', () => {
