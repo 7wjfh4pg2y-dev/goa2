@@ -54,7 +54,7 @@ export function buildProjectile(img, H) {
 export async function buildHero(heroId, outDir) {
 	const H = await loadHero(heroId), B = await loadBase(H.base);
 	fs.mkdirSync(outDir, { recursive: true });
-	const man = { hero: H.id, name: H.name, base: B.id, cell: B.cell, foot: B.foot, attack: B.attack, sheets: {}, projectiles: {}, chips: H.chips, blurb: H.blurb, glow: H.projectile?.glow, scale: B.scale || 1 };
+	const man = { hero: H.id, name: H.name, base: B.id, cell: B.cell, foot: B.foot, attack: B.attack, sheets: {}, projectiles: {}, chips: H.chips, blurb: H.blurb, glow: H.projectile?.glow, scale: B.scale || 1, noWard: !!H.noWard };
 	const outs = {}, srcs = {};
 	for (const [sheet, file] of Object.entries(B.sheets)) {
 		const src = clearBg(loadPng(path.join(ROOT, 'bases', B.id, file)), B);

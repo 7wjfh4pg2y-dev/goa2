@@ -49,7 +49,7 @@ export function compose(frames, attack, charH, names = {}, guard = null, combo =
 	// Jump: stance → take-off (jump frames) → descent (fall frames) on one parabola → land in the stance
 	const up = range('jump', frames.jump).map((x, i) => ({ ...x, d: i === 0 ? 2 : 3, air: true }));
 	const down = range('fall', frames.fall).map((x, i, a) => ({ ...x, d: i === a.length - 1 ? 2 : 3, air: true }));
-	out.push({ id: 'jump', name: 'Jump', fps: FPS.jump, loop: true, H: Math.round(charH * JUMP_HEIGHT), steps: [idle(0, 2), ...up, ...down, idle(1, 3)] });
+	if (frames.jump || frames.fall) out.push({ id: 'jump', name: 'Jump', fps: FPS.jump, loop: true, H: Math.round(charH * JUMP_HEIGHT), steps: [idle(0, 2), ...up, ...down, idle(1, 3)] });
 	// posed hit / death frames (lib/pose.mjs) stand in for the pack's own when there are some
 	const hitS = frames.phit ? 'phit' : 'hit', deathS = frames.pdeath ? 'pdeath' : 'death';
 	// Hit: stance → white flash + knockback through the hit frames → recover through the back half of the idle

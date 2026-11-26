@@ -1,0 +1,18 @@
+{
+	"from": "char-orc-character-sprite-sheets-pixel-art-orc-brute",
+	"cell": 105,
+	"foot": 105,
+	"actions": {
+		"Idle": 7,
+		"Walk": 8,
+		"Run": 8,
+		"Run attack": 5,
+		"Attack": 4,
+		"Jump attack": 6,
+		"Crouch": 3,
+		"Attack 2": 7,
+		"Attack 3": 6,
+		"Hurt": 5,
+		"Death": 3
+	}
+}

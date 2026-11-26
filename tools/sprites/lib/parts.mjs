@@ -5,6 +5,7 @@
 // Colours: a base pack names its MATERIALS (source colours, light → dark); a hero's `palette` gives the same
 // material names their new colours (same order). Unlisted materials keep the source colours.
 import { hex, K, patches } from './pixels.mjs';
+import { KIT } from './kit.mjs';
 
 const mat = (B, name) => (B.materials[name] || []).map(K);
 const rgb = (H, name, i) => hex(H.palette[name][i]);
@@ -219,14 +220,17 @@ export const PASSES = {
 		let eye = null, bd = 1e9;
 		for (let y = top; y <= top + 12; y++) for (let x = F.x0; x < F.x0 + F.cw; x++) if (EYE.has(F.kAt(x, y))) { const d = Math.abs(x - cx) + Math.abs(y - top - 5); if (d < bd) { bd = d; eye = [x, y]; } }
 		if (!eye || bd > 12) return;
-		const c = { hi: hex(p.colors.hi), mid: hex(p.colors.mid), dk: hex(p.colors.dk) };
-		for (let y = eye[1] + 1; y <= eye[1] + (p.depth ?? 3); y++) for (let x = eye[0] - (p.back ?? 2); x <= eye[0] + (p.fwd ?? 4); x++) {
-			if (!F.inCell(x) || !SKIN.has(F.kAt(x, y))) continue;
+		const c = { hi: hex(p.colors.hi), mid: hex(p.colors.mid), dk: hex(p.colors.dk) }, ALSO = new Set((p.also || []).map(K));
+		for (let y = eye[1] + (p.from ?? 1); y <= eye[1] + (p.depth ?? 3); y++) for (let x = eye[0] - (p.back ?? 2); x <= eye[0] + (p.fwd ?? 4); x++) {
+			if (!F.inCell(x)) continue;
+			if (ALSO.has(F.kAt(x, y))) { F.put(x, y, c.mid); continue; } // a tusk / tooth under the beard
+			if (!SKIN.has(F.kAt(x, y))) continue;
 			const [r, g, b] = F.srcRgb(x, y), L = r + g + b;
 			F.put(x, y, L >= (p.light ?? 540) ? c.hi : L >= (p.mid ?? 470) ? c.mid : c.dk);
 		}
 		F.lm.eye = eye;
 	},
+	...KIT
 };
 
 /** Is this frame skipped for a group of passes? H.skip[group][sheet] = first frame index from which it is skipped. */

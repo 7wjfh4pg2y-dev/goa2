@@ -51,3 +51,19 @@ hero and true heights show (Arien, 50 px with his crest, stands taller than Silv
 head and arms). Check a new pack against the others at the same scale (torso width at the belt, face, arm thickness).
 A pack drawn at another scale gets a whole-number `scale` in its base.mjs (e.g. 2 for a pack drawn at half size) —
 never a fractional one (pixels must stay square and even).
+
+## Library characters as bases, and kitbashing
+- `node tools/sprites/charbase.mjs <library char id> <pack>` turns a CraftPix reel character (static/anim/chars, cut
+  by reelsplit) into a base pack: every reel pixel was a 2 × 2 block, so frames go back to NATIVE pixels, one strip
+  per action (`bases/<pack>/<Action>.png`, square cells, feet on one line) + `frames.json`; write base.mjs by hand.
+- `node tools/sprites/charbase.mjs --part <char id> <frame> <name> <x0,y0,x1,y1 | e:cx,cy,rx,ry> [colours…]` cuts a
+  piece of gear from another character's native frame (the listed colours + the dark outline round them) →
+  `parts/<name>.png`.
+- `lib/kit.mjs` passes place parts on a hero — the part's own pixels, turned with a RotSprite-style rotation (scale2x
+  twice, rotate, sample back), never redrawn: `wraps` (one-tone wraps split into bracers / greaves / shaft + belt by
+  shape), `axe` (swap a weapon head: anchor + axis of the part, faces forward), `shield` (on the free forearm's bracer
+  in `arm` sheets, braced in front in `front` sheets, else strapped at the waist at the idle's offset — never jumps).
+- The CraftPix family (Orc Brute, Spartan, Gladiator, Minotaur…) is drawn finer than the free packs (face ~10 px),
+  so a hero built on one stands about twice as tall at the shared scale.
+- Brogan (2026-11-26, the user's recipe): Orc Brute body · Spartan shield · Gladiator bronze + crimson · Minotaur
+  Brute axe. Defend = the orc's crouch with the shield in front (`noWard`: a real shield needs no drawn ward).
