@@ -119,7 +119,10 @@
 		if (!sh || !im) return;
 		const reel = e.kind === 'reel' || e.kind === 'unique' || e.kind === 'general', px = e.px || 1;
 		// the view: a character-sized box for heroes / packs (every one the same height on screen), the frame for reels
-		const vw = reel ? sh.fw + 8 : e.bodyH * 2.7, vh = reel ? sh.fh + 8 : e.bodyH * 1.75 + Math.max(0, ...e.clips.map((x) => x.H || 0));
+		// heroes share ONE pixel scale (from the tallest hero and highest jump): true relative sizes, same pixel size
+		const hs = e.kind === 'hero' ? entries.filter((x) => x.kind === 'hero') : [e];
+		const bh = Math.max(...hs.map((x) => x.bodyH)), jh = Math.max(0, ...hs.flatMap((x) => x.clips.map((y) => y.H || 0)));
+		const vw = reel ? sh.fw + 8 : bh * 2.7, vh = reel ? sh.fh + 8 : bh * 1.75 + jh;
 		const fit = Math.max(1, Math.floor(Math.min(W / vw, Ht / vh) * 0.94));
 		const s = zoom ? Math.max(0.5, (zoom * dpr) / px) : fit;
 		const groundY = reel ? Math.round(Ht / 2 + (sh.fh / 2 - (sh.fh - e.ay)) * s) : Math.round(Ht * 0.74);

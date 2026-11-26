@@ -11,8 +11,8 @@ export default {
 	sheets: {
 		idle: 'Idle.png',
 		run: 'Run.png',
-		attack: 'Attack1.png',
-		attack2: 'Attack2.png',
+		attack: 'Attack2.png', // the main Attack (the user's pick, 2026-11-26)
+		attack1: 'Attack1.png',
 		attack3: 'Attack3.png',
 		jump: 'Jump.png',
 		fall: 'Fall.png',

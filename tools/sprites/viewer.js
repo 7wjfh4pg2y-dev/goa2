@@ -99,8 +99,9 @@
 		const W = cv.width, Ht = cv.height, CELL = H.cell;
 		ctx.clearRect(0, 0, W, Ht); ctx.imageSmoothingEnabled = false;
 		const a = A(), st = a.steps, cur = st[ui.i];
-		// one on-screen height for every hero: the view is sized in units of the character's own height
-		const vw = body.h * 2.65, vh = body.h * 1.66 + (ANIMS.find((x) => x.id === 'jump')?.H || 0);
+		// ONE pixel scale for every hero (sized from the tallest), so each keeps its true size and the same pixel size
+		const refH = Math.max(...HEROES.map((h) => bodyOf(h.sheets.idle.bbox, h.foot).h));
+		const vw = refH * 2.65, vh = refH * 1.66 + refH * 0.72;
 		const s = Math.max(1, Math.floor(Math.min(W / (vw * (ui.compare ? 2 : 1)), Ht / vh) * 0.95));
 		const groundY = Math.round(Ht * 0.74), up = Math.round(liftAt(a, ui.i, ui.t, ui.fps));
 		if (cur.flash && ui.t < 0.03 && !ui.shook) { const p = cur.flash === true ? 1 : cur.flash; ui.shake = p; ui.shook = true; hitBurst(p); }
