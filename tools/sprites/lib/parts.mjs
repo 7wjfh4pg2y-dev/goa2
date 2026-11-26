@@ -203,7 +203,30 @@ export const PASSES = {
 		}
 		for (const [fx, fy, s] of pts) { const x = Math.round(fx - px), y = Math.round(fy - py); if (s > 0.1 && s < 0.88 && F.inCell(x) && free(x, y)) F.put(x, y, rgb(H, 'hair', 2)); }
 		const r0 = pts[2]; if (r0) { const x = Math.round(r0[0]), y = Math.round(r0[1]); F.put(x, y, rgb(H, 'tie', 0)); F.put(Math.round(x + px), Math.round(y + py), rgb(H, 'tie', 1)); }
-	}
+	},
+	/**
+	 * A beard from the pack's own pixels: the skin just under the eye (rows eye+1 … eye+depth, from eye − back to
+	 * eye + fwd) recoloured by its source lightness (light → hi, mid → mid, dark → dk). The eye = the `eye` material
+	 * pixel nearest the head (the largest hair patch, so the hair pass must run first). Nothing is drawn: the face's
+	 * own pixels turn red, so the beard moves with every frame the artist drew.
+	 */
+	beard(F, B, H, p) {
+		if (skipped(F, H, 'gear')) return;
+		const EYE = new Set(mat(B, 'eye')), SKIN = new Set(mat(B, 'skin')), head = F.lm.hair || [];
+		if (!head.length) return;
+		const top = Math.min(...head.map((v) => v[1])), hx = head.filter((v) => v[1] <= top + 2).map((v) => v[0]);
+		const cx = (Math.min(...hx) + Math.max(...hx)) / 2;
+		let eye = null, bd = 1e9;
+		for (let y = top; y <= top + 12; y++) for (let x = F.x0; x < F.x0 + F.cw; x++) if (EYE.has(F.kAt(x, y))) { const d = Math.abs(x - cx) + Math.abs(y - top - 5); if (d < bd) { bd = d; eye = [x, y]; } }
+		if (!eye || bd > 12) return;
+		const c = { hi: hex(p.colors.hi), mid: hex(p.colors.mid), dk: hex(p.colors.dk) };
+		for (let y = eye[1] + 1; y <= eye[1] + (p.depth ?? 3); y++) for (let x = eye[0] - (p.back ?? 2); x <= eye[0] + (p.fwd ?? 4); x++) {
+			if (!F.inCell(x) || !SKIN.has(F.kAt(x, y))) continue;
+			const [r, g, b] = F.srcRgb(x, y), L = r + g + b;
+			F.put(x, y, L >= (p.light ?? 540) ? c.hi : L >= (p.mid ?? 470) ? c.mid : c.dk);
+		}
+		F.lm.eye = eye;
+	},
 };
 
 /** Is this frame skipped for a group of passes? H.skip[group][sheet] = first frame index from which it is skipped. */

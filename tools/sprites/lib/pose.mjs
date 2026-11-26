@@ -2,7 +2,8 @@
 // (the art-consistency rule: nothing is drawn — no generated strokes, no limbs; the user turned down a redrawn arm,
 // 2026-11-26). Runs after the passes, on the hero's output strips, for any pack that declares a `rig` in base.mjs:
 //
-//   rig: { arm: 'leather', hip: 'buckle', neck: 'collar', knee: 6 }
+//   rig: { arm: 'leather', hip: 'buckle', neck: 'collar', knee: 6, hand? }   (hand = a pack whose arm is one with the
+//        body, e.g. bare skin: the Defend ward's hand = the forward-most pixel of that material; arm / neck may be left out)
 //     arm  = the material of the free (front) arm — the patch furthest FORWARD (+x) between the neck and a little
 //            below the hip; it RIDES the torso as one rigid piece (otherwise the lean would break it at the belt)
 //     hip  = the belt material: rows above its first row lean, the legs stay planted
@@ -60,6 +61,11 @@ export function buildPoses(B, H, out, src, charH) {
 
 /** Where the free hand is in a frame (the forward tip of the free arm) — the Defend ward stands just in front of it. */
 export function handAt(cell, kAt, foot, rig) {
+	if (rig.HAND) { // the arm is one with the body (bare skin): the hand = the forward-most hand-material pixel
+		let best = null;
+		for (let y = 0; y < cell.h; y++) for (let x = 0; x < cell.w; x++) if (cell.d[(y * cell.w + x) * 4 + 3] && rig.HAND.has(kAt(x, y)) && (!best || x > best[0])) best = [x, y];
+		return best && [best[0] + 1, best[1]];
+	}
 	const g = geometry(cell, kAt, foot, rig);
 	if (!g.arm) return null;
 	let best = null;
@@ -131,7 +137,7 @@ export function pose(c, kAt, foot, rig, p) {
 export function handsOf(B, out, src, sheet, frames) {
 	const O = out[sheet], S = src[sheet], cw = B.cell;
 	if (!B.rig || !O || !S) return null;
-	const rig = { ARM: new Set((B.materials[B.rig.arm] || []).map(K)), HIP: new Set((B.materials[B.rig.hip] || []).map(K)), NECK: new Set((B.materials[B.rig.neck] || []).map(K)), knee: B.rig.knee ?? 6 };
+	const rig = { ARM: new Set((B.materials[B.rig.arm] || []).map(K)), HIP: new Set((B.materials[B.rig.hip] || []).map(K)), NECK: new Set((B.materials[B.rig.neck] || []).map(K)), knee: B.rig.knee ?? 6, HAND: B.rig.hand ? new Set((B.materials[B.rig.hand] || []).map(K)) : null };
 	const n = Math.round(O.w / cw), res = Array(n).fill(null);
 	for (const f of frames) {
 		if (f >= n) continue;
