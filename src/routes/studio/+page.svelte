@@ -11,10 +11,10 @@
 	import { role } from '$lib/role';
 	import Icon from '$lib/ui/Icon.svelte';
 
-	type Step = { s: string; f: number; d: number; kx?: number; flash?: boolean | number; air?: number };
+	type Step = { s: string; f: number; d: number; kx?: number; flash?: boolean | number; air?: number; guard?: boolean };
 	type Clip = { id: string; name: string; fps: number; loop: boolean; H?: number; raw?: boolean; steps: Step[] };
 	type Sheet = { src: string; fw: number; fh: number; n: number; cols: number };
-	type Entry = { id: string; kind: 'hero' | 'unique' | 'general' | 'pack' | 'reel'; name: string; sub: string; blurb?: string; credit?: string; chips?: [string, string][]; px?: number; ax: number; ay: number; bodyH: number; sheets: Record<string, Sheet>; clips: Clip[] };
+	type Entry = { id: string; kind: 'hero' | 'unique' | 'general' | 'pack' | 'reel'; name: string; sub: string; blurb?: string; credit?: string; chips?: [string, string][]; px?: number; glow?: string; ax: number; ay: number; bodyH: number; sheets: Record<string, Sheet>; clips: Clip[] };
 
 	const GROUPS: [Entry['kind'], string][] = [['hero', 'GoA2 heroes'], ['unique', 'Characters'], ['general', 'General'], ['pack', 'Base packs'], ['reel', 'Whole reels']];
 	const BGS = [['dark', 'Night'], ['light', 'Day'], ['check', 'Checker'], ['grass', 'Grass']] as const;
@@ -153,6 +153,11 @@
 				ctx.save(); ctx.globalAlpha = 0.8 * Math.max(f, 0.25); mirror(); ctx.drawImage(off, ox, oy, sw * s, shh * s); ctx.restore();
 			}
 		}
+		if (cur.guard) { // Defend: a pixel ward in the hero's own colour in front of them, swelling in
+			const k = Math.min(1, (t * c.fps * speed) / cur.d + 0.35), wc = ward(e);
+			const wx = Math.round(e.ax + e.bodyH * 0.12), wy = Math.round(e.ay - e.bodyH * 0.5 - (wc.height - 1) / 2);
+			ctx.save(); ctx.globalAlpha = k; mirror(); ctx.drawImage(wc, ox + wx * s, oy + wy * s, wc.width * s, wc.height * s); ctx.restore();
+		}
 		if (sparks.length) {
 			ctx.save(); mirror();
 			for (let k = sparks.length - 1; k >= 0; k--) {
@@ -168,6 +173,23 @@
 		if (strip && playing) { const b = strip.children[i] as HTMLElement | undefined; if (b && (b.offsetLeft < strip.scrollLeft || b.offsetLeft + b.offsetWidth > strip.scrollLeft + strip.clientWidth)) strip.scrollLeft = b.offsetLeft - 8; }
 		i = i; // refresh the counter / strip highlight
 	}
+
+	// the Defend ward as PIXELS at sprite scale (a crescent shield: rim in the hero's colour, a white inner glint,
+	// a checker-dithered fill) — the same pixel art as the sprite, never a smooth vector shape
+	function wardCanvas(h: number, glow: string) {
+	const R = Math.max(6, Math.round(h * 0.46)), A = Math.max(3, Math.round(R * 0.42)), W = A + 2, Hh = 2 * R + 1;
+	const c = document.createElement('canvas'); c.width = W; c.height = Hh; const x = c.getContext('2d') as CanvasRenderingContext2D;
+	const put = (px: number, py: number, col: string, a: number) => { x.globalAlpha = a; x.fillStyle = col; x.fillRect(px, py, 1, 1); };
+	for (let dy = -R; dy <= R; dy++) {
+		const o = Math.round(A * Math.sqrt(Math.max(0, 1 - (dy / R) ** 2))), y = dy + R;
+		for (let dx = 0; dx < o; dx++) if ((dx + y) % 2 === 0) put(dx, y, glow, 0.35);
+		put(o, y, glow, 1); if (o > 0) put(o - 1, y, glow, 0.8);
+		if (Math.abs(dy) < R * 0.7 && o > 2) put(o - 2, y, '#ffffff', 0.85);
+	}
+	return c;
+}
+	const wards = new Map<string, HTMLCanvasElement>();
+	const ward = (e: Entry) => { let w = wards.get(e.id); if (!w) { w = wardCanvas(e.bodyH, e.glow || '#9fd8ff'); wards.set(e.id, w); } return w; };
 	function burst(e: Entry, p: number) {
 		const x = e.ax + 6, y = e.ay - e.bodyH * 0.7, cols = p > 1 ? ['#ff3030', '#ff7a5a', '#ffffff', '#b81414'] : ['#ffffff', '#ffd9a0', '#ff8a4a'];
 		for (let k = 0; k < 14 * p * p; k++) sparks.push({ x: x + Math.random() * 4, y: y + Math.random() * 6, vx: (-20 - Math.random() * 50) * p, vy: (-30 - Math.random() * 40) * p, life: 0.35 + Math.random() * 0.3, c: cols[k % cols.length] });

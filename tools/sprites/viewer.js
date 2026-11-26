@@ -123,6 +123,11 @@
 				o.globalCompositeOperation = 'source-atop'; o.fillStyle = cur.flash === true ? '#fff4ea' : '#ff2a2a'; o.fillRect(0, 0, CELL, CELL);
 				ctx.save(); ctx.globalAlpha = 0.8 * Math.max(f, 0.25); mirror(); ctx.drawImage(off, ox, oy, CELL * s, CELL * s); ctx.restore();
 			}
+			if (cur.guard) { // Defend: a pixel ward in the hero's own colour in front of them, swelling in
+				const k = Math.min(1, (ui.t * ui.fps) / cur.d + 0.35), wc = wardCanvas(body.h, H.glow || '#9fd8ff');
+				const wx = Math.round(body.cx + body.h * 0.12), wy = Math.round(H.foot - body.h * 0.5 - (wc.height - 1) / 2);
+				ctx.save(); ctx.globalAlpha = k; mirror(); ctx.drawImage(wc, ox + wx * s, oy + wy * s, wc.width * s, wc.height * s); ctx.restore();
+			}
 			if (set === img) {
 				ctx.save(); mirror();
 				drawShots(ox - kx * s - shx, groundY - H.foot * s, s, dt);
@@ -158,6 +163,21 @@
 		ctx.globalAlpha = 1;
 	}
 
+
+	// the Defend ward as PIXELS at sprite scale (a crescent shield: rim in the hero's colour, a white inner glint,
+	// a checker-dithered fill) — the same pixel art as the sprite, never a smooth vector shape
+	function wardCanvas(h, glow) {
+	const R = Math.max(6, Math.round(h * 0.46)), A = Math.max(3, Math.round(R * 0.42)), W = A + 2, Hh = 2 * R + 1;
+	const c = document.createElement('canvas'); c.width = W; c.height = Hh; const x = c.getContext('2d');
+	const put = (px, py, col, a) => { x.globalAlpha = a; x.fillStyle = col; x.fillRect(px, py, 1, 1); };
+	for (let dy = -R; dy <= R; dy++) {
+		const o = Math.round(A * Math.sqrt(Math.max(0, 1 - (dy / R) ** 2))), y = dy + R;
+		for (let dx = 0; dx < o; dx++) if ((dx + y) % 2 === 0) put(dx, y, glow, 0.35);
+		put(o, y, glow, 1); if (o > 0) put(o - 1, y, glow, 0.8);
+		if (Math.abs(dy) < R * 0.7 && o > 2) put(o - 2, y, '#ffffff', 0.85);
+	}
+	return c;
+}
 	const tog = (k) => { ui[k] = !ui[k]; document.querySelectorAll(`[data-t="${k}"]`).forEach((b) => b.setAttribute('aria-pressed', ui[k])); };
 	document.querySelectorAll('[data-t]').forEach((b) => b.addEventListener('click', () => tog(b.dataset.t)));
 	document.querySelectorAll('[data-bg]').forEach((b) => b.addEventListener('click', () => { $('#bg').className = 'bg ' + b.dataset.bg; document.querySelectorAll('[data-bg]').forEach((x) => x.setAttribute('aria-pressed', x === b)); }));

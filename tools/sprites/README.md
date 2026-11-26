@@ -18,6 +18,14 @@ Needs ImageMagick (`convert`, `identify`).
 - `lib/engine.mjs`, `lib/pixels.mjs` — strip building, PNG I/O, patches.
 - `viewer.html` + `viewer.js` — the review page (hero picker, before / after, onion skin, frame strip…), filled in by `build.mjs`.
 
+## The standard process (the user's rule, 2026-11-26 — every character)
+
+1. **Analyse ALL the art first** — every card painting and the hero splash (contact sheet + close-ups), written up as a design brief at the top of `heroes/<id>.mjs`.
+2. Pick the base pack; map its colours to MATERIALS (`palette.mjs`, a highlight probe); write `bases/<pack>/base.mjs`.
+3. Build the **standard set**: Idle · Attack · Defend · Hit · Death (Defeat), and Movement (Run) when the pack has it; Jump is an extra.
+4. **Art style fully consistent** (most important): only recolour / segment / add pixel parts in the pack's own pixel scale — effects too (Arien's water is the pack's slash shapes re-shaded, the Defend ward is drawn as pixels at sprite scale). Never a smooth vector shape or a different resolution.
+5. QA (contact sheets, the studio's player), then the user's sign-off.
+
 ## Rules
 
 Same cell / baseline / facing / animation set / timings for every hero; light from the upper-left; flat 3-tone ramps per material, no anti-aliasing; Hit flashes white, Defeat flashes red; added parts never flicker (≤ 1 px against their landmark between frames). We recolour, segment and add — never redraw the pack's poses.

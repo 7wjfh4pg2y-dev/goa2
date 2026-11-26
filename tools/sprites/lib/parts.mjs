@@ -47,6 +47,57 @@ export const PASSES = {
 		}
 	},
 
+	/**
+	 * Turn a pack's energy effects into WATER (torrent / water-bending). Effect pixels = opaque pixels whose colour is
+	 * no material of the pack. Solid fills (B.fx.fill) become a body of water shaded by depth from its edge (foam rim →
+	 * aqua → deep); everything else (thin bolts / sparks) breaks into spray: most pixels kept as light spray, the rest
+	 * shed one pixel down as a falling droplet. p.colors = {foam, light, mid, deep, spray, drop}.
+	 */
+	torrent(F, B, H, p) {
+		const body = new Set(Object.values(B.materials).flat().map(K)), fill = new Set((B.fx?.fill || []).map(K));
+		const c = Object.fromEntries(Object.entries(p.colors).map(([k, v]) => [k, hex(v)]));
+		const isFx = (x, y) => { const k = F.kAt(x, y); return k >= 0 && !body.has(k); };
+		const isFill = (x, y) => fill.has(F.kAt(x, y));
+		const depth = (x, y) => { for (let r = 1; r <= 3; r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) { if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue; const nx = x + dx, ny = y + dy; if (!F.inCell(nx) || ny < 0 || ny >= F.ch || !isFill(nx, ny)) return r; } return 4; };
+		const drops = [];
+		for (let y = 0; y < F.ch; y++) for (let x = F.x0; x < F.x0 + F.cw; x++) {
+			if (!isFx(x, y)) continue;
+			if (isFill(x, y)) { const d = depth(x, y); F.put(x, y, d === 1 ? c.foam : d === 2 ? c.light : d === 3 ? c.mid : c.deep); continue; }
+			// a bolt inside / against the water is part of the wave
+			let wet = 0; for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) if (isFill(x + dx, y + dy)) wet++;
+			if (wet >= 6) { F.put(x, y, wet >= 14 ? c.mid : c.light); continue; }
+			const h = ((x - F.x0) * 73856093) ^ (y * 19349663) ^ (F.f * 83492791);
+			if ((h >>> 0) % 7 < (p.shed ?? 3)) { F.out.d[F.at(x, y) + 3] = 0; drops.push([x, y + 1 + ((h >>> 3) & 1)]); continue; }
+			const nearFill = isFill(x + 1, y) || isFill(x - 1, y) || isFill(x, y + 1) || isFill(x, y - 1);
+			F.put(x, y, nearFill ? c.foam : (h >>> 5) & 1 ? c.spray : c.light);
+		}
+		for (const [x, y] of drops) if (F.inCell(x) && y < F.ch && !F.isSet(x, y)) F.put(x, y, c.drop);
+	},
+
+	/**
+	 * A spiked FIN CREST on a helmet: p.from = the source colours of the head's top (e.g. the pack's hair); from its
+	 * topmost row, `spikes` fins rise and lean BACK (away from the facing), front fin tallest. p.colors = {hi, mid, dk}.
+	 */
+	crest(F, B, H, p) {
+		if (skipped(F, H, 'gear')) return;
+		const top = new Set(p.from.map(K));
+		let ty = -1, x0 = 1e9, x1 = -1;
+		for (let y = 0; y < F.ch && ty < 0; y++) for (let x = F.x0; x < F.x0 + F.cw; x++) if (top.has(F.kAt(x, y))) { ty = y; x0 = Math.min(x0, x); x1 = Math.max(x1, x); }
+		if (ty < 0) return;
+		for (let y = ty; y < ty + 2; y++) for (let x = F.x0; x < F.x0 + F.cw; x++) if (top.has(F.kAt(x, y))) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); }
+		const c = Object.fromEntries(Object.entries(p.colors).map(([k, v]) => [k, hex(v)]));
+		(p.spikes || [4, 3, 2]).forEach((h, i) => {
+			const bx = x1 - i * (p.gap || 2);
+			if (bx < x0 - 1) return;
+			for (let k = 1; k <= h; k++) {
+				const x = bx - Math.floor(k / 2), y = ty - k;
+				if (!F.isSet(x, y)) F.put(x, y, k === h ? c.hi : c.mid);
+				if (k < h - 1 && !F.isSet(x - 1, y)) F.put(x - 1, y, c.dk);
+			}
+		});
+		F.lm.crest = [x1, ty];
+	},
+
 	/** A third, darker hair tone on edges facing away from the light (open below or to the left), not on highlights. */
 	hairEdge(F, B, H) {
 		const HI = mat(B, 'hair')[0];

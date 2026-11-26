@@ -17,7 +17,8 @@ describe('shared animations', () => {
 	const by = (id: string) => A.find((a: { id: string }) => a.id === id);
 
 	it('reproduces the timings approved on Silverarrow', () => {
-		expect(A.map((a: { id: string }) => a.id)).toEqual(['idle', 'run', 'attack', 'jump', 'hit', 'defeat']);
+		expect(A.map((a: { id: string }) => a.id)).toEqual(['idle', 'run', 'attack', 'defend', 'hit', 'defeat', 'jump']);
+		expect(tag(by('defend'))).toBe('i0x2 h0x2k-1 h0x4k-2 h0x2k-1 i6x1 i7x1 i8x1 i9x3');
 		expect(tag(by('attack'))).toBe('a0x1 a1x1 a2x1 a3x3 a4x1 a5x4');
 		expect(by('attack').loose).toBe(4);
 		expect(tag(by('jump'))).toBe('i0x2 j0x2 j1x3 f0x3 f1x2 i1x3');
@@ -25,7 +26,7 @@ describe('shared animations', () => {
 		expect(tag(by('hit'))).toBe('i0x2 i1x1 h0x2k-3!true h1x2k-2 h2x2k-1 i4x1 i5x1 i6x1 i7x1 i8x1 i9x3');
 		expect(tag(by('defeat'))).toBe('i0x2 i1x1 h0x3k-5!1.7 h1x2k-4 h2x1k-3 d0x1k-2 d1x1k-1 d2x1 d3x1 d4x1 d5x1 d6x1 d7x1 d8x1 d9x7');
 		expect(by('defeat').loop).toBe(false);
-		expect(FPS).toEqual({ idle: 8, run: 12, attack: 9, jump: 9, hit: 10, defeat: 9 });
+		expect(FPS).toEqual({ idle: 8, run: 12, attack: 9, defend: 10, jump: 9, hit: 10, defeat: 9 });
 	});
 
 	it('composes any pack (other frame counts) by the same rules', () => {
@@ -125,6 +126,6 @@ describe('animation studio library (static/anim, written by tools/sprites/studio
 		for (const e of ch) { const ids = e.clips.map((c: { id: string }) => c.id); expect(new Set(ids).size, e.id).toBe(ids.length); }
 	});
 	it('heroes carry the shared animation set', () => {
-		for (const e of lib.entries.filter((x: { kind: string }) => x.kind === 'hero')) expect(e.clips.filter((c: { raw?: boolean }) => !c.raw).map((c: { id: string }) => c.id)).toEqual(['idle', 'run', 'attack', 'jump', 'hit', 'defeat']);
+		for (const e of lib.entries.filter((x: { kind: string }) => x.kind === 'hero')) expect(e.clips.filter((c: { raw?: boolean }) => !c.raw).map((c: { id: string }) => c.id).slice(0, 6)).toEqual(['idle', 'run', 'attack', 'defend', 'hit', 'defeat']);
 	});
 });
