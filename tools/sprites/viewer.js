@@ -17,7 +17,7 @@
 		}
 		({ img, orig, proj } = loaded.get(H.id));
 		body = bodyOf(H.sheets.idle.bbox, H.foot);
-		ANIMS = compose(Object.fromEntries(Object.entries(H.sheets).map(([s, v]) => [s, v.frames])), H.attack, body.h, { attack: H.attack?.name }, H.guard);
+		ANIMS = compose(Object.fromEntries(Object.entries(H.sheets).map(([s, v]) => [s, v.frames])), H.attack, body.h, { attack: H.attack?.name }, H.guard, H.combo);
 		off.width = off.height = H.cell;
 		nock = findNock();
 		$('#htitle').textContent = H.name;

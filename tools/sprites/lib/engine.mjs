@@ -65,6 +65,7 @@ export async function buildHero(heroId, outDir) {
 	}
 	// the pose stage (lib/pose.mjs): new Hit / Death / Defend frames for packs with a rig
 	// Defend's guard pose = the pack's own drawing of the free hand thrust out (base.mjs `guard`); the ward stands at that hand
+	if (B.combo) man.combo = B.combo;
 	if (B.guard && man.sheets[B.guard.sheet]) { man.guard = B.guard; man.sheets[B.guard.sheet].palm = handsOf(B, outs, srcs, B.guard.sheet, B.guard.frames); }
 	const charH = bodyOf(man.sheets.idle.bbox, B.foot).h;
 	for (const [name, g] of Object.entries(buildPoses(B, H, outs, srcs, charH))) {

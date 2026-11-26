@@ -26,6 +26,8 @@ export default {
 	// Defend: Attack1's wind-up = the artist's own pose of the free hand thrust out, sword drawn back (lead-in frame 0,
 	// held on 1–2); the shared Defend plays it with the ward at that hand
 	guard: { sheet: 'attack1', lead: [0], frames: [1, 2] },
+	// an extra clip: the three attacks chained into one combo (the user, 2026-11-26)
+	combo: { name: 'Finisher', sheets: ['attack1', 'attack', 'attack3'] },
 	attack: { holds: [0, 1, 0, 1, 0, 1, 1], release: null },
 	// source colours by material, light → dark
 	materials: {

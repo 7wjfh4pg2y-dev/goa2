@@ -65,6 +65,16 @@ describe('shared animations', () => {
 		expect(Object.keys(POSES)).toEqual(['phit', 'pdeath']);
 	});
 
+	it('chains a pack\'s attacks into a combo clip (an extra, after the standard set)', () => {
+		const C = compose({ idle: 10, run: 8, attack: 7, attack1: 7, attack3: 8, jump: 3, fall: 3, hit: 3, death: 7 }, { holds: [] }, 45, {}, null, { name: 'Finisher', sheets: ['attack1', 'attack', 'attack3'] });
+		expect(C.map((a: { id: string }) => a.id)).toEqual(['idle', 'run', 'attack', 'defend', 'hit', 'defeat', 'combo', 'jump']);
+		const f = C.find((a: { id: string }) => a.id === 'combo');
+		expect(f.name).toBe('Finisher');
+		expect(f.steps.map((x: { s: string }) => x.s).filter((s: string, i: number, a: string[]) => s !== a[i - 1])).toEqual(['idle', 'attack1', 'attack', 'attack3', 'idle']);
+		expect(f.steps.filter((x: { s: string }) => x.s !== 'idle').length).toBe(22);
+		expect(f.steps.at(-2)).toMatchObject({ s: 'attack3', f: 7, d: 5 });
+	});
+
 	it('measures the body from the idle boxes', () => {
 		expect(bodyOf([[35, 31, 66, 66], [35, 33, 66, 66], [35, 32, 66, 66]], 66)).toEqual({ h: 35, cx: 50.5 });
 	});

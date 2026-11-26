@@ -18,7 +18,7 @@ const range = (s, n) => Array.from({ length: n }, (_, f) => ({ s, f, d: 1 }));
  * guard pose {sheet, lead, frames} (Defend); attack = the base pack's {holds, release};
  * charH = the character's standing height in sprite px. Returns the animation list the viewer plays.
  */
-export function compose(frames, attack, charH, names = {}, guard = null) {
+export function compose(frames, attack, charH, names = {}, guard = null, combo = null) {
 	const idleN = frames.idle;
 	const idle = (f, d = 1) => ({ s: 'idle', f: Math.min(f, idleN - 1), d });
 	const out = [];
@@ -72,6 +72,14 @@ export function compose(frames, attack, charH, names = {}, guard = null) {
 				: { ...x, d: i === a.length - 1 ? 7 : 1, kx: -Math.max(0, 2 - i) })
 		]
 	});
+	// a combo (base.mjs `combo`, an extra): the pack's attacks back to back — a beat on each hit's last frame, the
+	// last one held — then back to the stance
+	if (combo && combo.sheets.every((s) => frames[s])) {
+		const steps = [idle(0, 1)];
+		combo.sheets.forEach((s, k) => steps.push(...range(s, frames[s]).map((x, i, a) => ({ ...x, d: i === a.length - 1 ? (k === combo.sheets.length - 1 ? 5 : 2) : 1 }))));
+		steps.push(idle(1, 3));
+		out.push({ id: 'combo', name: combo.name || 'Combo', fps: FPS.attack, loop: true, steps });
+	}
 	// the standard five (+ Movement) first, extras after
 	const j = out.findIndex((a) => a.id === 'jump'); if (j >= 0) out.push(...out.splice(j, 1));
 	return out;
