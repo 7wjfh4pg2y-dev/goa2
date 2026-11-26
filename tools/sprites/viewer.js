@@ -99,10 +99,8 @@
 		const W = cv.width, Ht = cv.height, CELL = H.cell;
 		ctx.clearRect(0, 0, W, Ht); ctx.imageSmoothingEnabled = false;
 		const a = A(), st = a.steps, cur = st[ui.i];
-		// ONE pixel scale for every hero (sized from the tallest), so each keeps its true size and the same pixel size
-		const refH = Math.max(...HEROES.map((h) => bodyOf(h.sheets.idle.bbox, h.foot).h));
-		const vw = refH * 2.65, vh = refH * 1.66 + refH * 0.72;
-		const s = Math.max(1, Math.floor(Math.min(W / (vw * (ui.compare ? 2 : 1)), Ht / vh) * 0.95));
+		// every hero about the same height on screen (× its `size`: humanoid = 1), at the whole-pixel zoom nearest it
+		const s = Math.max(1, Math.round((Math.min(W / (2.65 * (ui.compare ? 2 : 1)), Ht / (1.66 + 0.72)) * 0.95 * (H.size || 1)) / body.h));
 		const groundY = Math.round(Ht * 0.74), up = Math.round(liftAt(a, ui.i, ui.t, ui.fps));
 		if (cur.flash && ui.t < 0.03 && !ui.shook) { const p = cur.flash === true ? 1 : cur.flash; ui.shake = p; ui.shook = true; hitBurst(p); }
 		if (!cur.flash) ui.shook = false;
@@ -126,7 +124,8 @@
 			}
 			if (cur.guard) { // Defend: a pixel ward in the hero's own colour in front of them, swelling in
 				const k = Math.min(1, (ui.t * ui.fps) / cur.d + 0.35), wc = wardCanvas(body.h, H.glow || '#9fd8ff');
-				const wx = Math.round(body.cx + body.h * 0.12), wy = Math.round(H.foot - body.h * 0.5 - (wc.height - 1) / 2);
+				const palm = H.sheets[cur.s]?.palm?.[cur.f]; // posed Defend: in front of the raised palm
+				const wx = palm ? palm[0] : Math.round(body.cx + body.h * 0.12), wy = Math.round((palm ? palm[1] : H.foot - body.h * 0.5) - (wc.height - 1) / 2);
 				ctx.save(); ctx.globalAlpha = k; mirror(); ctx.drawImage(wc, ox + wx * s, oy + wy * s, wc.width * s, wc.height * s); ctx.restore();
 			}
 			if (set === img) {

@@ -20,6 +20,9 @@ export default {
 		death: 'Death.png'
 	},
 	attackName: 'Attack',
+	// the pose stage (lib/pose.mjs): the free front arm is the leather patch right of the belt; the belt (buckle row)
+	// is where the lean starts, the fur collar where the head starts; crouches take rows out 6 above the foot
+	rig: { arm: 'leather', hip: 'buckle', neck: 'collar', knee: 6 },
 	attack: { holds: [0, 1, 0, 1, 0, 1, 1], release: null },
 	// source colours by material, light → dark
 	materials: {

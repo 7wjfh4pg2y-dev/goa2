@@ -35,3 +35,14 @@ Silverarrow (`heroes/silverarrow.mjs`) is the reference: the engine must keep re
 ## Animation studio
 
 `node tools/sprites/studio.mjs [--reels <folder of GIFs>]` rebuilds the GM page **/studio**'s library: `static/anim/library.json` + sheets (every hero built here, the base packs' strips, and CraftPix preview GIFs cut to their stage, background cleared, packed into frame grids). Run it after adding a hero or a pack; without `--reels` the reels already in the library are kept (the GIFs aren't in the repo). The folder is `anim`, not `studio`: a folder and a page of the same name can 404.
+
+## Pose stage (`lib/pose.mjs`)
+A pack with a `rig` in its base.mjs gets NEW frames built from the hero's finished frames, at the pack's own pixel
+scale: `phit` (Hit), `pdeath` (Death, the first frames; the pack's collapse after) and `pdefend` (Defend: the free hand
+raised palm-out, the ward anchored at the palm). A pose = upper-body lean (rows above the belt, 1-px steps), a head
+whip, a crouch (rows out above the knee) and the free arm erased + redrawn at two angles in the pack's own two shades.
+`compose` uses the posed sheets when they exist. Poses live in `POSES` — tune them there, for every rigged pack.
+
+## Size
+Every hero shows at about the same height in the studio / viewer (whole-pixel zoom nearest that height). A hero spec's
+`size` (default 1 = humanoid) scales it: a giant more, a pet less.

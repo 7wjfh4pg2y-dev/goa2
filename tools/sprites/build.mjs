@@ -20,10 +20,10 @@ for (const id of ids) {
 	const rows = Object.keys(man.sheets).map((s) => path.join(dir, s + '.png'));
 	execFileSync('convert', [...rows, '-background', '#1b2521', '-append', '-scale', '400%', '-background', '#1b2521', '-flatten', path.join(dir, 'contact.png')]);
 	heroes.push({
-		id: man.hero, name: man.name, blurb: man.blurb, chips: man.chips, base: B.id, baseName: B.name, cell: man.cell, foot: man.foot, attack: { ...man.attack, name: B.attackName }, glow: man.glow,
-		sheets: Object.fromEntries(Object.entries(man.sheets).map(([s, v]) => [s, { frames: v.frames, bbox: v.bbox }])),
+		id: man.hero, name: man.name, size: man.size, blurb: man.blurb, chips: man.chips, base: B.id, baseName: B.name, cell: man.cell, foot: man.foot, attack: { ...man.attack, name: B.attackName }, glow: man.glow,
+		sheets: Object.fromEntries(Object.entries(man.sheets).map(([s, v]) => [s, { frames: v.frames, bbox: v.bbox, palm: v.palm }])),
 		art: Object.fromEntries(Object.keys(man.sheets).map((s) => [s, uri(path.join(dir, s + '.png'))])),
-		orig: Object.fromEntries(Object.keys(man.sheets).map((s) => [s, uri(path.join(bdir, s + '.png'))])),
+		orig: Object.fromEntries(Object.entries(man.sheets).map(([s, v]) => [s, uri(path.join(v.gen ? dir : bdir, s + '.png'))])), // posed sheets have no pack original
 		proj: Object.fromEntries(Object.keys(man.projectiles).map((p) => [p, uri(path.join(dir, p + '.png'))]))
 	});
 	console.log(`${id}: ${Object.entries(man.sheets).map(([s, v]) => `${s} ${v.frames}`).join(' · ')}`);

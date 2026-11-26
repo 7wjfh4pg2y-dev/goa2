@@ -45,6 +45,8 @@ function boxes(img, fw, n) {
 	}
 	return out;
 }
+// where the Defend ward stands: in front of the raised palm (posed frames), else the renderer's default
+const wardAt = (man, st) => { const p = man.sheets[st.s]?.palm?.[st.f]; return p ? { wx: p[0], wy: p[1] } : {}; };
 const median = (a) => { const s = [...a].sort((x, y) => x - y); return s[s.length >> 1]; };
 
 const entries = [];
@@ -58,10 +60,10 @@ for (const id of fs.readdirSync(path.join(ROOT, 'heroes')).filter((f) => f.endsW
 	const anims = compose(Object.fromEntries(Object.entries(man.sheets).map(([s, v]) => [s, v.frames])), man.attack, body.h, { attack: B.attackName });
 	const sheets = {};
 	for (const [s, v] of Object.entries(man.sheets)) { squeeze(path.join(dir, s + '.png')); sheets[s] = { src: rel(path.join(dir, s + '.png')), fw: man.cell, fh: man.cell, n: v.frames, cols: v.frames }; }
-	const clips = anims.map((a) => ({ id: a.id, name: a.name, fps: a.fps, loop: a.loop, H: a.H || 0, steps: a.steps.map((st) => ({ s: st.s, f: st.f, d: st.d, ...(st.kx ? { kx: st.kx } : {}), ...(st.flash ? { flash: st.flash } : {}), ...(st.air ? { air: 1 } : {}), ...(st.guard ? { guard: true } : {}) })) }));
+	const clips = anims.map((a) => ({ id: a.id, name: a.name, fps: a.fps, loop: a.loop, H: a.H || 0, steps: a.steps.map((st) => ({ s: st.s, f: st.f, d: st.d, ...(st.kx ? { kx: st.kx } : {}), ...(st.flash ? { flash: st.flash } : {}), ...(st.air ? { air: 1 } : {}), ...(st.guard ? { guard: true, ...wardAt(man, st) } : {}) })) }));
 	// and the raw strips, frame by frame
-	for (const [s, v] of Object.entries(man.sheets)) clips.push({ id: 'raw-' + s, name: pretty(s), raw: true, fps: 10, loop: true, steps: Array.from({ length: v.frames }, (_, f) => ({ s, f, d: 1 })) });
-	entries.push({ id: 'hero-' + id, kind: 'hero', glow: man.glow, name: man.name, sub: `GoA2 hero · base ${B.name}`, blurb: man.blurb, chips: man.chips, base: B.id, ax: body.cx, ay: man.foot, bodyH: body.h, sheets, clips });
+	for (const [s, v] of Object.entries(man.sheets)) if (!v.gen) clips.push({ id: 'raw-' + s, name: pretty(s), raw: true, fps: 10, loop: true, steps: Array.from({ length: v.frames }, (_, f) => ({ s, f, d: 1 })) });
+	entries.push({ id: 'hero-' + id, kind: 'hero', glow: man.glow, name: man.name, sub: `GoA2 hero · base ${B.name}`, blurb: man.blurb, chips: man.chips, base: B.id, ax: body.cx, ay: man.foot, bodyH: body.h, size: man.size, sheets, clips });
 	console.log(`hero ${id}: ${clips.length} clips`);
 }
 

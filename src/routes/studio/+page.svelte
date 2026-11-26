@@ -11,10 +11,10 @@
 	import { role } from '$lib/role';
 	import Icon from '$lib/ui/Icon.svelte';
 
-	type Step = { s: string; f: number; d: number; kx?: number; flash?: boolean | number; air?: number; guard?: boolean };
+	type Step = { s: string; f: number; d: number; kx?: number; flash?: boolean | number; air?: number; guard?: boolean; wx?: number; wy?: number };
 	type Clip = { id: string; name: string; fps: number; loop: boolean; H?: number; raw?: boolean; steps: Step[] };
 	type Sheet = { src: string; fw: number; fh: number; n: number; cols: number };
-	type Entry = { id: string; kind: 'hero' | 'unique' | 'general' | 'pack' | 'reel'; name: string; sub: string; blurb?: string; credit?: string; chips?: [string, string][]; px?: number; glow?: string; ax: number; ay: number; bodyH: number; sheets: Record<string, Sheet>; clips: Clip[] };
+	type Entry = { id: string; kind: 'hero' | 'unique' | 'general' | 'pack' | 'reel'; name: string; sub: string; blurb?: string; credit?: string; chips?: [string, string][]; px?: number; glow?: string; ax: number; ay: number; bodyH: number; size?: number; sheets: Record<string, Sheet>; clips: Clip[] };
 
 	const GROUPS: [Entry['kind'], string][] = [['hero', 'GoA2 heroes'], ['unique', 'Characters'], ['general', 'General'], ['pack', 'Base packs'], ['reel', 'Whole reels']];
 	const BGS = [['dark', 'Night'], ['light', 'Day'], ['check', 'Checker'], ['grass', 'Grass']] as const;
@@ -119,11 +119,12 @@
 		if (!sh || !im) return;
 		const reel = e.kind === 'reel' || e.kind === 'unique' || e.kind === 'general', px = e.px || 1;
 		// the view: a character-sized box for heroes / packs (every one the same height on screen), the frame for reels
-		// heroes share ONE pixel scale (from the tallest hero and highest jump): true relative sizes, same pixel size
-		const hs = e.kind === 'hero' ? entries.filter((x) => x.kind === 'hero') : [e];
-		const bh = Math.max(...hs.map((x) => x.bodyH)), jh = Math.max(0, ...hs.flatMap((x) => x.clips.map((y) => y.H || 0)));
-		const vw = reel ? sh.fw + 8 : bh * 2.7, vh = reel ? sh.fh + 8 : bh * 1.75 + jh;
-		const fit = Math.max(1, Math.floor(Math.min(W / vw, Ht / vh) * 0.94));
+		// heroes: every hero stands about the same height (× its `size`: humanoid = 1, a giant more, a pet less) — each at
+		// the whole-pixel zoom nearest that height, so pixels stay square and every hero reads at its true build
+		const vw = reel ? sh.fw + 8 : e.bodyH * 2.7, vh = reel ? sh.fh + 8 : e.bodyH * 1.75 + Math.max(0, ...e.clips.map((x) => x.H || 0));
+		const fit = e.kind === 'hero'
+			? Math.max(1, Math.round((Math.min(W / 2.7, Ht / (1.75 + 0.72)) * 0.94 * (e.size || 1)) / e.bodyH))
+			: Math.max(1, Math.floor(Math.min(W / vw, Ht / vh) * 0.94));
 		const s = zoom ? Math.max(0.5, (zoom * dpr) / px) : fit;
 		const groundY = reel ? Math.round(Ht / 2 + (sh.fh / 2 - (sh.fh - e.ay)) * s) : Math.round(Ht * 0.74);
 		const up = Math.round(liftAt(c, i, t, c.fps * speed));
@@ -158,7 +159,8 @@
 		}
 		if (cur.guard) { // Defend: a pixel ward in the hero's own colour in front of them, swelling in
 			const k = Math.min(1, (t * c.fps * speed) / cur.d + 0.35), wc = ward(e);
-			const wx = Math.round(e.ax + e.bodyH * 0.12), wy = Math.round(e.ay - e.bodyH * 0.5 - (wc.height - 1) / 2);
+			// posed Defend: in front of the raised palm (wx / wy from the library), else just in front of the body
+			const wx = cur.wx ?? Math.round(e.ax + e.bodyH * 0.12), wy = Math.round((cur.wy ?? e.ay - e.bodyH * 0.5) - (wc.height - 1) / 2);
 			ctx.save(); ctx.globalAlpha = k; mirror(); ctx.drawImage(wc, ox + wx * s, oy + wy * s, wc.width * s, wc.height * s); ctx.restore();
 		}
 		if (sparks.length) {

@@ -5,6 +5,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { loadPng, savePng, blank, frameOf, K, key, hex } from './pixels.mjs';
 import { PASSES } from './parts.mjs';
+import { buildPoses } from './pose.mjs';
+import { bodyOf } from './anims.mjs';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -52,12 +54,20 @@ export function buildProjectile(img, H) {
 export async function buildHero(heroId, outDir) {
 	const H = await loadHero(heroId), B = await loadBase(H.base);
 	fs.mkdirSync(outDir, { recursive: true });
-	const man = { hero: H.id, name: H.name, base: B.id, cell: B.cell, foot: B.foot, attack: B.attack, sheets: {}, projectiles: {}, chips: H.chips, blurb: H.blurb, glow: H.projectile?.glow };
+	const man = { hero: H.id, name: H.name, base: B.id, cell: B.cell, foot: B.foot, attack: B.attack, sheets: {}, projectiles: {}, chips: H.chips, blurb: H.blurb, glow: H.projectile?.glow, size: H.size || 1 };
+	const outs = {}, srcs = {};
 	for (const [sheet, file] of Object.entries(B.sheets)) {
 		const src = clearBg(loadPng(path.join(ROOT, 'bases', B.id, file)), B);
 		const r = buildStrip(src, B, H, sheet);
 		savePng(r.img, path.join(outDir, sheet + '.png'));
 		man.sheets[sheet] = { frames: r.frames, bbox: r.bbox, lm: r.lm };
+		outs[sheet] = r.img; srcs[sheet] = src;
+	}
+	// the pose stage (lib/pose.mjs): new Hit / Death / Defend frames for packs with a rig
+	const charH = bodyOf(man.sheets.idle.bbox, B.foot).h;
+	for (const [name, g] of Object.entries(buildPoses(B, H, outs, srcs, charH))) {
+		savePng(g.img, path.join(outDir, name + '.png'));
+		man.sheets[name] = { frames: g.frames, bbox: [], palm: g.palm, gen: true };
 	}
 	for (const [id, file] of Object.entries(B.projectiles || {})) {
 		const img = buildProjectile(clearBg(loadPng(path.join(ROOT, 'bases', B.id, file)), B), H);
