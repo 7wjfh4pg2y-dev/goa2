@@ -63,7 +63,7 @@ for (const id of fs.readdirSync(path.join(ROOT, 'heroes')).filter((f) => f.endsW
 	const clips = anims.map((a) => ({ id: a.id, name: a.name, fps: a.fps, loop: a.loop, H: a.H || 0, steps: a.steps.map((st) => ({ s: st.s, f: st.f, d: st.d, ...(st.kx ? { kx: st.kx } : {}), ...(st.flash ? { flash: st.flash } : {}), ...(st.air ? { air: 1 } : {}), ...(st.guard ? { guard: true, ...wardAt(man, st) } : {}) })) }));
 	// and the raw strips, frame by frame
 	for (const [s, v] of Object.entries(man.sheets)) if (!v.gen) clips.push({ id: 'raw-' + s, name: pretty(s), raw: true, fps: 10, loop: true, steps: Array.from({ length: v.frames }, (_, f) => ({ s, f, d: 1 })) });
-	entries.push({ id: 'hero-' + id, kind: 'hero', glow: man.glow, name: man.name, sub: `GoA2 hero · base ${B.name}`, blurb: man.blurb, chips: man.chips, base: B.id, ax: body.cx, ay: man.foot, bodyH: body.h, size: man.size, sheets, clips });
+	entries.push({ id: 'hero-' + id, kind: 'hero', glow: man.glow, name: man.name, sub: `GoA2 hero · base ${B.name}`, blurb: man.blurb, chips: man.chips, base: B.id, ax: body.cx, ay: man.foot, bodyH: body.h, scale: man.scale, sheets, clips });
 	console.log(`hero ${id}: ${clips.length} clips`);
 }
 

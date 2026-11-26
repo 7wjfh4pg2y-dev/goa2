@@ -45,6 +45,9 @@ NOTHING is drawn by code: no generated strokes or limbs (a redrawn arm was tried
   Attack1's wind-up, free hand thrust out); the ward stands at that hand (`handsOf` → the sheet's `palm`).
 - A new limb position must come from a pack drawing (this pack, or a library character of the same scale and style).
 
-## Size
-Every hero shows at about the same height in the studio / viewer (whole-pixel zoom nearest that height). A hero spec's
-`size` (default 1 = humanoid) scales it: a giant more, a pet less.
+## Scale
+Body parts are RELATIVE: every hero is shown at one shared pixel scale, so heads, arms and torsos match from hero to
+hero and true heights show (Arien, 50 px with his crest, stands taller than Silverarrow, 35 px, with the same-size
+head and arms). Check a new pack against the others at the same scale (torso width at the belt, face, arm thickness).
+A pack drawn at another scale gets a whole-number `scale` in its base.mjs (e.g. 2 for a pack drawn at half size) —
+never a fractional one (pixels must stay square and even).

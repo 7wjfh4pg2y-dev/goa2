@@ -99,8 +99,10 @@
 		const W = cv.width, Ht = cv.height, CELL = H.cell;
 		ctx.clearRect(0, 0, W, Ht); ctx.imageSmoothingEnabled = false;
 		const a = A(), st = a.steps, cur = st[ui.i];
-		// every hero about the same height on screen (× its `size`: humanoid = 1), at the whole-pixel zoom nearest it
-		const s = Math.max(1, Math.round((Math.min(W / (2.65 * (ui.compare ? 2 : 1)), Ht / (1.66 + 0.72)) * 0.95 * (H.size || 1)) / body.h));
+		// ONE pixel scale for every hero (sized from the tallest) so heads, arms and bodies match; a pack drawn at another
+		// scale carries a whole-number `scale` (base.mjs)
+		const refH = Math.max(...HEROES.map((h) => bodyOf(h.sheets.idle.bbox, h.foot).h * (h.scale || 1)));
+		const s = Math.max(1, Math.floor(Math.min(W / (refH * 2.65 * (ui.compare ? 2 : 1)), Ht / (refH * (1.66 + 0.72))) * 0.95)) * (H.scale || 1);
 		const groundY = Math.round(Ht * 0.74), up = Math.round(liftAt(a, ui.i, ui.t, ui.fps));
 		if (cur.flash && ui.t < 0.03 && !ui.shook) { const p = cur.flash === true ? 1 : cur.flash; ui.shake = p; ui.shook = true; hitBurst(p); }
 		if (!cur.flash) ui.shook = false;
