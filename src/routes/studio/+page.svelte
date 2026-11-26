@@ -10,6 +10,7 @@
 	import { goBack } from '$lib/nav';
 	import { role } from '$lib/role';
 	import Icon from '$lib/ui/Icon.svelte';
+	import { loadAnim, saveAnim, ANIM_SQL } from '$lib/animstore';
 
 	type Step = { s: string; f: number; d: number; off?: boolean; kx?: number; flash?: boolean | number; air?: number; guard?: boolean; wx?: number; wy?: number };
 	type Clip = { id: string; name: string; fps: number; loop: boolean; H?: number; raw?: boolean; steps: Step[] };
@@ -40,6 +41,22 @@
 	// longer / shorter. Kept per browser in localStorage (`goa2-studio-edit:<entry>:<clip>`), laid over the library's
 	// clip; Reset drops them, Copy steps hands the edited list over (paste it to Claude to make it the real one).
 	let editing = false, edited = new Set<string>(), copied = false, dragFrom = -1, dragOver = -1;
+	// shared with every browser through Supabase (animstore); `cloud` = where edits are kept
+	let shared: Record<string, unknown> = {}, cloud: 'loading' | 'ready' | 'missing' | 'error' = 'loading', saveNote = '', sqlCopied = false;
+	const timers = new Map<string, ReturnType<typeof setTimeout>>();
+	function pushEdit(k: string, steps: Step[] | null) {
+		if (steps) shared[k] = steps; else delete shared[k];
+		if (cloud !== 'ready') return;
+		clearTimeout(timers.get(k));
+		saveNote = 'Saving…';
+		timers.set(k, setTimeout(async () => { const err = await saveAnim(k, steps); saveNote = err ? 'Not saved · ' + err : 'Saved for everyone'; }, 600));
+	}
+	const editOf = (e: Entry, c: Clip): Step[] | null => {
+		const v = shared[ekey(e, c)];
+		if (Array.isArray(v) && v.length) return v as Step[];
+		try { const l = JSON.parse(P(ekey(e, c)) || 'null'); if (Array.isArray(l) && l.length) return l; } catch { /* ignore */ }
+		return null;
+	};
 	const ekey = (e: Entry, c: Clip) => `edit:${e.id}:${c.id}`;
 	const clean = (st: Step[]) => st.map((x) => ({ ...x }));
 	const P = (k: string) => { try { return localStorage.getItem('goa2-studio-' + k); } catch { return null; } };
@@ -55,6 +72,7 @@
 			entries = (await r.json()).entries;
 		} catch { failed = true; return; }
 		editing = P('editing') === '1';
+		const got = await loadAnim('edit:'); cloud = got.status; shared = got.rows;
 		const want = new URLSearchParams(location.search).get('e') || P('entry');
 		bg = (P('bg') as typeof bg) || 'dark';
 		await choose(entries.find((e) => e.id === want) ?? entries[0], new URLSearchParams(location.search).get('c') || P('clip'));
@@ -67,7 +85,7 @@
 	async function choose(e: Entry | undefined, clipId?: string | null) {
 		if (!e) return;
 		entry = e; ready = false; S('entry', e.id);
-		edited = new Set(e.clips.filter((c) => P(ekey(e, c))).map((c) => c.id));
+		edited = new Set(e.clips.filter((c) => editOf(e, c)).map((c) => c.id));
 		const got = await Promise.all(Object.entries(e.sheets).map(async ([k, s]) => [k, await load(s.src).catch(() => null)] as const));
 		if (entry !== e) return;
 		imgs = Object.fromEntries(got.filter(([, v]) => v)) as Record<string, HTMLImageElement>;
@@ -75,8 +93,7 @@
 		pickClip(e.clips.find((c) => c.id === clipId) ?? e.clips[0]);
 	}
 	function pickClip(c: Clip) {
-		let steps = clean(c.steps);
-		if (entry) try { const v = JSON.parse(P(ekey(entry, c)) || 'null'); if (Array.isArray(v) && v.length) steps = v; } catch { /* ignore */ }
+		const steps = (entry && editOf(entry, c)) || clean(c.steps);
 		clip = { ...c, steps }; i = 0; t = 0; done = false; playing = true; sparks = []; shake = 0; S('clip', c.id);
 		requestAnimationFrame(drawStrip);
 	}
@@ -93,8 +110,8 @@
 		clip = { ...clip, steps };
 		i = Math.max(0, Math.min(steps.length - 1, sel)); t = 0; done = false;
 		const o = orig(), k = ekey(entry, clip);
-		if (o && JSON.stringify(clean(o.steps)) === JSON.stringify(steps)) { try { localStorage.removeItem('goa2-studio-' + k); } catch { /* ignore */ } edited.delete(clip.id); }
-		else { S(k, JSON.stringify(steps)); edited.add(clip.id); }
+		if (o && JSON.stringify(clean(o.steps)) === JSON.stringify(steps)) { try { localStorage.removeItem('goa2-studio-' + k); } catch { /* ignore */ } edited.delete(clip.id); pushEdit(k, null); }
+		else { S(k, JSON.stringify(steps)); edited.add(clip.id); pushEdit(k, steps); }
 		edited = edited;
 		requestAnimationFrame(drawStrip);
 	}
@@ -375,6 +392,8 @@
 							<div class="edbar">
 								<span class="et">Editing <b>{clip.name}</b> · {onCount(clip)} of {clip.steps.length} frames on{edited.has(clip.id) ? ' · edited' : ''}</span>
 								<span class="ek">Drag to reorder · E on/off · D duplicate · Del delete · [ ] move · − + hold</span>
+								<span class="cl" class:warn={cloud !== 'ready'} title={cloud === 'ready' ? 'Edits are shared with every browser' : 'Edits stay in this browser until the table is set up'}>{cloud === 'ready' ? saveNote || 'Shared with everyone' : cloud === 'loading' ? '…' : 'This browser only'}</span>
+								{#if cloud === 'missing'}<button class="sg" on:click={async () => { try { await navigator.clipboard.writeText(ANIM_SQL); sqlCopied = true; } catch { /* ignore */ } }} title="Run it once in the Supabase SQL editor to share edits">{sqlCopied ? 'SQL copied' : 'Copy SQL'}</button>{/if}
 								<button class="sg" on:click={copySteps} title="Copy the edited steps (JSON) — paste them to Claude to keep them">{copied ? 'Copied' : 'Copy steps'}</button>
 								<button class="sg rs" disabled={!edited.has(clip.id)} on:click={ed.reset} title="Back to the library's version">Reset</button>
 							</div>
@@ -487,6 +506,8 @@
 	.edbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 6px 10px; border: 1px solid rgba(201, 162, 90, 0.4); border-radius: 8px; background: rgba(201, 162, 90, 0.07); font-size: 13px; }
 	.edbar .et b { color: var(--brass-hi, #e7c983); font-weight: 400; }
 	.edbar .ek { color: var(--muted, #9fb0c8); margin-right: auto; }
+	.edbar .cl { font-size: 12px; color: #7fd69a; }
+	.edbar .cl.warn { color: #e7b46a; }
 	.edbar .sg:disabled { opacity: 0.4; cursor: default; }
 	.cb.ed::after { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--brass-hi, #e7c983); align-self: center; }
 	.blurb { margin: 0; font-size: 14px; color: var(--muted, #9fb0c8); }
