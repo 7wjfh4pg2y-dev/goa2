@@ -72,7 +72,8 @@ describe('shared animations', () => {
 		expect(f.name).toBe('Finisher');
 		expect(f.steps.map((x: { s: string }) => x.s).filter((s: string, i: number, a: string[]) => s !== a[i - 1])).toEqual(['idle', 'attack1', 'attack', 'attack3', 'idle']);
 		expect(f.steps.filter((x: { s: string }) => x.s !== 'idle').length).toBe(22);
-		expect(f.steps.at(-2)).toMatchObject({ s: 'attack3', f: 7, d: 5 });
+		expect(f.steps.at(-2)).toMatchObject({ s: 'attack3', f: 7, d: 9 });
+		expect(f.steps.slice(1, -2).every((x: { d: number }) => x.d === 1)).toBe(true); // no beat between the hits
 	});
 
 	it('measures the body from the idle boxes', () => {

@@ -72,11 +72,11 @@ export function compose(frames, attack, charH, names = {}, guard = null, combo =
 				: { ...x, d: i === a.length - 1 ? 7 : 1, kx: -Math.max(0, 2 - i) })
 		]
 	});
-	// a combo (base.mjs `combo`, an extra): the pack's attacks back to back — a beat on each hit's last frame, the
-	// last one held — then back to the stance
+	// a combo (base.mjs `combo`, an extra): the pack's attacks flowing straight into each other (no beat between
+	// hits), the last frame of the last one lingered on (9 frames) — then back to the stance
 	if (combo && combo.sheets.every((s) => frames[s])) {
 		const steps = [idle(0, 1)];
-		combo.sheets.forEach((s, k) => steps.push(...range(s, frames[s]).map((x, i, a) => ({ ...x, d: i === a.length - 1 ? (k === combo.sheets.length - 1 ? 5 : 2) : 1 }))));
+		combo.sheets.forEach((s, k) => steps.push(...range(s, frames[s]).map((x, i, a) => ({ ...x, d: i === a.length - 1 && k === combo.sheets.length - 1 ? 9 : 1 }))));
 		steps.push(idle(1, 3));
 		out.push({ id: 'combo', name: combo.name || 'Combo', fps: FPS.attack, loop: true, steps });
 	}
