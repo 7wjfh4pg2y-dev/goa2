@@ -123,9 +123,9 @@ export const KIT = {
 		const br = all.filter((b) => b !== axeHand || dAx(b) > (p.clear ?? 14));
 		const rig = { S };
 		if (br.length) {
-			const last = F.strip.handAt, d = (c) => Math.hypot(c.c[0] - last[0], c.c[1] - last[1]);
+			const last = F.strip.handAt && [F.strip.handAt[0] + F.x0, F.strip.handAt[1]], d = (c) => Math.hypot(c.c[0] - last[0], c.c[1] - last[1]);
 			const b = br.reduce((a, c) => ((last ? d(c) < d(a) : c.c[0] < a.c[0]) ? c : a));
-			if (!last || d(b) <= (p.jump ?? 16)) {
+			if (!last || d(b) <= (p.jump ?? 40)) {
 				const [mx, my] = b.c; let sxx = 0, syy = 0, sxy = 0;
 				for (const [x, y] of b.px) { sxx += (x - mx) ** 2; syy += (y - my) ** 2; sxy += (x - mx) * (y - my); }
 				const th = 0.5 * Math.atan2(2 * sxy, sxx - syy), ux = Math.cos(th), uy = Math.sin(th);
@@ -135,7 +135,7 @@ export const KIT = {
 				const dl = Math.hypot(e2[0] - e1[0], e2[1] - e1[1]) || 1, dh = [(e2[0] - e1[0]) / dl, (e2[1] - e1[1]) / dl];
 				rig.elbow = e1; rig.hand = [e2[0] + dh[0] * p.reach, e2[1] + dh[1] * p.reach];
 				rig.a = Math.atan2(dh[1], dh[0]); rig.u = Math.atan2(e1[1] - S[1], e1[0] - S[0]);
-				F.strip.handAt = b.c;
+				F.strip.handAt = [b.c[0] - F.x0, b.c[1]];
 			}
 		}
 		if (F.anim === 'idle' && F.f === 0 && rig.hand) H._rig = { a: rig.a, u: rig.u };
@@ -150,10 +150,13 @@ export const KIT = {
 	shoulderplate(F, B, H, p) {
 		if (skipped(F, H, 'gear')) return;
 		const rig = F.lm.arm; if (!rig) return;
-		const turn = rig.u != null && H._rig ? rig.u - H._rig.u : 0;
+		let turn = rig.u != null && H._rig ? rig.u - H._rig.u : 0;
+		turn = Math.atan2(Math.sin(turn), Math.cos(turn)) * (p.follow ?? 1); // a pauldron rides the shoulder CAP: it turns with the arm, but only so far
+		const lim = (p.max ?? 180) * Math.PI / 180; turn = Math.max(-lim, Math.min(lim, turn));
 		const P = part(p.part), AX = F.masks.axe;
-		const done = place(F, P, p.pin, [Math.round(rig.S[0]), Math.round(rig.S[1])], turn * (p.follow ?? 1), false, null, false, (x, y) => AX?.has(F.q(x, y)));
+		const done = place(F, P, p.pin, [Math.round(rig.S[0]), Math.round(rig.S[1])], turn, false, null, false, (x, y) => AX?.has(F.q(x, y)));
 		F.masks.plate = new Set(done.map(([x, y]) => F.q(x, y)));
+		F.lm.audit = { ...(F.lm.audit || {}), plate: Math.round(turn * 180 / Math.PI) };
 	},
 
 	/**
@@ -184,8 +187,23 @@ export const KIT = {
 		}
 		if (!best || best.n < T.length * (p.min ?? 0.3)) return;
 		const P = part(p.part), AX = F.masks.axe;
+		// the pack's own hair (the old topknot) goes, with outline that only bordered it: the part is the whole new head
+		if (p.clearHair && F.masks.hair) {
+			const OUTK = mat(B, 'outline'), isHair = (x, y) => F.masks.hair.has(F.q(x, y));
+			for (const q of F.masks.hair) {
+				const x = q % F.w, y = Math.floor(q / F.w);
+				F.out.d[F.at(x, y) + 3] = 0;
+				for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+					const nx = x + dx, ny = y + dy; if (!F.inCell(nx) || !OUTK.has(F.kAt(nx, ny))) continue;
+					let other = false;
+					for (let ey = -1; ey <= 1 && !other; ey++) for (let ex = -1; ex <= 1 && !other; ex++) { const k = F.kAt(nx + ex, ny + ey); if (k >= 0 && !OUTK.has(k) && !isHair(nx + ex, ny + ey)) other = true; }
+					if (!other) F.out.d[F.at(nx, ny) + 3] = 0;
+				}
+			}
+		}
 		const done = place(F, P, [cx - p.origin[0], cy - p.origin[1]], [best.x, best.y], best.a, false, null, false, (x, y) => AX?.has(F.q(x, y)));
 		for (const [x, y] of done) { const i = F.at(x, y); if (F.out.d[i] === 255 && F.out.d[i + 1] === 0 && F.out.d[i + 2] === 255) F.out.d[i + 3] = 0; }
+		F.lm.audit = { ...(F.lm.audit || {}), head: +(best.n / T.length).toFixed(2), headTurn: Math.round(best.a * 180 / Math.PI) };
 		(F.lm.follow ||= {})[p.part] = { x: best.x - F.x0, y: best.y, deg: Math.round(best.a * 180 / Math.PI), fit: +(best.n / T.length).toFixed(2) };
 	},
 
@@ -215,6 +233,7 @@ export const KIT = {
 		const done = place(F, P, p.anchor, [bx, by], ang, false, null, false, fist);
 		F.masks.axe = new Set(done.map(([x, y]) => F.q(x, y)));
 		F.lm.axe = { base: [fx, fy], dir: [Math.cos(ang), Math.sin(ang)] };
+		F.lm.audit = { ...(F.lm.audit || {}), axe: 'regrip' };
 	},
 
 	/**
@@ -255,6 +274,7 @@ export const KIT = {
 		const R = p.ramp.map(hex), lum = (x, y) => { const i = F.at(x, y); return 0.3 * F.out.d[i] + 0.59 * F.out.d[i + 1] + 0.11 * F.out.d[i + 2]; };
 		const xy = (q) => [q % F.w, Math.floor(q / F.w)];
 		for (const q of C) { const [x, y] = xy(q), L = lum(x, y); F.put(x, y, R[L > 170 ? 0 : L > 140 ? 1 : L > 110 ? 2 : L > 85 ? 3 : 4]); }
+		F.lm.audit = { ...(F.lm.audit || {}), chest: C.size };
 		const has = (x, y) => C.has(F.q(x, y));
 		// fur collar: the top pixel of each column
 		const FUR = p.collar.map(hex);
@@ -320,6 +340,7 @@ export const KIT = {
 			const x0 = Math.min(...px.map((v) => v[0])) - 3, x1 = Math.max(...px.map((v) => v[0])) + 4;
 			for (let y = bot + 1; y <= bot + 3; y++) for (let x = x0; x <= x1; x++) if (F.inCell(x) && F.isSet(x, y) && !isO(x, y)) F.put(x, y, SOLE[hh(x, y) % 3 ? 0 : 1]);
 		}
+		F.lm.audit = { ...(F.lm.audit || {}), boots: feet.length };
 		const xy = (q) => [q % F.w, Math.floor(q / F.w)], inL = (x, y) => LEG.has(F.q(x, y));
 		const tone = (x, y, base) => { const n = hh(x, y); let k = base; if (n < 26) k--; else if (n > 232) k++; return FUR[Math.max(0, Math.min(3, k))]; };
 		// paint: the shin's own pixels and the new bulk (only over empty space or outline: never over the kilt)
@@ -388,6 +409,21 @@ export const KIT = {
 		if (!near.length) return;
 		const hc = hd.c, nc = cen(near);
 		let ux = hc[0] - nc[0], uy = hc[1] - nc[1]; const m = Math.hypot(ux, uy) || 1; ux /= m; uy /= m;
+		// the head turns along the HAFT (the shaft patch nearest it, its long axis by PCA), so the handle runs straight
+		// into the socket instead of bending where the head's own guess differs
+		const pca = (px) => { const mx = px.reduce((a, v) => a + v[0], 0) / px.length, my = px.reduce((a, v) => a + v[1], 0) / px.length; let sxx = 0, syy = 0, sxy = 0; for (const [x, y] of px) { sxx += (x - mx) ** 2; syy += (y - my) ** 2; sxy += (x - mx) * (y - my); } const th = 0.5 * Math.atan2(2 * sxy, sxx - syy); return [mx, my, Math.cos(th), Math.sin(th)]; };
+		let sb = null, sd = p.shaftNear ?? 24;
+		for (const b of F.lm.shafts || []) {
+			if (b.px.length < 6) continue;
+			let d = 1e9; for (const [x, y] of b.px) for (const [hx, hy] of hd.px) d = Math.min(d, Math.abs(x - hx) + Math.abs(y - hy));
+			const [mx, my, vx, vy] = pca(b.px), off = Math.abs((hc[0] - mx) * vy - (hc[1] - my) * vx); // the head must sit on the haft's line
+			if (d <= sd && off <= (p.onLine ?? 6)) { sd = d; sb = b; }
+		}
+		if (sb) {
+			let [mx, my, vx, vy] = pca(sb.px);
+			if (vx * (hc[0] - mx) + vy * (hc[1] - my) < 0) { vx = -vx; vy = -vy; }
+			ux = vx; uy = vy;
+		}
 		// erase the old head (and its outline) from the output
 		const old = new Set(), edge = [...hd.px];
 		for (const [x, y] of hd.px) for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const nx = x + dx, ny = y + dy; const k = F.kAt(nx, ny); if (F.inCell(nx) && (k === 0x020203 || HEAD.has(k) || k === 0xfff1c0)) old.add(F.q(nx, ny)), edge.push([nx, ny]); }
@@ -403,6 +439,7 @@ export const KIT = {
 		const keep = (px, py) => ((px - p.anchor[0]) * ax + (py - p.anchor[1]) * ay) / am >= -(p.stub ?? 2);
 		const done = place(F, P, p.anchor, [base[0] - ux * (p.back ?? 0), base[1] - uy * (p.back ?? 0)], ang, flip, keep);
 		F.lm.axe = { base, dir: [ux, uy] };
+		F.lm.audit = { ...(F.lm.audit || {}), axe: sb ? 'haft' : 'guess' };
 		F.masks.axe = new Set(done.map(([x, y]) => F.q(x, y)));
 	},
 
@@ -412,10 +449,20 @@ export const KIT = {
 	 */
 	shield(F, B, H, p) {
 		const P = part(p.part), rig = F.lm.arm, AX = F.masks.axe, skip = (x, y) => AX?.has(F.q(x, y));
+		// both hands on the axe (p.behind[sheet] = frames): the shield swings round behind him, under the body
+		const back = (p.behind?.[F.anim] || []).includes(F.f);
+		// both hands on the axe: the shield is slung on his back (behind the shoulder, under the body)
+		if (back && rig?.S) {
+			const at = [Math.round(rig.S[0] + (p.slung?.[0] ?? -6)), Math.round(rig.S[1] + (p.slung?.[1] ?? 10))];
+			place(F, P, [P.img.w / 2, P.img.h / 2], at, 0, false, null, true, skip);
+			F.lm.audit = { ...(F.lm.audit || {}), shield: 'slung' }; F.lm.shield = at;
+			return;
+		}
 		if (rig?.hand) {
 			const turn = H._rig ? rig.a - H._rig.a : 0, c = Math.cos(turn), s = Math.sin(turn), [ox, oy] = p.grip || [0, 0];
 			const at = [Math.round(rig.hand[0] + c * ox - s * oy), Math.round(rig.hand[1] + s * ox + c * oy)];
-			place(F, P, [P.img.w / 2, P.img.h / 2], at, turn, false, null, false, skip);
+			place(F, P, [P.img.w / 2, P.img.h / 2], at, turn, false, null, back, skip);
+			F.lm.audit = { ...(F.lm.audit || {}), shield: back ? 'hand·behind' : 'hand' };
 			F.strip.shAt = at; F.strip.shOff = rig.S ? [at[0] - rig.S[0], at[1] - rig.S[1]] : F.strip.shOff; F.lm.shield = at;
 			return;
 		}
@@ -423,7 +470,8 @@ export const KIT = {
 		const S = rig?.S, o = F.strip.shOff || p.off || [-9, 21];
 		if (!S) return;
 		const at = [Math.round(S[0] + o[0]), Math.round(S[1] + o[1])];
-		place(F, P, [P.img.w / 2, P.img.h / 2], at, 0, false, null, false, skip);
+		place(F, P, [P.img.w / 2, P.img.h / 2], at, 0, false, null, back, skip);
+		F.lm.audit = { ...(F.lm.audit || {}), shield: 'carried' };
 		F.lm.shield = at;
 	}
 };
