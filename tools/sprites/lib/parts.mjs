@@ -217,6 +217,7 @@ export const PASSES = {
 		if (!head.length) return;
 		const top = Math.min(...head.map((v) => v[1])), hx = head.filter((v) => v[1] <= top + 2).map((v) => v[0]);
 		const cx = (Math.min(...hx) + Math.max(...hx)) / 2;
+		F.lm.head = [Math.round(cx), top];
 		let eye = null, bd = 1e9;
 		for (let y = top; y <= top + 12; y++) for (let x = F.x0; x < F.x0 + F.cw; x++) if (EYE.has(F.kAt(x, y))) { const d = Math.abs(x - cx) + Math.abs(y - top - 5); if (d < bd) { bd = d; eye = [x, y]; } }
 		if (!eye || bd > 12) return;
